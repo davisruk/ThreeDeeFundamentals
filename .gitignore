@@ -1,0 +1,87 @@
+########################################
+# Java
+########################################
+*.class
+*.log
+*.ctxt
+
+# JVM crash logs
+hs_err_pid*
+
+########################################
+# Gradle
+########################################
+.gradle/
+build/
+
+# Gradle cache (if using Kotlin DSL)
+**/build/
+
+# Gradle wrapper (KEEP these)
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+########################################
+# Eclipse
+########################################
+.project
+.classpath
+.settings/
+.metadata/
+
+# Eclipse launch configs
+*.launch
+
+########################################
+# IntelliJ IDEA (defensive – safe to ignore)
+########################################
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+########################################
+# VS Code (defensive)
+########################################
+.vscode/
+
+########################################
+# OS / Environment
+########################################
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+########################################
+# Archives / binaries (never commit)
+########################################
+*.jar
+*.war
+*.ear
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+########################################
+# Temporary files
+########################################
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+########################################
+# Logs
+########################################
+logs/
+*.log
+
+########################################
+# Misc
+########################################
+.env
+.env.*
