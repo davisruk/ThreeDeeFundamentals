@@ -1,16 +1,19 @@
 package online.davisfamily.threedee.triangles;
 
+import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Vec4;
+
 public class TriangleRenderer {
 	
 	int minX, minY, maxX, maxY; // the viewport on the cavas
 	int[] pixels; // the world canvas
-	int scanlineWidth;
-	int worldHeight;
+	int pw;
+	int ph;
 	
 	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY) {
 		pixels = canvas;
-		scanlineWidth = canvasWidth;
-		worldHeight = pixels.length / scanlineWidth;
+		pw = canvasWidth;
+		ph = pixels.length / pw;
 		this.minX = minX;
 		this.maxX = maxX;
 		this.minY = minY;
@@ -128,7 +131,7 @@ public class TriangleRenderer {
 				if (leftx < minX) leftx = minX;
 				if (rightx > maxX) rightx = maxX;
 	
-				int row = y * scanlineWidth;
+				int row = y * pw;
 				for (int x = leftx; x<=rightx; x++)
 					pixels[row+x] = colour;
 	
@@ -140,4 +143,62 @@ public class TriangleRenderer {
 			rightx = Math.round(edge2xIntersection);
 		}		
 	}
+
+	public void drawCube (Vec4[] vertices, int[][]triangles, float angleX, float angleY, float zTranslation, int colour) {
+		float aspect = (float)pw / (float)ph;
+		Mat4 model = Mat4.translation(0, 0, zTranslation)
+				.multiplyMatrix(Mat4.rotationY(angleY))
+				.multiplyMatrix(Mat4.rotationX(angleX));
+
+		Mat4 view = Mat4.identity();
+		Mat4 projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
+		Mat4 mvp = projection.multiplyMatrix(view).multiplyMatrix(model);
+		
+		int[] sx = new int[vertices.length];
+		int[] sy = new int[vertices.length];
+		
+		boolean[] visible = new boolean[vertices.length];
+		for (int i = 0; i<vertices.length; i++) {
+			Vec4 clip = mvp.multiplyVec(vertices[i]);
+	
+			if (clip.w <= 0.0001f) { visible[i] = false; continue; }
+			
+			// clip-space bounds test (conservative)
+			if (clip.x < -clip.w || clip.x > clip.w ||
+			    clip.y < -clip.w || clip.y > clip.w ||
+			    clip.z < -clip.w || clip.z > clip.w) {
+			    visible[i] = false;
+			    continue;
+			}
+			
+			float ndcX = clip.x / clip.w;
+			float ndcY = clip.y / clip.w;
+			sx[i] = (int)((ndcX * 0.5f + 0.5f) * (pw - 1));
+			sy[i] = (int)((-ndcY * 0.5f + 0.5f) * (ph - 1));
+			visible[i] = true;
+		}
+		
+		for (int[] t: triangles) {
+			int a = t[0];
+			int b = t[1];
+			int c = t[2];
+
+			if (!visible[a] || !visible[b] || !visible[c]) continue;
+
+			// the vertices may well be within the projection, however
+			// they may be part of a surface that is behind others
+			// we need to cull any surfaces that need not be rendered
+			int ax = sx[a], bx = sx[b], cx = sx[c];
+			int ay = sy[a], by = sy[b], cy = sy[c];
+			
+			long abx = (long) (bx - ax), aby = (long) (by - ay);
+			long acx = (long) (cx - ax), acy = (long)(cy - ay);
+			
+			long cross = abx * acy - aby * acx;
+			
+			if (cross <=0 ) continue;
+			
+			fillTriangle(sx[a], sy[a], sx[b], sy[b], sx[c], sy[c], colour);			
+		}
+	}	
 }

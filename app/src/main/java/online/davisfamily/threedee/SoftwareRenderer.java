@@ -11,8 +11,11 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
 
+import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
-import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper.LineClipResults;
+import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.triangles.TriangleRenderer;
 
 
@@ -37,9 +40,68 @@ public class SoftwareRenderer extends JPanel {
 	private final BufferedImage image;
 	private final int[] pixels; //pixel argb values - multiply y coord by width and add x coord for pixel argb value
 	
+	// wireframe drawing utility classes
 	private CohenSutherlandLineClipper clipper;
-	private LineClipResults lcResults;
+	private BresenhamLineUtilities bl;
+	private TriangleRenderer tr;
+	
+	// test cube structure
+	Vec3[] v3CubeVertices = {
+			// bottom square
+			new Vec3 (-0.5f, -0.5f, -0.5f),
+			new Vec3 (-0.5f, -0.5f, 0.5f),
+			new Vec3 (0.5f, -0.5f, 0.5f),
+			new Vec3 (0.5f, -0.5f, -0.5f),
+			// top square
+			new Vec3 (-0.5f, 0.5f, -0.5f),
+			new Vec3 (-0.5f, 0.5f, 0.5f),
+			new Vec3 (0.5f, 0.5f, 0.5f),
+			new Vec3 (0.5f, 0.5f, -0.5f),
+		};
 		
+	Vec4[] v4CubeVertices = {
+			// bottom square
+			new Vec4 (-0.5f, -0.5f, -0.5f),
+			new Vec4 (-0.5f, -0.5f, 0.5f),
+			new Vec4 (0.5f, -0.5f, 0.5f),
+			new Vec4 (0.5f, -0.5f, -0.5f),
+			// top square
+			new Vec4 (-0.5f, 0.5f, -0.5f),
+			new Vec4 (-0.5f, 0.5f, 0.5f),
+			new Vec4 (0.5f, 0.5f, 0.5f),
+			new Vec4 (0.5f, 0.5f, -0.5f),
+		};
+
+		int[][] cubeEdges = {
+				{0, 1}, {1, 2}, {2, 3}, {3, 0}, // bottom square edges
+				{4, 5}, {5, 6}, {6, 7}, {7, 4}, // top square edges
+				{0, 4}, {1, 5}, // left vertical edges
+				{2, 6}, {3, 7}, // right vertical edges
+		};	
+	
+		// must make sure these are CCW 
+		int[][] cubeTriangles = {
+		    // bottom (y = -0.5) outward normal -Y
+		    {0, 2, 1}, {0, 3, 2},
+
+		    // top (y = +0.5) outward normal +Y
+		    {4, 5, 6}, {4, 6, 7},
+
+		    // front (z = +0.5) outward normal +Z
+		    {1, 2, 6}, {1, 6, 5},
+
+		    // right (x = +0.5) outward normal +X
+		    {2, 3, 7}, {2, 7, 6},
+
+		    // back (z = -0.5) outward normal -Z
+		    {0, 4, 7}, {0, 7, 3},
+
+		    // left (x = -0.5) outward normal -X
+		    {0, 1, 5}, {0, 5, 4},
+		};
+		
+	private float angleX, angleY;
+	
 	public SoftwareRenderer (int width, int height, int minX, int minY, int maxX, int maxY) {
 		this.width = width;
 		this.height = height;
@@ -51,7 +113,8 @@ public class SoftwareRenderer extends JPanel {
 		this.image = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
 		this.pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
 		this.clipper = new CohenSutherlandLineClipper(vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
-		this.lcResults = new LineClipResults();
+		this.bl = new BresenhamLineUtilities(pixels, width, clipper);
+		this.tr = new TriangleRenderer(pixels, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
 		setPreferredSize(new Dimension(width, height));
 
 		// testing vars
@@ -64,6 +127,8 @@ public class SoftwareRenderer extends JPanel {
 		this.cy = height/2;
 		this.halfW = Math.round((width / 2f) * s);
 		this.halfH = Math.round((height / 2f) * s);
+		this.angleX = 0.4f;
+		this.angleY = 0.6f;
 		
 	}
 	
@@ -71,97 +136,10 @@ public class SoftwareRenderer extends JPanel {
 		for (int i=0; i<pixels.length;i++) pixels[i] = argb;
 	}
 	
-/*
-	private void setPixel(int x, int y, int argb) {
-		if (x < vpMinX || x >= vpMaxXExclusive || y < vpMaxYExclusive || y >= vpMaxYExclusive) return;
-		pixels[y*width + x] = argb;
-	}
-	
-	private void setPixelUnsafe (int x, int y, int argb) {
-		// can be called if algorithm guarantees pixel is within the image bounds
-		pixels[y*width + x] = argb;
-	}
-*/	
-	
 	@Override
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
 		g.drawImage(image,  0,  0,  null);
-	}
-	
-	
-	private void lineLow(int x0, int y0, int x1, int y1, int colour) {
-		int deltaX = x1 - x0;
-		int deltaY = y1 - y0;
-		int yi = 1;
-		if (deltaY < 0) {
-			yi = -1;
-			deltaY = deltaY * -1;
-		}
-		int yDecision = 2 * deltaY - deltaX;
-		int idx = y0 * width + x0;
-		for (int x = x0; x <= x1; x++) {
-			pixels[idx] = colour;
-			idx+=1;
-			if (yDecision >= 0) {
-				idx += yi * width;
-				yDecision += (2 * (deltaY - deltaX));
-			} else {
-				yDecision += 2 * deltaY;
-			}
-		}
-	}
-	
-	private void lineHigh(int x0, int y0, int x1, int y1, int colour) {
-		int deltaX = x1 - x0;
-		int deltaY = y1 - y0;
-		int xi = 1;
-
-		if (deltaX < 0) {
-			xi = -1;
-			deltaX *= -1;
-		}
-
-		int xDecision = 2 * deltaX - deltaY;
-		int idx = y0 * width + x0;
-		for (int y = y0; y <= y1; y++) {
-			pixels[idx] = colour;
-			idx+=width;
-			if (xDecision >= 0) {
-				idx += xi;
-				xDecision += (2 * (deltaX - deltaY));
-			} else {
-				xDecision += 2 * deltaX;
-			}
-		}
-	}
-	
-	public void drawLineBresenhamUnsafeClipped(int x0, int y0, int x1, int y1, int colour) {
-		
-		boolean accepted = clipper.computeViewportLine(x0, y0, x1, y1, lcResults);
-		if (!accepted) return;
-
-		int deltaX = Math.abs(lcResults.x1 - lcResults.x0);
-		int deltaY = Math.abs(lcResults.y1 - lcResults.y0);
-		
-		if (deltaY < deltaX) {
-			if (lcResults.x0 > lcResults.x1)
-				lineLow(lcResults.x1, lcResults.y1, lcResults.x0, lcResults.y0, colour);
-			else
-				lineLow(lcResults.x0, lcResults.y0, lcResults.x1, lcResults.y1, colour);
-		} else {
-			if (lcResults.y0 > lcResults.y1)
-				lineHigh(lcResults.x1, lcResults.y1, lcResults.x0, lcResults.y0, colour);
-			else
-				lineHigh(lcResults.x0, lcResults.y0, lcResults.x1, lcResults.y1, colour);
-		}
-	}
-
-	private void drawTriangle (int x0, int y0, int x1, int y1, int x2, int y2, int colour) {
-		
-		drawLineBresenhamUnsafeClipped(x0, y0, x1, y1, colour);
-		drawLineBresenhamUnsafeClipped(x1, y1, x2, y2, colour);
-		drawLineBresenhamUnsafeClipped(x2, y2, x0, y0, colour);
 	}
 	
 	private String verticesAsString (int []v) {
@@ -173,10 +151,6 @@ public class SoftwareRenderer extends JPanel {
 		return b.toString();
 	}
 		
-	private void renderFrame(double tSeconds) {
-		testTriangleClipping();
-	}
-	
 	private void testLineDrawTriangle() {
 		int colour = 0xFFFFCC00;
 		clear(0xFF101018);
@@ -185,7 +159,7 @@ public class SoftwareRenderer extends JPanel {
 		int dX = vpMaxXExclusive - vpMinX;
 		 
 		// triangle with no clip
-		drawTriangle (vpMinX, vpMinY, vpMinX, vpMinY + (dY / 2), vpMinX + (dX / 2), vpMinY + (dY / 2), colour);	
+		bl.drawTriangle (vpMinX, vpMinY, vpMinX, vpMinY + (dY / 2), vpMinX + (dX / 2), vpMinY + (dY / 2), colour);	
 	}
 	
 	
@@ -304,7 +278,72 @@ public class SoftwareRenderer extends JPanel {
 
 	}
 	
+	private void testWireframeCube() {
+		this.clear(0xFF000000);
+		Vec3[] t = new Vec3[8];
+		this.angleX += 0.01f;
+		this.angleY += 0.01f;
+		for (int i = 0; i < 8; i++) {
+			Vec3 v = v3CubeVertices[i];
+			v = Vec3.rotateY(v, this.angleY);
+			v = Vec3.rotateX(v, this.angleX);
+			v = v.add(new Vec3(0,0,2));
+			t[i] = v;
+		}
+		bl.drawCube(t, cubeEdges, 0xFF2E7D32);
+	}
+	
+	private final float twoPI = (float)Math.PI * 2;
+	private float zTranslation = -1;
+	private float zTranslationInc = -0.05f;
+	private void testWireframeCubeWithMatrices() {
+		this.clear(0xFF000000);
+
+		bl.drawCube(v4CubeVertices, cubeEdges, this.angleY, this.angleX, this.zTranslation, 0xFF2E7D32);
+		this.angleX += 0.01f;
+		this.angleY += 0.005f;
+		// wrap the rotation angles into (0, 2pi) to avoid floating point degradation over time
+		this.angleX %= twoPI;
+		this.angleY %= twoPI;
+		if (this.zTranslation < -10) {
+			this.zTranslationInc = 0.05f;
+		} else if (this.zTranslation > -1) {
+			this.zTranslationInc = -0.05f;
+		}
+ 
+		this.zTranslation += this.zTranslationInc;
+
+	}
+	
+
+
+	private void testFilledCubeNoZBuffer() {
+		this.clear(0xFF000000);
+
+		tr.drawCube(v4CubeVertices, cubeTriangles, this.angleY, this.angleX, this.zTranslation, 0xFF2E7D32);
+		this.angleX += 0.01f;
+		this.angleY += 0.005f;
+		// wrap the rotation angles into (0, 2pi) to avoid floating point degradation over time
+		this.angleX %= twoPI;
+		this.angleY %= twoPI;
+		if (this.zTranslation < -10) {
+			this.zTranslationInc = 0.05f;
+		} else if (this.zTranslation > -3) {
+			this.zTranslationInc = -0.05f;
+		}
+ 
+		this.zTranslation += this.zTranslationInc;
+		
+	}
+
+	private void renderFrame(double tSeconds) {
+		//testWireframeCube();
+		//testWireframeCubeWithMatrices();
+		testFilledCubeNoZBuffer();
+	}
+	
 	public static void main(String[] args) {
+				
 		SwingUtilities.invokeLater(() -> {
 			int w = 960, h = 540;
 			//int minX = 80, minY = 250, maxX = 500, maxY = 400;
