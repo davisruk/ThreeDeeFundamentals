@@ -79,6 +79,15 @@ public class SoftwareRenderer extends JPanel {
 				{2, 6}, {3, 7}, // right vertical edges
 		};	
 	
+		int[] cubeFaceColours = {
+			    0xFFFF0000, // bottom - red
+			    0xFF00FF00, // top - green
+			    0xFF0000FF, // front - blue
+			    0xFFFFFF00, // right - yellow
+			    0xFFFF00FF, // back - magenta
+			    0xFF00FFFF  // left - cyan
+		};
+		
 		// must make sure these are CCW 
 		int[][] cubeTriangles = {
 		    // bottom (y = -0.5) outward normal -Y
@@ -320,7 +329,7 @@ public class SoftwareRenderer extends JPanel {
 	private void testFilledCubeNoZBuffer() {
 		this.clear(0xFF000000);
 
-		tr.drawCube(v4CubeVertices, cubeTriangles, this.angleY, this.angleX, this.zTranslation, 0xFF2E7D32);
+		tr.drawCube(v4CubeVertices, cubeTriangles, this.angleY, this.angleX, this.zTranslation, cubeFaceColours);
 		this.angleX += 0.01f;
 		this.angleY += 0.005f;
 		// wrap the rotation angles into (0, 2pi) to avoid floating point degradation over time

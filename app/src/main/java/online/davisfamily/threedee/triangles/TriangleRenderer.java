@@ -105,7 +105,7 @@ public class TriangleRenderer {
 	
 	// scanline fill for half a triangle using 2 edges
 	// need to provide the xy coords for each edge plus scanline x increment for each edge
-	// i.e. when y increases by 1 how many pixels will the x advance by based on the slope
+	// i.e. when y increases by 1 how many pixels will x advance based on the slope
 	private void fillHalfTriangle(int e1x, int e1y, float e1xInc, int e2x, int e2y, float e2xInc, int colour) {
 		
 		int startY = Math.max(e1y, minY);
@@ -132,8 +132,10 @@ public class TriangleRenderer {
 				if (rightx > maxX) rightx = maxX;
 	
 				int row = y * pw;
-				for (int x = leftx; x<=rightx; x++)
+				for (int x = leftx; x<=rightx; x++) {
+					// z-buffer goes here - need to maintain colour and depth arrays
 					pixels[row+x] = colour;
+				}
 	
 			}
 			// work out the intersections for the next scanline
@@ -144,7 +146,7 @@ public class TriangleRenderer {
 		}		
 	}
 
-	public void drawCube (Vec4[] vertices, int[][]triangles, float angleX, float angleY, float zTranslation, int colour) {
+	public void drawCube (Vec4[] vertices, int[][]triangles, float angleX, float angleY, float zTranslation, int[] colours) {
 		float aspect = (float)pw / (float)ph;
 		Mat4 model = Mat4.translation(0, 0, zTranslation)
 				.multiplyMatrix(Mat4.rotationY(angleY))
@@ -178,7 +180,8 @@ public class TriangleRenderer {
 			visible[i] = true;
 		}
 		
-		for (int[] t: triangles) {
+		for (int i = 0; i < triangles.length; i++ ) {
+			int[] t = triangles[i];
 			int a = t[0];
 			int b = t[1];
 			int c = t[2];
@@ -196,9 +199,9 @@ public class TriangleRenderer {
 			
 			long cross = abx * acy - aby * acx;
 			
-			if (cross <=0 ) continue;
+			if (cross >=0 ) continue;
 			
-			fillTriangle(sx[a], sy[a], sx[b], sy[b], sx[c], sy[c], colour);			
+			fillTriangle(sx[a], sy[a], sx[b], sy[b], sx[c], sy[c], colours[i/2]);			
 		}
 	}	
 }
