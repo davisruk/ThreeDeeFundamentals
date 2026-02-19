@@ -71,66 +71,134 @@ public class TriangleRenderer {
 		int x, y;
 		float z;
 	}
-	
-	public void fillTriangle(ScreenCoord t0, ScreenCoord t1, ScreenCoord t2, int colour) {
-		ScreenCoord[] coords = new ScreenCoord[] {t0, t1, t2};
+
+	private final int A=0, B=1, C=2;
+	// Fills a triangle given the x,y,z coords for that triangle
+	// Triangle is determined as A(x,y) B(x,y) C(x,y)
+	// Edges are determined as AB, AC, BC
+	public void fillTriangle(ScreenCoord p1, ScreenCoord p2, ScreenCoord p3, int colour) {
+		ScreenCoord[] coords = new ScreenCoord[] {p1,p2,p3};
 		// Sort coords into y order ascending
-		Arrays.sort(coords, Comparator.comparingInt(c -> c.y));
-		
+		Arrays.sort(coords, Comparator.comparingInt(i -> i.y));
+		// Array is now effectively in y order ascending for each edge
 		// find the x & z increment for each edge on a scanline (slope)
-		int abdx = coords[1].x - coords[0].x; // delta x
-		int abdy = coords[1].y - coords[0].y; // delta y
-		float abdz = coords[1].z - coords[0].z; // delta z
+		int abdx = coords[B].x - coords[A].x; // delta x
+		int abdy = coords[B].y - coords[A].y; // delta y
+		float abdz = coords[B].z - coords[A].z; // delta z
 		float abXinc = (abdy != 0) ? (float)abdx / (float)abdy : 0f; // ABx slope
 		float abZinc = (abdy != 0) ? abdz / abdy : 0f; // ABz slope 
 		
-		int acdx = coords[2].x - coords[0].x;
-		int acdy = coords[2].y - coords[0].y;
-		float acdz = coords[2].z - coords[0].z;
+		int acdx = coords[C].x - coords[A].x;
+		int acdy = coords[C].y - coords[A].y;
+		float acdz = coords[C].z - coords[A].z;
 		float acXinc = (acdy != 0) ? (float)acdx / (float)acdy : 0f;
 		float acZinc = (acdy != 0) ? acdz / acdy : 0f;
 		
-		int bcdx = coords[2].x - coords[1].x;
-		int bcdy = coords[2].y - coords[1].y;
-		float bcdz = coords[2].z - coords[1].z;
+		int bcdx = coords[C].x - coords[B].x;
+		int bcdy = coords[C].y - coords[B].y;
+		float bcdz = coords[C].z - coords[B].z;
 		float bcXinc = (bcdy != 0) ? (float)bcdx / (float)bcdy : 0f;
 		float bcZinc = (bcdy != 0) ? bcdz / bcdy : 0f;
 		
 		// fill top half of triangle (edges AC AB)
-		if (coords[0].y < coords[1].y)
+		// only need the A & B points as C will never be reached
+		if (coords[A].y < coords[B].y)
 			fillHalfTriangle(
-				coords[0].x, 
-				coords[0].y,
-				coords[0].z,
+				coords[A],
 				acXinc, acZinc,
-				coords[1].x,
-				coords[1].y,
-				coords[1].z,
+				coords[B],
 				abXinc, abZinc,
 				colour
 			);
+		
 		// fill bottom half of triangle (edges AC BC)
 		// first half of AB edge has been filled so need to
-		// find where x & z will be based on the starting y position of BC
-		float edge1xIntersection = (coords[1].y - coords[0].y) * acXinc + coords[0].x;
-		float edge1zIntersection = (coords[1].y - coords[0].y) * acZinc + coords[0].z;
-		
-		if (coords[1].y <= coords[2].y)
-			fillHalfTriangle(
+		// find where x & z will be based on the starting y position of BC (so B.y)
+		float edge1xIntersection = abdy * acXinc + coords[A].x;
+		float edge1zIntersection = abdy * acZinc + coords[A].z;
+		ScreenCoord acbyIntersection = new ScreenCoord(
 				Math.round(edge1xIntersection), // ACx intersection at By
-				coords[1].y, // By 
-				edge1zIntersection, // ACz intersection at By
+				coords[B].y, // By 
+				edge1zIntersection // ACz intersection at By
+		);
+		if (coords[B].y <= coords[C].y)
+			fillHalfTriangle(
+				acbyIntersection,
 				acXinc, // ACx slope - amount x advances on AC as we move up y
 				acZinc, // ACz slope - amount z advances on AC as we move up y
-				coords[2].x, // Cx
-				coords[2].y, // Cy
-				coords[2].z, // Cz
+				coords[2],
 				bcXinc, // BCx slope - amount x advances on BC as we move up y
 				bcZinc, // BCz slope - amount z advances on BC as we move up y
 				colour
 			);
 	}
 	
+	// fills scan lines between 2 points when those 2 points intersect the edges a triangle
+	// p1.y must always be equal or less than p2.y
+	// for a single triangle call twice, once for top and once for bottom
+	private void fillHalfTriangle(ScreenCoord p1, float e1xInc, float e1zInc, ScreenCoord p2, float e2xInc, float e2zInc, int colour) {
+		int startY = Math.max(p1.y, minY);
+		int endY = Math.min(p2.y, maxY + 1);
+		if (startY >= endY) return; // no visible lines
+		int ySkip = startY - p1.y; // amount p1.y has been clipped
+		float p2ySkip = p2.y - startY; // amount p2.y has been clipped
+		
+		float edge1xIntersection = ySkip * e1xInc + p1.x; // x intersection for first edge at starting y
+		float edge1zIntersection = ySkip * e1zInc + p1.z; // z intersection for first edge at starting y
+		float edge2xIntersection = p2.x - p2ySkip * e2xInc; // x intersection for second edge at starting y
+		float edge2zIntersection = p2.z - p2ySkip * e2zInc;	// z intersection for second edge at starting y	
+
+		// transitory fields, useful if edge1.x > edge2.x
+		float leftz = edge1zIntersection;
+		float rightz = edge2zIntersection;
+		int leftx = Math.round(edge1xIntersection);
+		int rightx = Math.round(edge2xIntersection);
+		
+		// for each scanline fill in the pixels between the x intersections
+		for (int y=startY; y<endY;y++) {
+			// ensure we always go left to right
+			if(rightx < leftx) {
+				// swap the x and z values
+				int t=leftx;	
+				leftx = rightx;
+				rightx = t;
+				float tz = leftz;
+				leftz = rightz;
+				rightz = tz;
+			}
+
+			int unclippedLeftx = leftx;
+			if (!(rightx < minX || leftx > maxX)) {
+				if (leftx < minX) leftx = minX;
+				if (rightx > maxX) rightx = maxX;
+				int row = y * pw;
+				// z-buffer - calculate the z pos for current x, y
+				float dlx = rightx - leftx;
+				float zInc = (dlx != 0) ? (rightz - leftz) / dlx : 0f;	
+				// advance z if we clipped leftx to minX;
+				float z = leftz + (leftx - unclippedLeftx) * zInc;
+				for (int x = leftx; x<=rightx; x++) {
+					// store the current z if it is less than the current one
+					// in this position and overwrite the colour of the pixel
+					if (z < depthBuff[row+x]) {
+						depthBuff[row+x]=z;
+						pixels[row+x] = colour;
+					}
+					z += zInc;
+				}
+			}
+			// work out the intersections for the next scanline
+			edge1xIntersection += e1xInc;
+			edge1zIntersection += e1zInc;
+			edge2xIntersection += e2xInc;
+			edge2zIntersection += e2zInc;		
+			leftx = Math.round(edge1xIntersection);
+			rightx = Math.round(edge2xIntersection);
+			leftz = edge1zIntersection;
+			rightz = edge2zIntersection;
+		}		
+	}	
+
 	// scanline fill for half a triangle using 2 edges
 	// need to provide the xyz coords for each edge plus scanline x&z increment for each edge
 	// i.e. when y increases by 1 how many pixels will x & z advance based on their slopes
@@ -285,7 +353,7 @@ public class TriangleRenderer {
 
 	private void clearZBuffer() {
 		this.depthBuff = new float[pixels.length];
-		Arrays.fill(this.depthBuff, 20.0f);
+		Arrays.fill(this.depthBuff, Float.MAX_VALUE);
 	}
 	
 	public void drawCube (Vec4[] vertices, int[][]triangles, float angleX, float angleY, float zTranslation, int[] colours) {
@@ -321,8 +389,8 @@ public class TriangleRenderer {
 			float ndcZ = clip.z / clip.w;
 			sx[i] = (int)((ndcX * 0.5f + 0.5f) * (pw - 1));
 			sy[i] = (int)((-ndcY * 0.5f + 0.5f) * (ph - 1));
-			//zDepth[i] = clip.z;
-			zDepth[i] = ndcZ * 0.5f + 0.5f * 20;
+			zDepth[i] = clip.z;
+			//zDepth[i] = ndcZ * 0.5f + 0.5f * 20;
 			visible[i] = true;
 		}
 		
@@ -347,11 +415,8 @@ public class TriangleRenderer {
 			
 			if (cross >=0 ) continue;
 			
-			// need to provide the z here for z-buffering
-			// may need to update fillTriangle to use Vec4 otherwise z interpolation for the pixel is tricky
 //			fillTriangle(sx[a], sy[a], sx[b], sy[b], sx[c], sy[c], colours[i/2]);
 			fillTriangle(new ScreenCoord(sx[a], sy[a], zDepth[a]), new ScreenCoord(sx[b], sy[b], zDepth[b]), new ScreenCoord(sx[c], sy[c], zDepth[c]), colours[i/2]);			
-			//fillTriangle(sx[a], sy[a], zDepth[a], sx[b], sy[b], zDepth[b], sx[c], sy[c], zDepth[c], colours[i/2]);
 		}
 	}	
 }
