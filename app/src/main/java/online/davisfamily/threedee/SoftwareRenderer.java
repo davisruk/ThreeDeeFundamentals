@@ -34,7 +34,10 @@ public class SoftwareRenderer extends JPanel {
 // ------------------------------------
 	
 	private final BufferedImage image;
-	private final int[] pixels; //pixel argb values - multiply y coord by width and add x coord for pixel argb value
+	private final int[] pixels; // [x][y] coords of pixels represented in a single dimension - x values are x*y + x
+// -- z-buffer	
+//	private final int[] colourBuffer; // colour of each pixel using same xy convention as pixels
+	private final float[] depthBuffer; // records nearest value previously stored at pixel [x][y] 
 	
 	// wireframe drawing utility classes
 	private CohenSutherlandLineClipper clipper;
@@ -51,9 +54,10 @@ public class SoftwareRenderer extends JPanel {
 
 		this.image = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
 		this.pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+		this.depthBuffer = new float[pixels.length];
 		this.clipper = new CohenSutherlandLineClipper(vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
 		this.bl = new BresenhamLineUtilities(pixels, width, clipper);
-		this.tr = new TriangleRenderer(pixels, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
+		this.tr = new TriangleRenderer(pixels, depthBuffer, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
 		setPreferredSize(new Dimension(width, height));
 	}
 	
@@ -85,7 +89,7 @@ public class SoftwareRenderer extends JPanel {
 			
 			long startNanos = System.nanoTime();
 			ViewDimensions vd = new ViewDimensions(w, h, minX, minY, maxX, maxY);
-			TestScene ts = new TestScene(vd, renderer.pixels, renderer.clipper, renderer.bl, renderer.tr);
+			TestScene ts = new TestScene(vd, renderer.pixels, renderer.depthBuffer, renderer.clipper, renderer.bl, renderer.tr);
 			new Timer(16, e -> {
 				double t = (System.nanoTime() - startNanos) / 1_000_000_000.0;
 				renderer.renderFrame(t,ts);

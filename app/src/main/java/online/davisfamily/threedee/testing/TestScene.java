@@ -15,13 +15,15 @@ public class TestScene implements Scene {
 	private BresenhamLineUtilities bl;
 	private TriangleRenderer tr;
 	int[] pixels;
+	float[] db;
 
-	public TestScene (ViewDimensions dimensions, int[] pixels, CohenSutherlandLineClipper clipper, BresenhamLineUtilities bresenhamUtils, TriangleRenderer triangleRenderer) {
+	public TestScene (ViewDimensions dimensions, int[] pixels, float[] depthBuffer, CohenSutherlandLineClipper clipper, BresenhamLineUtilities bresenhamUtils, TriangleRenderer triangleRenderer) {
 		this.vd = dimensions;
 		this.clipper = clipper;
 		this.bl = bresenhamUtils;
 		this.tr = triangleRenderer;
 		this.pixels = pixels;
+		this.db = depthBuffer;
 		
 		// testing vars
 		this.steps = 270;
