@@ -230,7 +230,7 @@ public class TriangleRenderer {
 		
 		int[] sx = new int[vertices.length];
 		int[] sy = new int[vertices.length];
-		float[] zDepth = new float[vertices.length];
+		float[] sz = new float[vertices.length];
 		boolean[] visible = new boolean[vertices.length];
 		for (int i = 0; i<vertices.length; i++) {
 			Vec4 clip = mvp.multiplyVec(vertices[i]);
@@ -248,11 +248,9 @@ public class TriangleRenderer {
 			float ndcX = clip.x / clip.w;
 			float ndcY = clip.y / clip.w;
 			float ndcZ = clip.z / clip.w;
-			sx[i] = (int)((ndcX * 0.5f + 0.5f) * (pw - 1));
-			sy[i] = (int)((-ndcY * 0.5f + 0.5f) * (ph - 1));
-			//zDepth[i] = clip.z;
-			zDepth[i] = ndcZ;
-			//zDepth[i] = 1.0f / clip.w;
+			sx[i] = Math.round((ndcX * 0.5f + 0.5f) * (pw - 1));
+			sy[i] = Math.round((-ndcY * 0.5f + 0.5f) * (ph - 1));
+			sz[i] = ndcZ;
 			visible[i] = true;
 		}
 		
@@ -277,7 +275,7 @@ public class TriangleRenderer {
 			
 			if (cross >=0 ) continue;
 			
-			fillTriangle(new ScreenCoord(sx[a], sy[a], zDepth[a]), new ScreenCoord(sx[b], sy[b], zDepth[b]), new ScreenCoord(sx[c], sy[c], zDepth[c]), colours[i/2], zBuff);			
+			fillTriangle(new ScreenCoord(sx[a], sy[a], sz[a]), new ScreenCoord(sx[b], sy[b], sz[b]), new ScreenCoord(sx[c], sy[c], sz[c]), colours[i/2], zBuff);			
 		}
 	}
 }

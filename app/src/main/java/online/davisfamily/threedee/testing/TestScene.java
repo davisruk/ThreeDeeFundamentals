@@ -202,7 +202,6 @@ public class TestScene implements Scene {
 	private void testFilledCube() {
 		this.clear(0xFF000000);
 		this.clearZBuffer();
-		//tr.drawCube(v4CubeVertices, cubeTriangles, this.angleY, this.angleX, this.zTranslation, cubeFaceColours);
 		tr.drawCube(v4CubeVertices, cubeTriangles, t1, cubeFaceColours, zBuffer);
 		tr.drawCube(v4CubeVertices, cubeTriangles, t2, cubeFaceColours, zBuffer);
 		
