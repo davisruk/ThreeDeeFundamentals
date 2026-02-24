@@ -4,6 +4,7 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
+import java.util.Arrays;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -55,9 +56,10 @@ public class SoftwareRenderer extends JPanel {
 		this.image = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
 		this.pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
 		this.depthBuffer = new float[pixels.length];
+		Arrays.fill(this.depthBuffer, Float.NEGATIVE_INFINITY);
 		this.clipper = new CohenSutherlandLineClipper(vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
 		this.bl = new BresenhamLineUtilities(pixels, width, clipper);
-		this.tr = new TriangleRenderer(pixels, depthBuffer, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
+		this.tr = new TriangleRenderer(pixels, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
 		setPreferredSize(new Dimension(width, height));
 	}
 	
@@ -89,7 +91,7 @@ public class SoftwareRenderer extends JPanel {
 			
 			long startNanos = System.nanoTime();
 			ViewDimensions vd = new ViewDimensions(w, h, minX, minY, maxX, maxY);
-			TestScene ts = new TestScene(vd, renderer.pixels, renderer.depthBuffer, renderer.clipper, renderer.bl, renderer.tr);
+			TestScene ts = new TestScene(vd, renderer.pixels, renderer.clipper, renderer.bl, renderer.tr);
 			new Timer(16, e -> {
 				double t = (System.nanoTime() - startNanos) / 1_000_000_000.0;
 				renderer.renderFrame(t,ts);
