@@ -65,6 +65,29 @@ public class Mat4 {
 		r.m[5] = c;
 		return r;
 	}
+	
+	public static Mat4 rotationYXZ (double ay, double ax, double az) {
+		float cx = (float)Math.cos(ax);
+		float sx = (float)Math.sin(ax);
+		float cy = (float)Math.cos(ay);
+		float sy = (float)Math.sin(ay);
+		float cz = (float)Math.cos(az);
+		float sz = (float)Math.sin(az);
+		Mat4 r = Mat4.identity();
+		r.m[0] = cy*cz + sy*sx*sz;
+		r.m[1] = -cy*sz + sy*sx*cz;
+		r.m[2] = sy*cx;
+		
+		r.m[4] = cx*sz;
+		r.m[5] = cx*cz;
+		r.m[6] = -sx;
+		
+		r.m[8] = -sy*cz + cy*sx*sz;
+		r.m[9] = sy*sz + cy*sx*cz;
+		r.m[10] = cy * cx;
+		return r;
+		
+	}
 
 	public static Mat4 perspective (float fovY, float aspect, float near, float far) {
 		float f = 1.0f / (float)Math.tan(fovY / 2.0f);

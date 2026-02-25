@@ -112,7 +112,7 @@ public class TriangleRenderer {
 		
 		// fill bottom half of triangle (edges AC BC)
 		// first half of AB edge has been filled so need to
-		// find where x & z will be based on the starting y position of BC (so B.y)
+		// find where x & z will be, based on the starting y position of BC (so B.y)
 		float edge1xIntersection = abdy * acXinc + coords[A].x;
 		float edge1zIntersection = abdy * acZinc + coords[A].z;
 		ScreenCoord acbyIntersection = new ScreenCoord(
@@ -125,7 +125,7 @@ public class TriangleRenderer {
 				acbyIntersection,
 				acXinc, // ACx slope - amount x advances on AC as we move up y
 				acZinc, // ACz slope - amount z advances on AC as we move up y
-				coords[2],
+				coords[C],
 				bcXinc, // BCx slope - amount x advances on BC as we move up y
 				bcZinc, // BCz slope - amount z advances on BC as we move up y
 				colour,
@@ -202,32 +202,7 @@ public class TriangleRenderer {
 	}	
 
 
-	public class CubeTransformation {
-		public CubeTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, float xTransInc, float yTransInc, float zTransInc) {
-			this.angleX = xAngle;
-			this.angleY = yAngle;
-			this.angleZ = zAngle;
-			this.xTranslation = xTrans;
-			this.yTranslation = yTrans;
-			this.zTranslation = zTrans;
-			this.xTranslationInc = xTransInc; // only used for scene calcs
-			this.yTranslationInc = yTransInc;
-			this.zTranslationInc = zTransInc;
-		}
-		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation, xTranslationInc, yTranslationInc, zTranslationInc;
-	}
-	
-	public void drawCube (Vec4[] vertices, int[][]triangles, CubeTransformation tx, int[] colours, float[] zBuff) {
-		float aspect = (float)pw / (float)ph;
-		Mat4 model = Mat4.translation(tx.xTranslation, tx.yTranslation, tx.zTranslation)
-				.multiplyMatrix(Mat4.rotationY(tx.angleY))
-				.multiplyMatrix(Mat4.rotationX(tx.angleX))
-				.multiplyMatrix(Mat4.rotationZ(tx.angleZ));
-
-		Mat4 view = Mat4.identity();
-		Mat4 projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
-		Mat4 mvp = projection.multiplyMatrix(view).multiplyMatrix(model);
-		
+	public void drawCube (Vec4[] vertices, int[][]triangles, Mat4 mvp, int[] colours, float[] zBuff) {
 		int[] sx = new int[vertices.length];
 		int[] sy = new int[vertices.length];
 		float[] sz = new float[vertices.length];
@@ -244,10 +219,12 @@ public class TriangleRenderer {
 			    visible[i] = false;
 			    continue;
 			}
-			
-			float ndcX = clip.x / clip.w;
-			float ndcY = clip.y / clip.w;
-			float ndcZ = clip.z / clip.w;
+
+			float invW = 1.0f / clip.w;			
+			float ndcX = clip.x * invW;
+			float ndcY = clip.y * invW;
+			float ndcZ = clip.z * invW;
+
 			sx[i] = Math.round((ndcX * 0.5f + 0.5f) * (pw - 1));
 			sy[i] = Math.round((-ndcY * 0.5f + 0.5f) * (ph - 1));
 			sz[i] = ndcZ;

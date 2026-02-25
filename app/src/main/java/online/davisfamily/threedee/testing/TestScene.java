@@ -6,10 +6,11 @@ import online.davisfamily.threedee.Scene;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.testing.TestScene.ObjectTransformation;
 import online.davisfamily.threedee.triangles.TriangleRenderer;
-import online.davisfamily.threedee.triangles.TriangleRenderer.CubeTransformation;
 
 public class TestScene implements Scene {
 
@@ -19,8 +20,8 @@ public class TestScene implements Scene {
 	private TriangleRenderer tr;
 	int[] pixels;
 	float[] zBuffer;
-	private CubeTransformation t1;
-	private CubeTransformation t2;
+	private ObjectTransformation t1;
+	private ObjectTransformation t2;
 
 	public TestScene (ViewDimensions dimensions, int[] pixels, CohenSutherlandLineClipper clipper, BresenhamLineUtilities bresenhamUtils, TriangleRenderer triangleRenderer) {
 		this.vd = dimensions;
@@ -41,8 +42,8 @@ public class TestScene implements Scene {
 		this.halfH = Math.round((vd.height / 2f) * s);
 		this.angleX = 0.4f;
 		this.angleY = 0.6f;
-		this.t1 = tr.new CubeTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-0.05f);
-		this.t2 = tr.new CubeTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,0.05f,0f,0f);
+		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-0.05f);
+		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,0.05f,0f,0f);
 
 	}
 
@@ -195,15 +196,44 @@ public class TestScene implements Scene {
 
 	}
 
+	public class ObjectTransformation {
+		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, float xTransInc, float yTransInc, float zTransInc) {
+			this.angleX = xAngle;
+			this.angleY = yAngle;
+			this.angleZ = zAngle;
+			this.xTranslation = xTrans;
+			this.yTranslation = yTrans;
+			this.zTranslation = zTrans;
+			this.xTranslationInc = xTransInc; // only used for scene calcs
+			this.yTranslationInc = yTransInc; // only used for scene calcs
+			this.zTranslationInc = zTransInc; // only used for scene calcs
+		}
+		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation, xTranslationInc, yTranslationInc, zTranslationInc;
+	}
+	
 	private void clearZBuffer() {
 		this.zBuffer = new float[pixels.length];
 		Arrays.fill(this.zBuffer, Float.POSITIVE_INFINITY);
-	}	
+	}
+	
+	private Mat4 getMVP(ObjectTransformation tx) {
+		float aspect = (float)vd.width / (float)vd.height;	
+		Mat4 model = Mat4
+				.translation(tx.xTranslation, tx.yTranslation, tx.zTranslation)
+				.multiplyMatrix(Mat4.rotationYXZ(tx.angleY, tx.angleX, tx.angleZ)); // could do multiple Mat4.multiplyMatrix(Mat4.rotationY).multiplyMatrix(rotationX) etc.
+		Mat4 view = Mat4.identity();
+		Mat4 projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
+		Mat4 mvp = projection.multiplyMatrix(view).multiplyMatrix(model);
+		return mvp;
+	}
+	
 	private void testFilledCube() {
 		this.clear(0xFF000000);
 		this.clearZBuffer();
-		tr.drawCube(v4CubeVertices, cubeTriangles, t1, cubeFaceColours, zBuffer);
-		tr.drawCube(v4CubeVertices, cubeTriangles, t2, cubeFaceColours, zBuffer);
+		Mat4 t1MVP = getMVP(t1);
+		Mat4 t2MVP = getMVP(t2);
+		tr.drawCube(v4CubeVertices, cubeTriangles, t1MVP, cubeFaceColours, zBuffer);
+		tr.drawCube(v4CubeVertices, cubeTriangles, t2MVP, cubeFaceColours, zBuffer);
 		
 		t1.angleX += 0.01f;
 		t1.angleY += 0.005f;
