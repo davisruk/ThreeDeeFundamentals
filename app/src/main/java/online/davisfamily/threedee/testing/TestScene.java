@@ -1,18 +1,21 @@
 package online.davisfamily.threedee.testing;
 
+import java.awt.MouseInfo;
 import java.util.Arrays;
 
 import online.davisfamily.threedee.Scene;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.input.mouse.MouseEventConsumer;
+import online.davisfamily.threedee.input.mouse.MouseEventDetail;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.triangles.TriangleRenderer;
 
-public class TestScene implements Scene {
+public class TestScene implements Scene, MouseEventConsumer{
 
 	private ViewDimensions vd;
 	private CohenSutherlandLineClipper clipper;
@@ -24,7 +27,8 @@ public class TestScene implements Scene {
 	private ObjectTransformation t2;
 	private Mat4 model1, model2, view, projection, perspective, mvp1, mvp2;
 	private float aspect;
-
+	private MouseEventDetail mouseInfo;
+	
 	public TestScene (ViewDimensions dimensions, int[] pixels, CohenSutherlandLineClipper clipper, BresenhamLineUtilities bresenhamUtils, TriangleRenderer triangleRenderer) {
 		this.vd = dimensions;
 		this.clipper = clipper;
@@ -262,12 +266,25 @@ public class TestScene implements Scene {
 		}
  
 		t2.xTranslation += t2.xTranslationInc;
-
 	}
 
+	public void testMouseMovement () {
+		if (mouseInfo != null && !mouseInfo.consumed && (mouseInfo.oldx != mouseInfo.x || mouseInfo.oldy != mouseInfo.y)) {
+			mouseInfo.consumed = true;
+			System.out.println(mouseInfo);		
+		}
+	}
+	
 	public void renderFrame(double tSeconds) {
 		//testWireframeCube();
 		//testWireframeCubeWithMatrices();
-		testFilledCube();
+		//testFilledCube();
+		testMouseMovement();
+	}
+
+
+	@Override
+	public void consume(MouseEventDetail detail) {
+		this.mouseInfo = detail;
 	}
 }

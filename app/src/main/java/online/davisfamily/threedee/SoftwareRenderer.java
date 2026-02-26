@@ -15,6 +15,7 @@ import javax.swing.WindowConstants;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.input.mouse.MouseHandler;
 import online.davisfamily.threedee.testing.TestScene;
 import online.davisfamily.threedee.triangles.TriangleRenderer;
 
@@ -92,6 +93,9 @@ public class SoftwareRenderer extends JPanel {
 			long startNanos = System.nanoTime();
 			ViewDimensions vd = new ViewDimensions(w, h, minX, minY, maxX, maxY);
 			TestScene ts = new TestScene(vd, renderer.pixels, renderer.clipper, renderer.bl, renderer.tr);
+			MouseHandler mh = new MouseHandler(ts);
+			frame.addMouseMotionListener(mh);
+			
 			new Timer(16, e -> {
 				double t = (System.nanoTime() - startNanos) / 1_000_000_000.0;
 				renderer.renderFrame(t,ts);
