@@ -233,6 +233,7 @@ public class Mat4 {
 	}
 	
 	// utility that sets rotation YXZ and translation xyz
+	// combines individual rotation matrices and the translation matrix
 	public Mat4 setModel (ObjectTransformation t) {
 		float cx = (float)Math.cos(t.angleX);
 		float sx = (float)Math.sin(t.angleX);
