@@ -112,15 +112,16 @@ public class BresenhamLineUtilities {
 		}
 	}
 
+	// this needs updating - create the mvp outside and pass in - object transformation is not part of drawing
 	public void drawCube (Vec4[] vertices, int[][]edges, float angleX, float angleY, float zTranslation, int colour) {
 		float aspect = (float)pw / (float)ph;
 		Mat4 model = Mat4.translation(0, 0, zTranslation)
-				.multiplyMatrix(Mat4.rotationY(angleY))
-				.multiplyMatrix(Mat4.rotationX(angleX));
+				.immutableMultiplyMatrix(Mat4.rotationY(angleY))
+				.immutableMultiplyMatrix(Mat4.rotationX(angleX));
 
 		Mat4 view = Mat4.identity();
 		Mat4 projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
-		Mat4 mvp = projection.multiplyMatrix(view).multiplyMatrix(model);
+		Mat4 mvp = projection.immutableMultiplyMatrix(view).immutableMultiplyMatrix(model);
 		
 		int[] sx = new int[vertices.length];
 		int[] sy = new int[vertices.length];

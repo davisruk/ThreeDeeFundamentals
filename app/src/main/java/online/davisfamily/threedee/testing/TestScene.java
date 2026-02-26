@@ -7,9 +7,9 @@ import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
-import online.davisfamily.threedee.testing.TestScene.ObjectTransformation;
 import online.davisfamily.threedee.triangles.TriangleRenderer;
 
 public class TestScene implements Scene {
@@ -22,6 +22,8 @@ public class TestScene implements Scene {
 	float[] zBuffer;
 	private ObjectTransformation t1;
 	private ObjectTransformation t2;
+	private Mat4 model1, model2, view, projection, perspective, mvp1, mvp2;
+	private float aspect;
 
 	public TestScene (ViewDimensions dimensions, int[] pixels, CohenSutherlandLineClipper clipper, BresenhamLineUtilities bresenhamUtils, TriangleRenderer triangleRenderer) {
 		this.vd = dimensions;
@@ -42,9 +44,16 @@ public class TestScene implements Scene {
 		this.halfH = Math.round((vd.height / 2f) * s);
 		this.angleX = 0.4f;
 		this.angleY = 0.6f;
+		this.aspect = (float)vd.width / (float)vd.height;
 		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-0.05f);
 		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,0.05f,0f,0f);
-
+		this.perspective = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
+		this.projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
+		this.model1 = new Mat4();
+		this.model2 = new Mat4();
+		this.view = Mat4.identity();
+		this.mvp1 = new Mat4();
+		this.mvp2 = new Mat4();
 	}
 
 	// -- Testing variables --
@@ -195,45 +204,38 @@ public class TestScene implements Scene {
 		this.zTranslation += this.zTranslationInc;
 
 	}
-
-	public class ObjectTransformation {
-		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, float xTransInc, float yTransInc, float zTransInc) {
-			this.angleX = xAngle;
-			this.angleY = yAngle;
-			this.angleZ = zAngle;
-			this.xTranslation = xTrans;
-			this.yTranslation = yTrans;
-			this.zTranslation = zTrans;
-			this.xTranslationInc = xTransInc; // only used for scene calcs
-			this.yTranslationInc = yTransInc; // only used for scene calcs
-			this.zTranslationInc = zTransInc; // only used for scene calcs
-		}
-		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation, xTranslationInc, yTranslationInc, zTranslationInc;
-	}
 	
 	private void clearZBuffer() {
 		this.zBuffer = new float[pixels.length];
 		Arrays.fill(this.zBuffer, Float.POSITIVE_INFINITY);
 	}
 	
-	private Mat4 getMVP(ObjectTransformation tx) {
+	private Mat4 getImmutableMVP(ObjectTransformation tx) {
 		float aspect = (float)vd.width / (float)vd.height;	
 		Mat4 model = Mat4
 				.translation(tx.xTranslation, tx.yTranslation, tx.zTranslation)
-				.multiplyMatrix(Mat4.rotationYXZ(tx.angleY, tx.angleX, tx.angleZ)); // could do multiple Mat4.multiplyMatrix(Mat4.rotationY).multiplyMatrix(rotationX) etc.
+				.immutableMultiplyMatrix(Mat4.rotationYXZ(tx.angleY, tx.angleX, tx.angleZ)); // could do multiple Mat4.multiplyMatrix(Mat4.rotationY).multiplyMatrix(rotationX) etc.
 		Mat4 view = Mat4.identity();
 		Mat4 projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
-		Mat4 mvp = projection.multiplyMatrix(view).multiplyMatrix(model);
+		Mat4 mvp = projection.immutableMultiplyMatrix(view).immutableMultiplyMatrix(model);
 		return mvp;
 	}
 	
+	private Mat4 getMVPMutable(Mat4 model, ObjectTransformation tx) {
+		model.setModel(tx);
+		projection.set(perspective);
+		projection.mutableMultiply(view).mutableMultiply(model);
+		return projection;
+	}
+
 	private void testFilledCube() {
 		this.clear(0xFF000000);
 		this.clearZBuffer();
-		Mat4 t1MVP = getMVP(t1);
-		Mat4 t2MVP = getMVP(t2);
-		tr.drawCube(v4CubeVertices, cubeTriangles, t1MVP, cubeFaceColours, zBuffer);
-		tr.drawCube(v4CubeVertices, cubeTriangles, t2MVP, cubeFaceColours, zBuffer);
+		//Mat4 t1MVP = getImmutableMVP(t1);
+		//Mat4 t2MVP = getImmutableMVP(t2);
+
+		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model1, t1), cubeFaceColours, zBuffer);
+		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model2, t2), cubeFaceColours, zBuffer);
 		
 		t1.angleX += 0.01f;
 		t1.angleY += 0.005f;
