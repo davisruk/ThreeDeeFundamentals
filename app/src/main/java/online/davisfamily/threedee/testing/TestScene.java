@@ -1,10 +1,10 @@
 package online.davisfamily.threedee.testing;
 
-import java.awt.MouseInfo;
 import java.util.Arrays;
 
 import online.davisfamily.threedee.Scene;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
+import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.mouse.MouseEventConsumer;
@@ -27,7 +27,10 @@ public class TestScene implements Scene, MouseEventConsumer{
 	private ObjectTransformation t2;
 	private Mat4 model1, model2, view, projection, perspective, mvp1, mvp2;
 	private float aspect;
+	// Camera variables
 	private MouseEventDetail mouseInfo;
+	private Camera camera;
+	private Vec3 forward, right, worldUp, up;
 	
 	public TestScene (ViewDimensions dimensions, int[] pixels, CohenSutherlandLineClipper clipper, BresenhamLineUtilities bresenhamUtils, TriangleRenderer triangleRenderer) {
 		this.vd = dimensions;
@@ -58,6 +61,10 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.view = Mat4.identity();
 		this.mvp1 = new Mat4();
 		this.mvp2 = new Mat4();
+		this.camera = new Camera();
+		this.forward = new Vec3(0,0,0);
+		this.right = new Vec3(0,0,0);
+		this.worldUp = new Vec3(0,1,0);
 	}
 
 	// -- Testing variables --
@@ -228,7 +235,28 @@ public class TestScene implements Scene, MouseEventConsumer{
 	private Mat4 getMVPMutable(Mat4 model, ObjectTransformation tx) {
 		model.setModel(tx);
 		projection.set(perspective);
-		projection.mutableMultiply(view).mutableMultiply(model);
+		//if (mouseInfo != null && !mouseInfo.consumed && (mouseInfo.oldx != mouseInfo.x || mouseInfo.oldy != mouseInfo.y)) {
+			//mouseInfo.consumed = true;
+		if (mouseInfo != null) {			
+			System.out.println("Mouse: " + mouseInfo);
+			camera.mouseUpdate(mouseInfo);
+			System.out.println("Camera: " + camera);
+			forward.x = (float)Math.sin(camera.yaw) * (float)Math.cos(camera.pitch);
+			forward.y = (float)Math.sin(camera.pitch);
+			forward.z = (float)-Math.cos(camera.yaw) * (float)Math.cos(camera.pitch);
+			System.out.println("Forward: " + forward);
+			right = forward.cross(worldUp).normalize();
+			System.out.println("Right: " + right);	
+			up = right.cross(forward);
+			System.out.println("Up: " + up);
+			view.setView(right, up, forward, camera.position);
+			System.out.println("View: " + view);
+			System.out.println("Old Projection: " + projection);
+			projection.mutableMultiply(view).mutableMultiply(model);
+			System.out.println("New Projection: " + projection);
+		} else {
+			projection.mutableMultiply(view).mutableMultiply(model);
+		}
 		return projection;
 	}
 
@@ -237,7 +265,6 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.clearZBuffer();
 		//Mat4 t1MVP = getImmutableMVP(t1);
 		//Mat4 t2MVP = getImmutableMVP(t2);
-
 		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model1, t1), cubeFaceColours, zBuffer);
 		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model2, t2), cubeFaceColours, zBuffer);
 		
@@ -271,15 +298,25 @@ public class TestScene implements Scene, MouseEventConsumer{
 	public void testMouseMovement () {
 		if (mouseInfo != null && !mouseInfo.consumed && (mouseInfo.oldx != mouseInfo.x || mouseInfo.oldy != mouseInfo.y)) {
 			mouseInfo.consumed = true;
-			System.out.println(mouseInfo);		
+			System.out.println(mouseInfo);
+			camera.mouseUpdate(mouseInfo);
+			System.out.println(camera);
 		}
+	}
+	
+	public void testNormalizeAndCross() {
+		Vec3 a = new Vec3(1,1,1);
+		Vec3 b = new Vec3(1,2,3);
+		Vec3 c = a.cross(b);
+		System.out.println(c.immutableMult(a));
 	}
 	
 	public void renderFrame(double tSeconds) {
 		//testWireframeCube();
 		//testWireframeCubeWithMatrices();
-		//testFilledCube();
-		testMouseMovement();
+		testFilledCube();
+		//testMouseMovement();
+		//testNormalizeAndCross();
 	}
 
 

@@ -255,6 +255,14 @@ public class Mat4 {
 		
 	}
 	
+	public Mat4 setView (Vec3 right, Vec3 up, Vec3 forward, Vec3 pos) {
+		m[0] = right.x; m[1] = right.y; m[2] = right.z; m[3] = -right.dot(pos);
+		m[4] = up.x; m[5] = up.y; m[6] = up.z; m[7] = -up.dot(pos);
+		m[8] = -forward.x; m[9] = -forward.y; m[10] = -forward.z; m[11] = forward.dot(pos);
+		m[12] = 0; m[13] = 0; m[14] = 0; m[15] = 1;
+		return this;
+	}
+	
 	// multiply this by 4 point vector by matrix
 	// each element of result is dot product of the ith row in this(m) and the jth column of b 
 	public Vec4 multiplyVec (Vec4 b) {

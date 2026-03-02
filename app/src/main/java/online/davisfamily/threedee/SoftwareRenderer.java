@@ -1,7 +1,13 @@
 package online.davisfamily.threedee;
 
+import java.awt.AWTException;
+import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.Point;
+import java.awt.Robot;
+import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.Arrays;
@@ -46,14 +52,13 @@ public class SoftwareRenderer extends JPanel {
 	private BresenhamLineUtilities bl;
 	private TriangleRenderer tr;
 	
-	public SoftwareRenderer (int width, int height, int minX, int minY, int maxX, int maxY) {
+	public SoftwareRenderer (int width, int height, int minX, int minY, int maxX, int maxY) throws AWTException{
 		this.width = width;
 		this.height = height;
 		this.vpMinX = minX;
 		this.vpMinY = minY;
 		this.vpMaxXExclusive = maxX;
 		this.vpMaxYExclusive = maxY;
-
 		this.image = new BufferedImage(this.width, this.height, BufferedImage.TYPE_INT_ARGB);
 		this.pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
 		this.depthBuffer = new float[pixels.length];
@@ -78,29 +83,34 @@ public class SoftwareRenderer extends JPanel {
 		scene.renderFrame(tSeconds);
 	}
 	
-	public static void main(String[] args) {		
+	public static void main(String[] args){		
 		SwingUtilities.invokeLater(() -> {
-			int w = 960, h = 540;
-			int minX = 0, minY = 0, maxX = w, maxY = h;
-			SoftwareRenderer renderer = new SoftwareRenderer(w,h, minX, minY, maxX, maxY);
-			JFrame frame = new JFrame("Software Renderer");
-			frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-			frame.setContentPane(renderer);
-			frame.pack();
-			frame.setLocationRelativeTo(null);
-			frame.setVisible(true);
-			
-			long startNanos = System.nanoTime();
-			ViewDimensions vd = new ViewDimensions(w, h, minX, minY, maxX, maxY);
-			TestScene ts = new TestScene(vd, renderer.pixels, renderer.clipper, renderer.bl, renderer.tr);
-			MouseHandler mh = new MouseHandler(ts);
-			frame.addMouseMotionListener(mh);
-			
-			new Timer(16, e -> {
-				double t = (System.nanoTime() - startNanos) / 1_000_000_000.0;
-				renderer.renderFrame(t,ts);
-				renderer.repaint();
-			}).start();
+			try {
+				int w = 960, h = 540;
+				int minX = 0, minY = 0, maxX = w, maxY = h;
+				SoftwareRenderer renderer = new SoftwareRenderer(w,h, minX, minY, maxX, maxY);
+				JFrame frame = new JFrame("Software Renderer");
+				frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+				frame.setContentPane(renderer);
+				frame.pack();
+				frame.setLocationRelativeTo(null);
+				frame.setVisible(true);
+				
+				long startNanos = System.nanoTime();
+				ViewDimensions vd = new ViewDimensions(w, h, minX, minY, maxX, maxY);
+				TestScene ts = new TestScene(vd, renderer.pixels, renderer.clipper, renderer.bl, renderer.tr);
+				MouseHandler mh = new MouseHandler(ts, frame);
+				frame.addMouseListener(mh);
+				frame.addMouseMotionListener(mh);
+				
+				new Timer(16, e -> {
+					double t = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+					renderer.renderFrame(t,ts);
+					renderer.repaint();
+				}).start();
+			} catch (AWTException awt) {
+				System.out.println(awt.getMessage());
+			}
 		});
 	}
 }
