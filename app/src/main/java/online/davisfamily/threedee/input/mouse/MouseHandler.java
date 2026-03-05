@@ -21,7 +21,8 @@ public class MouseHandler extends MouseInputAdapter {
 	private Cursor defaultCursor;
 	private Cursor invisibleCursor;
 	private int centreScreenX, centreScreenY;
-	private boolean warping = false;
+	private int warpIgnoreCount = 0;
+	private static final int WARP_IGNORE_EVENTS = 3;
 	
 	public MouseHandler (MouseEventConsumer consumer, Component component) {
 		this.consumer = consumer;
@@ -46,11 +47,11 @@ public class MouseHandler extends MouseInputAdapter {
 	public void mousePressed(MouseEvent e) {
 
 		if (SwingUtilities.isLeftMouseButton(e)) {
-            toggleMouseCapture(component);
+            toggleMouseCapture(e.getComponent());
         }
     }
 	
-	private void updateCentre(Component component) {
+	private void updateCentreFrom(Component component) {
 	    Point p = component.getLocationOnScreen();
 	    centreScreenX = p.x + component.getWidth() / 2;
 	    centreScreenY = p.y + component.getHeight() / 2;
@@ -58,12 +59,14 @@ public class MouseHandler extends MouseInputAdapter {
 	
 	private void toggleMouseCapture(Component component) {
 	    mouseCaptured = !mouseCaptured;
-	    System.out.println(String.format("Mouse Capture triggered: %b", mouseCaptured));
 	    if (mouseCaptured) {
-	        component.setCursor(invisibleCursor);
-	        updateCentre(component);
-	        warping = true;
-	        robot.mouseMove(centreScreenX, centreScreenY);
+	    	component.setCursor(invisibleCursor);
+	    	if (component.isShowing()) {
+		        updateCentreFrom(component);
+		        warpIgnoreCount = WARP_IGNORE_EVENTS;
+		        robot.mouseMove(centreScreenX, centreScreenY);
+	    	}
+	        
 	    } else {
 	        component.setCursor(defaultCursor);
 	    }
@@ -96,17 +99,20 @@ public class MouseHandler extends MouseInputAdapter {
 	public void mouseMoved(MouseEvent e) {
 	    if (!mouseCaptured) return;
 
+	    Component c = e.getComponent();
+	    if (!c.isShowing()) return;
+
+	    if (warpIgnoreCount > 0) {
+	    	warpIgnoreCount--;
+	    	return;
+	    }
+	    
+	    // Recenter (update centre first to be safe)
+	    updateCentreFrom(c);
+
 	    int mx = e.getXOnScreen();
 	    int my = e.getYOnScreen();
-
-	    // If we just warped, ignore events until we observe the mouse at the centre.
-	    if (warping) {
-	        if (Math.abs(mx - centreScreenX) <= 1 && Math.abs(my - centreScreenY) <= 1) {
-	            warping = false; // warp complete
-	        }
-	        return;
-	    }
-
+   
 	    int dx = mx - centreScreenX;
 	    int dy = my - centreScreenY;
 
@@ -117,9 +123,7 @@ public class MouseHandler extends MouseInputAdapter {
 	    detail.dx = dx;detail.dy = dy;
 	    consumer.consume(detail);
 
-	    // Recenter (update centre first to be safe)
-	    updateCentre(component);
-	    warping = true;
+	    warpIgnoreCount = WARP_IGNORE_EVENTS;
 	    robot.mouseMove(centreScreenX, centreScreenY);
 	}
 }
