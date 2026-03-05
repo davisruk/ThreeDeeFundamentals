@@ -27,8 +27,6 @@ public class Camera {
 	}
 	
 	public void mouseUpdate(MouseEventDetail md) {
-		//yaw += (md.x - md.oldx) * sensitivityRadiansPerPixel;
-		//pitch -= (md.y - md.oldy) * sensitivityRadiansPerPixel;
 		yaw+=md.dx * sensitivityRadiansPerPixel;
 		pitch-=md.dy * sensitivityRadiansPerPixel;
 		pitch = clamp(pitch, -1.5533f, 1.5533f); // +-89 degrees in radians

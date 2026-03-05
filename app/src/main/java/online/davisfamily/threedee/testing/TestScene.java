@@ -235,25 +235,16 @@ public class TestScene implements Scene, MouseEventConsumer{
 	private Mat4 getMVPMutable(Mat4 model, ObjectTransformation tx) {
 		model.setModel(tx);
 		projection.set(perspective);
-		//if (mouseInfo != null && !mouseInfo.consumed && (mouseInfo.oldx != mouseInfo.x || mouseInfo.oldy != mouseInfo.y)) {
-			//mouseInfo.consumed = true;
+
 		if (mouseInfo != null) {			
-			System.out.println("Mouse: " + mouseInfo);
 			camera.mouseUpdate(mouseInfo);
-			System.out.println("Camera: " + camera);
 			forward.x = (float)Math.sin(camera.yaw) * (float)Math.cos(camera.pitch);
 			forward.y = (float)Math.sin(camera.pitch);
 			forward.z = (float)-Math.cos(camera.yaw) * (float)Math.cos(camera.pitch);
-			System.out.println("Forward: " + forward);
 			right = forward.cross(worldUp).normalize();
-			System.out.println("Right: " + right);	
 			up = right.cross(forward);
-			System.out.println("Up: " + up);
 			view.setView(right, up, forward, camera.position);
-			System.out.println("View: " + view);
-			System.out.println("Old Projection: " + projection);
 			projection.mutableMultiply(view).mutableMultiply(model);
-			System.out.println("New Projection: " + projection);
 		} else {
 			projection.mutableMultiply(view).mutableMultiply(model);
 		}
@@ -263,8 +254,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 	private void testFilledCube() {
 		this.clear(0xFF000000);
 		this.clearZBuffer();
-		//Mat4 t1MVP = getImmutableMVP(t1);
-		//Mat4 t2MVP = getImmutableMVP(t2);
+
 		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model1, t1), cubeFaceColours, zBuffer);
 		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model2, t2), cubeFaceColours, zBuffer);
 		
