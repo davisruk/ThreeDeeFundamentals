@@ -1,13 +1,8 @@
 package online.davisfamily.threedee;
 
 import java.awt.AWTException;
-import java.awt.Component;
-import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Graphics;
-import java.awt.Point;
-import java.awt.Robot;
-import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.Arrays;
@@ -21,6 +16,8 @@ import javax.swing.WindowConstants;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.input.keyboard.InputState;
+import online.davisfamily.threedee.input.keyboard.KeyBindings;
 import online.davisfamily.threedee.input.mouse.MouseHandler;
 import online.davisfamily.threedee.testing.TestScene;
 import online.davisfamily.threedee.triangles.TriangleRenderer;
@@ -51,6 +48,7 @@ public class SoftwareRenderer extends JPanel {
 	private CohenSutherlandLineClipper clipper;
 	private BresenhamLineUtilities bl;
 	private TriangleRenderer tr;
+	private long lastRenderTime;
 	
 	public SoftwareRenderer (int width, int height, int minX, int minY, int maxX, int maxY) throws AWTException{
 		this.width = width;
@@ -67,7 +65,13 @@ public class SoftwareRenderer extends JPanel {
 		this.bl = new BresenhamLineUtilities(pixels, width, clipper);
 		this.tr = new TriangleRenderer(pixels, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
 		setPreferredSize(new Dimension(width, height));
+		lastRenderTime = System.nanoTime();
 	}
+	
+	public CohenSutherlandLineClipper getClipper() {return clipper;}
+	public BresenhamLineUtilities getBresenhamLineImpl() {return bl;}
+	public TriangleRenderer getTriangleRenderer() {return tr;}
+	public int[] getPixels() {return pixels;}
 	
 	private void clear (int argb) {
 		for (int i=0; i<pixels.length;i++) pixels[i] = argb;
@@ -79,8 +83,11 @@ public class SoftwareRenderer extends JPanel {
 		g.drawImage(image,  0,  0,  null);
 	}
 			
-	private void renderFrame(double tSeconds, Scene scene) {
-		scene.renderFrame(tSeconds);
+	private void renderFrame(Scene scene) {
+		long current = System.nanoTime(); 
+		double t = (current - lastRenderTime) / 1_000_000_000.0;
+		lastRenderTime = current;
+		scene.renderFrame(t);
 	}
 	
 	public static void main(String[] args){		
@@ -96,16 +103,13 @@ public class SoftwareRenderer extends JPanel {
 				frame.setLocationRelativeTo(null);
 				frame.setVisible(true);
 				
-				long startNanos = System.nanoTime();
 				ViewDimensions vd = new ViewDimensions(w, h, minX, minY, maxX, maxY);
-				TestScene ts = new TestScene(vd, renderer.pixels, renderer.clipper, renderer.bl, renderer.tr);
+				TestScene ts = new TestScene(vd, renderer);
 				MouseHandler mh = new MouseHandler(ts, frame);
 				frame.addMouseListener(mh);
 				frame.addMouseMotionListener(mh);
-				
 				new Timer(16, e -> {
-					double t = (System.nanoTime() - startNanos) / 1_000_000_000.0;
-					renderer.renderFrame(t,ts);
+					renderer.renderFrame(ts);
 					renderer.repaint();
 				}).start();
 			} catch (AWTException awt) {

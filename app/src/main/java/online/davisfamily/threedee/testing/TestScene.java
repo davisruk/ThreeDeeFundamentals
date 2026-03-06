@@ -3,10 +3,13 @@ package online.davisfamily.threedee.testing;
 import java.util.Arrays;
 
 import online.davisfamily.threedee.Scene;
+import online.davisfamily.threedee.SoftwareRenderer;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.input.keyboard.InputState;
+import online.davisfamily.threedee.input.keyboard.KeyBindings;
 import online.davisfamily.threedee.input.mouse.MouseEventConsumer;
 import online.davisfamily.threedee.input.mouse.MouseEventDetail;
 import online.davisfamily.threedee.matrices.Mat4;
@@ -18,26 +21,28 @@ import online.davisfamily.threedee.triangles.TriangleRenderer;
 public class TestScene implements Scene, MouseEventConsumer{
 
 	private ViewDimensions vd;
-	private CohenSutherlandLineClipper clipper;
 	private BresenhamLineUtilities bl;
 	private TriangleRenderer tr;
 	int[] pixels;
 	float[] zBuffer;
 	private ObjectTransformation t1;
 	private ObjectTransformation t2;
-	private Mat4 model1, model2, view, projection, perspective, mvp1, mvp2;
+	private Mat4 model1, model2, view, projection, perspective;
 	private float aspect;
+
 	// Camera variables
 	private MouseEventDetail mouseInfo;
 	private Camera camera;
-	private Vec3 forward, right, worldUp, up;
+	private Vec3 move;
+	private float speed = 3.0f;
 	
-	public TestScene (ViewDimensions dimensions, int[] pixels, CohenSutherlandLineClipper clipper, BresenhamLineUtilities bresenhamUtils, TriangleRenderer triangleRenderer) {
+	private InputState inputState;
+	
+	public TestScene (ViewDimensions dimensions, SoftwareRenderer renderer) {
 		this.vd = dimensions;
-		this.clipper = clipper;
-		this.bl = bresenhamUtils;
-		this.tr = triangleRenderer;
-		this.pixels = pixels;
+		this.bl = renderer.getBresenhamLineImpl();
+		this.tr = renderer.getTriangleRenderer();
+		this.pixels = renderer.getPixels();
 		this.zBuffer = new float[pixels.length];
 		// testing vars
 		this.steps = 270;
@@ -59,12 +64,10 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.model1 = new Mat4();
 		this.model2 = new Mat4();
 		this.view = Mat4.identity();
-		this.mvp1 = new Mat4();
-		this.mvp2 = new Mat4();
 		this.camera = new Camera();
-		this.forward = new Vec3(0,0,0);
-		this.right = new Vec3(0,0,0);
-		this.worldUp = new Vec3(0,1,0);
+		this.move = new Vec3(0,0,0);
+		this.inputState = new InputState();
+		KeyBindings.installKeyBindings(renderer, this.inputState);
 	}
 
 	// -- Testing variables --
@@ -235,28 +238,18 @@ public class TestScene implements Scene, MouseEventConsumer{
 	private Mat4 getMVPMutable(Mat4 model, ObjectTransformation tx) {
 		model.setModel(tx);
 		projection.set(perspective);
-
-		if (mouseInfo != null) {			
-			camera.mouseUpdate(mouseInfo);
-			forward.x = (float)Math.sin(camera.yaw) * (float)Math.cos(camera.pitch);
-			forward.y = (float)Math.sin(camera.pitch);
-			forward.z = (float)-Math.cos(camera.yaw) * (float)Math.cos(camera.pitch);
-			right = forward.cross(worldUp).normalize();
-			up = right.cross(forward);
-			view.setView(right, up, forward, camera.position);
-			projection.mutableMultiply(view).mutableMultiply(model);
-		} else {
-			projection.mutableMultiply(view).mutableMultiply(model);
-		}
+		projection.mutableMultiply(camera.getView()).mutableMultiply(model);
 		return projection;
 	}
 
-	private void testFilledCube() {
+	private void testFilledCubes() {
 		this.clear(0xFF000000);
 		this.clearZBuffer();
 
 		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model1, t1), cubeFaceColours, zBuffer);
-		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model2, t2), cubeFaceColours, zBuffer);
+//		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model2, t2), cubeFaceColours, zBuffer);
+
+
 		
 		t1.angleX += 0.01f;
 		t1.angleY += 0.005f;
@@ -294,6 +287,35 @@ public class TestScene implements Scene, MouseEventConsumer{
 		}
 	}
 	
+	private void updateCamera() {
+		if (mouseInfo != null) camera.mouseUpdate(mouseInfo);	
+	}
+	
+	private void updatePosition(double dt) {
+		if (mouseInfo == null)
+			camera.updateBasis();
+
+		if (inputState.w()) this.move.mutableAdd(camera.getForwardXZ());
+		if (inputState.s()) this.move.mutableSubtract(camera.getForwardXZ());
+		if (inputState.d()) this.move.mutableAdd(camera.getRightXZ());
+		if (inputState.a()) this.move.mutableSubtract(camera.getRightXZ());
+
+		move.mutableScale((float)(speed * dt));
+		camera.position.mutableAdd(move);
+	}
+	
+	public void testKeyInput() {
+		String s = "Keys Pressed: ";
+		if (inputState.a()) s+="A ";
+		if (inputState.w()) s+="W ";
+		if (inputState.s()) s+="S ";
+		if (inputState.d()) s+="D ";
+		if (inputState.up()) s+="UP ";
+		if (inputState.down()) s+="DOWN ";
+		
+		if (!s.equals("Keys Pressed: ")) System.out.println(s);
+	}
+	
 	public void testNormalizeAndCross() {
 		Vec3 a = new Vec3(1,1,1);
 		Vec3 b = new Vec3(1,2,3);
@@ -302,11 +324,11 @@ public class TestScene implements Scene, MouseEventConsumer{
 	}
 	
 	public void renderFrame(double tSeconds) {
-		//testWireframeCube();
-		//testWireframeCubeWithMatrices();
-		testFilledCube();
-		//testMouseMovement();
-		//testNormalizeAndCross();
+		if (tSeconds > 0.1) tSeconds = 0.1;
+		updateCamera();
+		updatePosition(tSeconds);
+		testFilledCubes();
+		//testKeyInput();
 	}
 
 

@@ -9,6 +9,11 @@ public class Vec3 {
 		this.x = x; this.y = y; this.z = z;
 	}
 
+	public Vec3 setXYZ(float x, float y, float z){
+		this.x = x; this.y = y; this.z = z;
+		return this;
+	}
+	
 	public Vec3 normalize() {
 		float mag = (float)Math.sqrt(x*x+y*y+z*z);
 		// guard against divide by 0
@@ -19,6 +24,20 @@ public class Vec3 {
 		// could do x/mag,y/mag,z/mag but div is more expensive than mult
 		// in tight loops 1 div and 3 mults is cheaper than 3 divs
 		return new Vec3(x * inv, y * inv, z * inv);
+	}
+	
+	public Vec3 mutableNormalize() {
+		float mag = (float)Math.sqrt(x*x+y*y+z*z);
+		// guard against divide by 0
+		if (mag == 0f) {
+			x=0; y=0;z=0;
+			return this;
+		}
+		float inv = 1f / mag;
+		// could do x/mag,y/mag,z/mag but div is more expensive than mult
+		// in tight loops 1 div and 3 mults is cheaper than 3 divs
+		x*=inv;y*=inv;z*=inv;
+		return this;
 	}
 	
 	// given 2 vectors a and b the cross product is
@@ -42,14 +61,29 @@ public class Vec3 {
 		return new Vec3(x + v.x, y + v.y, z + v.z);
 	}
 	
+	public Vec3 mutableAdd(Vec3 v) {
+		x += v.x; y += v.y; z += v.z;
+		return this;
+	}
+	
 	public Vec3 subtract(Vec3 v) {
 		return new Vec3(x - v.x, y - v.y, z - v.z);
+	}
+
+	public Vec3 mutableSubtract(Vec3 v) {
+		x -= v.x; y -= v.y; z -= v.z;
+		return this;
 	}
 	
 	public Vec3 scale(float s) {
 		return new Vec3(x * s, y*s, z*s);
 	}
 	
+	public Vec3 mutableScale(float s) {
+		x *= s; y*=s; z*=s;
+		return this;
+	}
+
 	public static Vec3 rotateY(Vec3 v, double angle) {
 		float c = (float)Math.cos(angle);
 		float s = (float)Math.sin(angle);
