@@ -562,11 +562,12 @@ public class TestScene implements Scene, MouseEventConsumer{
 	
 	public void renderFrame(double tSeconds) {
 		if (tSeconds > 0.1) tSeconds = 0.1;
-//		updateCamera();
-//		updatePosition(tSeconds);
-//		testFilledCubes();
-//		drawCameraOverlayAxes(60, 60, 30);
-		drawDebugText(image, tSeconds);		//testKeyInput();
+		updateCamera();
+		updatePosition(tSeconds);
+		testFilledCubes();
+		// add key toggle for camera axes and debug info
+		drawCameraOverlayAxes(900, 500, 30); // make this use the screen dimensions
+		drawDebugText(image, tSeconds);
 	}
 
 
