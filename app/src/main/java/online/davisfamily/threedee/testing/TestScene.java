@@ -495,7 +495,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 	    );
 	}
 	
-	private void drawDebugText(BufferedImage image) {
+	private void drawDebugText(BufferedImage image, double tdelta) {
 	    Graphics2D g = image.createGraphics();
 	    try {
 	        g.setColor(Color.WHITE);
@@ -534,6 +534,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 	        Vec3 r = camera.getRightXZ();
 	        g.drawString(String.format("RightXZ:(%.3f, %.3f, %.3f)",
 	                r.x, r.y, r.z), x, y);
+	        y += line;
+	        g.drawString(String.format("FPS: %.3f", 1.0 / tdelta), x, y);
 	    } finally {
 	        g.dispose();
 	    }
@@ -560,11 +562,11 @@ public class TestScene implements Scene, MouseEventConsumer{
 	
 	public void renderFrame(double tSeconds) {
 		if (tSeconds > 0.1) tSeconds = 0.1;
-		updateCamera();
-		updatePosition(tSeconds);
-		testFilledCubes();
-		drawCameraOverlayAxes(60, 60, 30);
-		drawDebugText(image);		//testKeyInput();
+//		updateCamera();
+//		updatePosition(tSeconds);
+//		testFilledCubes();
+//		drawCameraOverlayAxes(60, 60, 30);
+		drawDebugText(image, tSeconds);		//testKeyInput();
 	}
 
 
