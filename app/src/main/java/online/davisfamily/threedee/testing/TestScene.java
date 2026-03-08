@@ -62,8 +62,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.angleX = 0.4f;
 		this.angleY = 0.6f;
 		this.aspect = (float)vd.width / (float)vd.height;
-		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-0.05f);
-		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,0.05f,0f,0f);
+		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f);
+		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f);
 		this.perspective = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
 		this.projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
 		this.vp = new Mat4();
@@ -76,7 +76,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.move = new Vec3(0,0,0);
 		this.inputState = new InputState();
 		this.mouseInfo = new MouseEventDetail();
-		KeyBindings.installKeyBindings(renderer, this.inputState);
+		KeyBindings.installKeyBindings(renderer.getRootPane(), this.inputState);
 	}
 
 	// -- Testing variables --
@@ -262,36 +262,54 @@ public class TestScene implements Scene, MouseEventConsumer{
 	    out.mutableMultiply(model);
 	}
 	
-	private void testFilledCubes() {
+	private void testFilledCubes(double tSeconds) {
 		this.clear(0xFF000000);
 		this.clearZBuffer();
 		
 
 		buildVP();
-//		drawWorldAxesAt(vp, 0f, 0f, -5f, 2.0f);
-//		drawLookLine(vp, camera, 5.0f, 0xFFFFFFFF);
-//		drawLookMarker(vp, camera, 5.0f, 0.2f);
-
 	    buildMVP(mvp1, model1, t1);
+	    //drawWorldAxesAt(vp, 0f, 0f, -5f, 2.0f);
+	    
 	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp1, cubeFaceColours, zBuffer);
 	    buildMVP(mvp2, model2, t2);
 	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp2, cubeFaceColours, zBuffer);
-	    drawCameraOverlayAxes(60, 60, 30);
-	    
-//		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model1, t1), cubeFaceColours, zBuffer);
-//		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model2, t2), cubeFaceColours, zBuffer);
 
+	    float angularSpeedX = 0.6f;   // radians per second
+	    float angularSpeedY = 0.3f;
+	    float zSpeed = 3.0f;          // units per second
+	    float xSpeed = 3.0f;
 
+	    t1.angleX += angularSpeedX * tSeconds;
+	    t1.angleY += angularSpeedY * tSeconds;
+	    t1.zTranslation += t1.zTranslationInc * tSeconds;
 		
-		t1.angleX += 0.01f;
+	    if (t1.zTranslation < -10) {
+			t1.zTranslationInc = 3.0f;
+		} else if (t1.zTranslation > -3) {
+			t1.zTranslationInc = -3.0f;
+		}
+
+	    t2.angleX += angularSpeedX * tSeconds;
+	    t2.angleY += angularSpeedY * tSeconds;
+	    t2.xTranslation += t2.xTranslationInc * tSeconds;
+	    
+		if (t2.xTranslation > 4) {
+			t2.xTranslationInc = -3.0f;
+		} else if (t2.xTranslation < -4) {
+			t2.xTranslationInc = 3.0f;
+		}
+	    
+/*	    
+	    t1.angleX += 0.01f;
 		t1.angleY += 0.005f;
 		// wrap the rotation angles into (0, 2pi) to avoid floating point degradation over time
 		t1.angleX %= twoPI;
 		t1.angleY %= twoPI;
 		if (t1.zTranslation < -10) {
-			t1.zTranslationInc = 0.05f;
+			t1.zTranslationInc = 3.0f;
 		} else if (t1.zTranslation > -3) {
-			t1.zTranslationInc = -0.05f;
+			t1.zTranslationInc = -3.0f;
 		}
  
 		t1.zTranslation += t1.zTranslationInc;
@@ -302,12 +320,13 @@ public class TestScene implements Scene, MouseEventConsumer{
 		t2.angleX %= twoPI;
 		t2.angleY %= twoPI;
 		if (t2.xTranslation > 4) {
-			t2.xTranslationInc = -0.05f;
+			t2.xTranslationInc = -3.0f;
 		} else if (t2.xTranslation < -4) {
-			t2.xTranslationInc = 0.05f;
+			t2.xTranslationInc = 3.0f;
 		}
  
 		t2.xTranslation += t2.xTranslationInc;
+		*/
 	}
 
 	public void testMouseMovement () {
@@ -561,15 +580,12 @@ public class TestScene implements Scene, MouseEventConsumer{
 	}
 	
 	public void renderFrame(double tSeconds) {
-		if (tSeconds > 0.1) tSeconds = 0.1;
-		updateCamera();
-		updatePosition(tSeconds);
-		testFilledCubes();
-		// add key toggle for camera axes and debug info
-		drawCameraOverlayAxes(900, 500, 30); // make this use the screen dimensions
-		drawDebugText(image, tSeconds);
+	    updateCamera();
+	    updatePosition(tSeconds);
+	    testFilledCubes(tSeconds);
+	    drawCameraOverlayAxes(900, 500, 30);
+	    drawDebugText(image, tSeconds);
 	}
-
 
 	@Override
 	public void consume(MouseEventDetail detail) {

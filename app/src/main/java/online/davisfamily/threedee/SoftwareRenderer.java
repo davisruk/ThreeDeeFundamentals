@@ -1,17 +1,19 @@
 package online.davisfamily.threedee;
 
 import java.awt.AWTException;
+import java.awt.Canvas;
 import java.awt.Dimension;
 import java.awt.Graphics;
+import java.awt.Toolkit;
+import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.Arrays;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.JRootPane;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
-import javax.swing.WindowConstants;
 
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
@@ -47,6 +49,10 @@ public class SoftwareRenderer extends JPanel {
 	private BresenhamLineUtilities bl;
 	private TriangleRenderer tr;
 	private long lastRenderTime;
+	private JFrame frame;
+	private Canvas canvas;
+	JRootPane root;
+	
 	
 	public SoftwareRenderer (int width, int height, int minX, int minY, int maxX, int maxY) throws AWTException{
 		this.width = width;
@@ -67,6 +73,8 @@ public class SoftwareRenderer extends JPanel {
 	}
 	
 	public BufferedImage getImage() {return image;}
+	public Canvas getCanvas() {return canvas;}
+	public JRootPane getRootPane() {return root;}
 	public CohenSutherlandLineClipper getClipper() {return clipper;}
 	public BresenhamLineUtilities getBresenhamLineImpl() {return bl;}
 	public TriangleRenderer getTriangleRenderer() {return tr;}
@@ -95,22 +103,58 @@ public class SoftwareRenderer extends JPanel {
 				int w = 960, h = 540;
 				int minX = 0, minY = 0, maxX = w, maxY = h;
 				SoftwareRenderer renderer = new SoftwareRenderer(w,h, minX, minY, maxX, maxY);
+				
 				JFrame frame = new JFrame("Software Renderer");
-				frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-				frame.setContentPane(renderer);
+				Canvas canvas = new Canvas();
+				canvas.setSize(w, h);
+				canvas.setIgnoreRepaint(true);
+
+				frame.add(canvas);
 				frame.pack();
 				frame.setLocationRelativeTo(null);
+				frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 				frame.setVisible(true);
-				
+				canvas.createBufferStrategy(2);
+				renderer.canvas = canvas;
+				renderer.frame = frame;
+				renderer.root = frame.getRootPane();
+
+				BufferStrategy bufferStrategy = canvas.getBufferStrategy();
+				boolean running = true;
 				ViewDimensions vd = new ViewDimensions(w, h, minX, minY, maxX, maxY);
 				TestScene ts = new TestScene(vd, renderer);
-				MouseHandler mh = new MouseHandler(ts, frame);
-				frame.addMouseListener(mh);
-				frame.addMouseMotionListener(mh);
-				new Timer(16, e -> {
-					renderer.renderFrame(ts);
-					renderer.repaint();
+				MouseHandler mh = new MouseHandler(ts, canvas);
+				canvas.addMouseListener(mh);
+				canvas.addMouseMotionListener(mh);
+				new Thread(() -> {
+					long last = System.nanoTime();
+
+					while (running) {
+					    long now = System.nanoTime();
+					    double dt = (now - last) / 1_000_000_000.0;
+					    last = now;
+
+					    if (dt > 0.1) dt = 0.1;
+
+					    ts.renderFrame(dt);
+
+					    do {
+					        do {
+					            Graphics g = bufferStrategy.getDrawGraphics();
+					            try {
+					                g.drawImage(renderer.image, 0, 0, null);
+					            } finally {
+					                g.dispose();
+					            }
+					        } while (bufferStrategy.contentsRestored());
+
+					        bufferStrategy.show();
+					    } while (bufferStrategy.contentsLost());
+
+					    Toolkit.getDefaultToolkit().sync();
+					}
 				}).start();
+
 			} catch (AWTException awt) {
 				System.out.println(awt.getMessage());
 			}
