@@ -16,8 +16,6 @@ import javax.swing.WindowConstants;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
-import online.davisfamily.threedee.input.keyboard.InputState;
-import online.davisfamily.threedee.input.keyboard.KeyBindings;
 import online.davisfamily.threedee.input.mouse.MouseHandler;
 import online.davisfamily.threedee.testing.TestScene;
 import online.davisfamily.threedee.triangles.TriangleRenderer;
@@ -68,6 +66,7 @@ public class SoftwareRenderer extends JPanel {
 		lastRenderTime = System.nanoTime();
 	}
 	
+	public BufferedImage getImage() {return image;}
 	public CohenSutherlandLineClipper getClipper() {return clipper;}
 	public BresenhamLineUtilities getBresenhamLineImpl() {return bl;}
 	public TriangleRenderer getTriangleRenderer() {return tr;}

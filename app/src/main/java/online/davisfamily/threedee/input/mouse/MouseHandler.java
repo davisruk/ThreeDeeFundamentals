@@ -126,4 +126,5 @@ public class MouseHandler extends MouseInputAdapter {
 	    warpIgnoreCount = WARP_IGNORE_EVENTS;
 	    robot.mouseMove(centreScreenX, centreScreenY);
 	}
+	
 }

@@ -48,7 +48,7 @@ public class Camera {
 		rightXZ.setXYZ((float)Math.cos(yaw), 0f, (float)Math.sin(yaw)).mutableNormalize();
 		right = forward.cross(worldUp).normalize();
 		up = right.cross(forward);
-		//view.setView(right, up, forward, position);
+		//view.setView(right, up, forward, position); // use this for movement in Y as well
 		view.setView(rightXZ, up, forwardXZ, position);
 	}
 	

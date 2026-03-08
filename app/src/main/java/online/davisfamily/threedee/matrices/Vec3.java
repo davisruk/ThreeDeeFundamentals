@@ -84,6 +84,14 @@ public class Vec3 {
 		return this;
 	}
 
+	public float lengthSquared() {
+		return x*x + y*y + z*z;
+	}
+	
+	public float length() {
+		return (float)Math.sqrt((double)x*x + y*y + z*z);
+	}
+	
 	public static Vec3 rotateY(Vec3 v, double angle) {
 		float c = (float)Math.cos(angle);
 		float s = (float)Math.sin(angle);

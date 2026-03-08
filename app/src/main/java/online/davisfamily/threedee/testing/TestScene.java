@@ -1,12 +1,15 @@
 package online.davisfamily.threedee.testing;
 
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.util.Arrays;
 
 import online.davisfamily.threedee.Scene;
 import online.davisfamily.threedee.SoftwareRenderer;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.camera.Camera;
-import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.keyboard.KeyBindings;
@@ -27,7 +30,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 	float[] zBuffer;
 	private ObjectTransformation t1;
 	private ObjectTransformation t2;
-	private Mat4 model1, model2, view, projection, perspective;
+	private Mat4 model1, model2, view, projection, perspective,vp, mvp1, mvp2;
+	private BufferedImage image;
 	private float aspect;
 
 	// Camera variables
@@ -42,6 +46,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.vd = dimensions;
 		this.bl = renderer.getBresenhamLineImpl();
 		this.tr = renderer.getTriangleRenderer();
+		this.image = renderer.getImage();
 		this.pixels = renderer.getPixels();
 		this.zBuffer = new float[pixels.length];
 		// testing vars
@@ -61,12 +66,16 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,0.05f,0f,0f);
 		this.perspective = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
 		this.projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
+		this.vp = new Mat4();
 		this.model1 = new Mat4();
 		this.model2 = new Mat4();
+		this.mvp1 = new Mat4();
+		this.mvp2 = new Mat4();
 		this.view = Mat4.identity();
 		this.camera = new Camera();
 		this.move = new Vec3(0,0,0);
 		this.inputState = new InputState();
+		this.mouseInfo = new MouseEventDetail();
 		KeyBindings.installKeyBindings(renderer, this.inputState);
 	}
 
@@ -241,12 +250,35 @@ public class TestScene implements Scene, MouseEventConsumer{
 		projection.mutableMultiply(camera.getView()).mutableMultiply(model);
 		return projection;
 	}
+	
+	private void buildVP() {
+	    vp.set(perspective);
+	    vp.mutableMultiply(camera.getView());
+	}
 
+	private void buildMVP(Mat4 out, Mat4 model, ObjectTransformation tx) {
+	    model.setModel(tx);
+	    out.set(vp);
+	    out.mutableMultiply(model);
+	}
+	
 	private void testFilledCubes() {
 		this.clear(0xFF000000);
 		this.clearZBuffer();
+		
 
-		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model1, t1), cubeFaceColours, zBuffer);
+		buildVP();
+//		drawWorldAxesAt(vp, 0f, 0f, -5f, 2.0f);
+//		drawLookLine(vp, camera, 5.0f, 0xFFFFFFFF);
+//		drawLookMarker(vp, camera, 5.0f, 0.2f);
+
+	    buildMVP(mvp1, model1, t1);
+	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp1, cubeFaceColours, zBuffer);
+	    buildMVP(mvp2, model2, t2);
+	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp2, cubeFaceColours, zBuffer);
+	    drawCameraOverlayAxes(60, 60, 30);
+	    
+//		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model1, t1), cubeFaceColours, zBuffer);
 //		tr.drawCube(v4CubeVertices, cubeTriangles, getMVPMutable(model2, t2), cubeFaceColours, zBuffer);
 
 
@@ -288,10 +320,15 @@ public class TestScene implements Scene, MouseEventConsumer{
 	}
 	
 	private void updateCamera() {
-		if (mouseInfo != null) camera.mouseUpdate(mouseInfo);	
+		if (mouseInfo != null) {
+			camera.mouseUpdate(mouseInfo);
+			mouseInfo.dx = 0;
+			mouseInfo.dy = 0;
+		}
 	}
 	
 	private void updatePosition(double dt) {
+		move.setXYZ(0, 0, 0);
 		if (mouseInfo == null)
 			camera.updateBasis();
 
@@ -300,8 +337,206 @@ public class TestScene implements Scene, MouseEventConsumer{
 		if (inputState.d()) this.move.mutableAdd(camera.getRightXZ());
 		if (inputState.a()) this.move.mutableSubtract(camera.getRightXZ());
 
-		move.mutableScale((float)(speed * dt));
-		camera.position.mutableAdd(move);
+		if (move.lengthSquared() > 0) {
+		    move.mutableNormalize();
+		    move.mutableScale(speed * (float)dt);
+		    camera.position.mutableAdd(move);
+		}
+	}
+	
+	
+	public void drawCameraOverlayAxes(int anchorX, int anchorY, int axisLength) {
+	    // Camera basis in world space
+	    Vec3 right = camera.getRight();
+	    Vec3 up = camera.getUp();
+	    Vec3 forward = camera.getForward();
+
+	    // Draw X axis (red)
+	    drawOverlayAxis(anchorX, anchorY, right, axisLength, 0xFFFF0000);
+
+	    // Draw Y axis (green)
+	    drawOverlayAxis(anchorX, anchorY, up, axisLength, 0xFF00FF00);
+
+	    // Draw Z axis (blue)
+	    drawOverlayAxis(anchorX, anchorY, forward, axisLength, 0xFF0000FF);
+	}
+	
+	private void drawOverlayAxis(int x0, int y0, Vec3 dir, int scale, int colour) {
+	    int x1 = Math.round(x0 + dir.x * scale);
+	    int y1 = Math.round(y0 - dir.y * scale); // minus because screen Y grows downward
+
+	    bl.drawLineUnsafeClipped(x0, y0, x1, y1, colour);
+	}
+	
+	public void drawWorldAxesAt(Mat4 viewProjection, float ox, float oy, float oz, float axisLength) {
+	    Vec4 origin = new Vec4(ox, oy, oz, 1f);
+
+	    drawAxisLine(viewProjection, origin, new Vec4(ox + axisLength, oy, oz, 1f), 0xFFFF0000); // +X
+	    drawAxisLine(viewProjection, origin, new Vec4(ox, oy + axisLength, oz, 1f), 0xFF00FF00); // +Y
+	    drawAxisLine(viewProjection, origin, new Vec4(ox, oy, oz - axisLength, 1f), 0xFF0000FF); // -Z
+	}
+	
+	public void drawLookMarker(Mat4 viewProjection, Camera camera, float distance, float size) {
+	    Vec3 f = camera.getForward();
+		Vec3 c = new Vec3(
+	        camera.position.x + f.x * distance,
+	        camera.position.y + f.y * distance,
+	        camera.position.z + f.z * distance
+	    );
+
+	    // small cross aligned to world axes
+	    drawAxisLine(viewProjection,
+	        new Vec4(c.x - size, c.y, c.z, 1f),
+	        new Vec4(c.x + size, c.y, c.z, 1f),
+	        0xFFFF0000); // red X
+
+	    drawAxisLine(viewProjection,
+	        new Vec4(c.x, c.y - size, c.z, 1f),
+	        new Vec4(c.x, c.y + size, c.z, 1f),
+	        0xFF00FF00); // green Y
+
+	    drawAxisLine(viewProjection,
+	        new Vec4(c.x, c.y, c.z - size, 1f),
+	        new Vec4(c.x, c.y, c.z + size, 1f),
+	        0xFF0000FF); // blue Z
+	}
+	public void drawAxes(Mat4 viewProjection, float axisLength) {
+	    Vec4 origin = new Vec4(0, 0, 0, 1);
+
+	    drawAxisLine(viewProjection, origin, new Vec4(axisLength, 0, 0, 1), 0xFFFF0000); // +X bright red
+	    drawAxisLine(viewProjection, origin, new Vec4(-axisLength, 0, 0, 1), 0xFF880000); // -X dark red
+
+	    drawAxisLine(viewProjection, origin, new Vec4(0, axisLength, 0, 1), 0xFF00FF00); // +Y bright green
+	    drawAxisLine(viewProjection, origin, new Vec4(0, -axisLength, 0, 1), 0xFF008800); // -Y dark green
+
+	    drawAxisLine(viewProjection, origin, new Vec4(0, 0, -axisLength, 1), 0xFF0000FF); // forward / -Z bright blue
+	    drawAxisLine(viewProjection, origin, new Vec4(0, 0, axisLength, 1), 0xFF000088); // +Z dark blue
+	}
+	
+	private void drawAxisLine(Mat4 viewProjection, Vec4 a, Vec4 b, int colour) {
+	    Vec4 clipA = viewProjection.multiplyVec(a);
+	    Vec4 clipB = viewProjection.multiplyVec(b);
+
+	    float epsilon = 0.001f;
+	    if (clipA.w <= epsilon || clipB.w <= epsilon) {
+	        return;
+	    }
+
+	    float ndcAx = clipA.x / clipA.w;
+	    float ndcAy = clipA.y / clipA.w;
+
+	    float ndcBx = clipB.x / clipB.w;
+	    float ndcBy = clipB.y / clipB.w;
+
+	    if (!Float.isFinite(ndcAx) || !Float.isFinite(ndcAy) ||
+	        !Float.isFinite(ndcBx) || !Float.isFinite(ndcBy)) {
+	        return;
+	    }
+
+	    int sx0 = Math.round((ndcAx * 0.5f + 0.5f) * (vd.width - 1));
+	    int sy0 = Math.round((-ndcAy * 0.5f + 0.5f) * (vd.height - 1));
+
+	    int sx1 = Math.round((ndcBx * 0.5f + 0.5f) * (vd.width - 1));
+	    int sy1 = Math.round((-ndcBy * 0.5f + 0.5f) * (vd.height - 1));
+
+	    bl.drawLineUnsafeClipped(sx0, sy0, sx1, sy1, colour);
+	}
+	
+	public void drawCameraAxes(Mat4 viewProjection, Camera camera, float axisLength, float distanceAhead) {
+	    Vec3 f = camera.getForward();
+	    Vec3 r = camera.getRight();
+	    Vec3 u = camera.getUp();
+		Vec3 centre = new Vec3(
+	        camera.position.x + f.x * distanceAhead,
+	        camera.position.y + f.y * distanceAhead,
+	        camera.position.z + f.z * distanceAhead
+	    );
+
+	    Vec4 origin = new Vec4(centre.x, centre.y, centre.z, 1f);
+
+	    // X axis (camera right)
+	    
+	    drawAxisLine(
+	        viewProjection,
+	        origin,
+	        new Vec4(
+	            centre.x + r.x * axisLength,
+	            centre.y + r.y * axisLength,
+	            centre.z + r.z * axisLength,
+	            1f
+	        ),
+	        0xFFFF0000
+	    );
+
+	    // Y axis (camera up)
+	    drawAxisLine(
+	        viewProjection,
+	        origin,
+	        new Vec4(
+	            centre.x + u.x * axisLength,
+	            centre.y + u.y * axisLength,
+	            centre.z + u.z * axisLength,
+	            1f
+	        ),
+	        0xFF00FF00
+	    );
+
+	    // Z axis (camera forward)
+	    drawAxisLine(
+	        viewProjection,
+	        origin,
+	        new Vec4(
+	            centre.x + f.x * axisLength,
+	            centre.y + f.y * axisLength,
+	            centre.z + f.z * axisLength,
+	            1f
+	        ),
+	        0xFF0000FF
+	    );
+	}
+	
+	private void drawDebugText(BufferedImage image) {
+	    Graphics2D g = image.createGraphics();
+	    try {
+	        g.setColor(Color.WHITE);
+	        g.setFont(new Font("Consolas", Font.PLAIN, 14));
+
+	        int x = 10;
+	        int y = 20;
+	        int line = 18;
+	        
+	        g.setColor(new Color(0, 0, 0, 170));
+	        g.fillRoundRect(5, 5, 260, 120, 10, 10);
+	        g.setColor(Color.WHITE);
+	        
+	        g.drawString(String.format("Pos:   (%.3f, %.3f, %.3f)",
+	                camera.position.x, camera.position.y, camera.position.z), x, y);
+	        y += line;
+
+	        g.drawString(String.format("Yaw:   %.3f rad (%.1f deg)",
+	                camera.yaw, Math.toDegrees(camera.yaw)), x, y);
+	        y += line;
+
+	        g.drawString(String.format("Pitch: %.3f rad (%.1f deg)",
+	                camera.pitch, Math.toDegrees(camera.pitch)), x, y);
+	        y += line;
+
+	        Vec3 f = camera.getForward();
+	        g.drawString(String.format("Fwd:   (%.3f, %.3f, %.3f)",
+	                f.x, f.y, f.z), x, y);
+	        y += line;
+
+	        Vec3 fxz = camera.getForwardXZ();
+	        g.drawString(String.format("FwdXZ: (%.3f, %.3f, %.3f)",
+	                fxz.x, fxz.y, fxz.z), x, y);
+	        y += line;
+
+	        Vec3 r = camera.getRightXZ();
+	        g.drawString(String.format("RightXZ:(%.3f, %.3f, %.3f)",
+	                r.x, r.y, r.z), x, y);
+	    } finally {
+	        g.dispose();
+	    }
 	}
 	
 	public void testKeyInput() {
@@ -328,12 +563,14 @@ public class TestScene implements Scene, MouseEventConsumer{
 		updateCamera();
 		updatePosition(tSeconds);
 		testFilledCubes();
-		//testKeyInput();
+		drawCameraOverlayAxes(60, 60, 30);
+		drawDebugText(image);		//testKeyInput();
 	}
 
 
 	@Override
 	public void consume(MouseEventDetail detail) {
-		this.mouseInfo = detail;
+		mouseInfo.dx += detail.dx;
+		mouseInfo.dy += detail.dy;
 	}
 }
