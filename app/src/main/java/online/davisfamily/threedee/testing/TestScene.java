@@ -236,14 +236,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 	}
 	
 	private void testFilledCubes(double tSeconds) {
-		this.clear(0xFF000000);
-		this.clearZBuffer();
-		
-
-		buildVP();
 	    buildMVP(mvp1, model1, t1);
-	    //drawWorldAxesAt(vp, 0f, 0f, -5f, 2.0f);
-	    
 	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp1, cubeFaceColours, zBuffer);
 	    buildMVP(mvp2, model2, t2);
 	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp2, cubeFaceColours, zBuffer);
@@ -332,10 +325,15 @@ public class TestScene implements Scene, MouseEventConsumer{
 	public void renderFrame(double tSeconds) {
 	    updateCamera();
 	    updatePosition(tSeconds);
-	    testFilledCubes(tSeconds);
+		this.clear(0xFF000000);
+		this.clearZBuffer();
+	    buildVP();
+	    // drawWorldAxesAt is bugged - need clipping properly when line comes through plane.	
+//	    if (inputState.isSet(Mode.SHOW_WORLD_AXES)) debug.drawWorldAxesAt(vp, 0f, 0f, -4f, 10.0f);
+		testFilledCubes(tSeconds);
 	    if (inputState.isSet(Mode.SHOW_CAMERA_AXES)) debug.drawCameraOverlayAxes(900, 500, 30);
 	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds);
-	    
+
 	}
 
 	@Override

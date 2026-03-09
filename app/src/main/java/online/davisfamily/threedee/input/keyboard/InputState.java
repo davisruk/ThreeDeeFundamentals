@@ -6,7 +6,7 @@ import java.util.EnumSet;
 
 public class InputState {
 	private final BitSet pressed = new BitSet(512);
-	public enum Mode {SHOW_DEBUG_INFO, SHOW_CAMERA_AXES}; 
+	public enum Mode {SHOW_DEBUG_INFO, SHOW_CAMERA_AXES, SHOW_WORLD_AXES}; 
 	private EnumSet<Mode> modes;
 	
 	public InputState() {
