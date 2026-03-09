@@ -15,7 +15,6 @@ import javax.swing.KeyStroke;
  * rather than relying on strings that contain the key name
  */
 public final class KeyBindings {
-	
 	public static void installKeyBindings(JComponent target, InputState input) {
 		InputMap im = target.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
 		ActionMap am = target.getActionMap();
@@ -25,6 +24,7 @@ public final class KeyBindings {
 		bind(im, am, input, "VK_D", KeyEvent.VK_D);
 		bind(im, am, input, "VK_UP", KeyEvent.VK_UP);
 		bind(im, am, input, "VK_DOWN", KeyEvent.VK_DOWN);
+		bind(im, am, input, "VK_DOWN", KeyEvent.VK_ALT);
 	}
 	
 	private static void bind(InputMap im, ActionMap am, InputState input, String keyName, int vk) {
