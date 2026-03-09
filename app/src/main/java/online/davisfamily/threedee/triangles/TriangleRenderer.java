@@ -15,6 +15,9 @@ public class TriangleRenderer {
 	private final static int Cx = 4;
 	private final static int Cy = 5;
 	
+	private final int A=0, B=1, C=2;
+
+	
 	int minX, minY, maxX, maxY; // the viewport on the cavas
 	int[] pixels; // the world canvas
 	int pw;
@@ -30,38 +33,6 @@ public class TriangleRenderer {
 		this.maxY = maxY;
 	}
 	
-	// unsafe sort - make sure [] length is % 2 and >= 4
-	private int[] unsafeSortPolygonVerticesByY (int[] v) {		
-		boolean stillSwapping = true;
-		while (stillSwapping) {
-			stillSwapping = false;
-			for (int c = 1; c <= v.length - 3; c+=2) {
-				if (v[c] > v[c+2]) {
-					int tx = v[c+1];
-					int ty = v[c+2];
-					v [c+1] = v[c-1];
-					v [c+2] = v[c];
-					v[c-1]=tx;
-					v[c]=ty;
-					stillSwapping = true;
-				}
-			}
-		}
-		return v;
-	}
-	
-	private int setEdgeBoundsForX(int x) {
-		if (x < minX) return minX;
-		if (x > maxX) return maxX;
-		return x;
-	}
-	
-	private int setEdgeBoundsForY(int y) {
-		if (y < minY) return minY;
-		if (y > maxY) return maxY;
-		return y;
-	}
-	
 	private class ScreenCoord {
 		public ScreenCoord(int x, int y, float z) {
 			this.x = x; this.y = y; this.z = z;
@@ -70,7 +41,6 @@ public class TriangleRenderer {
 		float z;
 	}
 
-	private final int A=0, B=1, C=2;
 	// Fills a triangle given the x,y,z coords for that triangle
 	// Triangle is determined as A(x,y) B(x,y) C(x,y)
 	// Edges are determined as AB, AC, BC

@@ -300,6 +300,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 		if (inputState.s()) this.move.mutableSubtract(camera.getForwardXZ());
 		if (inputState.d()) this.move.mutableAdd(camera.getRightXZ());
 		if (inputState.a()) this.move.mutableSubtract(camera.getRightXZ());
+		if (inputState.up()) this.move.mutableAdd(camera.getUp());
+		if (inputState.down()) this.move.mutableSubtract(camera.getUp());		
 
 		if (move.lengthSquared() > 0) {
 		    move.mutableNormalize();
@@ -330,7 +332,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 	public void renderFrame(double tSeconds) {
 	    updateCamera();
 	    updatePosition(tSeconds);
-//	    testFilledCubes(tSeconds);
+	    testFilledCubes(tSeconds);
 	    if (inputState.isSet(Mode.SHOW_CAMERA_AXES)) debug.drawCameraOverlayAxes(900, 500, 30);
 	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds);
 	    

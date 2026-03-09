@@ -24,7 +24,13 @@ public final class KeyBindings {
 		bind(im, am, input, "VK_D", KeyEvent.VK_D);
 		bind(im, am, input, "VK_UP", KeyEvent.VK_UP);
 		bind(im, am, input, "VK_DOWN", KeyEvent.VK_DOWN);
-		bind(im, am, input, "VK_DOWN", KeyEvent.VK_ALT);
+		
+		// the following are not strictly necessary, just here
+		// to record the key presses that are bound by commands.
+		// commands will still work without these bindings.
+		bind(im, am, input, "VK_C", KeyEvent.VK_C); 
+		bind(im, am, input, "VK_ALT", KeyEvent.VK_ALT);
+		bind(im, am, input, "VK_I", KeyEvent.VK_I);
 	}
 	
 	private static void bind(InputMap im, ActionMap am, InputState input, String keyName, int vk) {
