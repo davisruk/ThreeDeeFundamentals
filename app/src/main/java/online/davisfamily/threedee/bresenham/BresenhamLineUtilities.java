@@ -5,6 +5,7 @@ import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper.Li
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.triangles.TriangleRenderer.Vertex;
 
 public class BresenhamLineUtilities {
 
@@ -76,6 +77,13 @@ public class BresenhamLineUtilities {
 		boolean accepted = c.computeViewportLine(x0, y0, x1, y1, r);
 		if (!accepted) return;
 
+		if (r.x0 < 0 || r.x0 >= pw || r.y0 < 0 || r.y0 >= ph ||
+			    r.x1 < 0 || r.x1 >= pw || r.y1 < 0 || r.y1 >= ph) {
+			    throw new IllegalStateException(
+			        "Clipper returned OOB endpoints: (" + r.x0 + "," + r.y0 + ") -> (" + r.x1 + "," + r.y1 + ")"
+			    );
+			}
+		
 		int deltaX = Math.abs(r.x1 - r.x0);
 		int deltaY = Math.abs(r.y1 - r.y0);
 		
@@ -154,5 +162,57 @@ public class BresenhamLineUtilities {
 		}
 	}
 	
+	public static class ClippedLine {
+		public Vertex a;
+		public Vertex b;
+		public boolean visible;
+		
+		public static boolean isNear (Vertex v, float near) {
+			return v.z < -near;
+		}
 
+		// return a Vertex clipped to near on Z plane
+		private static Vertex intersectNear(Vertex a, Vertex b, float near) {
+			float planeZ = -near;
+			float t = (planeZ - a.z) / (b.z - a.z);
+			return new Vertex(
+						a.x + t * (b.x - a.x),
+						a.y + t * (b.y - a.y),
+						planeZ,
+						a.w + t * (b.w - a.w)
+					);
+		}
+		
+		public static ClippedLine clipLineNear(Vertex a, Vertex b, float near) {
+			boolean aInside = isNear(a, near);
+			boolean bInside = isNear(b, near);
+			ClippedLine result = new ClippedLine();
+			
+			if (!aInside && !bInside) {
+				result.visible = false;
+				return result;
+			}
+			
+			if (aInside && bInside) {
+				result.visible = true;
+				result.a = a;
+				result.b = b;
+				return result;
+			}
+			
+			Vertex intersection = intersectNear(a, b, near);
+			
+			if (!aInside) {
+				result.a = intersection;
+				result.b = b;
+			} else {
+				result.a = a;
+				result.b = intersection;
+			}
+
+			result.visible = true;
+			return result;
+		}
+		
+	}
 }

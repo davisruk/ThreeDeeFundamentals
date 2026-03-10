@@ -3,27 +3,25 @@ package online.davisfamily.threedee.triangles;
 import java.util.Arrays;
 import java.util.Comparator;
 
+import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
+import online.davisfamily.threedee.camera.Camera;
+import online.davisfamily.threedee.input.keyboard.InputState;
+import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec4;
 
 public class TriangleRenderer {
 
-	private final static int Ax = 0;
-	private final static int Ay = 1;
-	private final static int Bx = 2;
-	private final static int By = 3;
-	private final static int Cx = 4;
-	private final static int Cy = 5;
-	
 	private final int A=0, B=1, C=2;
 
-	
+	private BresenhamLineUtilities bl;
+	private InputState is;
 	int minX, minY, maxX, maxY; // the viewport on the cavas
 	int[] pixels; // the world canvas
 	int pw;
 	int ph;
 	
-	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY) {
+	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer) {
 		pixels = canvas;
 		pw = canvasWidth;
 		ph = pixels.length / pw;
@@ -31,6 +29,11 @@ public class TriangleRenderer {
 		this.maxX = maxX;
 		this.minY = minY;
 		this.maxY = maxY;
+		this.bl = lineDrawer;
+	}
+	
+	public void setInputState(InputState is) {
+		this.is = is;
 	}
 	
 	private class ScreenCoord {
@@ -222,7 +225,160 @@ public class TriangleRenderer {
 			
 			if (cross >=0 ) continue;
 			
-			fillTriangle(new ScreenCoord(sx[a], sy[a], sz[a]), new ScreenCoord(sx[b], sy[b], sz[b]), new ScreenCoord(sx[c], sy[c], sz[c]), colours[i/2], zBuff);			
+			fillTriangle(new ScreenCoord(sx[a], sy[a], sz[a]), new ScreenCoord(sx[b], sy[b], sz[b]), new ScreenCoord(sx[c], sy[c], sz[c]), colours[i/2], zBuff);
 		}
+	}
+
+	private void drawProjectedTriangle(Mat4 perspective, Vertex a, Vertex b, Vertex c, int colour, float[] zBuff) {
+		Vec4 clipA = perspective.multiplyVec(new Vec4(a.x, a.y, a.z, a.w));
+		Vec4 clipB = perspective.multiplyVec(new Vec4(b.x, b.y, b.z, b.w));
+		Vec4 clipC = perspective.multiplyVec(new Vec4(c.x, c.y, c.z, c.w));
+		
+		if (clipA.w < 0.1f || clipB.w < 0.1f || clipC.w < 0.1f) return;
+		float invWA = 1.0f / clipA.w;	
+		float invWB = 1.0f / clipB.w;
+		float invWC = 1.0f / clipC.w;
+		
+		float ndcAx = clipA.x * invWA;
+		float ndcAy = clipA.y * invWA;
+		float ndcAz = clipA.z * invWA;
+		
+		float ndcBx = clipB.x * invWB;
+		float ndcBy = clipB.y * invWB;
+		float ndcBz = clipB.z * invWB;
+
+		float ndcCx = clipC.x * invWC;
+		float ndcCy = clipC.y * invWC;
+		float ndcCz = clipC.z * invWC;
+
+		int sxA = Math.round((ndcAx * 0.5f + 0.5f) * (pw - 1));
+		int syA = Math.round((-ndcAy * 0.5f + 0.5f) * (ph - 1));
+		int sxB = Math.round((ndcBx * 0.5f + 0.5f) * (pw - 1));
+		int syB = Math.round((-ndcBy * 0.5f + 0.5f) * (ph - 1));
+		int sxC = Math.round((ndcCx * 0.5f + 0.5f) * (pw - 1));
+		int syC = Math.round((-ndcCy * 0.5f + 0.5f) * (ph - 1));
+
+		long abx = (long) (sxB - sxA), aby = (long) (syB - syA);
+		long acx = (long) (sxC - sxA), acy = (long)(syC - syA);
+	
+		long cross = abx * acy - aby * acx;
+		
+		if (cross >=0 ) return;
+		if (is.isSet(Mode.FILL_MODEL)) {
+		fillTriangle(new ScreenCoord(sxA, syA, ndcAz), new ScreenCoord(sxB, syB, ndcBz), new ScreenCoord(sxC, syC, ndcCz), colour, zBuff);
+		}
+		
+		if (is.isSet(Mode.SHOW_WIREFRAME)) {
+		    bl.drawLineUnsafeClipped(sxA, syA, sxB, syB, 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(sxB, syB, sxC, syC, 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(sxC, syC, sxA, syA, 0xFFFFFFFF);
+		}
+
+	}
+	
+	public void drawCube (Camera cam, Vec4[] vertices, int[][]triangles, Mat4 model, Mat4 perspective, int[] colours, float[] zBuff, boolean drawWireframe) {
+		Mat4 mv = new Mat4();
+		mv.set(cam.getView());
+		mv.mutableMultiply(model);
+		
+		Vertex[] viewVerts = new Vertex[vertices.length];
+		for(int v=0; v<vertices.length;v++) {
+			viewVerts[v] = new Vertex(mv.multiplyVec(vertices[v]));
+		}
+		
+		for (int i=0; i<triangles.length;i++) {
+			int[] t = triangles[i];
+			Vertex v0 = viewVerts[t[0]];
+			Vertex v1 = viewVerts[t[1]];
+			Vertex v2 = viewVerts[t[2]];
+			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
+			if (ct.t1 != null) drawProjectedTriangle(perspective, ct.t1[0], ct.t1[1], ct.t1[2], colours[i/2], zBuff);
+			if (ct.t2 != null) drawProjectedTriangle(perspective, ct.t2[0], ct.t2[1], ct.t2[2], colours[i/2], zBuff);
+		}
+	}
+
+	// helpers for near plane clipping
+	// need to refactor this to separate class
+	public static class Vertex {
+		public float x, y, z, w;
+		
+		public Vertex(Vec4 v){
+			x = v.x;
+			y = v.y;
+			z = v.z;
+			w = v.w;
+		}
+		
+		public Vertex(float x, float y, float z, float w){
+			this.x = x;
+			this.y = y;
+			this.z = z;
+			this.w = w;
+		}
+		
+		// determine if this vertex is inside the Z plane
+		private static boolean isInsideNear(Vertex v, float near) {
+			return v.z < -near;
+		}
+		
+		// return a Vertex clipped to near on Z plane
+		private static Vertex intersectNear(Vertex a, Vertex b, float near) {
+			float planeZ = -near;
+			float t = (planeZ - a.z) / (b.z - a.z);
+			return new Vertex(
+						a.x + t * (b.x - a.x),
+						a.y + t * (b.y - a.y),
+						planeZ,
+						a.w + t * (b.w - a.w)
+					);
+		}
+
+		private static class ClippedTriangles {
+			Vertex[] t1;
+			Vertex[] t2;
+		}
+		
+		// clip triangle to near on Z plane
+		// empty result == exclude all vertices
+		// returns 2 triangles if 2 vertices cross the Z plane 
+		private static ClippedTriangles clipTriangleNear(Vertex v0, Vertex v1, Vertex v2, float near) {
+			Vertex [] in = new Vertex[3];
+			Vertex [] out = new Vertex[3];
+			int inCount = 0, outCount = 0;
+			Vertex [] verts = {v0, v1, v2};
+			for (Vertex v: verts) {
+				if (isInsideNear(v, near)) in[inCount++] = v;
+				else out[outCount++] = v;
+			}
+			
+			ClippedTriangles ct = new ClippedTriangles();
+			if (inCount == 0) return ct; // none inside
+			if (inCount == 3) {
+				ct.t1 = new Vertex[] {v0, v1, v2}; // all inside
+				return ct;
+			}
+			
+			// 1 vertex inside so clip to ab & ac
+			if (inCount == 1) {
+				Vertex a = in[0];
+				Vertex b = out[0];
+				Vertex c = out[1];
+				Vertex ab = intersectNear(a,b, near);
+				Vertex ac = intersectNear(a,c, near);
+				ct.t1 = new Vertex[] {a, ab, ac};
+				return ct;
+			}
+
+			// 2 vertex inside so clip to ac & bc
+			Vertex a = in[0];
+			Vertex b = in[1];
+			Vertex c = out[0];
+			Vertex ac = intersectNear(a,c, near);
+			Vertex bc = intersectNear(b,c, near);
+			ct.t1 = new Vertex[] {a, b, bc};
+			ct.t2 = new Vertex[] {a, bc, ac};
+			return ct;
+		}
+
 	}
 }

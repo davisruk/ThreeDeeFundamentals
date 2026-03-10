@@ -51,7 +51,7 @@ public class CohenSutherlandLineClipper {
 	}
 	
 	public boolean computeViewportLine(int x0, int y0, int x1, int y1, LineClipResults results) {
-		results.x0 = x0;results.y0 = y0;results.x1=x1;results.y1=y1;
+		
 		int p0Outcode = computeOutcode(x0, y0);
 		int p1Outcode = computeOutcode(x1, y1);
 
@@ -60,6 +60,7 @@ public class CohenSutherlandLineClipper {
 				// both points are inside the viewport
 				// algorithm guarantees that at some point this will happen
 				// if any part of the line is inside the viewport
+				results.x0 = x0;results.y0 = y0;results.x1=x1;results.y1=y1;
 				return true;
 			} else if ((p0Outcode & p1Outcode) != 0) {
 				// both points are outside the viewport

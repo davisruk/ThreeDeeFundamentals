@@ -67,7 +67,7 @@ public class SoftwareRenderer extends JPanel {
 		Arrays.fill(this.depthBuffer, Float.NEGATIVE_INFINITY);
 		this.clipper = new CohenSutherlandLineClipper(vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
 		this.bl = new BresenhamLineUtilities(pixels, width, clipper);
-		this.tr = new TriangleRenderer(pixels, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1);
+		this.tr = new TriangleRenderer(pixels, width, vpMinX, vpMinY, vpMaxXExclusive-1, vpMaxYExclusive-1, this.bl);
 		setPreferredSize(new Dimension(width, height));
 		lastRenderTime = System.nanoTime();
 	}

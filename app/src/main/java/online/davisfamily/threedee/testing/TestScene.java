@@ -83,7 +83,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.mouseInfo = new MouseEventDetail();
 		JRootPane rootPane = renderer.getRootPane();
 		KeyBindings.installKeyBindings(rootPane, this.inputState);
-		CommandBindings.installCommandBindings(rootPane, this.inputState);		
+		CommandBindings.installCommandBindings(rootPane, this.inputState);
+		tr.setInputState(this.inputState);
 		this.debug = new DebugUtils(bl,camera,vd, this.inputState);
 	}
 
@@ -236,12 +237,16 @@ public class TestScene implements Scene, MouseEventConsumer{
 	}
 	
 	private void testFilledCubes(double tSeconds) {
-	    buildMVP(mvp1, model1, t1);
-	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp1, cubeFaceColours, zBuffer);
+	    //buildMVP(mvp1, model1, t1);
+	    //tr.drawCube(v4CubeVertices, cubeTriangles, mvp1, cubeFaceColours, zBuffer);
 	    buildMVP(mvp2, model2, t2);
-	    tr.drawCube(v4CubeVertices, cubeTriangles, mvp2, cubeFaceColours, zBuffer);
+	    //tr.drawCube(v4CubeVertices, cubeTriangles, mvp2, cubeFaceColours, zBuffer);
 
-	    float angularSpeedX = 0.6f;   // radians per second
+		//tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer);
+		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer, inputState.isSet(Mode.SHOW_WIREFRAME));
+		
+/*
+		float angularSpeedX = 0.6f;   // radians per second
 	    float angularSpeedY = 0.3f;
 	    float zSpeed = 3.0f;          // units per second
 	    float xSpeed = 3.0f;
@@ -264,7 +269,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 			t2.xTranslationInc = -3.0f;
 		} else if (t2.xTranslation < -4) {
 			t2.xTranslationInc = 3.0f;
-		}   
+		}
+*/   
 	}
 
 	public void testMouseMovement () {
@@ -329,7 +335,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.clearZBuffer();
 	    buildVP();
 	    // drawWorldAxesAt is bugged - need clipping properly when line comes through plane.	
-//	    if (inputState.isSet(Mode.SHOW_WORLD_AXES)) debug.drawWorldAxesAt(vp, 0f, 0f, -4f, 10.0f);
+	    if (inputState.isSet(Mode.SHOW_WORLD_AXES)) debug.drawWorldAxesAt(view, projection, 0f, 0f, -1f, 20.0f);
 		testFilledCubes(tSeconds);
 	    if (inputState.isSet(Mode.SHOW_CAMERA_AXES)) debug.drawCameraOverlayAxes(900, 500, 30);
 	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds);

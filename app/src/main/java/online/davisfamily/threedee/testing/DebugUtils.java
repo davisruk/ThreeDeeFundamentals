@@ -6,6 +6,7 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
+import online.davisfamily.threedee.bresenham.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState;
@@ -13,6 +14,7 @@ import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.triangles.TriangleRenderer.Vertex;
 
 public class DebugUtils {
 
@@ -37,10 +39,23 @@ public class DebugUtils {
 	}
 	
 	// tested
-	private void drawAxisLine(Mat4 viewProjection, Vec4 a, Vec4 b, int colour) {
-	    Vec4 clipA = viewProjection.multiplyVec(a);
-	    Vec4 clipB = viewProjection.multiplyVec(b);
-
+	private void drawAxisLine(Mat4 view, Mat4 projection, Vec4 a, Vec4 b, int colour) {
+	    Vec4 viewA4 = view.multiplyVec(a);
+	    Vec4 viewB4 = view.multiplyVec(b);
+	    
+	    Vertex viewA = new Vertex(viewA4);
+	    Vertex viewB = new Vertex(viewB4);
+	    
+	    // clip against the near plane
+	    
+	    float near = 0.1f;
+	    ClippedLine clippedLine = ClippedLine.clipLineNear(viewA, viewB, near);
+	    if (!clippedLine.visible) return;
+	    
+	    Vec4 clipA = projection.multiplyVec(new Vec4(clippedLine.a));
+	    Vec4 clipB = projection.multiplyVec(new Vec4(clippedLine.b));
+	    
+	    
 	    float epsilon = 0.001f;
 	    if (clipA.w <= epsilon || clipB.w <= epsilon) {
 	        return;
@@ -52,11 +67,13 @@ public class DebugUtils {
 	    float ndcBx = clipB.x / clipB.w;
 	    float ndcBy = clipB.y / clipB.w;
 
+	    // reject non-infinite results
 	    if (!Float.isFinite(ndcAx) || !Float.isFinite(ndcAy) ||
 	        !Float.isFinite(ndcBx) || !Float.isFinite(ndcBy)) {
 	        return;
 	    }
-
+	    
+	    //map to screen
 	    int sx0 = Math.round((ndcAx * 0.5f + 0.5f) * (vd.width - 1));
 	    int sy0 = Math.round((-ndcAy * 0.5f + 0.5f) * (vd.height - 1));
 
@@ -84,7 +101,7 @@ public class DebugUtils {
 	}
 	
 	// tested
-	public void drawLookMarker(Mat4 viewProjection, Camera camera, float distance, float size) {
+	public void drawLookMarker(Mat4 view, Mat4 projection, Camera camera, float distance, float size) {
 	    Vec3 f = camera.getForward();
 		Vec3 c = new Vec3(
 	        camera.position.x + f.x * distance,
@@ -93,23 +110,23 @@ public class DebugUtils {
 	    );
 
 	    // small cross aligned to world axes
-	    drawAxisLine(viewProjection,
+	    drawAxisLine(view, projection,
 	        new Vec4(c.x - size, c.y, c.z, 1f),
 	        new Vec4(c.x + size, c.y, c.z, 1f),
 	        0xFFFF0000); // red X
 
-	    drawAxisLine(viewProjection,
+	    drawAxisLine(view, projection,
 	        new Vec4(c.x, c.y - size, c.z, 1f),
 	        new Vec4(c.x, c.y + size, c.z, 1f),
 	        0xFF00FF00); // green Y
 
-	    drawAxisLine(viewProjection,
+	    drawAxisLine(view, projection,
 	        new Vec4(c.x, c.y, c.z - size, 1f),
 	        new Vec4(c.x, c.y, c.z + size, 1f),
 	        0xFF0000FF); // blue Z
 	}
 
-	public void drawCameraAxes(Mat4 viewProjection, Camera camera, float axisLength, float distanceAhead) {
+	public void drawCameraAxes(Mat4 view, Mat4 projection, Camera camera, float axisLength, float distanceAhead) {
 	    Vec3 f = camera.getForward();
 	    Vec3 r = camera.getRight();
 	    Vec3 u = camera.getUp();
@@ -124,7 +141,7 @@ public class DebugUtils {
 	    // X axis (camera right)
 	    
 	    drawAxisLine(
-	        viewProjection,
+	        view, projection,
 	        origin,
 	        new Vec4(
 	            centre.x + r.x * axisLength,
@@ -137,7 +154,7 @@ public class DebugUtils {
 
 	    // Y axis (camera up)
 	    drawAxisLine(
-	        viewProjection,
+	        view, projection,
 	        origin,
 	        new Vec4(
 	            centre.x + u.x * axisLength,
@@ -150,7 +167,7 @@ public class DebugUtils {
 
 	    // Z axis (camera forward)
 	    drawAxisLine(
-	        viewProjection,
+	        view, projection,
 	        origin,
 	        new Vec4(
 	            centre.x + f.x * axisLength,
@@ -212,11 +229,11 @@ public class DebugUtils {
 	}
 	
 	// untested - may cause exceptions when axis goes through the camera
-	public void drawWorldAxesAt(Mat4 viewProjection, float ox, float oy, float oz, float axisLength) {
+	public void drawWorldAxesAt(Mat4 view, Mat4 projection, float ox, float oy, float oz, float axisLength) {
 	    Vec4 origin = new Vec4(ox, oy, oz, 1f);
 
-	    drawAxisLine(viewProjection, origin, new Vec4(ox + axisLength, oy, oz, 1f), 0xFFFF0000); // +X
-	    drawAxisLine(viewProjection, origin, new Vec4(ox, oy + axisLength, oz, 1f), 0xFF00FF00); // +Y
-	    drawAxisLine(viewProjection, origin, new Vec4(ox, oy, oz - axisLength, 1f), 0xFF0000FF); // -Z
+	    drawAxisLine(view, projection, origin, new Vec4(ox + axisLength, oy, oz, 1f), 0xFFFF0000); // +X
+	    drawAxisLine(view, projection, origin, new Vec4(ox, oy + axisLength, oz, 1f), 0xFF00FF00); // +Y
+	    drawAxisLine(view, projection, origin, new Vec4(ox, oy, oz - axisLength, 1f), 0xFF0000FF); // -Z
 	}
 }

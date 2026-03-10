@@ -1,8 +1,24 @@
 package online.davisfamily.threedee.matrices;
 
+import online.davisfamily.threedee.triangles.TriangleRenderer.Vertex;
+
 public class Vec4 {
 	public float x, y, z, w;
 	
+	public Vec4 (Vec4 a) {
+		x = a.x;
+		y = a.y;
+		z = a.z;
+		w = a.w;
+	}
+	
+	public Vec4 (Vertex a) {
+		x = a.x;
+		y = a.y;
+		z = a.z;
+		w = a.w;
+	}
+
 	public Vec4(float x, float y, float z) {
 		this.x = x;
 		this.y = y;
