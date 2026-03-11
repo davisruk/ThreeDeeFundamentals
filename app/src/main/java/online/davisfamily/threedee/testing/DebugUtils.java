@@ -180,7 +180,7 @@ public class DebugUtils {
 	}
 	
 	// tested
-	public void drawDebugText(BufferedImage image, double tdelta) {
+	public void drawDebugText(BufferedImage image, double tdelta, Mat4 perspective) {
 	    Graphics2D g = image.createGraphics();
 	    try {
 	        g.setColor(Color.WHITE);
@@ -191,7 +191,7 @@ public class DebugUtils {
 	        int line = 18;
 	        
 	        g.setColor(new Color(0, 0, 0, 170));
-	        g.fillRoundRect(5, 5, 260, 150, 10, 10);
+	        g.fillRoundRect(5, 5, 260, 320, 10, 10);
 	        g.setColor(Color.WHITE);
 	        
 	        g.drawString(String.format("Pos:   (%.3f, %.3f, %.3f)",
@@ -222,7 +222,27 @@ public class DebugUtils {
 	        y += line;
 	        g.drawString(String.format("FPS: %.3f", 1.0 / tdelta), x, y);
 	        y += line;
-	        g.drawString(String.format("Show Camera Axes: %b", is.isSet(Mode.SHOW_CAMERA_AXES)), x, y);
+
+	        g.drawString(String.format("right len = %.3f", camera.getRight().length()), x, y);
+	        y += line;
+	        g.drawString(String.format("up len = %.3f", camera.getUp().length()), x, y);
+	        y += line;
+	        g.drawString(String.format("forward len = %.3f", camera.getForward().length()), x, y);
+	        y += line;
+	        
+	        g.drawString(String.format("r·u = %.3f", camera.getRight().dot(camera.getUp())), x, y);
+	        y += line;
+	        g.drawString(String.format("r·f = %.3f", camera.getRight().dot(camera.getForward())), x, y);
+	        y += line;
+	        g.drawString(String.format("u·f = %.3f", camera.getUp().dot(camera.getForward())), x, y);
+	        y += line;
+
+	        for (int i=0; i<=12;i+=4) {
+	        	g.drawString(String.format("Perspective %d:(%.3f, %.3f, %.3f, %3f)", i/4, perspective.m[i],perspective.m[i+1],perspective.m[i+2],perspective.m[i+3]), x, y);
+	        	y += line;
+	        }
+
+
 	    } finally {
 	        g.dispose();
 	    }
@@ -236,4 +256,29 @@ public class DebugUtils {
 	    drawAxisLine(view, projection, origin, new Vec4(ox, oy + axisLength, oz, 1f), 0xFF00FF00); // +Y
 	    drawAxisLine(view, projection, origin, new Vec4(ox, oy, oz - axisLength, 1f), 0xFF0000FF); // -Z
 	}
+	
+	public void drawWorldGrid(Mat4 view, Mat4 projection, int halfSize, float step) {
+	    for (int i = -halfSize; i <= halfSize; i++) {
+	        float p = i * step;
+
+	        int colourX = (i == 0) ? 0xFFFF4444 : 0xFF444444; // X axis highlighted
+	        int colourZ = (i == 0) ? 0xFF4444FF : 0xFF444444; // Z axis highlighted
+
+	        // line parallel to Z at x = p
+	        drawAxisLine(
+	            view, projection,
+	            new Vec4(p, 0f, -halfSize * step, 1f),
+	            new Vec4(p, 0f,  halfSize * step, 1f),
+	            colourX
+	        );
+
+	        // line parallel to X at z = p
+	        drawAxisLine(
+	            view, projection,
+	            new Vec4(-halfSize * step, 0f, p, 1f),
+	            new Vec4( halfSize * step, 0f, p, 1f),
+	            colourZ
+	        );
+	    }
+	}	
 }

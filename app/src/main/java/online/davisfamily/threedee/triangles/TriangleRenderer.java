@@ -9,6 +9,7 @@ import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.testing.DebugUtils;
 
 public class TriangleRenderer {
 
@@ -20,6 +21,7 @@ public class TriangleRenderer {
 	int[] pixels; // the world canvas
 	int pw;
 	int ph;
+	DebugUtils dbg;
 	
 	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer) {
 		pixels = canvas;
@@ -32,9 +34,18 @@ public class TriangleRenderer {
 		this.bl = lineDrawer;
 	}
 	
+// ******* Refactor required - debug and input state should be on constructor                              ******//
+// ******* Currently TestScene creates both but SoftwareRenderer creates TriangleRenderer                  ******//
+// ******* Either move TriangleRenderer creation to TestScene or Debug and Input State to SoftwareRenderer ******//	
+	public void setDebug(DebugUtils du) {
+		this.dbg = du;
+	}
+	
 	public void setInputState(InputState is) {
 		this.is = is;
 	}
+
+// ******
 	
 	private class ScreenCoord {
 		public ScreenCoord(int x, int y, float z) {
@@ -155,7 +166,8 @@ public class TriangleRenderer {
 					// store the current z (depth) if it is less than (nearer)
 					// than the currently stored depth for this pixel
 					// overwrite the colour of the pixel as this object is nearer
-					if (z < zBuff[row+x]) {
+					//if (z < zBuff[row+x]) {
+					if (z > zBuff[row+x]) {
 						zBuff[row+x]=z;
 						pixels[row+x] = colour;
 					}
@@ -265,7 +277,8 @@ public class TriangleRenderer {
 		
 		if (cross >=0 ) return;
 		if (is.isSet(Mode.FILL_MODEL)) {
-		fillTriangle(new ScreenCoord(sxA, syA, ndcAz), new ScreenCoord(sxB, syB, ndcBz), new ScreenCoord(sxC, syC, ndcCz), colour, zBuff);
+		//fillTriangle(new ScreenCoord(sxA, syA, ndcAz), new ScreenCoord(sxB, syB, ndcBz), new ScreenCoord(sxC, syC, ndcCz), colour, zBuff);
+		fillTriangle(new ScreenCoord(sxA, syA, invWA), new ScreenCoord(sxB, syB, invWB), new ScreenCoord(sxC, syC, invWC), colour, zBuff);
 		}
 		
 		if (is.isSet(Mode.SHOW_WIREFRAME)) {
@@ -280,8 +293,7 @@ public class TriangleRenderer {
 		Mat4 mv = new Mat4();
 		mv.set(cam.getView());
 		mv.mutableMultiply(model);
-		
-		Vertex[] viewVerts = new Vertex[vertices.length];
+	    Vertex[] viewVerts = new Vertex[vertices.length];
 		for(int v=0; v<vertices.length;v++) {
 			viewVerts[v] = new Vertex(mv.multiplyVec(vertices[v]));
 		}

@@ -86,6 +86,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		CommandBindings.installCommandBindings(rootPane, this.inputState);
 		tr.setInputState(this.inputState);
 		this.debug = new DebugUtils(bl,camera,vd, this.inputState);
+		tr.setDebug(debug);
 	}
 
 	// -- Testing variables --
@@ -222,7 +223,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 	
 	private void clearZBuffer() {
 		this.zBuffer = new float[pixels.length];
-		Arrays.fill(this.zBuffer, Float.POSITIVE_INFINITY);
+		//Arrays.fill(this.zBuffer, Float.POSITIVE_INFINITY);
+		Arrays.fill(this.zBuffer, Float.NEGATIVE_INFINITY);
 	}
 	
 	private void buildVP() {
@@ -237,15 +239,15 @@ public class TestScene implements Scene, MouseEventConsumer{
 	}
 	
 	private void testFilledCubes(double tSeconds) {
-	    //buildMVP(mvp1, model1, t1);
+	    buildMVP(mvp1, model1, t1);
 	    //tr.drawCube(v4CubeVertices, cubeTriangles, mvp1, cubeFaceColours, zBuffer);
 	    buildMVP(mvp2, model2, t2);
 	    //tr.drawCube(v4CubeVertices, cubeTriangles, mvp2, cubeFaceColours, zBuffer);
 
-		//tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer);
+		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer, inputState.isSet(Mode.SHOW_WIREFRAME));
 		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer, inputState.isSet(Mode.SHOW_WIREFRAME));
 		
-/*
+
 		float angularSpeedX = 0.6f;   // radians per second
 	    float angularSpeedY = 0.3f;
 	    float zSpeed = 3.0f;          // units per second
@@ -270,7 +272,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		} else if (t2.xTranslation < -4) {
 			t2.xTranslationInc = 3.0f;
 		}
-*/   
+   
 	}
 
 	public void testMouseMovement () {
@@ -334,11 +336,12 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.clear(0xFF000000);
 		this.clearZBuffer();
 	    buildVP();
-	    // drawWorldAxesAt is bugged - need clipping properly when line comes through plane.	
-	    if (inputState.isSet(Mode.SHOW_WORLD_AXES)) debug.drawWorldAxesAt(view, projection, 0f, 0f, -1f, 20.0f);
+	
 		testFilledCubes(tSeconds);
+		if (inputState.isSet(Mode.SHOW_WORLD_AXES)) debug.drawWorldAxesAt(camera.getView(), projection, 0f, 0f, -1f, 20.0f);
+		if (inputState.isSet(Mode.SHOW_GRID)) debug.drawWorldGrid(camera.getView(), perspective, 20, 1.0f);
 	    if (inputState.isSet(Mode.SHOW_CAMERA_AXES)) debug.drawCameraOverlayAxes(900, 500, 30);
-	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds);
+	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds, perspective);
 
 	}
 
