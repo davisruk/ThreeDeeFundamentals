@@ -10,24 +10,21 @@ import online.davisfamily.threedee.bresenham.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState;
-import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
-import online.davisfamily.threedee.triangles.TriangleRenderer.Vertex;
+import online.davisfamily.threedee.matrices.Vertex;
 
 public class DebugUtils {
 
 	private BresenhamLineUtilities bl;
 	private Camera camera;
 	private ViewDimensions vd;
-	private InputState is;
 	
-	public DebugUtils(BresenhamLineUtilities lineUtilities, Camera cam, ViewDimensions dimensions, InputState input) {
+	public DebugUtils(BresenhamLineUtilities lineUtilities, Camera cam, ViewDimensions dimensions) {
 		bl = lineUtilities;
 		camera = cam;
 		vd = dimensions;
-		is = input;
 	}
 	
 	// tested

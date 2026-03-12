@@ -70,7 +70,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		KeyBindings.installKeyBindings(root, this.inputState);
 		CommandBindings.installCommandBindings(root, this.inputState);
 		this.bl = new BresenhamLineUtilities(pixels, vd.width, new CohenSutherlandLineClipper(vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1));
-		this.debug = new DebugUtils(bl,camera,vd, this.inputState);
+		this.debug = new DebugUtils(bl,camera,vd);
 		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug);
 	}
 	
@@ -128,11 +128,15 @@ public class TestScene implements Scene, MouseEventConsumer{
 		
 	private void clear (int argb) {
 		for (int i=0; i<pixels.length;i++) pixels[i] = argb;
+		clearZBuffer();
 	}
 	
 	private void clearZBuffer() {
 		this.zBuffer = new float[pixels.length];
+		// ZBuffer using ndcZ so comparison is <
 		//Arrays.fill(this.zBuffer, Float.POSITIVE_INFINITY);
+		
+		// ZBuffer using invW so comparison is > 
 		Arrays.fill(this.zBuffer, Float.NEGATIVE_INFINITY);
 	}
 	
@@ -157,8 +161,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer);
 
 		transformAndRotate(tSeconds);
-   
-	}
+   	}
 	
 	private void transformAndRotate (double tSeconds) {
 		float angularSpeedX = 0.6f;   // radians per second
@@ -213,21 +216,23 @@ public class TestScene implements Scene, MouseEventConsumer{
 		}
 	}
 	
+	private void updateDebug(double tSeconds) {
+		if (inputState.isSet(Mode.SHOW_WORLD_AXES)) debug.drawWorldAxesAt(camera.getView(), projection, 0f, 0f, -1f, 20.0f);
+		if (inputState.isSet(Mode.SHOW_GRID)) debug.drawWorldGrid(camera.getView(), perspective, 20, 1.0f);
+	    if (inputState.isSet(Mode.SHOW_CAMERA_AXES)) debug.drawCameraOverlayAxes(900, 500, 30);
+	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds, perspective);
+	
+	}
+	
 	public BufferedImage getImage() {return image;}
 	
 	public void renderFrame(double tSeconds) {
 	    updateCamera();
 	    updatePosition(tSeconds);
 		this.clear(0xFF000000);
-		this.clearZBuffer();
 	    buildVP();
-	
 		testFilledCubes(tSeconds);
-		if (inputState.isSet(Mode.SHOW_WORLD_AXES)) debug.drawWorldAxesAt(camera.getView(), projection, 0f, 0f, -1f, 20.0f);
-		if (inputState.isSet(Mode.SHOW_GRID)) debug.drawWorldGrid(camera.getView(), perspective, 20, 1.0f);
-	    if (inputState.isSet(Mode.SHOW_CAMERA_AXES)) debug.drawCameraOverlayAxes(900, 500, 30);
-	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds, perspective);
-
+		updateDebug(tSeconds);
 	}
 
 	@Override

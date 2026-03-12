@@ -5,7 +5,7 @@ import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper.Li
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
-import online.davisfamily.threedee.triangles.TriangleRenderer.Vertex;
+import online.davisfamily.threedee.matrices.Vertex;
 
 public class BresenhamLineUtilities {
 

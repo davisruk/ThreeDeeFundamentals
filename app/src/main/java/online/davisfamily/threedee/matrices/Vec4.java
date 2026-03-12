@@ -1,7 +1,5 @@
 package online.davisfamily.threedee.matrices;
 
-import online.davisfamily.threedee.triangles.TriangleRenderer.Vertex;
-
 public class Vec4 {
 	public float x, y, z, w;
 	

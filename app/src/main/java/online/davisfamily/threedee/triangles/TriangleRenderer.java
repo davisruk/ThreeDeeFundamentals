@@ -9,6 +9,7 @@ import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.matrices.Vertex;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 public class TriangleRenderer {
@@ -296,90 +297,5 @@ public class TriangleRenderer {
 			if (ct.t1 != null) drawProjectedTriangle(perspective, ct.t1[0], ct.t1[1], ct.t1[2], colours[i/2], zBuff);
 			if (ct.t2 != null) drawProjectedTriangle(perspective, ct.t2[0], ct.t2[1], ct.t2[2], colours[i/2], zBuff);
 		}
-	}
-
-	// helpers for near plane clipping
-	// need to refactor this to separate class
-	public static class Vertex {
-		public float x, y, z, w;
-		
-		public Vertex(Vec4 v){
-			x = v.x;
-			y = v.y;
-			z = v.z;
-			w = v.w;
-		}
-		
-		public Vertex(float x, float y, float z, float w){
-			this.x = x;
-			this.y = y;
-			this.z = z;
-			this.w = w;
-		}
-		
-		// determine if this vertex is inside the Z plane
-		private static boolean isInsideNear(Vertex v, float near) {
-			return v.z < -near;
-		}
-		
-		// return a Vertex clipped to near on Z plane
-		private static Vertex intersectNear(Vertex a, Vertex b, float near) {
-			float planeZ = -near;
-			float t = (planeZ - a.z) / (b.z - a.z);
-			return new Vertex(
-						a.x + t * (b.x - a.x),
-						a.y + t * (b.y - a.y),
-						planeZ,
-						a.w + t * (b.w - a.w)
-					);
-		}
-
-		private static class ClippedTriangles {
-			Vertex[] t1;
-			Vertex[] t2;
-		}
-		
-		// clip triangle to near on Z plane
-		// empty result == exclude all vertices
-		// returns 2 triangles if 2 vertices cross the Z plane 
-		private static ClippedTriangles clipTriangleNear(Vertex v0, Vertex v1, Vertex v2, float near) {
-			Vertex [] in = new Vertex[3];
-			Vertex [] out = new Vertex[3];
-			int inCount = 0, outCount = 0;
-			Vertex [] verts = {v0, v1, v2};
-			for (Vertex v: verts) {
-				if (isInsideNear(v, near)) in[inCount++] = v;
-				else out[outCount++] = v;
-			}
-			
-			ClippedTriangles ct = new ClippedTriangles();
-			if (inCount == 0) return ct; // none inside
-			if (inCount == 3) {
-				ct.t1 = new Vertex[] {v0, v1, v2}; // all inside
-				return ct;
-			}
-			
-			// 1 vertex inside so clip to ab & ac
-			if (inCount == 1) {
-				Vertex a = in[0];
-				Vertex b = out[0];
-				Vertex c = out[1];
-				Vertex ab = intersectNear(a,b, near);
-				Vertex ac = intersectNear(a,c, near);
-				ct.t1 = new Vertex[] {a, ab, ac};
-				return ct;
-			}
-
-			// 2 vertex inside so clip to ac & bc
-			Vertex a = in[0];
-			Vertex b = in[1];
-			Vertex c = out[0];
-			Vertex ac = intersectNear(a,c, near);
-			Vertex bc = intersectNear(b,c, near);
-			ct.t1 = new Vertex[] {a, b, bc};
-			ct.t2 = new Vertex[] {a, bc, ac};
-			return ct;
-		}
-
 	}
 }
