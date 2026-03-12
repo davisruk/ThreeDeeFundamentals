@@ -176,7 +176,7 @@ public class TriangleRenderer {
 		}		
 	}	
 
-
+/* -- Delete once near-plane-clipping and invW version is working correctly
 	public void drawCube (Vec4[] vertices, int[][]triangles, Mat4 mvp, int[] colours, float[] zBuff) {
 		int[] sx = new int[vertices.length];
 		int[] sy = new int[vertices.length];
@@ -230,7 +230,7 @@ public class TriangleRenderer {
 			fillTriangle(new ScreenCoord(sx[a], sy[a], sz[a]), new ScreenCoord(sx[b], sy[b], sz[b]), new ScreenCoord(sx[c], sy[c], sz[c]), colours[i/2], zBuff);
 		}
 	}
-
+*/
 	private void drawProjectedTriangle(Mat4 perspective, Vertex a, Vertex b, Vertex c, int colour, float[] zBuff) {
 		Vec4 clipA = perspective.multiplyVec(new Vec4(a.x, a.y, a.z, a.w));
 		Vec4 clipB = perspective.multiplyVec(new Vec4(b.x, b.y, b.z, b.w));
