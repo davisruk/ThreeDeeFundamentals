@@ -14,6 +14,7 @@ import javax.swing.SwingUtilities;
 
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.mouse.MouseHandler;
+import online.davisfamily.threedee.scene.Scene;
 import online.davisfamily.threedee.testing.TestScene;
 
 

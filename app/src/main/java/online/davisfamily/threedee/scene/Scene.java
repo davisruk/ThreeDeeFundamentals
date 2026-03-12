@@ -1,4 +1,4 @@
-package online.davisfamily.threedee;
+package online.davisfamily.threedee.scene;
 
 import java.awt.image.BufferedImage;
 
