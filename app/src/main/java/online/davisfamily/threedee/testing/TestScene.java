@@ -1,17 +1,15 @@
 package online.davisfamily.threedee.testing;
 
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.util.Arrays;
 
 import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.Scene;
-import online.davisfamily.threedee.SoftwareRenderer;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.camera.Camera;
+import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.CommandBindings;
 import online.davisfamily.threedee.input.keyboard.InputState;
@@ -34,7 +32,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 	float[] zBuffer;
 	private ObjectTransformation t1;
 	private ObjectTransformation t2;
-	private Mat4 model1, model2, view, projection, perspective,vp, mvp1, mvp2;
+	private Mat4 model1, model2, projection, perspective, vp, mvp1, mvp2;
 	private BufferedImage image;
 	private float aspect;
 
@@ -46,26 +44,15 @@ public class TestScene implements Scene, MouseEventConsumer{
 	private DebugUtils debug;
 	
 	private InputState inputState;
-	
-	public TestScene (ViewDimensions dimensions, SoftwareRenderer renderer) {
-		this.vd = dimensions;
-		this.bl = renderer.getBresenhamLineImpl();
-		this.tr = renderer.getTriangleRenderer();
-		this.image = renderer.getImage();
-		this.pixels = renderer.getPixels();
+	private JRootPane root;
+	public TestScene (JRootPane pane, ViewDimensions dimensions) {
+		root = pane;
+		vd = dimensions;
+		this.inputState = new InputState();
+		this.image = new BufferedImage(vd.width, vd.height, BufferedImage.TYPE_INT_ARGB);
+		this.pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
 		this.zBuffer = new float[pixels.length];
-		// testing vars
-		this.steps = 270;
-		this.step = 1;
-		this.stepInc = 1;
-		this.t = step / (float) steps;
-		this.s = 1.0f - t;
-		this.cx = vd.width/2;
-		this.cy = vd.height/2;
-		this.halfW = Math.round((vd.width / 2f) * s);
-		this.halfH = Math.round((vd.height / 2f) * s);
-		this.angleX = 0.4f;
-		this.angleY = 0.6f;
+
 		this.aspect = (float)vd.width / (float)vd.height;
 		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f);
 		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f);
@@ -76,43 +63,19 @@ public class TestScene implements Scene, MouseEventConsumer{
 		this.model2 = new Mat4();
 		this.mvp1 = new Mat4();
 		this.mvp2 = new Mat4();
-		this.view = Mat4.identity();
 		this.camera = new Camera();
 		this.move = new Vec3(0,0,0);
-		this.inputState = new InputState();
+
 		this.mouseInfo = new MouseEventDetail();
-		JRootPane rootPane = renderer.getRootPane();
-		KeyBindings.installKeyBindings(rootPane, this.inputState);
-		CommandBindings.installCommandBindings(rootPane, this.inputState);
-		tr.setInputState(this.inputState);
+		KeyBindings.installKeyBindings(root, this.inputState);
+		CommandBindings.installCommandBindings(root, this.inputState);
+		this.bl = new BresenhamLineUtilities(pixels, vd.width, new CohenSutherlandLineClipper(vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1));
 		this.debug = new DebugUtils(bl,camera,vd, this.inputState);
-		tr.setDebug(debug);
+		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug);
 	}
-
-	// -- Testing variables --
-	// these should be moved out to a test class
-
-	// -- viewport testing variables ------
-		private int steps, cx, cy, halfW, halfH, stepInc;
-		private float t, s, step;
-	// ------------------------------------
-
+	
 	// -- 3D models  ------
 
-	// cube structure
-	Vec3[] v3CubeVertices = {
-			// bottom square
-			new Vec3 (-0.5f, -0.5f, -0.5f),
-			new Vec3 (-0.5f, -0.5f, 0.5f),
-			new Vec3 (0.5f, -0.5f, 0.5f),
-			new Vec3 (0.5f, -0.5f, -0.5f),
-			// top square
-			new Vec3 (-0.5f, 0.5f, -0.5f),
-			new Vec3 (-0.5f, 0.5f, 0.5f),
-			new Vec3 (0.5f, 0.5f, 0.5f),
-			new Vec3 (0.5f, 0.5f, -0.5f),
-		};
-		
 	Vec4[] v4CubeVertices = {
 			// bottom square
 			new Vec4 (-0.5f, -0.5f, -0.5f),
@@ -163,62 +126,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 		    {0, 1, 5}, {0, 5, 4},
 		};
 		
-	private float angleX, angleY;
-
 	private void clear (int argb) {
 		for (int i=0; i<pixels.length;i++) pixels[i] = argb;
-	}
-	
-	
-	private void testLineDrawTriangle() {
-		int colour = 0xFFFFCC00;
-		clear(0xFF101018);
-		
-		int dY = vd.vpMaxYExclusive - vd.vpMinY;
-		int dX = vd.vpMaxXExclusive - vd.vpMinX;
-		 
-		// triangle with no clip
-		bl.drawTriangle (vd.vpMinX, vd.vpMinY, vd.vpMinX, vd.vpMinY + (dY / 2), vd.vpMinX + (dX / 2), vd.vpMinY + (dY / 2), colour);	
-	}
-	
-	
-	private void testWireframeCube() {
-		this.clear(0xFF000000);
-		Vec3[] t = new Vec3[8];
-		this.angleX += 0.01f;
-		this.angleY += 0.01f;
-		for (int i = 0; i < 8; i++) {
-			Vec3 v = v3CubeVertices[i];
-			v = Vec3.rotateY(v, this.angleY);
-			v = Vec3.rotateX(v, this.angleX);
-			v = v.add(new Vec3(0,0,2));
-			t[i] = v;
-		}
-		bl.drawCube(t, cubeEdges, 0xFF2E7D32);
-	}
-	
-// -- Matrix tests
-	private final float twoPI = (float)Math.PI * 2;
-	private float zTranslation = -1;
-	private float zTranslationInc = -0.05f;
-	
-	private void testWireframeCubeWithMatrices() {
-		this.clear(0xFF000000);
-
-		bl.drawCube(v4CubeVertices, cubeEdges, this.angleY, this.angleX, this.zTranslation, 0xFF2E7D32);
-		this.angleX += 0.01f;
-		this.angleY += 0.005f;
-		// wrap the rotation angles into (0, 2pi) to avoid floating point degradation over time
-		this.angleX %= twoPI;
-		this.angleY %= twoPI;
-		if (this.zTranslation < -10) {
-			this.zTranslationInc = 0.05f;
-		} else if (this.zTranslation > -1) {
-			this.zTranslationInc = -0.05f;
-		}
- 
-		this.zTranslation += this.zTranslationInc;
-
 	}
 	
 	private void clearZBuffer() {
@@ -246,12 +155,14 @@ public class TestScene implements Scene, MouseEventConsumer{
 
 		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer, inputState.isSet(Mode.SHOW_WIREFRAME));
 		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer, inputState.isSet(Mode.SHOW_WIREFRAME));
-		
 
+		transformAndRotate(tSeconds);
+   
+	}
+	
+	private void transformAndRotate (double tSeconds) {
 		float angularSpeedX = 0.6f;   // radians per second
 	    float angularSpeedY = 0.3f;
-	    float zSpeed = 3.0f;          // units per second
-	    float xSpeed = 3.0f;
 
 	    t1.angleX += angularSpeedX * tSeconds;
 	    t1.angleY += angularSpeedY * tSeconds;
@@ -272,18 +183,9 @@ public class TestScene implements Scene, MouseEventConsumer{
 		} else if (t2.xTranslation < -4) {
 			t2.xTranslationInc = 3.0f;
 		}
-   
+		
 	}
 
-	public void testMouseMovement () {
-		if (mouseInfo != null && !mouseInfo.consumed && (mouseInfo.oldx != mouseInfo.x || mouseInfo.oldy != mouseInfo.y)) {
-			mouseInfo.consumed = true;
-			System.out.println(mouseInfo);
-			camera.mouseUpdate(mouseInfo);
-			System.out.println(camera);
-		}
-	}
-	
 	private void updateCamera() {
 		if (mouseInfo != null) {
 			camera.mouseUpdate(mouseInfo);
@@ -311,24 +213,7 @@ public class TestScene implements Scene, MouseEventConsumer{
 		}
 	}
 	
-	public void testKeyInput() {
-		String s = "Keys Pressed: ";
-		if (inputState.a()) s+="A ";
-		if (inputState.w()) s+="W ";
-		if (inputState.s()) s+="S ";
-		if (inputState.d()) s+="D ";
-		if (inputState.up()) s+="UP ";
-		if (inputState.down()) s+="DOWN ";
-		
-		if (!s.equals("Keys Pressed: ")) System.out.println(s);
-	}
-	
-	public void testNormalizeAndCross() {
-		Vec3 a = new Vec3(1,1,1);
-		Vec3 b = new Vec3(1,2,3);
-		Vec3 c = a.cross(b);
-		System.out.println(c.immutableMult(a));
-	}
+	public BufferedImage getImage() {return image;}
 	
 	public void renderFrame(double tSeconds) {
 	    updateCamera();

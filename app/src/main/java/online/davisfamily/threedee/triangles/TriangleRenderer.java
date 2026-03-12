@@ -23,6 +23,19 @@ public class TriangleRenderer {
 	int ph;
 	DebugUtils dbg;
 	
+	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer, InputState input, DebugUtils debug) {
+		pixels = canvas;
+		pw = canvasWidth;
+		ph = pixels.length / pw;
+		this.minX = minX;
+		this.maxX = maxX;
+		this.minY = minY;
+		this.maxY = maxY;
+		this.bl = lineDrawer;
+		this.dbg = debug;
+		this.is = input;
+	}
+
 	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer) {
 		pixels = canvas;
 		pw = canvasWidth;
