@@ -153,8 +153,8 @@ public class TestScene implements Scene, MouseEventConsumer{
 	    buildMVP(mvp2, model2, t2);
 	    //tr.drawCube(v4CubeVertices, cubeTriangles, mvp2, cubeFaceColours, zBuffer);
 
-		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer, inputState.isSet(Mode.SHOW_WIREFRAME));
-		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer, inputState.isSet(Mode.SHOW_WIREFRAME));
+		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer);
+		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer);
 
 		transformAndRotate(tSeconds);
    

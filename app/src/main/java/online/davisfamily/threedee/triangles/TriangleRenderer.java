@@ -36,30 +36,6 @@ public class TriangleRenderer {
 		this.is = input;
 	}
 
-	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer) {
-		pixels = canvas;
-		pw = canvasWidth;
-		ph = pixels.length / pw;
-		this.minX = minX;
-		this.maxX = maxX;
-		this.minY = minY;
-		this.maxY = maxY;
-		this.bl = lineDrawer;
-	}
-	
-// ******* Refactor required - debug and input state should be on constructor                              ******//
-// ******* Currently TestScene creates both but SoftwareRenderer creates TriangleRenderer                  ******//
-// ******* Either move TriangleRenderer creation to TestScene or Debug and Input State to SoftwareRenderer ******//	
-	public void setDebug(DebugUtils du) {
-		this.dbg = du;
-	}
-	
-	public void setInputState(InputState is) {
-		this.is = is;
-	}
-
-// ******
-	
 	private class ScreenCoord {
 		public ScreenCoord(int x, int y, float z) {
 			this.x = x; this.y = y; this.z = z;
@@ -266,15 +242,15 @@ public class TriangleRenderer {
 		
 		float ndcAx = clipA.x * invWA;
 		float ndcAy = clipA.y * invWA;
-		float ndcAz = clipA.z * invWA;
+//		float ndcAz = clipA.z * invWA;
 		
 		float ndcBx = clipB.x * invWB;
 		float ndcBy = clipB.y * invWB;
-		float ndcBz = clipB.z * invWB;
+//		float ndcBz = clipB.z * invWB;
 
 		float ndcCx = clipC.x * invWC;
 		float ndcCy = clipC.y * invWC;
-		float ndcCz = clipC.z * invWC;
+//		float ndcCz = clipC.z * invWC;
 
 		int sxA = Math.round((ndcAx * 0.5f + 0.5f) * (pw - 1));
 		int syA = Math.round((-ndcAy * 0.5f + 0.5f) * (ph - 1));
@@ -290,8 +266,8 @@ public class TriangleRenderer {
 		
 		if (cross >=0 ) return;
 		if (is.isSet(Mode.FILL_MODEL)) {
-		//fillTriangle(new ScreenCoord(sxA, syA, ndcAz), new ScreenCoord(sxB, syB, ndcBz), new ScreenCoord(sxC, syC, ndcCz), colour, zBuff);
-		fillTriangle(new ScreenCoord(sxA, syA, invWA), new ScreenCoord(sxB, syB, invWB), new ScreenCoord(sxC, syC, invWC), colour, zBuff);
+			//fillTriangle(new ScreenCoord(sxA, syA, ndcAz), new ScreenCoord(sxB, syB, ndcBz), new ScreenCoord(sxC, syC, ndcCz), colour, zBuff);
+			fillTriangle(new ScreenCoord(sxA, syA, invWA), new ScreenCoord(sxB, syB, invWB), new ScreenCoord(sxC, syC, invWC), colour, zBuff);
 		}
 		
 		if (is.isSet(Mode.SHOW_WIREFRAME)) {
@@ -302,7 +278,7 @@ public class TriangleRenderer {
 
 	}
 	
-	public void drawCube (Camera cam, Vec4[] vertices, int[][]triangles, Mat4 model, Mat4 perspective, int[] colours, float[] zBuff, boolean drawWireframe) {
+	public void drawCube (Camera cam, Vec4[] vertices, int[][]triangles, Mat4 model, Mat4 perspective, int[] colours, float[] zBuff) {
 		Mat4 mv = new Mat4();
 		mv.set(cam.getView());
 		mv.mutableMultiply(model);
