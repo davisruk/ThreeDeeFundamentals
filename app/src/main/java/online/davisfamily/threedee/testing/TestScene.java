@@ -36,7 +36,7 @@ public class TestScene extends BaseScene{
 	    model1.setModel(t1);
 	    model2.setModel(t2);
 	    cube.draw(tr, camera, model1, perspective, zBuffer);
-//	    cube.draw(tr, camera, model2, perspective, zBuffer);
+	    cube.draw(tr, camera, model2, perspective, zBuffer);
    	}
 	
 	private void transformAndRotate (double tSeconds) {
