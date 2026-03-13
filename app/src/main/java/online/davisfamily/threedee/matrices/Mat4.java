@@ -274,6 +274,24 @@ public class Mat4 {
 		);
 	}
 	
+	// mutable multiply that returns a Vertex rather than Vec4
+	public Vertex multiplyVec (Vec4 b, Vertex out) {
+		out.x = m[0] * b.x + m[1]*b.y + m[2] * b.z + m[3] * b.w; 
+		out.y = m[4] * b.x + m[5]*b.y + m[6] * b.z + m[7] * b.w;
+		out.z = m[8] * b.x + m[9]*b.y + m[10] * b.z + m[11] * b.w;
+		out.w = m[12] * b.x + m[13]*b.y + m[14] * b.z + m[15] * b.w;
+		return out;
+	}
+
+	// mutable multiply that returns a Vertex rather than Vec4
+	public Vec4 multiplyVec (Vertex b, Vec4 out) {
+		out.x = m[0] * b.x + m[1]*b.y + m[2] * b.z + m[3] * b.w; 
+		out.y = m[4] * b.x + m[5]*b.y + m[6] * b.z + m[7] * b.w;
+		out.z = m[8] * b.x + m[9]*b.y + m[10] * b.z + m[11] * b.w;
+		out.w = m[12] * b.x + m[13]*b.y + m[14] * b.z + m[15] * b.w;
+		return out;
+	}
+	
 	// multiply this matrix by 4 point vector b and return result in b
 	// each element of result is dot product of the ith row in this(m) and the jth column of b 
 	// see Vec4 multiplyMat method for same thing

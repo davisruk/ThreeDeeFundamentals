@@ -3,6 +3,8 @@ package online.davisfamily.threedee.matrices;
 public class Vec4 {
 	public float x, y, z, w;
 	
+	public Vec4() {}
+	
 	public Vec4 (Vec4 a) {
 		x = a.x;
 		y = a.y;

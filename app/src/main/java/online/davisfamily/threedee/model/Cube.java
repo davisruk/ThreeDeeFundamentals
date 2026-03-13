@@ -62,14 +62,17 @@ public class Cube {
 	
 	public Cube() {
 		viewVerts = new Vertex[v4CubeVertices.length];
+		for(int v=0; v<v4CubeVertices.length;v++) {
+			viewVerts[v] = new Vertex();
+		}
 	}
 	
-	public void draw (TriangleRenderer tr, Camera cam, Mat4 model, Mat4 perspective, float[] zBuff) {
+	public void draw(TriangleRenderer tr, Camera cam, Mat4 model, Mat4 perspective, float[] zBuff) {
 		Mat4 mv = new Mat4();
 		mv.set(cam.getView());
 		mv.mutableMultiply(model);
 		for(int v=0; v<v4CubeVertices.length;v++) {
-			viewVerts[v] = new Vertex(mv.multiplyVec(v4CubeVertices[v]));
+			viewVerts[v] = mv.multiplyVec(v4CubeVertices[v], viewVerts[v]);
 		}
 		
 		for (int i=0; i<cubeTriangles.length;i++) {
@@ -78,8 +81,9 @@ public class Cube {
 			Vertex v1 = viewVerts[t[1]];
 			Vertex v2 = viewVerts[t[2]];
 			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
-			if (ct.t1 != null) tr.drawProjectedTriangle(perspective, ct.t1[0], ct.t1[1], ct.t1[2], cubeFaceColours[i/2], zBuff);
-			if (ct.t2 != null) tr.drawProjectedTriangle(perspective, ct.t2[0], ct.t2[1], ct.t2[2], cubeFaceColours[i/2], zBuff);
+			if (ct.t1 != null) tr.drawProjectedTriangle(perspective, ct.t1, cubeFaceColours[i/2], zBuff);
+			if (ct.t2 != null) tr.drawProjectedTriangle(perspective, ct.t2, cubeFaceColours[i/2], zBuff);
+			
 		}
 	}	
 }

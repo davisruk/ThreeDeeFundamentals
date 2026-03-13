@@ -2,13 +2,13 @@ package online.davisfamily.threedee.matrices;
 
 public class Vertex {
 	public static class ClippedTriangles {
-		public Vertex[] t1;
-		public Vertex[] t2;
+		public Vertex[] t1 = new Vertex[3];
+		public Vertex[] t2 = new Vertex[3];
 	}
 
 	public float x, y, z, w;
 	
-	
+	public Vertex() {};
 	public Vertex(Vec4 v){
 		x = v.x;
 		y = v.y;
@@ -29,34 +29,46 @@ public class Vertex {
 	}
 	
 	// return a Vertex clipped to near on Z plane
-	public static Vertex intersectNear(Vertex a, Vertex b, float near) {
+	public static Vertex intersectNear(Vertex a, Vertex b, float near, Vertex out) {
 		float planeZ = -near;
 		float t = (planeZ - a.z) / (b.z - a.z);
-		return new Vertex(
-					a.x + t * (b.x - a.x),
-					a.y + t * (b.y - a.y),
-					planeZ,
-					a.w + t * (b.w - a.w)
-				);
+		out.x = a.x + t * (b.x - a.x);
+		out.y = a.y + t * (b.y - a.y);
+		out.z = planeZ;
+		out.w = a.w + t * (b.w - a.w);
+		return out;
 	}
+
+	// mutable Objects for clipTriangleNear
+	// stops rampant object creation for
+	// complex scenes
+	private static Vertex[] in = new Vertex[3];
+	private static Vertex[] out = new Vertex[3];
+	private static Vertex[] verts = new Vertex[3];
+	private static ClippedTriangles ct = new ClippedTriangles();
+	private static Vertex[] t1 = new Vertex[3];
+	private static Vertex[] t2 = new Vertex[3];
+	private static Vertex ab = new Vertex();
+	private static Vertex ac = new Vertex();
+	private static Vertex bc = new Vertex();
 
 	// clip triangle to near on Z plane
 	// empty result == exclude all vertices
 	// returns 2 triangles if 2 vertices cross the Z plane 
 	public static ClippedTriangles clipTriangleNear(Vertex v0, Vertex v1, Vertex v2, float near) {
-		Vertex [] in = new Vertex[3];
-		Vertex [] out = new Vertex[3];
+		in[0] = in[1] = in[2] = out[0] = out[1] = out[2] = null; 
 		int inCount = 0, outCount = 0;
-		Vertex [] verts = {v0, v1, v2};
+		verts[0] = v0; verts[1] = v1; verts[2] = v2;
 		for (Vertex v: verts) {
 			if (Vertex.isInsideNear(v, near)) in[inCount++] = v;
 			else out[outCount++] = v;
 		}
 		
-		ClippedTriangles ct = new ClippedTriangles();
+		ct.t1 = null; ct.t2 = null;
 		if (inCount == 0) return ct; // none inside
 		if (inCount == 3) {
-			ct.t1 = new Vertex[] {v0, v1, v2}; // all inside
+			t1[0] = v0; t1[1] = v1; t1[2]=v2; // all inside
+			ct.t1 = t1;
 			return ct;
 		}
 		
@@ -65,9 +77,10 @@ public class Vertex {
 			Vertex a = in[0];
 			Vertex b = out[0];
 			Vertex c = out[1];
-			Vertex ab = Vertex.intersectNear(a,b, near);
-			Vertex ac = Vertex.intersectNear(a,c, near);
-			ct.t1 = new Vertex[] {a, ab, ac};
+			ab = Vertex.intersectNear(a,b, near, ab);
+			ac = Vertex.intersectNear(a,c, near, ac);
+			t1[0] = a; t1[1] = ab; t1[2]=ac;			
+			ct.t1 = t1;
 			return ct;
 		}
 
@@ -75,10 +88,12 @@ public class Vertex {
 		Vertex a = in[0];
 		Vertex b = in[1];
 		Vertex c = out[0];
-		Vertex ac = Vertex.intersectNear(a,c, near);
-		Vertex bc = Vertex.intersectNear(b,c, near);
-		ct.t1 = new Vertex[] {a, b, bc};
-		ct.t2 = new Vertex[] {a, bc, ac};
+		ac = Vertex.intersectNear(a,c, near, ac);
+		bc = Vertex.intersectNear(b,c, near, bc);
+		t1[0] = a; t1[1] = b; t1[2]=bc;
+		t2[0] = a; t2[1] = bc; t2[2]=ac;
+		ct.t1 = t1;
+		ct.t2 = t2;
 		return ct;
 	}	
 }

@@ -4,12 +4,12 @@ import java.util.Arrays;
 import java.util.Comparator;
 
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
-import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
+import online.davisfamily.threedee.matrices.Vertex.ClippedTriangles;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 public class TriangleRenderer {
@@ -38,6 +38,7 @@ public class TriangleRenderer {
 	}
 
 	private class ScreenCoord {
+		public ScreenCoord() {}
 		public ScreenCoord(int x, int y, float z) {
 			this.x = x; this.y = y; this.z = z;
 		}
@@ -176,67 +177,56 @@ public class TriangleRenderer {
 		}		
 	}	
 
-	public void drawProjectedTriangle(Mat4 perspective, Vertex a, Vertex b, Vertex c, int colour, float[] zBuff) {
-		Vec4 clipA = perspective.multiplyVec(new Vec4(a.x, a.y, a.z, a.w));
-		Vec4 clipB = perspective.multiplyVec(new Vec4(b.x, b.y, b.z, b.w));
-		Vec4 clipC = perspective.multiplyVec(new Vec4(c.x, c.y, c.z, c.w));
+	// mutable instances for drawProjectedTriangle
+	Vec4 clipA = new Vec4();
+	Vec4 clipB = new Vec4();
+	Vec4 clipC = new Vec4();
+	ScreenCoord screenA = new ScreenCoord();
+	ScreenCoord screenB = new ScreenCoord();
+	ScreenCoord screenC = new ScreenCoord();
+	public void drawProjectedTriangle(Mat4 perspective, Vertex[] v, int colour, float[] zBuff) {
+		clipA = perspective.multiplyVec(v[0], clipA);
+		clipB = perspective.multiplyVec(v[1], clipB);
+		clipC = perspective.multiplyVec(v[2], clipC);
 		
 		if (clipA.w < 0.1f || clipB.w < 0.1f || clipC.w < 0.1f) return;
-		float invWA = 1.0f / clipA.w;	
-		float invWB = 1.0f / clipB.w;
-		float invWC = 1.0f / clipC.w;
+		// invW calcs for each point
+		screenA.z = 1.0f / clipA.w;	
+		screenB.z = 1.0f / clipB.w;
+		screenC.z = 1.0f / clipC.w;
 		
-		float ndcAx = clipA.x * invWA;
-		float ndcAy = clipA.y * invWA;
+		float ndcAx = clipA.x * screenA.z;
+		float ndcAy = clipA.y * screenA.z;
 		
-		float ndcBx = clipB.x * invWB;
-		float ndcBy = clipB.y * invWB;
+		float ndcBx = clipB.x * screenB.z;
+		float ndcBy = clipB.y * screenB.z;
 
-		float ndcCx = clipC.x * invWC;
-		float ndcCy = clipC.y * invWC;
+		float ndcCx = clipC.x * screenC.z;
+		float ndcCy = clipC.y * screenC.z;
 
-		int sxA = Math.round((ndcAx * 0.5f + 0.5f) * (pw - 1));
-		int syA = Math.round((-ndcAy * 0.5f + 0.5f) * (ph - 1));
-		int sxB = Math.round((ndcBx * 0.5f + 0.5f) * (pw - 1));
-		int syB = Math.round((-ndcBy * 0.5f + 0.5f) * (ph - 1));
-		int sxC = Math.round((ndcCx * 0.5f + 0.5f) * (pw - 1));
-		int syC = Math.round((-ndcCy * 0.5f + 0.5f) * (ph - 1));
+		screenA.x = Math.round((ndcAx * 0.5f + 0.5f) * (pw - 1));
+		screenA.y = Math.round((-ndcAy * 0.5f + 0.5f) * (ph - 1));
+		screenB.x = Math.round((ndcBx * 0.5f + 0.5f) * (pw - 1));
+		screenB.y = Math.round((-ndcBy * 0.5f + 0.5f) * (ph - 1));
+		screenC.x = Math.round((ndcCx * 0.5f + 0.5f) * (pw - 1));
+		screenC.y = Math.round((-ndcCy * 0.5f + 0.5f) * (ph - 1));
 
-		long abx = (long) (sxB - sxA), aby = (long) (syB - syA);
-		long acx = (long) (sxC - sxA), acy = (long)(syC - syA);
+		long abx = (long) (screenB.x - screenA.x), aby = (long) (screenB.y - screenA.y);
+		long acx = (long) (screenC.x - screenA.x), acy = (long)(screenC.y - screenA.y);
 	
 		long cross = abx * acy - aby * acx;
 		
 		if (cross >=0 ) return;
 		if (is.isSet(Mode.FILL_MODEL)) {
-			fillTriangle(new ScreenCoord(sxA, syA, invWA), new ScreenCoord(sxB, syB, invWB), new ScreenCoord(sxC, syC, invWC), colour, zBuff);
+			fillTriangle(screenA, screenB, screenC, colour, zBuff);
 		}
 		
 		if (is.isSet(Mode.SHOW_WIREFRAME)) {
-		    bl.drawLineUnsafeClipped(sxA, syA, sxB, syB, 0xFFFFFFFF);
-		    bl.drawLineUnsafeClipped(sxB, syB, sxC, syC, 0xFFFFFFFF);
-		    bl.drawLineUnsafeClipped(sxC, syC, sxA, syA, 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(screenA.x, screenA.y, screenB.x, screenB.y, 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(screenB.x, screenB.y, screenC.x, screenC.y, 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(screenC.x, screenC.y, screenA.x, screenA.y, 0xFFFFFFFF);
 		}
 
 	}
 	
-	public void drawCube (Camera cam, Vec4[] vertices, int[][]triangles, Mat4 model, Mat4 perspective, int[] colours, float[] zBuff) {
-		Mat4 mv = new Mat4();
-		mv.set(cam.getView());
-		mv.mutableMultiply(model);
-	    Vertex[] viewVerts = new Vertex[vertices.length];
-		for(int v=0; v<vertices.length;v++) {
-			viewVerts[v] = new Vertex(mv.multiplyVec(vertices[v]));
-		}
-		
-		for (int i=0; i<triangles.length;i++) {
-			int[] t = triangles[i];
-			Vertex v0 = viewVerts[t[0]];
-			Vertex v1 = viewVerts[t[1]];
-			Vertex v2 = viewVerts[t[2]];
-			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
-			if (ct.t1 != null) drawProjectedTriangle(perspective, ct.t1[0], ct.t1[1], ct.t1[2], colours[i/2], zBuff);
-			if (ct.t2 != null) drawProjectedTriangle(perspective, ct.t2[0], ct.t2[1], ct.t2[2], colours[i/2], zBuff);
-		}
-	}
 }
