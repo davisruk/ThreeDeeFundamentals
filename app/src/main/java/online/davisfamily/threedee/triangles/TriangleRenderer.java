@@ -176,62 +176,7 @@ public class TriangleRenderer {
 		}		
 	}	
 
-/* -- Delete once near-plane-clipping and invW version is working correctly
-	public void drawCube (Vec4[] vertices, int[][]triangles, Mat4 mvp, int[] colours, float[] zBuff) {
-		int[] sx = new int[vertices.length];
-		int[] sy = new int[vertices.length];
-		float[] sz = new float[vertices.length];
-		boolean[] visible = new boolean[vertices.length];
-		for (int i = 0; i<vertices.length; i++) {
-			Vec4 clip = mvp.multiplyVec(vertices[i]);
-	
-			if (clip.w <= 0.0001f) { visible[i] = false; continue; }
-			
-			// clip-space bounds test (conservative)
-			if (clip.x < -clip.w || clip.x > clip.w ||
-			    clip.y < -clip.w || clip.y > clip.w ||
-			    clip.z < -clip.w || clip.z > clip.w) {
-			    visible[i] = false;
-			    continue;
-			}
-
-			float invW = 1.0f / clip.w;			
-			float ndcX = clip.x * invW;
-			float ndcY = clip.y * invW;
-			float ndcZ = clip.z * invW;
-
-			sx[i] = Math.round((ndcX * 0.5f + 0.5f) * (pw - 1));
-			sy[i] = Math.round((-ndcY * 0.5f + 0.5f) * (ph - 1));
-			sz[i] = ndcZ;
-			visible[i] = true;
-		}
-		
-		for (int i = 0; i < triangles.length; i++ ) {
-			int[] t = triangles[i];
-			int a = t[0];
-			int b = t[1];
-			int c = t[2];
-
-			if (!visible[a] || !visible[b] || !visible[c]) continue;
-
-			// the vertices may well be within the projection, however
-			// they may be part of a surface that is behind others
-			// we need to cull any surfaces that need not be rendered
-			int ax = sx[a], bx = sx[b], cx = sx[c];
-			int ay = sy[a], by = sy[b], cy = sy[c];
-			
-			long abx = (long) (bx - ax), aby = (long) (by - ay);
-			long acx = (long) (cx - ax), acy = (long)(cy - ay);
-			
-			long cross = abx * acy - aby * acx;
-			
-			if (cross >=0 ) continue;
-			
-			fillTriangle(new ScreenCoord(sx[a], sy[a], sz[a]), new ScreenCoord(sx[b], sy[b], sz[b]), new ScreenCoord(sx[c], sy[c], sz[c]), colours[i/2], zBuff);
-		}
-	}
-*/
-	private void drawProjectedTriangle(Mat4 perspective, Vertex a, Vertex b, Vertex c, int colour, float[] zBuff) {
+	public void drawProjectedTriangle(Mat4 perspective, Vertex a, Vertex b, Vertex c, int colour, float[] zBuff) {
 		Vec4 clipA = perspective.multiplyVec(new Vec4(a.x, a.y, a.z, a.w));
 		Vec4 clipB = perspective.multiplyVec(new Vec4(b.x, b.y, b.z, b.w));
 		Vec4 clipC = perspective.multiplyVec(new Vec4(c.x, c.y, c.z, c.w));
@@ -243,15 +188,12 @@ public class TriangleRenderer {
 		
 		float ndcAx = clipA.x * invWA;
 		float ndcAy = clipA.y * invWA;
-//		float ndcAz = clipA.z * invWA;
 		
 		float ndcBx = clipB.x * invWB;
 		float ndcBy = clipB.y * invWB;
-//		float ndcBz = clipB.z * invWB;
 
 		float ndcCx = clipC.x * invWC;
 		float ndcCy = clipC.y * invWC;
-//		float ndcCz = clipC.z * invWC;
 
 		int sxA = Math.round((ndcAx * 0.5f + 0.5f) * (pw - 1));
 		int syA = Math.round((-ndcAy * 0.5f + 0.5f) * (ph - 1));
@@ -267,7 +209,6 @@ public class TriangleRenderer {
 		
 		if (cross >=0 ) return;
 		if (is.isSet(Mode.FILL_MODEL)) {
-			//fillTriangle(new ScreenCoord(sxA, syA, ndcAz), new ScreenCoord(sxB, syB, ndcBz), new ScreenCoord(sxC, syC, ndcCz), colour, zBuff);
 			fillTriangle(new ScreenCoord(sxA, syA, invWA), new ScreenCoord(sxB, syB, invWB), new ScreenCoord(sxC, syC, invWC), colour, zBuff);
 		}
 		

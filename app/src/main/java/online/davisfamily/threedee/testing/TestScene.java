@@ -7,6 +7,7 @@ import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.model.Cube;
 import online.davisfamily.threedee.scene.BaseScene;
 
 public class TestScene extends BaseScene{	
@@ -14,7 +15,8 @@ public class TestScene extends BaseScene{
 	private ObjectTransformation t1;
 	private ObjectTransformation t2;
 	private Mat4 model1, model2, vp;
-
+	private Cube cube;
+	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions);
 
@@ -23,59 +25,9 @@ public class TestScene extends BaseScene{
 		this.vp = new Mat4();
 		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f);
 		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f);
+		this.cube = new Cube();
 	}
-	
-	// -- 3D models  ------
-	Vec4[] v4CubeVertices = {
-		// bottom square
-		new Vec4 (-0.5f, -0.5f, -0.5f),
-		new Vec4 (-0.5f, -0.5f, 0.5f),
-		new Vec4 (0.5f, -0.5f, 0.5f),
-		new Vec4 (0.5f, -0.5f, -0.5f),
-		// top square
-		new Vec4 (-0.5f, 0.5f, -0.5f),
-		new Vec4 (-0.5f, 0.5f, 0.5f),
-		new Vec4 (0.5f, 0.5f, 0.5f),
-		new Vec4 (0.5f, 0.5f, -0.5f),
-	};
-
-	int[][] cubeEdges = {
-		{0, 1}, {1, 2}, {2, 3}, {3, 0}, // bottom square edges
-		{4, 5}, {5, 6}, {6, 7}, {7, 4}, // top square edges
-		{0, 4}, {1, 5}, // left vertical edges
-		{2, 6}, {3, 7}, // right vertical edges
-	};	
-
-	int[] cubeFaceColours = {
-	    0xFFFF0000, // bottom - red
-	    0xFF00FF00, // top - green
-	    0xFF0000FF, // front - blue
-	    0xFFFFFF00, // right - yellow
-	    0xFFFF00FF, // back - magenta
-	    0xFF00FFFF  // left - cyan
-	};
-	
-	// must make sure these are CCW 
-	int[][] cubeTriangles = {
-	    // bottom (y = -0.5) outward normal -Y
-	    {0, 2, 1}, {0, 3, 2},
-
-	    // top (y = +0.5) outward normal +Y
-	    {4, 5, 6}, {4, 6, 7},
-
-	    // front (z = +0.5) outward normal +Z
-	    {1, 2, 6}, {1, 6, 5},
-
-	    // right (x = +0.5) outward normal +X
-	    {2, 3, 7}, {2, 7, 6},
-
-	    // back (z = -0.5) outward normal -Z
-	    {0, 4, 7}, {0, 7, 3},
-
-	    // left (x = -0.5) outward normal -X
-	    {0, 1, 5}, {0, 5, 4},
-	};
-	
+		
 	private void buildVP() {
 	    vp.set(perspective);
 	    vp.mutableMultiply(camera.getView());
@@ -84,8 +36,8 @@ public class TestScene extends BaseScene{
 	private void testFilledCubes(double tSeconds) {
 	    model1.setModel(t1);
 	    model2.setModel(t2);
-		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer);
-		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer);
+	    cube.draw(tr, camera, model1, perspective, zBuffer);
+	    cube.draw(tr, camera, model2, perspective, zBuffer);
    	}
 	
 	private void transformAndRotate (double tSeconds) {
@@ -116,11 +68,11 @@ public class TestScene extends BaseScene{
 	@Override
 	public void renderFrame(double tSeconds) {
 	    if (!inputState.isSet(Mode.PAUSE_ALL)) {
-			updateCamera();
-		    updatePosition(tSeconds);
-			this.clear(0xFF000000);
 			if (!inputState.isSet(Mode.PAUSE_TRANSFORMS))
 				transformAndRotate(tSeconds);
+	    	updateCamera();
+		    updatePosition(tSeconds);
+			this.clear(0xFF000000);
 			buildVP();
 			testFilledCubes(tSeconds);
 			updateDebug(tSeconds);
