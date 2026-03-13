@@ -9,7 +9,7 @@ public class Camera {
 	public float yaw; // radians
 	public float pitch; // radians
 	public float sensitivityRadiansPerPixel = 0.002f; // ~0.11 degrees per pixel
-	private Vec3 forward, right, worldUp, up, forwardXZ, rightXZ;
+	private Vec3 move, forward, right, worldUp, up, forwardXZ, rightXZ;
 	private Mat4 view;
 	
 	public Camera () {
@@ -21,6 +21,7 @@ public class Camera {
 		this.up = new Vec3(0,1,0);
 		this.worldUp = new Vec3(0,1,0);
 		this.view = Mat4.identity();
+		this.move = new Vec3();
 		updateBasis();
 	}
 	
@@ -40,22 +41,54 @@ public class Camera {
 	}
 	
 	public void updateBasis() {
-		forward.setXYZ(
+		forward
+			.setXYZ(
 				(float)Math.sin(yaw) * (float)Math.cos(pitch),
 				(float)Math.sin(pitch),
-				(float)-Math.cos(yaw) * (float)Math.cos(pitch));
-		forwardXZ.setXYZ((float)Math.sin(yaw), 0f, (float)-Math.cos(yaw)).mutableNormalize();
-		rightXZ.setXYZ((float)Math.cos(yaw), 0f, (float)Math.sin(yaw)).mutableNormalize();
-		right = forward.cross(worldUp).normalize();
-		up = right.cross(forward);
-		view.setView(right, up, forward, position); // use this for movement in Y as well
-		//view.setView(rightXZ, up, forwardXZ, position);
+				(float)-Math.cos(yaw) * (float)Math.cos(pitch))
+			.mutableNormalize();
+		
+		right
+			.set(forward.cross(worldUp))
+			.mutableNormalize();
+		
+		up.set(right.cross(forward)).mutableNormalize();
+		
+		forwardXZ.setXYZ(forward.x, 0f, forward.z);
+		if (forwardXZ.lengthSquared() > 0f)
+			forwardXZ.mutableNormalize();
+		
+		rightXZ
+			.set(forwardXZ.cross(worldUp))
+			.mutableNormalize();
+		
+		view.setView(right, up, forward, position);
 	}
 	
-	public void computeBasis() {
-		computeForward();
-		computeRight();
-		computeUp();
+	Vec3 mutableForwardXZ = new Vec3();
+	Vec3 mutableRightXZ = new Vec3();
+	Vec3 mutableUp = new Vec3();
+	public void move(float forwardAmount, float strafeAmount, float verticalAmount, float speed, float dt) {
+		move.setXYZ(0,0,0);
+ 
+		if (forwardAmount != 0f) {
+			move.mutableAdd(forwardXZ.scale(forwardAmount, mutableForwardXZ));
+		}
+		
+		if (strafeAmount != 0f) {
+			move.mutableAdd(rightXZ.scale(strafeAmount, mutableRightXZ));
+		}
+
+		if (verticalAmount != 0f) {
+			move.mutableAdd(worldUp.scale(verticalAmount, mutableUp));
+		}
+
+		if (move.lengthSquared() > 0) {
+		    move.mutableNormalize();
+		    move.mutableScale(speed * dt);
+		    position.mutableAdd(move);
+		    updateBasis();
+		}
 	}
 	
 	public Vec3 getForward() {
@@ -85,34 +118,6 @@ public class Camera {
 	public Mat4 getView() {
 		return view;
 	}
-	
-	public Vec3 computeForward() {
-		forward.setXYZ(
-				(float)Math.sin(yaw) * (float)Math.cos(pitch),
-				(float)Math.sin(pitch),
-				(float)-Math.cos(yaw) * (float)Math.cos(pitch));
-		return forward;
-	}
-
-	public Vec3 computeForwardXZ() {
-		return forwardXZ.setXYZ((float)Math.sin(yaw), 0f, (float)-Math.cos(yaw)).mutableNormalize();
-	}
-	
-	public Vec3 computeRightXZ() {
-		return rightXZ.setXYZ((float)Math.cos(yaw), 0f, (float)Math.sin(yaw)).mutableNormalize();
-	}
-	
-	
-	public Vec3 computeRight() {
-		right = forward.cross(worldUp).normalize();
-		return right;
-	}
-	
-	public Vec3 computeUp() {
-		up = right.cross(forward);
-		return up;
-	}
-	
 	
 	private float clamp (float v, float min, float max) {
 		if (v < min) return min;

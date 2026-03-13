@@ -6,7 +6,6 @@ import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
-import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.model.Cube;
 import online.davisfamily.threedee.scene.BaseScene;
 
@@ -37,7 +36,7 @@ public class TestScene extends BaseScene{
 	    model1.setModel(t1);
 	    model2.setModel(t2);
 	    cube.draw(tr, camera, model1, perspective, zBuffer);
-	    cube.draw(tr, camera, model2, perspective, zBuffer);
+//	    cube.draw(tr, camera, model2, perspective, zBuffer);
    	}
 	
 	private void transformAndRotate (double tSeconds) {
@@ -47,7 +46,7 @@ public class TestScene extends BaseScene{
 	    t1.angleX += angularSpeedX * tSeconds;
 	    t1.angleY += angularSpeedY * tSeconds;
 	    t1.zTranslation += t1.zTranslationInc * tSeconds;
-		
+	    
 	    if (t1.zTranslation < -10) {
 			t1.zTranslationInc = 3.0f;
 		} else if (t1.zTranslation > -3) {
@@ -57,24 +56,25 @@ public class TestScene extends BaseScene{
 	    t2.angleX += angularSpeedX * tSeconds;
 	    t2.angleY += angularSpeedY * tSeconds;
 	    t2.xTranslation += t2.xTranslationInc * tSeconds;
-	    
+		if (t2.xTranslation > 4 || t2.xTranslation < -4) t2.xTranslationInc *= -1.0f;
+
 		if (t2.xTranslation > 4) {
-			t2.xTranslationInc = -3.0f;
+			t2.xTranslationInc = -2.0f;
 		} else if (t2.xTranslation < -4) {
-			t2.xTranslationInc = 3.0f;
+			t2.xTranslationInc = 2.0f;
 		}
 	}
 
 	@Override
 	public void renderFrame(double tSeconds) {
 	    if (!inputState.isSet(Mode.PAUSE_ALL)) {
-			if (!inputState.isSet(Mode.PAUSE_TRANSFORMS))
-				transformAndRotate(tSeconds);
 	    	updateCamera();
-		    updatePosition(tSeconds);
-			this.clear(0xFF000000);
+			updatePosition(tSeconds);
+		    this.clear(0xFF000000);
 			buildVP();
 			testFilledCubes(tSeconds);
+			if (!inputState.isSet(Mode.PAUSE_TRANSFORMS))
+				transformAndRotate(tSeconds);
 			updateDebug(tSeconds);
 	    }
 	}

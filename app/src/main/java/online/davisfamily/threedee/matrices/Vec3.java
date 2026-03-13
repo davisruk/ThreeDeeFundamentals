@@ -5,12 +5,19 @@ package online.davisfamily.threedee.matrices;
 public class Vec3 {
 	public float x, y, z;
 	
+	public Vec3() {}
+	
 	public Vec3(float x, float y, float z){
 		this.x = x; this.y = y; this.z = z;
 	}
 
 	public Vec3 setXYZ(float x, float y, float z){
 		this.x = x; this.y = y; this.z = z;
+		return this;
+	}
+	
+	public Vec3 set(Vec3 a){
+		this.x = a.x; this.y = a.y; this.z = a.z;
 		return this;
 	}
 	
@@ -77,6 +84,12 @@ public class Vec3 {
 	
 	public Vec3 scale(float s) {
 		return new Vec3(x * s, y*s, z*s);
+	}
+	
+	// alternative mutable scale
+	public Vec3 scale(float s, Vec3 out) {
+		out.x=this.x*s; out.y=this.y*s; out.z=this.z*s;
+		return out;
 	}
 	
 	public Vec3 mutableScale(float s) {

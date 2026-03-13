@@ -41,7 +41,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	// Camera variables
 	protected Camera camera;
 	protected Vec3 move;
-	protected float speed = 3.0f;
+	protected float speed = 4.0f;
 	
 	//input variables
 	protected MouseEventDetail mouseInfo;	
@@ -93,22 +93,20 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	}
 	
 	protected void updatePosition(double dt) {
+		float x=0, y=0, z = 0;
 		move.setXYZ(0, 0, 0);
+/*
 		if (mouseInfo == null)
 			camera.updateBasis();
-
-		if (inputState.w()) this.move.mutableAdd(camera.getForwardXZ());
-		if (inputState.s()) this.move.mutableSubtract(camera.getForwardXZ());
-		if (inputState.d()) this.move.mutableAdd(camera.getRightXZ());
-		if (inputState.a()) this.move.mutableSubtract(camera.getRightXZ());
-		if (inputState.up()) this.move.mutableAdd(camera.getUp());
-		if (inputState.down()) this.move.mutableSubtract(camera.getUp());		
-
-		if (move.lengthSquared() > 0) {
-		    move.mutableNormalize();
-		    move.mutableScale(speed * (float)dt);
-		    camera.position.mutableAdd(move);
-		}
+*/
+		if (inputState.w()) z+=1;
+		if (inputState.s()) z-=1;
+		if (inputState.d()) x+=1;
+		if (inputState.a()) x-=1;
+		if (inputState.up()) y+=1;
+		if (inputState.down()) y-=1;		
+		
+		camera.move(z, x, y, speed, (float) dt);
 	}
 	
 	protected void updateDebug(double tSeconds) {
