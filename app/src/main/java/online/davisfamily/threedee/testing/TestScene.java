@@ -3,6 +3,7 @@ package online.davisfamily.threedee.testing;
 import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec4;
@@ -85,7 +86,6 @@ public class TestScene extends BaseScene{
 	    model2.setModel(t2);
 		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model1, perspective, cubeFaceColours, zBuffer);
 		tr.drawCube(camera, v4CubeVertices, cubeTriangles, model2, perspective, cubeFaceColours, zBuffer);
-		transformAndRotate(tSeconds);
    	}
 	
 	private void transformAndRotate (double tSeconds) {
@@ -115,11 +115,15 @@ public class TestScene extends BaseScene{
 
 	@Override
 	public void renderFrame(double tSeconds) {
-	    updateCamera();
-	    updatePosition(tSeconds);
-		this.clear(0xFF000000);
-	    buildVP();
-		testFilledCubes(tSeconds);
-		updateDebug(tSeconds);
+	    if (!inputState.isSet(Mode.PAUSE_ALL)) {
+			updateCamera();
+		    updatePosition(tSeconds);
+			this.clear(0xFF000000);
+			if (!inputState.isSet(Mode.PAUSE_TRANSFORMS))
+				transformAndRotate(tSeconds);
+			buildVP();
+			testFilledCubes(tSeconds);
+			updateDebug(tSeconds);
+	    }
 	}
 }

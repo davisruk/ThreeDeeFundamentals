@@ -124,6 +124,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	
 	@Override
 	public void consume(MouseEventDetail detail) {
+		if (inputState.isSet(Mode.PAUSE_ALL)) return;
 		mouseInfo.dx += detail.dx;
 		mouseInfo.dy += detail.dy;
 	}

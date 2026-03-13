@@ -23,6 +23,8 @@ public class CommandBindings {
 		bindToggle(Mode.SHOW_WIREFRAME, im, am, KeyEvent.VK_L, KeyEvent.ALT_DOWN_MASK, true, is);
 		bindToggle(Mode.FILL_MODEL, im, am, KeyEvent.VK_M, KeyEvent.ALT_DOWN_MASK, true, is);
 		bindToggle(Mode.SHOW_GRID, im, am, KeyEvent.VK_G, KeyEvent.ALT_DOWN_MASK, true, is);
+		bindToggle(Mode.PAUSE_ALL, im, am, KeyEvent.VK_P, 0, true, is);
+		bindToggle(Mode.PAUSE_TRANSFORMS, im, am, KeyEvent.VK_P, KeyEvent.ALT_DOWN_MASK, true, is);
 	}
 	
 	
