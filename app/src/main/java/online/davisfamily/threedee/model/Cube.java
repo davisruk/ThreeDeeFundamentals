@@ -1,10 +1,7 @@
 package online.davisfamily.threedee.model;
 
-import online.davisfamily.threedee.camera.Camera;
-import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
-import online.davisfamily.threedee.triangles.TriangleRenderer;
 
 public class Cube {
 	// -- 3D models  ------
@@ -66,24 +63,4 @@ public class Cube {
 			viewVerts[v] = new Vertex();
 		}
 	}
-	
-	public void draw(TriangleRenderer tr, Camera cam, Mat4 model, Mat4 perspective, float[] zBuff) {
-		Mat4 mv = new Mat4();
-		mv.set(cam.getView());
-		mv.mutableMultiply(model);
-		for(int v=0; v<v4CubeVertices.length;v++) {
-			viewVerts[v] = mv.multiplyVec(v4CubeVertices[v], viewVerts[v]);
-		}
-		
-		for (int i=0; i<cubeTriangles.length;i++) {
-			int[] t = cubeTriangles[i];
-			Vertex v0 = viewVerts[t[0]];
-			Vertex v1 = viewVerts[t[1]];
-			Vertex v2 = viewVerts[t[2]];
-			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
-			if (ct.t1 != null) tr.drawProjectedTriangle(perspective, ct.t1, cubeFaceColours[i/2], zBuff);
-			if (ct.t2 != null) tr.drawProjectedTriangle(perspective, ct.t2, cubeFaceColours[i/2], zBuff);
-			
-		}
-	}	
 }

@@ -7,6 +7,8 @@ import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.model.Cube;
+import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.model.RenderableObject;
 import online.davisfamily.threedee.scene.BaseScene;
 
 public class TestScene extends BaseScene{	
@@ -15,16 +17,21 @@ public class TestScene extends BaseScene{
 	private ObjectTransformation t2;
 	private Mat4 model1, model2, vp;
 	private Cube cube;
+	private RenderableObject cube1, cube2;
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions);
+		this.cube = new Cube();
 
 		this.model1 = new Mat4();
+		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f, model1);
+		Mesh m = new Mesh(cube.v4CubeVertices, cube.cubeTriangles);
+		cube1 = new RenderableObject(m,t1,cube.cubeFaceColours);
+
 		this.model2 = new Mat4();
+		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f, model2);
 		this.vp = new Mat4();
-		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f);
-		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f);
-		this.cube = new Cube();
+		cube2 = new RenderableObject(m,t2,cube.cubeFaceColours);
 	}
 		
 	private void buildVP() {
@@ -32,12 +39,14 @@ public class TestScene extends BaseScene{
 	    vp.mutableMultiply(camera.getView());
 	}
 
+	private void drawCube(RenderableObject ro) {
+		ro.transformation.setupModel();
+		tr.drawMesh(ro, camera, perspective, zBuffer);
+	}
 	private void testFilledCubes(double tSeconds) {
-	    model1.setModel(t1);
-	    model2.setModel(t2);
-	    cube.draw(tr, camera, model1, perspective, zBuffer);
-	    cube.draw(tr, camera, model2, perspective, zBuffer);
-   	}
+		drawCube(cube1);
+		drawCube(cube2);
+	}
 	
 	private void transformAndRotate (double tSeconds) {
 		float angularSpeedX = 0.6f;   // radians per second

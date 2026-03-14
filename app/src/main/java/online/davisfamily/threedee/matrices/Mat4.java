@@ -3,6 +3,9 @@ package online.davisfamily.threedee.matrices;
 public class Mat4 {
 	
 	public static class ObjectTransformation {
+		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation, xTranslationInc, yTranslationInc, zTranslationInc;
+		public Mat4 model;
+
 		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, float xTransInc, float yTransInc, float zTransInc) {
 			this.angleX = xAngle;
 			this.angleY = yAngle;
@@ -14,7 +17,15 @@ public class Mat4 {
 			this.yTranslationInc = yTransInc; // only used for scene calcs
 			this.zTranslationInc = zTransInc; // only used for scene calcs
 		}
-		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation, xTranslationInc, yTranslationInc, zTranslationInc;
+		
+		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, float xTransInc, float yTransInc, float zTransInc, Mat4 model) {
+			this(xAngle, yAngle,zAngle, xTrans, yTrans, zTrans, xTransInc, yTransInc, zTransInc);
+			this.model = model;
+		}
+		
+		public void setupModel() {
+			model.setModel(this);
+		}
 	}
 	
 	// flat array for storing 4x4 matrix

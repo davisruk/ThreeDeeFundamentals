@@ -4,12 +4,13 @@ import java.util.Arrays;
 import java.util.Comparator;
 
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
+import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
-import online.davisfamily.threedee.matrices.Vertex.ClippedTriangles;
+import online.davisfamily.threedee.model.RenderableObject;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 public class TriangleRenderer {
@@ -229,4 +230,20 @@ public class TriangleRenderer {
 
 	}
 	
+	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff) {
+		Mat4 mv = new Mat4();
+		mv.set(cam.getView());
+		mv.mutableMultiply(ro.transformation.model);
+		Vertex[] viewVerts = ro.mesh.createVerticesFrom(mv);
+		for (int i=0; i<ro.mesh.triangles.length;i++) {
+			int[] t = ro.mesh.triangles[i];
+			Vertex v0 = viewVerts[t[0]];
+			Vertex v1 = viewVerts[t[1]];
+			Vertex v2 = viewVerts[t[2]];
+			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
+			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, ro.faceColours[i/2], zBuff);
+			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, ro.faceColours[i/2], zBuff);
+			
+		}
+	}
 }
