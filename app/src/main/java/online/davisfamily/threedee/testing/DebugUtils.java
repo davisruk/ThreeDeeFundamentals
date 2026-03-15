@@ -9,7 +9,6 @@ import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
-import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;

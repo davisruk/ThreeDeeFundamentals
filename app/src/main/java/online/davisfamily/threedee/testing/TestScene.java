@@ -4,8 +4,10 @@ import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
+import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
+import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Cube;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.RenderableObject;
@@ -15,23 +17,25 @@ public class TestScene extends BaseScene{
 
 	private ObjectTransformation t1;
 	private ObjectTransformation t2;
-	private Mat4 model1, model2, vp;
+	private Mat4 cubeModel1, cubeModel2, vp;
 	private Cube cube;
-	private RenderableObject cube1, cube2;
+	private RenderableObject cubeRender1, cubeRender2;
+	private DirectionalLight lightDirection;
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions);
 		this.cube = new Cube();
 
-		this.model1 = new Mat4();
-		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f, model1);
+		this.cubeModel1 = new Mat4();
+		this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f, cubeModel1);
 		Mesh m = new Mesh(cube.v4CubeVertices, cube.cubeTriangles);
-		cube1 = new RenderableObject(m,t1,cube.cubeFaceColours);
+		cubeRender1 = new RenderableObject(m,t1,cube.cubeFaceColours);
 
-		this.model2 = new Mat4();
-		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f, model2);
+		this.cubeModel2 = new Mat4();
+		this.t2 = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f, cubeModel2);
 		this.vp = new Mat4();
-		cube2 = new RenderableObject(m,t2,cube.cubeFaceColours);
+		cubeRender2 = new RenderableObject(m,t2,cube.cubeFaceColours);
+		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
 	}
 		
 	private void buildVP() {
@@ -41,11 +45,11 @@ public class TestScene extends BaseScene{
 
 	private void drawCube(RenderableObject ro) {
 		ro.transformation.setupModel();
-		tr.drawMesh(ro, camera, perspective, zBuffer);
+		tr.drawMesh(ro, camera, perspective, zBuffer, lightDirection);
 	}
 	private void testFilledCubes(double tSeconds) {
-		drawCube(cube1);
-		drawCube(cube2);
+		drawCube(cubeRender1);
+		drawCube(cubeRender2);
 	}
 	
 	private void transformAndRotate (double tSeconds) {

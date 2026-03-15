@@ -22,7 +22,7 @@ public class Mesh {
 		this.triangles = triangles;
 	}
 	
-	public Vertex[] createVerticesFrom(Mat4 modelView) {
+	public Vertex[] prepareVerticesWithModelView(Mat4 modelView) {
 		for(int v=0; v<v4Vertices.length;v++) {
 			viewVerts[v] = modelView.multiplyVec(v4Vertices[v], viewVerts[v]);
 		}

@@ -21,6 +21,11 @@ public class Vec3 {
 		return this;
 	}
 	
+	public Vec3 set(Vertex a) {
+		this.x = a.x; this.y = a.y; this.z = a.z;
+		return this;
+	}
+	
 	public Vec3 normalize() {
 		float mag = (float)Math.sqrt(x*x+y*y+z*z);
 		// guard against divide by 0

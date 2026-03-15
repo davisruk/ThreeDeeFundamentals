@@ -7,7 +7,9 @@ import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
+import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
 import online.davisfamily.threedee.model.RenderableObject;
@@ -230,20 +232,44 @@ public class TriangleRenderer {
 
 	}
 	
-	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff) {
+	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff, DirectionalLight light) {
 		Mat4 mv = new Mat4();
 		mv.set(cam.getView());
 		mv.mutableMultiply(ro.transformation.model);
-		Vertex[] viewVerts = ro.mesh.createVerticesFrom(mv);
+		Vertex[] viewVerts = ro.mesh.prepareVerticesWithModelView(mv);
 		for (int i=0; i<ro.mesh.triangles.length;i++) {
 			int[] t = ro.mesh.triangles[i];
 			Vertex v0 = viewVerts[t[0]];
 			Vertex v1 = viewVerts[t[1]];
 			Vertex v2 = viewVerts[t[2]];
+			int litColour = applyFlatLighting(v0,v1,v2,ro.faceColours[i/2], light);
 			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
-			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, ro.faceColours[i/2], zBuff);
-			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, ro.faceColours[i/2], zBuff);
-			
+			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, litColour, zBuff);
+			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, litColour, zBuff);
 		}
+	}
+	
+	private int multiplyColour(int argb, float brightness) {
+	    int a = (argb >>> 24) & 0xFF;
+	    int r = (argb >>> 16) & 0xFF;
+	    int g = (argb >>> 8) & 0xFF;
+	    int b = argb & 0xFF;
+
+	    r = Math.min(255, Math.max(0, Math.round(r * brightness)));
+	    g = Math.min(255, Math.max(0, Math.round(g * brightness)));
+	    b = Math.min(255, Math.max(0, Math.round(b * brightness)));
+
+	    return (a << 24) | (r << 16) | (g << 8) | b;
+	}
+
+	private Vec3 ab = new Vec3(); 
+	private Vec3 ac = new Vec3();
+	public int applyFlatLighting(Vertex a, Vertex b, Vertex c, int baseColour, DirectionalLight light) {
+	    ab.setXYZ(b.x - a.x, b.y - a.y, b.z - a.z);
+	    ac.setXYZ(c.x - a.x, c.y - a.y, c.z - a.z);
+	    ab.mutableCross(ac).mutableNormalize();
+	    float diffuse = Math.max(0f, ab.dot(light.getDirection()));
+	    float brightness = light.getAmbient() + light.getDiffuseStrength() * diffuse;
+	    return multiplyColour(baseColour, Math.min(1f, brightness));
 	}
 }
