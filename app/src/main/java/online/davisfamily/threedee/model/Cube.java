@@ -5,7 +5,7 @@ import online.davisfamily.threedee.matrices.Vertex;
 
 public class Cube {
 	// -- 3D models  ------
-	public Vec4[] v4CubeVertices = {
+	public Vec4[] v4Vertices = {
 		// bottom square
 		new Vec4 (-0.5f, -0.5f, -0.5f),
 		new Vec4 (-0.5f, -0.5f, 0.5f),
@@ -18,14 +18,9 @@ public class Cube {
 		new Vec4 (0.5f, 0.5f, -0.5f),
 	};
 
-	public int[][] cubeEdges = {
-		{0, 1}, {1, 2}, {2, 3}, {3, 0}, // bottom square edges
-		{4, 5}, {5, 6}, {6, 7}, {7, 4}, // top square edges
-		{0, 4}, {1, 5}, // left vertical edges
-		{2, 6}, {3, 7}, // right vertical edges
-	};	
-
-	public int[] cubeFaceColours = {
+	// these should not be here - this should b structure only
+	// the renderable model should specify the colours
+	public int[] faceColours = {
 	    0xFFFF0000, // bottom - red
 	    0xFF00FF00, // top - green
 	    0xFF0000FF, // front - blue
@@ -35,7 +30,7 @@ public class Cube {
 	};
 	
 	// must make sure these are CCW 
-	public int[][] cubeTriangles = {
+	public int[][] triangles = {
 	    // bottom (y = -0.5) outward normal -Y
 	    {0, 2, 1}, {0, 3, 2},
 

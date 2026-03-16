@@ -242,7 +242,13 @@ public class TriangleRenderer {
 			Vertex v0 = viewVerts[t[0]];
 			Vertex v1 = viewVerts[t[1]];
 			Vertex v2 = viewVerts[t[2]];
-			int litColour = applyFlatLighting(v0,v1,v2,ro.faceColours[i/2], light);
+			// colour determination should come from the renderable object
+			// based on the surface that is being rendered
+			// eventually this is likely to be a texture but for raw colours
+			// probably need a getColour(i) where i is the triangle index
+			
+			//int litColour = applyFlatLighting(v0,v1,v2,ro.faceColours[i/2], light);
+			int litColour = applyFlatLighting(v0,v1,v2,ro.getColour(i), light);
 			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
 			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, litColour, zBuff);
 			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, litColour, zBuff);
