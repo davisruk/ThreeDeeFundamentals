@@ -232,10 +232,10 @@ public class TriangleRenderer {
 
 	}
 	
-	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff, DirectionalLight light) {
+	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff, DirectionalLight light, Mat4 worldModel) {
 		Mat4 mv = new Mat4();
 		mv.set(cam.getView());
-		mv.mutableMultiply(ro.transformation.model);
+		mv.mutableMultiply(worldModel);
 		Vertex[] viewVerts = ro.mesh.prepareVerticesWithModelView(mv);
 		for (int i=0; i<ro.mesh.triangles.length;i++) {
 			int[] t = ro.mesh.triangles[i];

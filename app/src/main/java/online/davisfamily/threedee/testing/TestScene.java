@@ -1,5 +1,7 @@
 package online.davisfamily.threedee.testing;
 
+import java.util.Arrays;
+
 import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.dimensions.ViewDimensions;
@@ -8,24 +10,26 @@ import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
-import online.davisfamily.threedee.model.Tote;
 import online.davisfamily.threedee.model.Cube;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.RenderableObject;
 import online.davisfamily.threedee.model.SquareBasedStrategyImpl;
+import online.davisfamily.threedee.model.Tote;
 import online.davisfamily.threedee.scene.BaseScene;
 
 public class TestScene extends BaseScene{	
 
-	private ObjectTransformation tCube;
-	private ObjectTransformation tTote;
-	private Mat4 cubeModel, toteModel, vp;
+	private ObjectTransformation tCube, tTote, tLidLeft, tLidRight;
+	private Mat4 cubeModel, toteModel, vp, lidLeftModel, lidRightModel;
 	private Cube cube;
 	private Tote tote;
-	private RenderableObject cubeRender, toteRender;
+	private Tote.Lid lid;
+	private RenderableObject rCube, rTote, rLidRight, rLidLeft;
 	private DirectionalLight lightDirection;
-	
+	private OneColourStrategyImpl blueColour;
+	private float lidAngle = 0.0f;
+	private boolean opening = true;
 	// probably need to add this to Cube / Box using a decorator or similar pattern
 	public int[] faceColours = {
 	    0xFFFF0000, // bottom - red
@@ -38,18 +42,33 @@ public class TestScene extends BaseScene{
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions);
+		blueColour = new OneColourStrategyImpl(0xFF0000FF);
 		tote = new Tote();
+		lid = tote.new Lid();
+		Mesh mLid = new Mesh(lid.v4Vertices, lid.triangles);
+		lidLeftModel = new Mat4();
+		lidRightModel = new Mat4();
+		
+		float testOpen = (float)Math.toRadians(45.0);
+
+		
+		tLidLeft = new ObjectTransformation(0.0f,0.0f,+testOpen,-lid.innerTopWidth / 2f,tote.outerHeight,0f,0f,0f,0f, lidLeftModel);
+		tLidRight = new ObjectTransformation(0.0f,(float)Math.PI,+testOpen,+lid.innerTopWidth / 2f, tote.outerHeight,0f,0f,0f,0f, lidRightModel);
+		
+		rLidRight =  new RenderableObject(tr,mLid,tLidRight,blueColour);
+		rLidLeft =  new RenderableObject(tr,mLid,tLidLeft,blueColour);
+
 		toteModel = new Mat4();
 		//this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f, cubeModel1);
 		tTote = new ObjectTransformation(0.0f,0.0f,0f,0f,0f,-5f,0f,0f,-3.0f, toteModel);
 		Mesh m = new Mesh(tote.v4Vertices, tote.triangles);
-		toteRender = new RenderableObject(tr, m,tTote,new OneColourStrategyImpl(0xFF0000FF));
+		rTote = new RenderableObject(tr, m,tTote, blueColour, Arrays.asList(rLidRight, rLidLeft));
 
 		cube = new Cube();
 		cubeModel = new Mat4();
 		tCube = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f, cubeModel);
 		m = new Mesh(cube.v4Vertices, cube.triangles);
-		cubeRender = new RenderableObject(tr, m,tCube,new SquareBasedStrategyImpl(faceColours));
+		rCube = new RenderableObject(tr, m,tCube,new SquareBasedStrategyImpl(faceColours));
 		
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
 		this.vp = new Mat4();
@@ -61,12 +80,12 @@ public class TestScene extends BaseScene{
 	}
 
 	private void drawObject(RenderableObject ro) {
-		ro.transformation.setupModel();
-		ro.draw(camera, perspective, zBuffer, lightDirection);
+		//ro.transformation.setupModel();
+		ro.draw(camera, perspective, zBuffer, lightDirection, null);
 		//tr.drawMesh(ro, camera, perspective, zBuffer, lightDirection);
 	}
 	private void testFilledObjects(double tSeconds) {
-		drawObject(toteRender);
+		drawObject(rTote);
 //		drawObject(cubeRender);
 	}
 	
@@ -94,6 +113,25 @@ public class TestScene extends BaseScene{
 		} else if (tCube.xTranslation < -4) {
 			tCube.xTranslationInc = 2.0f;
 		}
+		
+		float speed = 0.002f;
+
+		if (opening) {
+		    lidAngle += speed;
+		    if (lidAngle > Math.toRadians(110.0)) {
+		        lidAngle = (float)Math.toRadians(110.0);
+		        opening = false;
+		    }
+		} else {
+		    lidAngle -= speed;
+		    if (lidAngle < 0.0f) {
+		        lidAngle = 0.0f;
+		        opening = true;
+		    }
+		}
+
+		tLidLeft.angleZ = +lidAngle;
+		tLidRight.angleZ = +lidAngle;		
 	}
 
 	@Override

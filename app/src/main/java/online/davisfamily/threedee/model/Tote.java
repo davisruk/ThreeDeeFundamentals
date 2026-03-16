@@ -8,7 +8,7 @@ public class Tote {
 	// outer top from published external dimensions
 	float outerTopWidth  = 400f * s;
 	float outerTopDepth  = 600f * s;
-	float outerHeight    = 310f * s;
+	public float outerHeight    = 310f * s;
 
 	// inner top from published internal dimensions
 	float innerTopWidth  = 371f * s;
@@ -144,4 +144,62 @@ public class Tote {
 	    {8, 11, 10},
 	    {8, 10, 9}
 	};
+	
+	public class Lid {
+		float s = 0.001f;
+
+		public float innerTopWidth  = 371f * s;
+		float innerTopDepth  = 547f * s;
+
+		float flapWidth      = innerTopWidth / 2f;   // 0.1855
+		float flapDepth      = innerTopDepth;        // 0.547
+		float flapThickness  = 20f * s;              // 0.020
+
+		float halfDepth = flapDepth / 2f;
+
+		public Vec4[] v4Vertices = new Vec4[] {
+		    // -------------------------------------------------
+		    // TOP FACE  (y = 0)
+		    // hinge edge is along x = 0
+		    // -------------------------------------------------
+		    new Vec4(0.0f,       0.0f, -halfDepth, 1.0f), // 0 hinge-back-top
+		    new Vec4(0.0f,       0.0f,  halfDepth, 1.0f), // 1 hinge-front-top
+		    new Vec4(flapWidth,  0.0f,  halfDepth, 1.0f), // 2 free-front-top
+		    new Vec4(flapWidth,  0.0f, -halfDepth, 1.0f), // 3 free-back-top
+
+		    // -------------------------------------------------
+		    // BOTTOM FACE  (y = -flapThickness)
+		    // -------------------------------------------------
+		    new Vec4(0.0f,      -flapThickness, -halfDepth, 1.0f), // 4 hinge-back-bottom
+		    new Vec4(0.0f,      -flapThickness,  halfDepth, 1.0f), // 5 hinge-front-bottom
+		    new Vec4(flapWidth, -flapThickness,  halfDepth, 1.0f), // 6 free-front-bottom
+		    new Vec4(flapWidth, -flapThickness, -halfDepth, 1.0f)  // 7 free-back-bottom
+		};
+		
+		public int[][] triangles = new int[][] {
+		    // top (+y)
+		    {0, 1, 2},
+		    {0, 2, 3},
+
+		    // bottom (-y)
+		    {4, 6, 5},
+		    {4, 7, 6},
+
+		    // hinge side (-x)
+		    {0, 4, 5},
+		    {0, 5, 1},
+
+		    // free side (+x)
+		    {3, 2, 6},
+		    {3, 6, 7},
+
+		    // front (+z)
+		    {1, 5, 6},
+		    {1, 6, 2},
+
+		    // back (-z)
+		    {0, 3, 7},
+		    {0, 7, 4}
+		};		
+	}
 }
