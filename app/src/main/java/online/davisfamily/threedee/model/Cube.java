@@ -54,13 +54,4 @@ public class Cube {
 	    // left (x = -0.5) outward normal -X
 	    {0, 1, 5}, {0, 5, 4},
 	};
-	
-	Vertex[] viewVerts;
-	
-	public Cube() {
-		viewVerts = new Vertex[v4CubeVertices.length];
-		for(int v=0; v<v4CubeVertices.length;v++) {
-			viewVerts[v] = new Vertex();
-		}
-	}
 }
