@@ -11,6 +11,7 @@ import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Cube;
+import online.davisfamily.threedee.model.LidFactory;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.RenderableObject;
@@ -27,7 +28,8 @@ public class TestScene extends BaseScene{
 	private Tote.Lid lid;
 	private RenderableObject rCube, rTote, rLidRight, rLidLeft;
 	private DirectionalLight lightDirection;
-	private OneColourStrategyImpl blueColour;
+	private OneColourStrategyImpl blueColour, yellowColour, redColour;
+	
 	private float lidAngle = 0.0f;
 	private boolean opening = true;
 	// probably need to add this to Cube / Box using a decorator or similar pattern
@@ -43,20 +45,54 @@ public class TestScene extends BaseScene{
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions);
 		blueColour = new OneColourStrategyImpl(0xFF0000FF);
+		yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
+		redColour = new OneColourStrategyImpl(0xFFFF0000);
 		tote = new Tote();
 		lid = tote.new Lid();
-		Mesh mLid = new Mesh(lid.v4Vertices, lid.triangles);
+		//Mesh mLid = new Mesh(lid.v4Vertices, lid.triangles);
+		LidFactory.InterlockingLids lids = LidFactory.buildInterlockingAngularLids(
+			    0.371f,  // openingWidth
+			    0.547f,  // openingDepth
+			    0.020f,  // thickness
+			    5,       // toothCount
+			    0.010f,  // seamAmplitude
+			    0.24f,   // valleyFlatFraction
+			    0.24f    // peakFlatFraction
+			);
+
+			Mesh mLeftLid = lids.leftMesh;
+			Mesh mRightLid = lids.rightMesh;
 		lidLeftModel = new Mat4();
 		lidRightModel = new Mat4();
 		
 		float testOpen = (float)Math.toRadians(45.0);
 
+		float openingWidth = 0.371f;   // same value passed into LidFactory
+		float halfWidth = openingWidth / 2f;
+
+		tLidLeft = new ObjectTransformation(
+		    0f, 0f, 0f,
+		    -halfWidth,
+		    tote.outerHeight,
+		    0f,
+		    0f, 0f, 0f,
+		    lidLeftModel
+		);
+
+		tLidRight = new ObjectTransformation(
+		    0f, 0f, 0f,
+		    +halfWidth,
+		    tote.outerHeight,
+		    0f,
+		    0f, 0f, 0f,
+		    lidRightModel
+		);
 		
-		tLidLeft = new ObjectTransformation(0.0f,0.0f,+testOpen,-lid.innerTopWidth / 2f,tote.outerHeight,0f,0f,0f,0f, lidLeftModel);
-		tLidRight = new ObjectTransformation(0.0f,(float)Math.PI,+testOpen,+lid.innerTopWidth / 2f, tote.outerHeight,0f,0f,0f,0f, lidRightModel);
+//		tLidLeft = new ObjectTransformation(0.0f,0.0f,+testOpen,-lid.innerTopWidth / 2f,tote.outerHeight,0f,0f,0f,0f, lidLeftModel);
+//		tLidRight = new ObjectTransformation(0.0f,(float)Math.PI,-testOpen,+lid.innerTopWidth / 2f, tote.outerHeight,0f,0f,0f,0f, lidRightModel);
 		
-		rLidRight =  new RenderableObject(tr,mLid,tLidRight,blueColour);
-		rLidLeft =  new RenderableObject(tr,mLid,tLidLeft,blueColour);
+		rLidRight =  new RenderableObject(tr,mRightLid,tLidRight,redColour);
+		rLidLeft =  new RenderableObject(tr,mLeftLid,tLidLeft,yellowColour);
 
 		toteModel = new Mat4();
 		//this.t1 = new ObjectTransformation(0.4f,0.6f,0f,0f,0f,-1f,0f,0f,-3.0f, cubeModel1);
@@ -131,7 +167,7 @@ public class TestScene extends BaseScene{
 		}
 
 		tLidLeft.angleZ = +lidAngle;
-		tLidRight.angleZ = +lidAngle;		
+		tLidRight.angleZ = -lidAngle;		
 	}
 
 	@Override
