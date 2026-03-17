@@ -41,7 +41,7 @@ public class TestScene extends BaseScene{
 			    0.371f,  // openingWidth
 			    0.547f,  // openingDepth
 			    0.020f,  // thickness
-			    5,       // toothCount
+			    3,       // toothCount
 			    0.010f,  // seamAmplitude
 			    0.24f,   // valleyFlatFraction
 			    0.24f    // peakFlatFraction
@@ -133,9 +133,15 @@ public class TestScene extends BaseScene{
 		tLidRight.angleZ = -lidAngle;		
 	}
 
+	boolean hasPrinted = false;
 	@Override
 	public void renderFrame(double tSeconds) {
-	    if (!inputState.isSet(Mode.PAUSE_ALL)) {
+	    if (!hasPrinted) {
+	    	rTote.children.stream().forEach(ro -> System.out.println(ro.mesh));
+	    	hasPrinted = true;
+	    }
+	    
+		if (!inputState.isSet(Mode.PAUSE_ALL)) {
 	    	updateCamera();
 			updatePosition(tSeconds);
 		    this.clear(0xFF000000);

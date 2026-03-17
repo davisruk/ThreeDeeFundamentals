@@ -6,6 +6,12 @@ import java.util.List;
 import online.davisfamily.threedee.matrices.Vec4;
 
 
+// Procedurally generates interlocking lids
+// For raw Vertices and Triangles use toString
+// on the RenerableObject that encloses left and right meshes
+// 
+// This should only be called to setup a model so
+// computationally is not expensive unless called each frame
 public final class LidFactory {
 
     private LidFactory() {
@@ -47,8 +53,9 @@ public final class LidFactory {
                 valleyFlatFraction, peakFlatFraction);
 
         Mesh left = buildLeftFlap(openingWidth, thickness, seam);
+        left.name = "Left Lid";
         Mesh right = buildRightFlap(openingWidth, thickness, seam);
-
+        right.name = "Right Lid";
         return new InterlockingLids(left, right);
     }
 
@@ -204,10 +211,8 @@ public final class LidFactory {
      * - local hinge edge lies on x = 0
      * - local free edge lies on x = halfWidth - seamX(z)
      *
-     * This is complementary to the left flap.
+     * Complementary to the left flap.
      *
-     * Use the same placement idea as before, but you should no longer need
-     * Y = PI to force the seam to match.
      */
     private static Mesh buildRightFlap(float openingWidth, float thickness, Seams seam) {
         float halfWidth = openingWidth / 2f;
@@ -277,6 +282,7 @@ public final class LidFactory {
 
         return new Mesh(vertices, triangles.toArray(new int[0][]));
     }
+    
     private static void buildPerimeterWallsRight(
             List<int[]> triangles,
             int[] topHinge,
