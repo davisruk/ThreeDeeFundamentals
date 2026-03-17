@@ -1,4 +1,4 @@
-package online.davisfamily.threedee.triangles;
+package online.davisfamily.threedee.rendering;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -12,7 +12,6 @@ import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
-import online.davisfamily.threedee.model.RenderableObject;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 public class TriangleRenderer {

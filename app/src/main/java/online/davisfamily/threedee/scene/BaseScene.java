@@ -18,8 +18,8 @@ import online.davisfamily.threedee.input.mouse.MouseEventConsumer;
 import online.davisfamily.threedee.input.mouse.MouseEventDetail;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.testing.DebugUtils;
-import online.davisfamily.threedee.triangles.TriangleRenderer;
 
 // provides a good starting point for a Scene
 // implements a lot of boilerplate methods
