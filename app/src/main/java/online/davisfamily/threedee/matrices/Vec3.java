@@ -177,4 +177,8 @@ public class Vec3 {
 	public float dot(Vec3 a) {
 		return a.x * x + a.y*y + a.z * z;
 	}
+	
+	public static Vec3 copy(Vec3 a) {
+		return new Vec3(a.x, a.y, a.z);
+	}
 }

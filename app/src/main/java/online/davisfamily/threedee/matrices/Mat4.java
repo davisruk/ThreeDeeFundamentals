@@ -26,6 +26,12 @@ public class Mat4 {
 		public void setupModel() {
 			model.setModel(this);
 		}
+		
+		public void setTranslation(Vec3 t) {
+			xTranslation = t.x;
+			yTranslation = t.y;
+			zTranslation = t.z;
+		}
 	}
 	
 	// flat array for storing 4x4 matrix

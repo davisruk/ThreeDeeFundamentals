@@ -7,11 +7,13 @@ import online.davisfamily.threedee.matrices.Vec4;
 
 
 // Procedurally generates interlocking lids
+// Better than raw Vertices & Triangles
+// as scaling for size increase / decrease would affect the teeth in the lids
+// adding / removing teeth would be painstaking
+
 // For raw Vertices and Triangles use toString
 // on the RenerableObject that encloses left and right meshes
 // 
-// This should only be called to setup a model so
-// computationally is not expensive unless called each frame
 public final class LidFactory {
 
     private LidFactory() {
