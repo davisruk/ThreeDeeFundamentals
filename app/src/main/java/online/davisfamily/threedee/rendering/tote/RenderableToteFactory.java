@@ -23,22 +23,11 @@ public class RenderableToteFactory {
 		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
 		OneColourStrategyImpl redColour = new OneColourStrategyImpl(0xFFFF0000);
 
-		LidFactory.InterlockingLids lids = LidFactory.buildInterlockingAngularLids(
-			    0.371f,  // openingWidth
-			    0.547f,  // openingDepth
-			    0.020f,  // thickness
-			    7,       // toothCount
-			    0.010f,  // seamAmplitude
-			    0.24f,   // valleyFlatFraction
-			    0.24f    // peakFlatFraction
-			);
-
-		Mesh mLeftLid = lids.leftMesh;
-		Mesh mRightLid = lids.rightMesh;
 		Tote tote = new Tote();		
 		float openingWidth = 0.371f;   // same value passed into LidFactory
 		float halfWidth = openingWidth / 2f;
 
+		// lid transformations
 		ObjectTransformation tLidLeft = new ObjectTransformation(
 		    0f, 0f, 0f,
 		    -halfWidth,
@@ -54,16 +43,39 @@ public class RenderableToteFactory {
 		    0f,
 		    new Mat4()
 		);
+
+		// lid meshes
+		LidFactory.InterlockingLids lids = LidFactory.buildInterlockingAngularLids(
+			    0.371f,  // openingWidth
+			    0.547f,  // openingDepth
+			    0.020f,  // thickness
+			    7,       // toothCount
+			    0.010f,  // seamAmplitude
+			    0.24f,   // valleyFlatFraction
+			    0.24f    // peakFlatFraction
+			);
+
+
+		Mesh mLeftLid = lids.leftMesh;
+		Mesh mRightLid = lids.rightMesh;
 		
+		//renderable lids with open / close behaviours
 		RenderableObject rLidRight =  new RenderableObject(tr,mRightLid,tLidRight,redColour);
 		rLidRight.addBehaviour(new PingPongRotationBehaviour(PingPongRotationBehaviour.Axis.Z, -110f, 0f, 90f));
 		RenderableObject rLidLeft =  new RenderableObject(tr,mLeftLid,tLidLeft,yellowColour);
 		rLidLeft.addBehaviour(new PingPongRotationBehaviour(PingPongRotationBehaviour.Axis.Z, 0f, 110f, 90f));
 		
+		// tote transformation (will apply to lid transformations so no need to add pathing to the lids)
 		ObjectTransformation tTote = new ObjectTransformation(0.0f,0.0f,0f,0f,0f,-5f, new Mat4());
-		Mesh m = new Mesh(tote.v4Vertices, tote.triangles);
-		RenderableObject rTote = new RenderableObject(tr,m,tTote, blueColour, Arrays.asList(rLidRight, rLidLeft));
+		// tote mesh
+		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
+		// renderable tote
+		RenderableObject rTote = new RenderableObject(tr, mTote, tTote, blueColour, Arrays.asList(rLidRight, rLidLeft));
+		
+		// tote spin
 		rTote.addBehaviour(new SpinBehaviour(0f, 1f, 0f));
+		
+		// tote path
 		LinearPath3 path = new LinearPath3(
 			    new Vec3(0f, 0f, -3f),
 			    new Vec3(2f, 0f, -5f),
@@ -71,7 +83,7 @@ public class RenderableToteFactory {
 			    new Vec3(-2f, 0f, -5f),
 			    new Vec3(0f, 0f, -3f)
 			);		
-		rTote.addBehaviour(new PathFollowerBehaviour(path, 0.15f, PathFollowerBehaviour.WrapMode.CLAMP));
+		rTote.addBehaviour(new PathFollowerBehaviour(path, 0.15f, PathFollowerBehaviour.WrapMode.LOOP));
 		return rTote;
 	}
 }
