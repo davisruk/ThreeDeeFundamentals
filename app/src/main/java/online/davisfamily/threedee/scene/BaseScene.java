@@ -25,7 +25,7 @@ import online.davisfamily.threedee.testing.DebugUtils;
 
 // provides a good starting point for a Scene
 // implements a lot of boilerplate methods
-// extending class should manage world models and lighting
+// extending class should manage world models (structure, transformations etc) and lighting
 public abstract class BaseScene implements Scene, MouseEventConsumer{
 	// drawing variables
 	protected JRootPane root;
