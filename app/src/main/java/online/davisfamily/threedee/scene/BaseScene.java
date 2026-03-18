@@ -73,6 +73,10 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 		this.vp = new Mat4();
 	}
 	
+	// base classes must override this method
+	// place additional render operations there
+	// the method is called from renderFrame
+	// for more control override renderFrame itself
 	public abstract void executeChildRenderOperations(double dtSeconds);
 	
 	protected void clear (int argb) {
@@ -133,6 +137,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds, perspective);
 	}
 	
+	@Override
 	public void renderFrame(double tSeconds) {
 /*
 		if (!hasPrinted) {
@@ -149,6 +154,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 			updateDebug(tSeconds);
 	    }
 	}
+	
 	@Override
 	public BufferedImage getImage() {return image;}	
 	
