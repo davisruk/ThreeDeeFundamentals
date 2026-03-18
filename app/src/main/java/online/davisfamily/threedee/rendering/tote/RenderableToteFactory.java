@@ -83,7 +83,7 @@ public class RenderableToteFactory {
 			    new Vec3(-2f, 0f, -5f),
 			    new Vec3(0f, 0f, -3f)
 			);		
-		rTote.addBehaviour(new PathFollowerBehaviour(path, 0.15f, PathFollowerBehaviour.WrapMode.LOOP));
+		rTote.addBehaviour(new PathFollowerBehaviour(path, 2.0f, PathFollowerBehaviour.WrapMode.LOOP));
 		return rTote;
 	}
 }

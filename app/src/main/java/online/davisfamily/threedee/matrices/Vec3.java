@@ -78,10 +78,6 @@ public class Vec3 {
 		return this;
 	}
 	
-	public Vec3 subtract(Vec3 v) {
-		return new Vec3(x - v.x, y - v.y, z - v.z);
-	}
-
 	public Vec3 mutableSubtract(Vec3 v) {
 		x -= v.x; y -= v.y; z -= v.z;
 		return this;
@@ -104,6 +100,14 @@ public class Vec3 {
 
 	public float lengthSquared() {
 		return x*x + y*y + z*z;
+	}
+	
+	public Vec3 subtract(Vec3 v) {
+		return new Vec3(x - v.x, y - v.y, z - v.z);
+	}
+
+	public float distanceTo(Vec3 other) {
+		return other.subtract(this).length();
 	}
 	
 	public float length() {

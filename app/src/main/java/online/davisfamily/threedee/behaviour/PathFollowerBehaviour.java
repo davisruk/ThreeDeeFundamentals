@@ -11,45 +11,46 @@ public class PathFollowerBehaviour implements Behaviour {
 	private final Path3 path;
 	private final float unitsPerSecond;
 	private final WrapMode wrapMode;
-	private float u;
 	private float direction = 1f;
-	
+	private float distanceAlongPath = 0f;
 	
 	public PathFollowerBehaviour(Path3 path, float unitsPerSecond, WrapMode wrapMode) {
 		this(path, unitsPerSecond, wrapMode, 0f);
 	}
 
-	public PathFollowerBehaviour(Path3 path, float unitsPerSecond, WrapMode wrapMode, float startU) {
+	public PathFollowerBehaviour(Path3 path, float unitsPerSecond, WrapMode wrapMode, float startDistance) {
 		this.path = path;
 		this.unitsPerSecond = unitsPerSecond;
 		this.wrapMode = wrapMode;
-		this.u = startU;
+		this.distanceAlongPath = startDistance;
 	}
 	
 	@Override
 	public void update(RenderableObject object, double dtSeconds) {
-		u += direction * unitsPerSecond * (float) dtSeconds;
+		distanceAlongPath+= direction * unitsPerSecond * (float) dtSeconds;
+		float totalLength = path.getTotalLength();
+
 		switch (wrapMode) {
 			case CLAMP -> {
-				if (u < 0f) u = 0f;
-				if (u > 1f) u = 1f;
+				if (distanceAlongPath < 0f) distanceAlongPath = 0f;
+				if (distanceAlongPath > totalLength) distanceAlongPath = totalLength;
 			}
 			case LOOP -> {
-				while (u > 1f) u-=1f;
-				while (u < 0f) u+=1f;
+				while (distanceAlongPath > totalLength) distanceAlongPath-=totalLength;
+				while (distanceAlongPath < 0f) distanceAlongPath+=totalLength;
 			}
 			case PING_PONG -> {
-				if (u > 1f) {
-					u = 1f;
+				if (distanceAlongPath > totalLength) {
+					distanceAlongPath = totalLength;
 					direction = -1f;
-				} else if (u < 0f) {
-					u = 0f;
+				} else if (distanceAlongPath < 0f) {
+					distanceAlongPath = 0f;
 					direction = 1f;
 				}
 			}
 		}
 		
-		Vec3 p = path.samplePosition(u);
+		Vec3 p = path.sampleByDistance(distanceAlongPath);
 		object.transformation.setTranslation(p);
 	}
 }
