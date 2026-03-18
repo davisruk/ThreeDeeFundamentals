@@ -13,7 +13,7 @@ public class TestScene extends BaseScene{
 
 	private RenderableObject rTote;
 	private DirectionalLight lightDirection;
-	
+
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions);
 		rTote = RenderableToteFactory.createRenderableTote(tr);

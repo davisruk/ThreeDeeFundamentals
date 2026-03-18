@@ -1,5 +1,7 @@
 package online.davisfamily.threedee.testing;
 
+import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
+import online.davisfamily.threedee.behaviour.SpinBehaviour;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
@@ -14,6 +16,7 @@ import online.davisfamily.threedee.model.Cube;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.SquareBasedStrategyImpl;
+import online.davisfamily.threedee.path.LinearPath3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 
@@ -119,12 +122,9 @@ public class BasicTests {
 /**** Cube Tests ****
  * Put this in a scene constructor:
  * BasicTests test = new BasicTests();
- * test.setupTestCube(tr) // tr will be present if you are extending BaseScene
- * 
- * Call this from your renderFrame implementation:
- * test.drawCube(camera, lightDirection, vp, perspective, zBuffer, tSeconds, !inputState.isSet(Mode.PAUSE_TRANSFORMS));
- * Most of the above are provided by BaseScene - you will need to maintain camera (position etc) and lightDirection
- * See TestScene for this
+ * Call getCube() as part of rendering
+ * e.g. in TestScene class put this in executeChildRenderOperations method: drawObject(test.getCube(), tSeconds, lightDirection);
+ * BaseScene rederFrame will call executeChildRenderOperations
  */
 	// probably need to add this to Cube / Box using a decorator or similar pattern
 	public int[] faceColours = {
@@ -141,33 +141,26 @@ public class BasicTests {
 	private Cube cube;
 	private RenderableObject rCube;
 
-	public void setupTestCube(TriangleRenderer tr) {
+	private void setupTestCube(TriangleRenderer tr) {
 		cube = new Cube();
 		cubeModel = new Mat4();
-		tCube = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f,3.0f,0f,0f, cubeModel);
+		tCube = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f, cubeModel);
 		Mesh m = new Mesh(cube.v4Vertices, cube.triangles);
 		rCube = new RenderableObject(tr, m, tCube,new SquareBasedStrategyImpl(faceColours));
+		rCube.addBehaviour(new SpinBehaviour(0f, 1f, 0f));
+		LinearPath3 path = new LinearPath3(
+			    new Vec3(0f, 0f, -3f),
+			    new Vec3(2f, 0f, -5f),
+			    new Vec3(0f, 0f, -10f),
+			    new Vec3(-2f, 0f, -5f),
+			    new Vec3(0f, 0f, -3f)
+			);		
+		rCube.addBehaviour(new PathFollowerBehaviour(path, 0.15f, PathFollowerBehaviour.WrapMode.LOOP));
 	}
 	
-	private void transformAndRotate (double tSeconds) {
-		float angularSpeedX = 0.6f;   // radians per second
-	    float angularSpeedY = 0.3f;
-
-	    tCube.angleX += angularSpeedX * tSeconds;
-	    tCube.angleY += angularSpeedY * tSeconds;
-	    tCube.xTranslation += tCube.xTranslationInc * tSeconds;
-		if (tCube.xTranslation > 4 || tCube.xTranslation < -4) tCube.xTranslationInc *= -1.0f;
-
-		if (tCube.xTranslation > 4) {
-			tCube.xTranslationInc = -2.0f;
-		} else if (tCube.xTranslation < -4) {
-			tCube.xTranslationInc = 2.0f;
-		}
+	public RenderableObject getCube(TriangleRenderer tr) {
+		if (cube == null) setupTestCube(tr);
+		return rCube;
 	}
 	
-	
-	public void drawCube(Camera cam, DirectionalLight lightDirection, Mat4 vp, Mat4 perspective, float[] zBuffer, double tSeconds, boolean transform) {
-		rCube.draw(cam, perspective, zBuffer, lightDirection, Mat4.identity());
-		if (transform)transformAndRotate(tSeconds);
-	}
 }

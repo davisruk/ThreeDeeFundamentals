@@ -32,6 +32,7 @@ public class LinearPath3 implements Path3 {
 		);
 	}
 	
+	// interpolate place on axis 
 	private static float lerp(float a, float b, float t) {
 		return a + ((b - a) * t);
 	}

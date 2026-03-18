@@ -44,7 +44,6 @@ public class RenderableToteFactory {
 		    -halfWidth,
 		    tote.outerHeight,
 		    0f,
-		    0f, 0f, 0f,
 		    new Mat4()
 		);
 
@@ -53,7 +52,6 @@ public class RenderableToteFactory {
 		    +halfWidth,
 		    tote.outerHeight,
 		    0f,
-		    0f, 0f, 0f,
 		    new Mat4()
 		);
 		
@@ -62,7 +60,7 @@ public class RenderableToteFactory {
 		RenderableObject rLidLeft =  new RenderableObject(tr,mLeftLid,tLidLeft,yellowColour);
 		rLidLeft.addBehaviour(new PingPongRotationBehaviour(PingPongRotationBehaviour.Axis.Z, 0f, 110f, 90f));
 		
-		ObjectTransformation tTote = new ObjectTransformation(0.0f,0.0f,0f,0f,0f,-5f,0f,0f,-3.0f, new Mat4());
+		ObjectTransformation tTote = new ObjectTransformation(0.0f,0.0f,0f,0f,0f,-5f, new Mat4());
 		Mesh m = new Mesh(tote.v4Vertices, tote.triangles);
 		RenderableObject rTote = new RenderableObject(tr,m,tTote, blueColour, Arrays.asList(rLidRight, rLidLeft));
 		rTote.addBehaviour(new SpinBehaviour(0f, 1f, 0f));

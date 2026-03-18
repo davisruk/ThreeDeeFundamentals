@@ -3,23 +3,20 @@ package online.davisfamily.threedee.matrices;
 public class Mat4 {
 	
 	public static class ObjectTransformation {
-		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation, xTranslationInc, yTranslationInc, zTranslationInc;
+		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation;
 		public Mat4 model;
 
-		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, float xTransInc, float yTransInc, float zTransInc) {
+		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans) {
 			this.angleX = xAngle;
 			this.angleY = yAngle;
 			this.angleZ = zAngle;
 			this.xTranslation = xTrans;
 			this.yTranslation = yTrans;
 			this.zTranslation = zTrans;
-			this.xTranslationInc = xTransInc; // only used for scene calcs
-			this.yTranslationInc = yTransInc; // only used for scene calcs
-			this.zTranslationInc = zTransInc; // only used for scene calcs
 		}
 		
-		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, float xTransInc, float yTransInc, float zTransInc, Mat4 model) {
-			this(xAngle, yAngle,zAngle, xTrans, yTrans, zTrans, xTransInc, yTransInc, zTransInc);
+		public ObjectTransformation(float xAngle, float yAngle, float zAngle, float xTrans, float yTrans, float zTrans, Mat4 model) {
+			this(xAngle, yAngle,zAngle, xTrans, yTrans, zTrans);
 			this.model = model;
 		}
 		
