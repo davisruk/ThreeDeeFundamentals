@@ -85,6 +85,21 @@ public class RenderableToteFactory {
 	}
 	
 	private static RenderableObject createRenderableLid(Mesh lidMesh, float yOffset, float lidWidth, TriangleRenderer tr, OneColourStrategyImpl colour, boolean isLeft) {
+		double zRotation = isLeft ? 255d : -255d;
+		float zRotationRadians = (float)Math.toRadians(zRotation);
+		ObjectTransformation tLid = new ObjectTransformation(
+			    0f, 0f, zRotationRadians, // rotation xyz
+			    lidWidth, yOffset, 0f, // translation xyz
+			    new Mat4()
+			);
+		return RenderableObject.create(
+				tr,
+				lidMesh, // mesh
+				tLid, // transform
+				colour
+			);
+
+/*
 		ObjectTransformation tLid = new ObjectTransformation(
 			    0f, 0f, 0f, // rotation xyz
 			    lidWidth, yOffset, 0f, // translation xyz
@@ -92,8 +107,8 @@ public class RenderableToteFactory {
 			);
 
 		Behaviour openClose = isLeft ? 
-				new PingPongRotationBehaviour(Axis.Z, 0f, 110f, 90f):
-				new PingPongRotationBehaviour(Axis.Z, -110f, 0f, 90f);
+				new PingPongRotationBehaviour(Axis.Z, 0f, 270f, 90f):
+				new PingPongRotationBehaviour(Axis.Z, -270f, 0f, 90f);
 		
 		return RenderableObject.createWithBehaviours(
 			tr,
@@ -102,5 +117,6 @@ public class RenderableToteFactory {
 			colour,
 			List.of(openClose)
 		);
+*/
 	}	
 }

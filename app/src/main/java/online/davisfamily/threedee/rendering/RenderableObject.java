@@ -199,8 +199,13 @@ public class RenderableObject {
                 behaviourObjects,
                 forwardDirection);
     }
+    
 	public void addBehaviour(Behaviour behaviour) {
 		behaviours.add(behaviour);
+	}
+	
+	public void addChild(RenderableObject child) {
+		children.add(child);
 	}
 	
 	public void update(double dtSeconds) {
