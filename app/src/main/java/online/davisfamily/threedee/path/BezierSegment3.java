@@ -4,26 +4,43 @@ import online.davisfamily.threedee.matrices.Vec3;
 
 public class BezierSegment3 {
 	// control points
-	Vec3 p0,p1,p2,p3;
+	private final Vec3 p0,p1,p2,p3;
 	
-	float[] sampleTs;
-	float[] sampleDistances;
-	float totalLength;
+	private final float[] sampleTs;
+	private final float[] sampleDistances;
+	private final float totalLength;
 	private static final int ARC_LENGTH_SAMPLES = 100;
 	
-	Vec3 samplePosition(float t) {
-		/*
-		 * Formula: 
-		 * B(t) =
-		 *	(1-t)^3 p0
-		 *	+ 3(1-t)^2 t p1
-		 *	+ 3(1-t) t^2 p2
-		 *	+ t^3 p3
-		 */
+	public BezierSegment3(Vec3 p0, Vec3 p1, Vec3 p2, Vec3 p3) {
+        this.p0 = p0;
+        this.p1 = p1;
+        this.p2 = p2;
+        this.p3 = p3;
+        
+		ArcLengthData ald = buildArcLengthTable();
+		this.sampleTs = ald.ts;
+		this.sampleDistances = ald.distances;
+		this.totalLength = ald.totalLength;
+	}
+	
+	public float getTotalLength() {
+		return totalLength;
+	}
+	
+	/*
+	 * Formula: 
+	 * B(t) =
+	 *	(1-t)^3 p0
+	 *	+ 3(1-t)^2 t p1
+	 *	+ 3(1-t) t^2 p2
+	 *	+ t^3 p3
+	 */
+	public Vec3 samplePosition(float t) {
+		t = Math.max(0f, Math.min(1f, t));
 		float u = 1f-t;
 		float b0 = u * u * u;
-		float b1 = 3 * u * u * t;
-		float b2 = 3 * u * t * t;
+		float b1 = 3f * u * u * t;
+		float b2 = 3f * u * t * t;
 		float b3 = t * t * t;
 		
 		return p0.scale(b0)
@@ -32,23 +49,61 @@ public class BezierSegment3 {
 				.add(p3.scale(b3));
 	}
 	
-	Vec3 sampleTangent(float t) {
-		/*
-		 * Formula:
-		 * B'(t) =
-		 * 3(1-t)^2 (p1 - p0)
-		 * + 6(1-t)t (p2 - p1)
-		 * + 3t^2 (p3 - p2)		
-		 */
+	/*
+	 * Formula:
+	 * B'(t) =
+	 * 3(1-t)^2 (p1 - p0)
+	 * + 6(1-t)t (p2 - p1)
+	 * + 3t^2 (p3 - p2)		
+	 */
+	public Vec3 sampleTangent(float t) {
+		t = Math.max(0f, Math.min(1f, t));
 		float u = 1f-t;
-		float b0 = 3 * u * u;
-		float b1 = 6 * u * t;
-		float b2 = 3 * t * t;
+		float b0 = 3f * u * u;
+		float b1 = 6f * u * t;
+		float b2 = 3f * t * t;
 	
 		return p1.subtract(p0).scale(b0)
 			.add(p2.subtract(p1).scale(b1))
 			.add(p3.subtract(p2).scale(b2))
 			.normalize();
+	}
+	
+	public Vec3 sampleByDistance(float distance) {
+		float t = findTForDistance(distance);
+		return samplePosition(t);
+	}
+	
+	public Vec3 sampleTangentByDistance(float distance) {
+		float t = findTForDistance(distance);
+		return sampleTangent(t);
+	}
+	
+	private float findTForDistance(float distance) {
+		if (distance <= 0f) return 0f;
+		if (distance >= totalLength) return 1f;
+		
+		for (int i = 1; i < sampleDistances.length; i++) {
+			if (distance <= sampleDistances[i]) {
+				float d0 = sampleDistances[i-1];
+				float d1 = sampleDistances[i];
+				float t0 = sampleTs[i-1];
+				float t1 = sampleTs[i];
+				
+				float range = d1 - d0;
+				if (range == 0f) return t0;
+				
+				float local = (distance - d0) / range;
+				return lerp(t0,t1,local);
+			}
+		}
+		
+		return 1f;
+	}
+	
+	// interpolate place on axis 
+	private static float lerp(float a, float b, float t) {
+		return a + ((b - a) * t);
 	}
 	
 	private static class ArcLengthData {

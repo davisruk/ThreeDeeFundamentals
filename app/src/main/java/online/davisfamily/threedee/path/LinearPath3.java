@@ -6,7 +6,7 @@ public class LinearPath3 implements Path3 {
 
 	private final Vec3[] points;
 	private final float[] segmentLengths;
-	private final float[] cumalativeLengths;
+	private final float[] cumulativeLengths;
 	
 	public LinearPath3 (Vec3... points) {
 		if (points == null || points.length < 2) {
@@ -14,17 +14,17 @@ public class LinearPath3 implements Path3 {
 		}
 		this.points = points;
 		this.segmentLengths = calculateSegmentLengths(points);
-		this.cumalativeLengths = new float[segmentLengths.length]; 
+		this.cumulativeLengths = new float[segmentLengths.length]; 
 		float runningTotal = 0f;
 		for (int i=0; i<segmentLengths.length; i++) {
 			runningTotal+=segmentLengths[i];
-			cumalativeLengths[i] = runningTotal;
+			cumulativeLengths[i] = runningTotal;
 		}
 	}
 	
 	@Override
 	public float getTotalLength() {
-		return cumalativeLengths[cumalativeLengths.length-1];
+		return cumulativeLengths[cumulativeLengths.length-1];
 	}
 	
 	private float[] calculateSegmentLengths(Vec3[] points) {
@@ -63,12 +63,12 @@ public class LinearPath3 implements Path3 {
 	@Override
 	public Vec3 sampleByDistance(float distance) {
 		if (distance <= 0f) return Vec3.copy(points[0]);
-		if (distance >= cumalativeLengths[cumalativeLengths.length - 1]) return Vec3.copy(points[points.length - 1]);
+		if (distance >= cumulativeLengths[cumulativeLengths.length - 1]) return Vec3.copy(points[points.length - 1]);
 
-		// find the index of the segment based on cumalative length
+		// find the index of the segment based on cumulative length
 		int index = findSegment(distance);
 		
-		float segmentStartDistance = index == 0 ? 0f: cumalativeLengths[index - 1];
+		float segmentStartDistance = index == 0 ? 0f: cumulativeLengths[index - 1];
 		float localDistance = distance - segmentStartDistance;
 		
 		Vec3 a = points[index];
@@ -93,8 +93,8 @@ public class LinearPath3 implements Path3 {
 	
 	private int findSegment(float distance) {
 		int index = 0;
-		for (int i = 0; i < cumalativeLengths.length; i++) {
-			if (distance <= cumalativeLengths[i]) {index = i;break;}
+		for (int i = 0; i < cumulativeLengths.length; i++) {
+			if (distance <= cumulativeLengths[i]) {index = i;break;}
 		}
 		return index;
 	}

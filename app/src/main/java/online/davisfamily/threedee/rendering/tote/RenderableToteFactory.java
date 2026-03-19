@@ -13,7 +13,8 @@ import online.davisfamily.threedee.model.LidFactory;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.Tote;
-import online.davisfamily.threedee.path.LinearPath3;
+import online.davisfamily.threedee.path.BezierPath3;
+import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
@@ -56,6 +57,8 @@ public class RenderableToteFactory {
 		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
 
 		// tote path
+		/*
+
 		LinearPath3 path = new LinearPath3(
 			    new Vec3(0f, 0f, -3f),
 			    new Vec3(2f, 0f, -5f),
@@ -63,12 +66,18 @@ public class RenderableToteFactory {
 			    new Vec3(-2f, 0f, -5f),
 			    new Vec3(0f, 0f, -3f)
 			);
-
 		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
 			path,
 			2.0f, // unitsPerSecond / speed
 			PathFollowerBehaviour.WrapMode.LOOP
 		);
+*/		
+
+		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
+				buildCircularPath(),
+				2.0f, // unitsPerSecond / speed
+				PathFollowerBehaviour.WrapMode.LOOP
+			);
 		
 		// renderable tote
 		RenderableObject rTote = RenderableObject.createWithChildrenAndBehaviours(
@@ -84,7 +93,41 @@ public class RenderableToteFactory {
 		return rTote;
 	}
 	
+	private static BezierPath3 buildCircularPath() {
+		float r = 3f;
+		float k = 0.55228475f * r;
+
+		float cx = 0f;
+		float cz = -6f;
+		BezierSegment3 s1 = new BezierSegment3(
+			    new Vec3(cx + r, 0f, cz),
+			    new Vec3(cx + r, 0f, cz + k),
+			    new Vec3(cx + k, 0f, cz + r),
+			    new Vec3(cx,     0f, cz + r)
+			);
+		BezierSegment3 s2 = new BezierSegment3(
+			    new Vec3(cx,     0f, cz + r),
+			    new Vec3(cx - k, 0f, cz + r),
+			    new Vec3(cx - r, 0f, cz + k),
+			    new Vec3(cx - r, 0f, cz)
+			);
+		BezierSegment3 s3 = new BezierSegment3(
+			    new Vec3(cx - r, 0f, cz),
+			    new Vec3(cx - r, 0f, cz - k),
+			    new Vec3(cx - k, 0f, cz - r),
+			    new Vec3(cx,     0f, cz - r)
+			);
+		BezierSegment3 s4 = new BezierSegment3(
+			    new Vec3(cx,     0f, cz - r),
+			    new Vec3(cx + k, 0f, cz - r),
+			    new Vec3(cx + r, 0f, cz - k),
+			    new Vec3(cx + r, 0f, cz)
+			);
+		return new BezierPath3(s1, s2, s3, s4);
+	}
+	
 	private static RenderableObject createRenderableLid(Mesh lidMesh, float yOffset, float lidWidth, TriangleRenderer tr, OneColourStrategyImpl colour, boolean isLeft) {
+/*	
 		double zRotation = isLeft ? 255d : -255d;
 		float zRotationRadians = (float)Math.toRadians(zRotation);
 		ObjectTransformation tLid = new ObjectTransformation(
@@ -98,8 +141,8 @@ public class RenderableToteFactory {
 				tLid, // transform
 				colour
 			);
+*/
 
-/*
 		ObjectTransformation tLid = new ObjectTransformation(
 			    0f, 0f, 0f, // rotation xyz
 			    lidWidth, yOffset, 0f, // translation xyz
@@ -107,8 +150,8 @@ public class RenderableToteFactory {
 			);
 
 		Behaviour openClose = isLeft ? 
-				new PingPongRotationBehaviour(Axis.Z, 0f, 270f, 90f):
-				new PingPongRotationBehaviour(Axis.Z, -270f, 0f, 90f);
+				new PingPongRotationBehaviour(Axis.Z, 0f, 255f, 90f):
+				new PingPongRotationBehaviour(Axis.Z, -255f, 0f, 90f);
 		
 		return RenderableObject.createWithBehaviours(
 			tr,
@@ -117,6 +160,6 @@ public class RenderableToteFactory {
 			colour,
 			List.of(openClose)
 		);
-*/
+
 	}	
 }
