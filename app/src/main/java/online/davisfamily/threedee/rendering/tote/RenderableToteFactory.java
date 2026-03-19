@@ -1,10 +1,9 @@
 package online.davisfamily.threedee.rendering.tote;
 
-import java.util.Arrays;
+import java.util.List;
 
 import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.PingPongRotationBehaviour;
-import online.davisfamily.threedee.behaviour.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
@@ -31,18 +30,14 @@ public class RenderableToteFactory {
 
 		// lid transformations
 		ObjectTransformation tLidLeft = new ObjectTransformation(
-		    0f, 0f, 0f,
-		    -halfWidth,
-		    tote.outerHeight,
-		    0f,
+		    0f, 0f, 0f, // rotation xyz
+		    -halfWidth, tote.outerHeight, 0f, // translation xyz
 		    new Mat4()
 		);
 
 		ObjectTransformation tLidRight = new ObjectTransformation(
-		    0f, 0f, 0f,
-		    +halfWidth,
-		    tote.outerHeight,
-		    0f,
+		    0f, 0f, 0f, // rotation xyz
+		    +halfWidth, tote.outerHeight, 0f, // translation xyz
 		    new Mat4()
 		);
 
@@ -57,40 +52,36 @@ public class RenderableToteFactory {
 		    0.24f    // peakFlatFraction
 		);
 
-
 		Mesh mLeftLid = lids.leftMesh;
 		Mesh mRightLid = lids.rightMesh;
 		
 		//renderable lids with open / close behaviours
 		RenderableObject rLidRight =  RenderableObject.createWithBehaviours(
 			tr,
-			mRightLid,
-			tLidRight,
+			mRightLid, // mesh
+			tLidRight, // transform
 			redColour,
-			new PingPongRotationBehaviour(Axis.Z, -110f, 0f, 90f)
+			List.of(new PingPongRotationBehaviour(Axis.Z, -110f, 0f, 90f))
 		);
 		
 		RenderableObject rLidLeft =  RenderableObject.createWithBehaviours(
 			tr,
-			mLeftLid,
-			tLidLeft,
+			mLeftLid, // mesh
+			tLidLeft, // transform
 			yellowColour,
-			new PingPongRotationBehaviour(Axis.Z, 0f, 110f, 90f)
+			List.of(new PingPongRotationBehaviour(Axis.Z, 0f, 110f, 90f))
 		);
 		
 		// tote transformation (will apply to lid transformations so no need to add pathing to the lids)
-		ObjectTransformation tTote = new ObjectTransformation(0.0f,0.0f,0f,0f,0f,-5f, new Mat4());
+		ObjectTransformation tTote = new ObjectTransformation(
+			0.0f,0.0f,0f, // rotation xyz
+			0f,0f,-5f, // translation xyz
+			new Mat4()
+		);
+
 		// tote mesh
 		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
-		// renderable tote
-		RenderableObject rTote = RenderableObject.createWithChildren(
-			tr,
-			mTote,
-			tTote,
-			blueColour,
-			Arrays.asList(rLidRight, rLidLeft), FORWARD_DIRECTION.NEGATIVE_X
-		);
-		
+
 		// tote path
 		LinearPath3 path = new LinearPath3(
 			    new Vec3(0f, 0f, -3f),
@@ -98,8 +89,25 @@ public class RenderableToteFactory {
 			    new Vec3(0f, 0f, -10f),
 			    new Vec3(-2f, 0f, -5f),
 			    new Vec3(0f, 0f, -3f)
-			);		
-		rTote.addBehaviour(new PathFollowerBehaviour(path, 2.0f, PathFollowerBehaviour.WrapMode.LOOP));
+			);
+
+		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
+			path,
+			2.0f, // unitsPerSecond / speed
+			PathFollowerBehaviour.WrapMode.LOOP
+		);
+		
+		// renderable tote
+		RenderableObject rTote = RenderableObject.createWithChildrenAndBehaviours(
+			tr,
+			mTote, // mesh
+			tTote, // transform
+			blueColour,
+			List.of(rLidRight, rLidLeft), //children
+			List.of(pathFollower), // behaviours
+			FORWARD_DIRECTION.NEGATIVE_X
+		);
+		
 		return rTote;
 	}
 }

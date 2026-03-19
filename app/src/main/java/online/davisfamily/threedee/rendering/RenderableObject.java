@@ -181,25 +181,6 @@ public class RenderableObject {
                 FORWARD_DIRECTION.POSITIVE_X);
     }
     
-    public static RenderableObject createWithBehaviours(
-            TriangleRenderer triangleRenderer,
-            Mesh mesh,
-            ObjectTransformation transform,
-            ColourPickerStrategy colourPicker,
-            FORWARD_DIRECTION forwardDirection,
-            Behaviour... behaviour) {
-
-        List<Behaviour> behaviourObjects = Arrays.asList(behaviour);
-    	return new RenderableObject(
-                triangleRenderer,
-                mesh,
-                transform,
-                colourPicker,
-                null,
-                behaviourObjects,
-                forwardDirection);
-    }
-
     public static RenderableObject createWithChildrenAndBehaviours(
             TriangleRenderer triangleRenderer,
             Mesh mesh,
