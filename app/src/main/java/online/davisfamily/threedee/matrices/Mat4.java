@@ -3,6 +3,7 @@ package online.davisfamily.threedee.matrices;
 public class Mat4 {
 	
 	public static class ObjectTransformation {
+		public enum Axis { X, Y, Z };
 		public float angleX, angleY, angleZ, xTranslation, yTranslation, zTranslation;
 		public Mat4 model;
 
@@ -29,6 +30,43 @@ public class Mat4 {
 			yTranslation = t.y;
 			zTranslation = t.z;
 		}
+		
+		public void setRotation(Vec3 t) {
+			angleX = t.x;
+			angleY = t.y;
+			angleZ = t.z;
+		}
+		
+	    public float getAxisTranslation(Axis axis) {
+	        return switch (axis) {
+	            case X -> xTranslation;
+	            case Y -> yTranslation;
+	            case Z -> zTranslation;
+	        };
+	    }
+
+	    public void setAxisTranslation(Axis axis, float value) {
+	        switch (axis) {
+	            case X -> xTranslation = value;
+	            case Y -> yTranslation = value;
+	            case Z -> zTranslation = value;
+	        }
+	    }
+	    public float getAxisRotation(Axis axis) {
+	        return switch (axis) {
+	            case X -> angleX;
+	            case Y -> angleY;
+	            case Z -> angleZ;
+	        };
+	    }
+
+	    public void setAxisRotation(Axis axis, float value) {
+	        switch (axis) {
+	            case X -> angleX = value;
+	            case Y -> angleY = value;
+	            case Z -> angleZ = value;
+	        }
+	    }
 	}
 	
 	// flat array for storing 4x4 matrix

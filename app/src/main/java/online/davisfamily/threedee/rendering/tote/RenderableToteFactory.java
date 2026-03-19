@@ -7,6 +7,7 @@ import online.davisfamily.threedee.behaviour.PingPongRotationBehaviour;
 import online.davisfamily.threedee.behaviour.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.LidFactory;
 import online.davisfamily.threedee.model.Mesh;
@@ -14,6 +15,7 @@ import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.Tote;
 import online.davisfamily.threedee.path.LinearPath3;
 import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 
 public class RenderableToteFactory {
@@ -61,19 +63,16 @@ public class RenderableToteFactory {
 		
 		//renderable lids with open / close behaviours
 		RenderableObject rLidRight =  new RenderableObject(tr,mRightLid,tLidRight,redColour);
-		rLidRight.addBehaviour(new PingPongRotationBehaviour(PingPongRotationBehaviour.Axis.Z, -110f, 0f, 90f));
+		rLidRight.addBehaviour(new PingPongRotationBehaviour(Axis.Z, -110f, 0f, 90f));
 		RenderableObject rLidLeft =  new RenderableObject(tr,mLeftLid,tLidLeft,yellowColour);
-		rLidLeft.addBehaviour(new PingPongRotationBehaviour(PingPongRotationBehaviour.Axis.Z, 0f, 110f, 90f));
+		rLidLeft.addBehaviour(new PingPongRotationBehaviour(Axis.Z, 0f, 110f, 90f));
 		
 		// tote transformation (will apply to lid transformations so no need to add pathing to the lids)
 		ObjectTransformation tTote = new ObjectTransformation(0.0f,0.0f,0f,0f,0f,-5f, new Mat4());
 		// tote mesh
 		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
 		// renderable tote
-		RenderableObject rTote = new RenderableObject(tr, mTote, tTote, blueColour, Arrays.asList(rLidRight, rLidLeft));
-		
-		// tote spin
-		rTote.addBehaviour(new SpinBehaviour(0f, 1f, 0f));
+		RenderableObject rTote = RenderableObject.createWithChildren(tr, mTote, tTote, blueColour, FORWARD_DIRECTION.NEGATIVE_X, Arrays.asList(rLidRight, rLidLeft));
 		
 		// tote path
 		LinearPath3 path = new LinearPath3(

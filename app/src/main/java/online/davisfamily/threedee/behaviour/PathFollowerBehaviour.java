@@ -1,5 +1,6 @@
 package online.davisfamily.threedee.behaviour;
 
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.path.Path3;
 import online.davisfamily.threedee.rendering.RenderableObject;
@@ -13,16 +14,18 @@ public class PathFollowerBehaviour implements Behaviour {
 	private final WrapMode wrapMode;
 	private float direction = 1f;
 	private float distanceAlongPath = 0f;
+	private final boolean alignToPath; 
 	
 	public PathFollowerBehaviour(Path3 path, float unitsPerSecond, WrapMode wrapMode) {
-		this(path, unitsPerSecond, wrapMode, 0f);
+		this(path, unitsPerSecond, wrapMode, 0f, true);
 	}
 
-	public PathFollowerBehaviour(Path3 path, float unitsPerSecond, WrapMode wrapMode, float startDistance) {
+	public PathFollowerBehaviour(Path3 path, float unitsPerSecond, WrapMode wrapMode, float startDistance, boolean alignToPath) {
 		this.path = path;
 		this.unitsPerSecond = unitsPerSecond;
 		this.wrapMode = wrapMode;
 		this.distanceAlongPath = startDistance;
+		this.alignToPath = alignToPath;
 	}
 	
 	@Override
@@ -52,5 +55,14 @@ public class PathFollowerBehaviour implements Behaviour {
 		
 		Vec3 p = path.sampleByDistance(distanceAlongPath);
 		object.transformation.setTranslation(p);
+		if (alignToPath) {
+			Vec3 d = path.sampleTangentByDistance(distanceAlongPath);
+			float yaw = yawFromDirection(d)+object.yawOffsetRadians;
+			object.transformation.setAxisRotation(Axis.Y, yaw);
+		}
+	}
+	
+	private float yawFromDirection(Vec3 d) {
+		return (float)Math.atan2(d.x, d.z);
 	}
 }

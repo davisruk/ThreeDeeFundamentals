@@ -26,24 +26,70 @@ public class RenderableObject {
 	public List<RenderableObject> children;
 	public ColourPickerStrategy colourPicker;
 	public List<Behaviour> behaviours;
-	
-	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker) {
-		this.tr = triangleRenderer;
-		this.mesh = mesh;
-		this.transformation = transform;
-		this.colourPicker = colourPicker;
-		children = new ArrayList<RenderableObject>();
-		behaviours = new ArrayList<Behaviour>();
+
+	// use below to determine forward direction
+	public float yawOffsetRadians;
+	public enum FORWARD_DIRECTION{POSITIVE_X(0d), NEGATIVE_X(180d), POSITIVE_Z(90d), NEGATIVE_Z(270d);
+		private double angleVal;
+		
+		FORWARD_DIRECTION(double val){
+			this.angleVal=val;
+		}
+		public double getAngleVal() {
+			return angleVal;
+		}
 	}
 
-	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker, List<RenderableObject> childObjects) {
+	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker) {
+		this(triangleRenderer,mesh,transform,colourPicker, FORWARD_DIRECTION.POSITIVE_X);
+	}
+
+	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker, FORWARD_DIRECTION yawOffset) {
+		this(triangleRenderer,mesh,transform,colourPicker, null, yawOffset);
+	}
+	
+	public static RenderableObject createWithBehaviours(
+	        TriangleRenderer triangleRenderer,
+	        Mesh mesh,
+	        ObjectTransformation transform,
+	        ColourPickerStrategy colourPicker,
+	        FORWARD_DIRECTION yawOffset,
+	        List<Behaviour> behaviourObjects) {
+	    return new RenderableObject(
+	            triangleRenderer, mesh, transform, colourPicker, null, behaviourObjects, yawOffset);
+	}
+
+	public static RenderableObject createWithChildren(
+	        TriangleRenderer triangleRenderer,
+	        Mesh mesh,
+	        ObjectTransformation transform,
+	        ColourPickerStrategy colourPicker,
+	        FORWARD_DIRECTION yawOffset,
+	        List<RenderableObject> childObjects) {
+	    return new RenderableObject(
+	            triangleRenderer, mesh, transform, colourPicker, childObjects, null, yawOffset);
+	}
+	
+	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker, List<RenderableObject> childObjects, FORWARD_DIRECTION yawOffset) {
+		this(triangleRenderer,mesh,transform,colourPicker, childObjects, null, yawOffset);
+	}
+
+	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker, List<RenderableObject> childObjects, List<Behaviour> behaviourObjects, FORWARD_DIRECTION yawOffset) {
 		this.tr = triangleRenderer;
 		this.mesh = mesh;
 		this.transformation = transform;
 		this.colourPicker = colourPicker;
+		this.yawOffsetRadians = (float)Math.toRadians(yawOffset.getAngleVal());
 		behaviours = new ArrayList<Behaviour>();
+		if (behaviourObjects != null) {
+			behaviours = behaviourObjects;
+		} else {
+			behaviours = new ArrayList<Behaviour>();
+		}
 		if (childObjects != null) {
 			children = childObjects;
+		} else {
+			children = new ArrayList<RenderableObject>();
 		}
 	}
 

@@ -1,11 +1,10 @@
 package online.davisfamily.threedee.behaviour;
 
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class PingPongRotationBehaviour implements Behaviour{
-    public enum Axis { X, Y, Z }
-
     private final Axis axis;
     private final float minRadians, maxRadians;
     private float speedRadiansPerSecond;
@@ -23,7 +22,7 @@ public class PingPongRotationBehaviour implements Behaviour{
     public void update(RenderableObject object, double dtSeconds) {
         ObjectTransformation t = object.transformation;
 
-        float value = getAxisValue(t);
+        float value = t.getAxisRotation(axis);
         value += speedRadiansPerSecond * dtSeconds;
 
         if (value < minRadians) {
@@ -34,23 +33,7 @@ public class PingPongRotationBehaviour implements Behaviour{
             speedRadiansPerSecond = -Math.abs(speedRadiansPerSecond);
         }
 
-        setAxisValue(t, value);
+        t.setAxisRotation(axis, value);
         
-    }
-
-    private float getAxisValue(ObjectTransformation t) {
-        return switch (axis) {
-            case X -> t.angleX;
-            case Y -> t.angleY;
-            case Z -> t.angleZ;
-        };
-    }
-
-    private void setAxisValue(ObjectTransformation t, float value) {
-        switch (axis) {
-            case X -> t.angleX = value;
-            case Y -> t.angleY = value;
-            case Z -> t.angleZ = value;
-        }
     }
 }

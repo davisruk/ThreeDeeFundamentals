@@ -35,6 +35,9 @@ public class LinearPath3 implements Path3 {
 		return ret;
 	}
 	
+	// sample without regard to speed
+	// object spends the same amount of time on each segment
+	// object will appear to speed up if segment is longer than others
 	@Override
 	public Vec3 samplePosition(float u) {
 		if (u <= 0f) return Vec3.copy(points[0]);
@@ -54,16 +57,16 @@ public class LinearPath3 implements Path3 {
 		);
 	}
 	
+	// sample with regard to speed
+	// traversal of a segment is based on its length
+	// object will appear to have the same speed
 	@Override
 	public Vec3 sampleByDistance(float distance) {
 		if (distance <= 0f) return Vec3.copy(points[0]);
 		if (distance >= cumalativeLengths[cumalativeLengths.length - 1]) return Vec3.copy(points[points.length - 1]);
 
 		// find the index of the segment based on cumalative length
-		int index = 0;
-		for (int i = 0; i < cumalativeLengths.length; i++) {
-			if (distance <= cumalativeLengths[i]) {index = i;break;}
-		}
+		int index = findSegment(distance);
 		
 		float segmentStartDistance = index == 0 ? 0f: cumalativeLengths[index - 1];
 		float localDistance = distance - segmentStartDistance;
@@ -79,8 +82,26 @@ public class LinearPath3 implements Path3 {
 		);
 	}
 	
+	@Override
+	public Vec3 sampleTangentByDistance(float distance) {
+		int index = findSegment(distance);
+		Vec3 a = points[index];
+		Vec3 b = points[index+1];
+		return b.subtract(a).normalize();
+
+	}
+	
+	private int findSegment(float distance) {
+		int index = 0;
+		for (int i = 0; i < cumalativeLengths.length; i++) {
+			if (distance <= cumalativeLengths[i]) {index = i;break;}
+		}
+		return index;
+	}
+
 	// interpolate place on axis 
 	private static float lerp(float a, float b, float t) {
 		return a + ((b - a) * t);
 	}
+	
 }
