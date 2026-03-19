@@ -146,7 +146,7 @@ public class BasicTests {
 		cubeModel = new Mat4();
 		tCube = new ObjectTransformation(0.2f,0.8f,0f,1f,0f,-6.5f, cubeModel);
 		Mesh m = new Mesh(cube.v4Vertices, cube.triangles);
-		rCube = new RenderableObject(tr, m, tCube,new SquareBasedStrategyImpl(faceColours));
+		rCube = RenderableObject.create(tr, m, tCube,new SquareBasedStrategyImpl(faceColours));
 		rCube.addBehaviour(new SpinBehaviour(0f, 1f, 0f));
 		LinearPath3 path = new LinearPath3(
 			    new Vec3(0f, 0f, -3f),

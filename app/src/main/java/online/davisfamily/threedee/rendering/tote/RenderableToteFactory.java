@@ -48,31 +48,48 @@ public class RenderableToteFactory {
 
 		// lid meshes
 		LidFactory.InterlockingLids lids = LidFactory.buildInterlockingAngularLids(
-			    0.371f,  // openingWidth
-			    0.547f,  // openingDepth
-			    0.020f,  // thickness
-			    7,       // toothCount
-			    0.010f,  // seamAmplitude
-			    0.24f,   // valleyFlatFraction
-			    0.24f    // peakFlatFraction
-			);
+		    0.371f,  // openingWidth
+		    0.547f,  // openingDepth
+		    0.020f,  // thickness
+		    7,       // toothCount
+		    0.010f,  // seamAmplitude
+		    0.24f,   // valleyFlatFraction
+		    0.24f    // peakFlatFraction
+		);
 
 
 		Mesh mLeftLid = lids.leftMesh;
 		Mesh mRightLid = lids.rightMesh;
 		
 		//renderable lids with open / close behaviours
-		RenderableObject rLidRight =  new RenderableObject(tr,mRightLid,tLidRight,redColour);
-		rLidRight.addBehaviour(new PingPongRotationBehaviour(Axis.Z, -110f, 0f, 90f));
-		RenderableObject rLidLeft =  new RenderableObject(tr,mLeftLid,tLidLeft,yellowColour);
-		rLidLeft.addBehaviour(new PingPongRotationBehaviour(Axis.Z, 0f, 110f, 90f));
+		RenderableObject rLidRight =  RenderableObject.createWithBehaviours(
+			tr,
+			mRightLid,
+			tLidRight,
+			redColour,
+			new PingPongRotationBehaviour(Axis.Z, -110f, 0f, 90f)
+		);
+		
+		RenderableObject rLidLeft =  RenderableObject.createWithBehaviours(
+			tr,
+			mLeftLid,
+			tLidLeft,
+			yellowColour,
+			new PingPongRotationBehaviour(Axis.Z, 0f, 110f, 90f)
+		);
 		
 		// tote transformation (will apply to lid transformations so no need to add pathing to the lids)
 		ObjectTransformation tTote = new ObjectTransformation(0.0f,0.0f,0f,0f,0f,-5f, new Mat4());
 		// tote mesh
 		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
 		// renderable tote
-		RenderableObject rTote = RenderableObject.createWithChildren(tr, mTote, tTote, blueColour, FORWARD_DIRECTION.NEGATIVE_X, Arrays.asList(rLidRight, rLidLeft));
+		RenderableObject rTote = RenderableObject.createWithChildren(
+			tr,
+			mTote,
+			tTote,
+			blueColour,
+			Arrays.asList(rLidRight, rLidLeft), FORWARD_DIRECTION.NEGATIVE_X
+		);
 		
 		// tote path
 		LinearPath3 path = new LinearPath3(

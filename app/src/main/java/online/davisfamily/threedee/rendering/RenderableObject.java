@@ -1,6 +1,7 @@
 package online.davisfamily.threedee.rendering;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
@@ -40,59 +41,183 @@ public class RenderableObject {
 		}
 	}
 
-	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker) {
-		this(triangleRenderer,mesh,transform,colourPicker, FORWARD_DIRECTION.POSITIVE_X);
-	}
+    private RenderableObject(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            List<RenderableObject> childObjects,
+            List<Behaviour> behaviourObjects,
+            FORWARD_DIRECTION forwardDirection) {
 
-	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker, FORWARD_DIRECTION yawOffset) {
-		this(triangleRenderer,mesh,transform,colourPicker, null, yawOffset);
-	}
-	
-	public static RenderableObject createWithBehaviours(
-	        TriangleRenderer triangleRenderer,
-	        Mesh mesh,
-	        ObjectTransformation transform,
-	        ColourPickerStrategy colourPicker,
-	        FORWARD_DIRECTION yawOffset,
-	        List<Behaviour> behaviourObjects) {
-	    return new RenderableObject(
-	            triangleRenderer, mesh, transform, colourPicker, null, behaviourObjects, yawOffset);
-	}
+        this.tr = triangleRenderer;
+        this.mesh = mesh;
+        this.transformation = transform;
+        this.colourPicker = colourPicker;
+        this.yawOffsetRadians = (float) Math.toRadians(forwardDirection.getAngleVal());
 
-	public static RenderableObject createWithChildren(
-	        TriangleRenderer triangleRenderer,
-	        Mesh mesh,
-	        ObjectTransformation transform,
-	        ColourPickerStrategy colourPicker,
-	        FORWARD_DIRECTION yawOffset,
-	        List<RenderableObject> childObjects) {
-	    return new RenderableObject(
-	            triangleRenderer, mesh, transform, colourPicker, childObjects, null, yawOffset);
-	}
-	
-	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker, List<RenderableObject> childObjects, FORWARD_DIRECTION yawOffset) {
-		this(triangleRenderer,mesh,transform,colourPicker, childObjects, null, yawOffset);
-	}
+        this.children = childObjects != null ? new ArrayList<>(childObjects) : new ArrayList<>();
+        this.behaviours = behaviourObjects != null ? new ArrayList<>(behaviourObjects) : new ArrayList<>();
+    }
 
-	public RenderableObject(TriangleRenderer triangleRenderer, Mesh mesh, ObjectTransformation transform, ColourPickerStrategy colourPicker, List<RenderableObject> childObjects, List<Behaviour> behaviourObjects, FORWARD_DIRECTION yawOffset) {
-		this.tr = triangleRenderer;
-		this.mesh = mesh;
-		this.transformation = transform;
-		this.colourPicker = colourPicker;
-		this.yawOffsetRadians = (float)Math.toRadians(yawOffset.getAngleVal());
-		behaviours = new ArrayList<Behaviour>();
-		if (behaviourObjects != null) {
-			behaviours = behaviourObjects;
-		} else {
-			behaviours = new ArrayList<Behaviour>();
-		}
-		if (childObjects != null) {
-			children = childObjects;
-		} else {
-			children = new ArrayList<RenderableObject>();
-		}
-	}
+    public static RenderableObject create(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker) {
 
+        return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                null,
+                null,
+                FORWARD_DIRECTION.POSITIVE_X);
+    }
+
+    public static RenderableObject create(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            FORWARD_DIRECTION forwardDirection) {
+
+        return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                null,
+                null,
+                forwardDirection);
+    }
+
+    public static RenderableObject createWithChildren(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            List<RenderableObject> childObjects) {
+
+        return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                childObjects,
+                null,
+                FORWARD_DIRECTION.POSITIVE_X);
+    }
+
+    public static RenderableObject createWithChildren(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            List<RenderableObject> childObjects,
+            FORWARD_DIRECTION forwardDirection) {
+
+        return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                childObjects,
+                null,
+                forwardDirection);
+    }
+
+    public static RenderableObject createWithBehaviours(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            List<Behaviour> behaviourObjects) {
+
+        return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                null,
+                behaviourObjects,
+                FORWARD_DIRECTION.POSITIVE_X);
+    }
+
+    public static RenderableObject createWithBehaviours(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            List<Behaviour> behaviourObjects,
+            FORWARD_DIRECTION forwardDirection) {
+
+        return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                null,
+                behaviourObjects,
+                forwardDirection);
+    }
+    
+    public static RenderableObject createWithBehaviours(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            Behaviour... behaviour) {
+
+        List<Behaviour> behaviourObjects = Arrays.asList(behaviour);
+    	return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                null,
+                behaviourObjects,
+                FORWARD_DIRECTION.POSITIVE_X);
+    }
+    
+    public static RenderableObject createWithBehaviours(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            FORWARD_DIRECTION forwardDirection,
+            Behaviour... behaviour) {
+
+        List<Behaviour> behaviourObjects = Arrays.asList(behaviour);
+    	return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                null,
+                behaviourObjects,
+                forwardDirection);
+    }
+
+    public static RenderableObject createWithChildrenAndBehaviours(
+            TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            List<RenderableObject> childObjects,
+            List<Behaviour> behaviourObjects,
+            FORWARD_DIRECTION forwardDirection) {
+
+        return new RenderableObject(
+                triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                childObjects,
+                behaviourObjects,
+                forwardDirection);
+    }
 	public void addBehaviour(Behaviour behaviour) {
 		behaviours.add(behaviour);
 	}
