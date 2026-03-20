@@ -13,8 +13,10 @@ import online.davisfamily.threedee.model.LidFactory;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.Tote;
-import online.davisfamily.threedee.path.BezierPath3;
 import online.davisfamily.threedee.path.BezierSegment3;
+import online.davisfamily.threedee.path.CompositePath3;
+import online.davisfamily.threedee.path.LinearSegment3;
+import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
@@ -58,7 +60,7 @@ public class RenderableToteFactory {
 
 		// tote path
 		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
-				BezierPath3.createCircularPath(3f, 0f, -6f),
+				createCompositePath(),
 				2.0f, // unitsPerSecond / speed
 				PathFollowerBehaviour.WrapMode.LOOP
 			);
@@ -96,6 +98,28 @@ public class RenderableToteFactory {
 			colour,
 			List.of(openClose)
 		);
-
-	}	
+	}
+	
+	private static CompositePath3 createCompositePath() {
+		PathSegment3 s1 = 
+			    new LinearSegment3(
+				        new Vec3(0f, 0f, -3f),
+				        new Vec3(2f, 0f, -5f)
+				    );
+		PathSegment3 s3 = 
+			    new LinearSegment3(
+			            new Vec3(2f, 0f, -10f),
+			            new Vec3(0f, 0f, -12f)
+			        );
+		PathSegment3 s2 = BezierSegment3.createSmoothConnector(
+				Vec3.copy(s1.getEndPoint()),
+				Vec3.copy(s3.getStartPoint()),
+				s1,
+				s3,
+				2f);
+		
+		CompositePath3 cp3 = new CompositePath3(s1,s2,s3);
+		System.out.println(cp3);
+		return cp3;
+	}
 }

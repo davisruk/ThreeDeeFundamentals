@@ -2,16 +2,16 @@ package online.davisfamily.threedee.path;
 
 import online.davisfamily.threedee.matrices.Vec3;
 
-public class BezierPath3 implements Path3 {
+public class CompositePath3 implements Path3 {
 
-	private final BezierSegment3[] segments;
+	private final PathSegment3[] segments;
 	private final float[] segmentLengths;
 	private final float[] cumulativeLengths;
 	private final float totalLength;
 	
-	public BezierPath3 (BezierSegment3... segments) {
+	public CompositePath3 (PathSegment3... segments) {
         if (segments == null || segments.length == 0) {
-            throw new IllegalArgumentException("BezierPath3 requires at least 1 segment");
+            throw new IllegalArgumentException("CompositePath3 requires at least 1 segment");
         }
 		
 		this.segments = segments;
@@ -66,7 +66,7 @@ public class BezierPath3 implements Path3 {
 	    }
 
 	    if (distance >= totalLength) {
-	        BezierSegment3 last = segments[segments.length - 1];
+	        PathSegment3 last = segments[segments.length - 1];
 	        return last.sampleTangentByDistance(last.getLength());
 	    }
 
@@ -77,7 +77,14 @@ public class BezierPath3 implements Path3 {
 
 	    return segments[index].sampleTangentByDistance(localDistance);
 	}
-	
+
+	public String toString() {
+		StringBuffer buff = new StringBuffer("Composite Path:\r\n");
+		for (PathSegment3 ps:segments) {
+			buff.append(startEndData(ps) + "\r\n");
+		}
+		return buff.toString();
+	}
 	private int findSegmentIndex(float distance) {
 	    for (int i = 0; i < cumulativeLengths.length; i++) {
 	        if (distance <= cumulativeLengths[i]) {
@@ -87,38 +94,10 @@ public class BezierPath3 implements Path3 {
 	    return cumulativeLengths.length - 1;
 	}
 	
-	public static BezierPath3 createCircularPath(float radius, float centreX, float centreZ) {
-		float k = 0.55228475f * radius;
-
-		BezierSegment3 s1 = new BezierSegment3(
-			    new Vec3(centreX + radius, 0f, centreZ),
-			    new Vec3(centreX + radius, 0f, centreZ + k),
-			    new Vec3(centreX + k, 0f, centreZ + radius),
-			    new Vec3(centreX,     0f, centreZ + radius)
-			);
-	
-		BezierSegment3 s2 = new BezierSegment3(
-			    new Vec3(centreX,     0f, centreZ + radius),
-			    new Vec3(centreX - k, 0f, centreZ + radius),
-			    new Vec3(centreX - radius, 0f, centreZ + k),
-			    new Vec3(centreX - radius, 0f, centreZ)
-			);
-
-		BezierSegment3 s3 = new BezierSegment3(
-			    new Vec3(centreX - radius, 0f, centreZ),
-			    new Vec3(centreX - radius, 0f, centreZ - k),
-			    new Vec3(centreX - k, 0f, centreZ - radius),
-			    new Vec3(centreX,     0f, centreZ - radius)
-			);
-
-		BezierSegment3 s4 = new BezierSegment3(
-			    new Vec3(centreX,     0f, centreZ - radius),
-			    new Vec3(centreX + k, 0f, centreZ - radius),
-			    new Vec3(centreX + radius, 0f, centreZ - k),
-			    new Vec3(centreX + radius, 0f, centreZ)
-			);
-
-		return new BezierPath3(s1, s2, s3, s4);
+	public String startEndData(PathSegment3 ps) {
+		return "Start Point:" + ps.getStartPoint()
+				+ " EndPoint:" + ps.getEndPoint()
+				+ " Start Tangent:" + ps.getStartTangent()
+				+ " End Tangent:" + ps.getEndTangent();
 	}
-
 }

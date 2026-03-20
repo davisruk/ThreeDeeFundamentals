@@ -2,7 +2,7 @@ package online.davisfamily.threedee.path;
 
 import online.davisfamily.threedee.matrices.Vec3;
 
-public class BezierSegment3 {
+public class BezierSegment3 implements PathSegment3 {
 	// control points
 	private final Vec3 p0,p1,p2,p3;
 	
@@ -17,13 +17,13 @@ public class BezierSegment3 {
         this.p2 = p2;
         this.p3 = p3;
         
-		ArcLengthData ald = buildArcLengthTable();
-		this.sampleTs = ald.ts;
-		this.sampleDistances = ald.distances;
-		this.totalLength = ald.totalLength;
+		ArcLengthData arcLengthData = buildArcLengthTable();
+		this.sampleTs = arcLengthData.ts;
+		this.sampleDistances = arcLengthData.distances;
+		this.totalLength = arcLengthData.totalLength;
 	}
 	
-	public float getTotalLength() {
+	public float getLength() {
 		return totalLength;
 	}
 	
@@ -69,14 +69,35 @@ public class BezierSegment3 {
 			.normalize();
 	}
 	
+	@Override
 	public Vec3 sampleByDistance(float distance) {
 		float t = findTForDistance(distance);
 		return samplePosition(t);
 	}
-	
+	@Override
 	public Vec3 sampleTangentByDistance(float distance) {
 		float t = findTForDistance(distance);
 		return sampleTangent(t);
+	}
+	
+	@Override
+	public Vec3 getStartPoint() {
+		return p0;
+	}
+
+	@Override
+	public Vec3 getEndPoint() {
+		return p3;
+	}
+
+	// creates a curve where the middle control points are calculated based on the the in and out direction
+	// this allows yaw translation of objects travelling the path to match in and out of the curve
+	public static BezierSegment3 createSmoothConnector(Vec3 start, Vec3 end, PathSegment3 incoming, PathSegment3 outgoing, float handleLength) {
+		Vec3 dIn = incoming.getEndPoint().subtract(incoming.getStartPoint()).normalize();
+		Vec3 dOut = outgoing.getEndPoint().subtract(outgoing.getStartPoint()).normalize();
+		Vec3 p1 = start.add(dIn.scale(handleLength));
+		Vec3 p2 = end.subtract(dOut.scale(handleLength));
+		return new BezierSegment3 (start, p1, p2, end);
 	}
 	
 	private float findTForDistance(float distance) {
@@ -136,4 +157,5 @@ public class BezierSegment3 {
 		}
 		return new ArcLengthData(ts, distances, runningTotal);
 	}
+
 }

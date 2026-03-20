@@ -147,6 +147,10 @@ public class Vec3 {
 		);
 	}
 
+	public static float yawFromDirection (Vec3 d) {
+		return (float)Math.atan2(d.x, d.z);
+	}
+	
 	public int projectX(float x, int maxX, int maxY) {
 		float s = Math.min(maxX, maxY) * 0.45f;
 		return (int) (x * s + maxX * 0.5f);

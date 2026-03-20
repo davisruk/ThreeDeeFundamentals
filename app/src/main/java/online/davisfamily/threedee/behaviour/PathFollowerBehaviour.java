@@ -57,12 +57,8 @@ public class PathFollowerBehaviour implements Behaviour {
 		object.transformation.setTranslation(p);
 		if (alignToPath) {
 			Vec3 d = path.sampleTangentByDistance(distanceAlongPath);
-			float yaw = yawFromDirection(d)+object.yawOffsetRadians;
+			float yaw = Vec3.yawFromDirection(d)+object.yawOffsetRadians;
 			object.transformation.setAxisRotation(Axis.Y, yaw);
 		}
-	}
-	
-	private float yawFromDirection(Vec3 d) {
-		return (float)Math.atan2(d.x, d.z);
 	}
 }
