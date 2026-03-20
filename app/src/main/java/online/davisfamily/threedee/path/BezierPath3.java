@@ -85,4 +85,39 @@ public class BezierPath3 implements Path3 {
 	    }
 	    return cumulativeLengths.length - 1;
 	}
+	
+	public static BezierPath3 createCircularPath(float radius, float centreX, float centreZ) {
+		float k = 0.55228475f * radius;
+
+		BezierSegment3 s1 = new BezierSegment3(
+			    new Vec3(centreX + radius, 0f, centreZ),
+			    new Vec3(centreX + radius, 0f, centreZ + k),
+			    new Vec3(centreX + k, 0f, centreZ + radius),
+			    new Vec3(centreX,     0f, centreZ + radius)
+			);
+	
+		BezierSegment3 s2 = new BezierSegment3(
+			    new Vec3(centreX,     0f, centreZ + radius),
+			    new Vec3(centreX - k, 0f, centreZ + radius),
+			    new Vec3(centreX - radius, 0f, centreZ + k),
+			    new Vec3(centreX - radius, 0f, centreZ)
+			);
+
+		BezierSegment3 s3 = new BezierSegment3(
+			    new Vec3(centreX - radius, 0f, centreZ),
+			    new Vec3(centreX - radius, 0f, centreZ - k),
+			    new Vec3(centreX - k, 0f, centreZ - radius),
+			    new Vec3(centreX,     0f, centreZ - radius)
+			);
+
+		BezierSegment3 s4 = new BezierSegment3(
+			    new Vec3(centreX,     0f, centreZ - radius),
+			    new Vec3(centreX + k, 0f, centreZ - radius),
+			    new Vec3(centreX + radius, 0f, centreZ - k),
+			    new Vec3(centreX + radius, 0f, centreZ)
+			);
+
+		return new BezierPath3(s1, s2, s3, s4);
+}
+
 }

@@ -35,7 +35,7 @@ public class RenderableToteFactory {
 		    0.371f,  // openingWidth
 		    0.547f,  // openingDepth
 		    0.020f,  // thickness
-		    7,       // toothCount
+		    5,       // toothCount
 		    0.010f,  // seamAmplitude
 		    0.24f,   // valleyFlatFraction
 		    0.24f    // peakFlatFraction
@@ -57,24 +57,8 @@ public class RenderableToteFactory {
 		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
 
 		// tote path
-		/*
-
-		LinearPath3 path = new LinearPath3(
-			    new Vec3(0f, 0f, -3f),
-			    new Vec3(2f, 0f, -5f),
-			    new Vec3(0f, 0f, -10f),
-			    new Vec3(-2f, 0f, -5f),
-			    new Vec3(0f, 0f, -3f)
-			);
 		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
-			path,
-			2.0f, // unitsPerSecond / speed
-			PathFollowerBehaviour.WrapMode.LOOP
-		);
-*/		
-
-		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
-				buildCircularPath(),
+				BezierPath3.createCircularPath(3f, 0f, -6f),
 				2.0f, // unitsPerSecond / speed
 				PathFollowerBehaviour.WrapMode.LOOP
 			);
@@ -93,56 +77,8 @@ public class RenderableToteFactory {
 		return rTote;
 	}
 	
-	private static BezierPath3 buildCircularPath() {
-		float r = 3f;
-		float k = 0.55228475f * r;
 
-		float cx = 0f;
-		float cz = -6f;
-		BezierSegment3 s1 = new BezierSegment3(
-			    new Vec3(cx + r, 0f, cz),
-			    new Vec3(cx + r, 0f, cz + k),
-			    new Vec3(cx + k, 0f, cz + r),
-			    new Vec3(cx,     0f, cz + r)
-			);
-		BezierSegment3 s2 = new BezierSegment3(
-			    new Vec3(cx,     0f, cz + r),
-			    new Vec3(cx - k, 0f, cz + r),
-			    new Vec3(cx - r, 0f, cz + k),
-			    new Vec3(cx - r, 0f, cz)
-			);
-		BezierSegment3 s3 = new BezierSegment3(
-			    new Vec3(cx - r, 0f, cz),
-			    new Vec3(cx - r, 0f, cz - k),
-			    new Vec3(cx - k, 0f, cz - r),
-			    new Vec3(cx,     0f, cz - r)
-			);
-		BezierSegment3 s4 = new BezierSegment3(
-			    new Vec3(cx,     0f, cz - r),
-			    new Vec3(cx + k, 0f, cz - r),
-			    new Vec3(cx + r, 0f, cz - k),
-			    new Vec3(cx + r, 0f, cz)
-			);
-		return new BezierPath3(s1, s2, s3, s4);
-	}
-	
 	private static RenderableObject createRenderableLid(Mesh lidMesh, float yOffset, float lidWidth, TriangleRenderer tr, OneColourStrategyImpl colour, boolean isLeft) {
-/*	
-		double zRotation = isLeft ? 255d : -255d;
-		float zRotationRadians = (float)Math.toRadians(zRotation);
-		ObjectTransformation tLid = new ObjectTransformation(
-			    0f, 0f, zRotationRadians, // rotation xyz
-			    lidWidth, yOffset, 0f, // translation xyz
-			    new Mat4()
-			);
-		return RenderableObject.create(
-				tr,
-				lidMesh, // mesh
-				tLid, // transform
-				colour
-			);
-*/
-
 		ObjectTransformation tLid = new ObjectTransformation(
 			    0f, 0f, 0f, // rotation xyz
 			    lidWidth, yOffset, 0f, // translation xyz
