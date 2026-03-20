@@ -5,6 +5,8 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 
+import online.davisfamily.threedee.behaviour.Behaviour;
+import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.camera.Camera;
@@ -13,6 +15,8 @@ import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
+import online.davisfamily.threedee.path.Path3;
+import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class DebugUtils {
 
@@ -35,7 +39,7 @@ public class DebugUtils {
 	}
 	
 	// tested
-	private void drawAxisLine(Mat4 view, Mat4 projection, Vec4 a, Vec4 b, int colour) {
+	private void drawWorldLine(Mat4 view, Mat4 projection, Vec4 a, Vec4 b, int colour) {
 	    Vec4 viewA4 = view.multiplyVec(a);
 	    Vec4 viewB4 = view.multiplyVec(b);
 	    
@@ -106,17 +110,17 @@ public class DebugUtils {
 	    );
 
 	    // small cross aligned to world axes
-	    drawAxisLine(view, projection,
+	    drawWorldLine(view, projection,
 	        new Vec4(c.x - size, c.y, c.z, 1f),
 	        new Vec4(c.x + size, c.y, c.z, 1f),
 	        0xFFFF0000); // red X
 
-	    drawAxisLine(view, projection,
+	    drawWorldLine(view, projection,
 	        new Vec4(c.x, c.y - size, c.z, 1f),
 	        new Vec4(c.x, c.y + size, c.z, 1f),
 	        0xFF00FF00); // green Y
 
-	    drawAxisLine(view, projection,
+	    drawWorldLine(view, projection,
 	        new Vec4(c.x, c.y, c.z - size, 1f),
 	        new Vec4(c.x, c.y, c.z + size, 1f),
 	        0xFF0000FF); // blue Z
@@ -136,7 +140,7 @@ public class DebugUtils {
 
 	    // X axis (camera right)
 	    
-	    drawAxisLine(
+	    drawWorldLine(
 	        view, projection,
 	        origin,
 	        new Vec4(
@@ -149,7 +153,7 @@ public class DebugUtils {
 	    );
 
 	    // Y axis (camera up)
-	    drawAxisLine(
+	    drawWorldLine(
 	        view, projection,
 	        origin,
 	        new Vec4(
@@ -162,7 +166,7 @@ public class DebugUtils {
 	    );
 
 	    // Z axis (camera forward)
-	    drawAxisLine(
+	    drawWorldLine(
 	        view, projection,
 	        origin,
 	        new Vec4(
@@ -248,9 +252,9 @@ public class DebugUtils {
 	public void drawWorldAxesAt(Mat4 view, Mat4 projection, float ox, float oy, float oz, float axisLength) {
 	    Vec4 origin = new Vec4(ox, oy, oz, 1f);
 
-	    drawAxisLine(view, projection, origin, new Vec4(ox + axisLength, oy, oz, 1f), 0xFFFF0000); // +X
-	    drawAxisLine(view, projection, origin, new Vec4(ox, oy + axisLength, oz, 1f), 0xFF00FF00); // +Y
-	    drawAxisLine(view, projection, origin, new Vec4(ox, oy, oz - axisLength, 1f), 0xFF0000FF); // -Z
+	    drawWorldLine(view, projection, origin, new Vec4(ox + axisLength, oy, oz, 1f), 0xFFFF0000); // +X
+	    drawWorldLine(view, projection, origin, new Vec4(ox, oy + axisLength, oz, 1f), 0xFF00FF00); // +Y
+	    drawWorldLine(view, projection, origin, new Vec4(ox, oy, oz - axisLength, 1f), 0xFF0000FF); // -Z
 	}
 	
 	public void drawWorldGrid(Mat4 view, Mat4 projection, int halfSize, float step) {
@@ -261,7 +265,7 @@ public class DebugUtils {
 	        int colourZ = (i == 0) ? 0xFF4444FF : 0xFF444444; // Z axis highlighted
 
 	        // line parallel to Z at x = p
-	        drawAxisLine(
+	        drawWorldLine(
 	            view, projection,
 	            new Vec4(p, 0f, -halfSize * step, 1f),
 	            new Vec4(p, 0f,  halfSize * step, 1f),
@@ -269,12 +273,55 @@ public class DebugUtils {
 	        );
 
 	        // line parallel to X at z = p
-	        drawAxisLine(
+	        drawWorldLine(
 	            view, projection,
 	            new Vec4(-halfSize * step, 0f, p, 1f),
 	            new Vec4( halfSize * step, 0f, p, 1f),
 	            colourZ
 	        );
 	    }
-	}	
+	}
+	
+	public void drawPathForObject(RenderableObject ro, Mat4 view, Mat4 projection) {
+	    ro.behaviours.stream()
+        .filter(b -> b instanceof PathFollowerBehaviour)
+        .map(b -> (PathFollowerBehaviour) b)
+        .forEach(pb -> drawPath(pb, view, projection));	}
+	
+	private void drawPath(PathFollowerBehaviour pb, Mat4 view, Mat4 projection) {
+	    Path3 path = pb.getPath();
+
+	    float total = path.getTotalLength();
+	    float pathStep = 0.25f;
+	    float tangentStep = 1.0f;
+	    float markerLength = 0.5f;
+
+	    // draw sampled path
+	    Vec4 prev4 = new Vec4(path.sampleByDistance(0f));
+	    Vec4 curr4 = new Vec4();
+
+	    for (float d = pathStep; d <= total; d += pathStep) {
+	        Vec3 p3 = path.sampleByDistance(Math.min(d, total));
+	        curr4.set(p3);
+
+	        drawWorldLine(view, projection, prev4, curr4, 0xFFFF0000);
+
+	        prev4.set(curr4); // copy values, do not assign reference
+	    }
+
+	    // draw tangent markers
+	    Vec4 base4 = new Vec4();
+	    Vec4 tip4 = new Vec4();
+
+	    for (float d = 0f; d <= total; d += tangentStep) {
+	        Vec3 base = path.sampleByDistance(Math.min(d, total));
+	        Vec3 tangent = path.sampleTangentByDistance(Math.min(d, total));
+	        Vec3 tip = base.add(tangent.scale(markerLength));
+
+	        base4.set(base);
+	        tip4.set(tip);
+
+	        drawWorldLine(view, projection, base4, tip4, 0xFFFFFF00);
+	    }
+	}
 }

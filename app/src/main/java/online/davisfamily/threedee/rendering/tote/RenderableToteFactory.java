@@ -62,7 +62,7 @@ public class RenderableToteFactory {
 		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
 				createCompositePath(),
 				2.0f, // unitsPerSecond / speed
-				PathFollowerBehaviour.WrapMode.LOOP
+				PathFollowerBehaviour.WrapMode.PING_PONG
 			);
 		
 		// renderable tote
@@ -101,25 +101,22 @@ public class RenderableToteFactory {
 	}
 	
 	private static CompositePath3 createCompositePath() {
-		PathSegment3 s1 = 
-			    new LinearSegment3(
-				        new Vec3(0f, 0f, -3f),
-				        new Vec3(2f, 0f, -5f)
-				    );
-		PathSegment3 s3 = 
-			    new LinearSegment3(
-			            new Vec3(2f, 0f, -10f),
-			            new Vec3(0f, 0f, -12f)
-			        );
-		PathSegment3 s2 = BezierSegment3.createSmoothConnector(
-				Vec3.copy(s1.getEndPoint()),
-				Vec3.copy(s3.getStartPoint()),
-				s1,
-				s3,
-				2f);
-		
-		CompositePath3 cp3 = new CompositePath3(s1,s2,s3);
-		System.out.println(cp3);
-		return cp3;
+		Vec3 start = new Vec3(0f, 0f, -3f);
+		Vec3 join1 = new Vec3(2f, 1f, -5f);
+		Vec3 join2 = new Vec3(2f, 3f, -10f);
+		Vec3 end   = new Vec3(0f, 4f, -12f);
+
+		LinearSegment3 s1 = new LinearSegment3(start, join1);
+		LinearSegment3 s3 = new LinearSegment3(join2, end);
+
+		BezierSegment3 middle = BezierSegment3.createSmoothConnector(
+		    join1,
+		    join2,
+		    s1,
+		    s3,
+		    2.0f
+		);
+
+		return new CompositePath3(s1, middle, s3);
 	}
 }

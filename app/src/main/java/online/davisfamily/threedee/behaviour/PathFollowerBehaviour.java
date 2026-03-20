@@ -28,6 +28,7 @@ public class PathFollowerBehaviour implements Behaviour {
 		this.alignToPath = alignToPath;
 	}
 	
+	public Path3 getPath() {return path;}
 	@Override
 	public void update(RenderableObject object, double dtSeconds) {
 		distanceAlongPath+= direction * unitsPerSecond * (float) dtSeconds;

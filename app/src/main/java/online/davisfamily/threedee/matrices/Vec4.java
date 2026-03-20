@@ -18,6 +18,13 @@ public class Vec4 {
 		z = a.z;
 		w = a.w;
 	}
+	
+	public Vec4 (Vec3 a) {
+		x = a.x;
+		y = a.y;
+		z = a.z;
+		w = 1f;
+	}
 
 	public Vec4(float x, float y, float z) {
 		this.x = x;
@@ -44,6 +51,21 @@ public class Vec4 {
 		float rz = a.m[8] * x + a.m[9]*y + a.m[10] * z + a.m[11] * w;
 		float rw = a.m[12] * x + a.m[13]*y + a.m[14] * z + a.m[15] * w;
 		x = rx; y = ry; z = rz; w = rw;
+		return this;
+	}
+	
+	public Vec4 set(Vec3 a) {
+		x = a.x;
+		y = a.y;
+		z = a.z;
+		w = 1f;
+		return this;
+	}
+	public Vec4 set(Vec4 a) {
+		x = a.x;
+		y = a.y;
+		z = a.z;
+		w = a.w;
 		return this;
 	}
 }

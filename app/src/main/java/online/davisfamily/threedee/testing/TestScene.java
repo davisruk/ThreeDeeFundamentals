@@ -3,6 +3,7 @@ package online.davisfamily.threedee.testing;
 import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
@@ -22,6 +23,8 @@ public class TestScene extends BaseScene{
 		
 	@Override
 	public void executeChildRenderOperations(double tSeconds) {
+		if (inputState.isSet(Mode.SHOW_PATH))
+			debug.drawPathForObject(rTote, camera.getView(), projection);
 		drawObject(rTote, tSeconds, lightDirection);
 	}
 }
