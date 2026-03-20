@@ -97,7 +97,7 @@ public class CompositePath3 implements Path3 {
 	public String startEndData(PathSegment3 ps) {
 		return "Start Point:" + ps.getStartPoint()
 				+ " EndPoint:" + ps.getEndPoint()
-				+ " Start Tangent:" + ps.getStartTangent()
-				+ " End Tangent:" + ps.getEndTangent();
+				+ " Start Tangent:" + Vec3.yawFromDirection(ps.getStartTangent())
+				+ " End Tangent:" + Vec3.yawFromDirection(ps.getEndTangent());
 	}
 }

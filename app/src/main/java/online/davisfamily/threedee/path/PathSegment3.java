@@ -9,11 +9,11 @@ public interface PathSegment3 {
 	Vec3 getStartPoint();
 	Vec3 getEndPoint();
 	
-	default float getStartTangent() {
-		return Vec3.yawFromDirection(sampleTangentByDistance(0f));
+	default Vec3 getStartTangent() {
+		return sampleTangentByDistance(0f);
 	}
 
-	default float getEndTangent() {
-		return Vec3.yawFromDirection(sampleTangentByDistance(getLength()));
+	default Vec3 getEndTangent() {
+		return sampleTangentByDistance(getLength());
 	}
 }

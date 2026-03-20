@@ -62,7 +62,7 @@ public class RenderableToteFactory {
 		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
 				createCompositePath(),
 				2.0f, // unitsPerSecond / speed
-				PathFollowerBehaviour.WrapMode.PING_PONG
+				PathFollowerBehaviour.WrapMode.LOOP
 			);
 		
 		// renderable tote
@@ -101,22 +101,51 @@ public class RenderableToteFactory {
 	}
 	
 	private static CompositePath3 createCompositePath() {
-		Vec3 start = new Vec3(0f, 0f, -3f);
-		Vec3 join1 = new Vec3(2f, 1f, -5f);
-		Vec3 join2 = new Vec3(2f, 3f, -10f);
-		Vec3 end   = new Vec3(0f, 4f, -12f);
+		Vec3 frontLeft  = new Vec3(-4f, 0f,  -4f);
+		Vec3 frontRight = new Vec3( 4f, 0f,  -4f);
+		Vec3 backRight  = new Vec3( 4f, 5f, -14f);
+		Vec3 backLeft   = new Vec3(-4f, 5f, -14f);
 
-		LinearSegment3 s1 = new LinearSegment3(start, join1);
-		LinearSegment3 s3 = new LinearSegment3(join2, end);
+		// side sections first
+		BezierSegment3 rightSide = new BezierSegment3(
+		    frontRight,
+		    new Vec3( 6.5f, 1.2f, -6.5f),
+		    new Vec3( 6.5f, 3.8f, -11.5f),
+		    backRight
+		);
 
-		BezierSegment3 middle = BezierSegment3.createSmoothConnector(
-		    join1,
-		    join2,
-		    s1,
-		    s3,
+		BezierSegment3 leftSide = new BezierSegment3(
+		    backLeft,
+		    new Vec3(-6.5f, 3.8f, -11.5f),
+		    new Vec3(-6.5f, 1.2f, -6.5f),
+		    frontLeft
+		);
+
+		// connectors built from neighbouring tangents
+		BezierSegment3 topConnector = BezierSegment3.createSmoothConnector(
+		    backRight,
+		    backLeft,
+		    rightSide,
+		    leftSide,
+		    2.5f,
+		    2.5f
+		);
+
+		BezierSegment3 bottomConnector = BezierSegment3.createSmoothConnector(
+		    frontLeft,
+		    frontRight,
+		    leftSide,
+		    rightSide,
+		    2.0f,
 		    2.0f
 		);
 
-		return new CompositePath3(s1, middle, s3);
+		CompositePath3 loopPath = new CompositePath3(
+		    bottomConnector,
+		    rightSide,
+		    topConnector,
+		    leftSide
+		);
+		return loopPath;
 	}
 }

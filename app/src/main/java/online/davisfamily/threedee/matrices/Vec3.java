@@ -52,6 +52,15 @@ public class Vec3 {
 		return this;
 	}
 	
+	public float horizontalMagnitude() {
+		float mag = (float)Math.sqrt(x*x+z*z);
+		return mag;
+	}
+	
+	public float pitch() {
+		return (float)Math.atan2(y, horizontalMagnitude());
+	}
+	
 	// given 2 vectors a and b the cross product is
 	// (ay*bz - by*az, bx*az - ax*bz, ax*by - bx*ay) 
 	public Vec3 cross (Vec3 b) {

@@ -91,12 +91,12 @@ public class BezierSegment3 implements PathSegment3 {
 	}
 
 	// creates a curve where the middle control points are calculated based on the the in and out direction
-	// this allows yaw translation of objects travelling the path to match in and out of the curve
-	public static BezierSegment3 createSmoothConnector(Vec3 start, Vec3 end, PathSegment3 incoming, PathSegment3 outgoing, float handleLength) {
-		Vec3 dIn = incoming.getEndPoint().subtract(incoming.getStartPoint()).normalize();
-		Vec3 dOut = outgoing.getEndPoint().subtract(outgoing.getStartPoint()).normalize();
-		Vec3 p1 = start.add(dIn.scale(handleLength));
-		Vec3 p2 = end.subtract(dOut.scale(handleLength));
+	// this allows yaw & pitch translation of objects to match the in and out orientation on the joins
+	public static BezierSegment3 createSmoothConnector(Vec3 start, Vec3 end, PathSegment3 incoming, PathSegment3 outgoing, float incomingHandleLength, float outgoingHandleLength) {
+		Vec3 dIn = incoming.getEndTangent().normalize();
+		Vec3 dOut = outgoing.getStartTangent().normalize();
+		Vec3 p1 = start.add(dIn.scale(incomingHandleLength));
+		Vec3 p2 = end.subtract(dOut.scale(outgoingHandleLength));
 		return new BezierSegment3 (start, p1, p2, end);
 	}
 	
