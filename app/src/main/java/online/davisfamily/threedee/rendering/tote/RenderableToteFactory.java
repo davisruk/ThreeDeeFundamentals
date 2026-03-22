@@ -1,10 +1,16 @@
 package online.davisfamily.threedee.rendering.tote;
 
+import java.util.EnumSet;
 import java.util.List;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
+import online.davisfamily.threedee.behaviour.Behaviour.OrientationMode;
 import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.PingPongRotationBehaviour;
+import online.davisfamily.threedee.behaviour.routing.FunctionalRouteDecisionProvider;
+import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
+import online.davisfamily.threedee.behaviour.routing.RouteDecisionProvider;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
@@ -16,7 +22,6 @@ import online.davisfamily.threedee.model.Tote;
 import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.CompositePath3;
 import online.davisfamily.threedee.path.LinearSegment3;
-import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
@@ -57,13 +62,15 @@ public class RenderableToteFactory {
 
 		// tote mesh
 		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
-
+/*
 		// tote path
 		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
 				createCompositePath(),
 				2.0f, // unitsPerSecond / speed
-				PathFollowerBehaviour.WrapMode.LOOP
+				Behaviour.WrapMode.LOOP
 			);
+*/
+		GraphFollowerBehaviour pathFollower = createGraphFollowerBehaviour();
 		
 		// renderable tote
 		RenderableObject rTote = RenderableObject.createWithChildrenAndBehaviours(
@@ -147,5 +154,96 @@ public class RenderableToteFactory {
 		    leftSide
 		);
 		return loopPath;
+	}
+	
+	private static GraphFollowerBehaviour createGraphFollowerBehaviour() {
+		RouteSegment mainA = new RouteSegment(
+		    1,
+			"mainA",
+		    new LinearSegment3(
+		        new Vec3(0f, 0f, -3f),
+		        new Vec3(3f, 0f, -5f)
+		    )
+		);
+
+		RouteSegment mainB = new RouteSegment(
+		    2,
+			"mainB",
+		    new LinearSegment3(
+		        new Vec3(3f, 0f, -5f),
+		        new Vec3(6f, 0f, -7f)
+		    )
+		);
+
+		RouteSegment mainC = new RouteSegment(
+		    3,
+				"mainC",
+		    new LinearSegment3(
+		        new Vec3(6f, 0f, -7f),
+		        new Vec3(10f, 0f, -7f)
+		    )
+		);
+
+		RouteSegment sidingIn = new RouteSegment(
+		    4,
+			"sidingIn",
+		    new BezierSegment3(
+		        new Vec3(6f, 0f, -7f),
+		        new Vec3(7f, 0f, -7f),
+		        new Vec3(7f, 0f, -10f),
+		        new Vec3(6f, 0f, -10f)
+		    )
+		);
+
+		RouteSegment exceptionFix = new RouteSegment(
+		    5,
+			"exceptionFix",
+		    new LinearSegment3(
+		        new Vec3(6f, 0f, -10f),
+		        new Vec3(2f, 0f, -10f)
+		    )
+		);
+
+		RouteSegment rejoin = new RouteSegment(
+		    6,
+			"rejoin",
+		    new BezierSegment3(
+		        new Vec3(2f, 0f, -10f),
+		        new Vec3(1f, 0f, -10f),
+		        new Vec3(1f, 0f, -7f),
+		        new Vec3(6f, 0f, -7f)
+		    )
+		);
+
+		mainA.addNext(mainB);
+		mainB.addNext(mainC);
+		mainB.addNext(sidingIn);
+
+		sidingIn.addNext(exceptionFix);
+		exceptionFix.addNext(rejoin);
+		rejoin.addNext(mainC);
+		
+		RouteDecisionProvider dynamic = new FunctionalRouteDecisionProvider((current, options) -> {
+			if (current.getId() == 2) {
+		        for (RouteSegment option : options) {
+		            if (option.getId() == 4) {
+		                return option;
+		            }
+		        }
+		    }
+		    return options.get(0);
+		});
+		
+		return new GraphFollowerBehaviour(
+			    mainA,
+			    dynamic,
+			    2.0f,
+			    EnumSet.of(OrientationMode.YAW, OrientationMode.YAW),
+			    0f,
+			    GraphFollowerBehaviour.DirectionOfTravel.FORWARD,
+			    Behaviour.WrapMode.CLAMP,
+			    0f
+			);		
+		
 	}
 }

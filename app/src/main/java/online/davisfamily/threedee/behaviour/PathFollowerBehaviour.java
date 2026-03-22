@@ -9,8 +9,6 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class PathFollowerBehaviour implements Behaviour {
 
-	public enum WrapMode { CLAMP, LOOP, PING_PONG }
-	public enum OrientationMode {NONE, YAW, PITCH}
 	private final Path3 path;
 	private final float unitsPerSecond;
 	private final WrapMode wrapMode;

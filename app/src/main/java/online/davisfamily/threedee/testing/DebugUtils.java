@@ -7,6 +7,7 @@ import java.awt.image.BufferedImage;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
+import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.camera.Camera;
@@ -283,10 +284,22 @@ public class DebugUtils {
 	}
 	
 	public void drawPathForObject(RenderableObject ro, Mat4 view, Mat4 projection) {
-	    ro.behaviours.stream()
+/*
+		ro.behaviours.stream()
         .filter(b -> b instanceof PathFollowerBehaviour)
         .map(b -> (PathFollowerBehaviour) b)
-        .forEach(pb -> drawPath(pb, view, projection));	}
+        .forEach(pb -> drawPath(pb, view, projection));
+*/	    
+	    for (Behaviour b: ro.behaviours) {
+	    	if (b instanceof PathFollowerBehaviour) drawPath((PathFollowerBehaviour)b, view, projection);
+	    	else if (b instanceof GraphFollowerBehaviour) drawGraphPath((GraphFollowerBehaviour)b, view, projection);
+	    }
+	}
+	
+	
+	private void drawGraphPath(GraphFollowerBehaviour gfb, Mat4 view, Mat4 projection) {
+		
+	}
 	
 	private void drawPath(PathFollowerBehaviour pb, Mat4 view, Mat4 projection) {
 	    Path3 path = pb.getPath();
