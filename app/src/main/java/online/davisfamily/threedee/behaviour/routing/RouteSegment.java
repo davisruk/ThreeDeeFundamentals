@@ -11,7 +11,9 @@ public class RouteSegment {
 	private final List<RouteSegment> nextSegments = new ArrayList<>();
 	private final List<RouteSegment> previousSegments = new ArrayList<>();
 	private final PathSegment3 geometry;
+	private RouteDecisionProvider decisionProvider;
 	
+
 	public RouteSegment(int id, String label, PathSegment3 geometry) {
 		this.id = id;
 		this.label = label;
@@ -22,14 +24,24 @@ public class RouteSegment {
 		return nextSegments;
 	}
 	public List<RouteSegment> getPreviousSegments() {
-		return nextSegments;
-	}
-	public RouteSegment addNext(RouteSegment next) {
-		if (!this.nextSegments.contains(next)) this.nextSegments.add(next);
-		if (!next.previousSegments.contains(this)) next.previousSegments.add(this);
-		return this;
+		return previousSegments;
 	}
 
+	public RouteSegment addNext(RouteSegment next) {
+	    if (next == null) {
+	        throw new IllegalArgumentException("Next RouteSegment must not be null");
+	    }
+
+	    if (!nextSegments.contains(next)) {
+	        nextSegments.add(next);
+	    }
+
+	    if (!next.previousSegments.contains(this)) {
+	        next.previousSegments.add(this);
+	    }
+
+	    return this;
+	}	
 	public int getId() {
 		return id;
 	}
@@ -41,4 +53,15 @@ public class RouteSegment {
 	public PathSegment3 getGeometry() {
 		return geometry;
 	}
+	public RouteDecisionProvider getDecisionProvider() {
+		return decisionProvider;
+	}
+
+	public void setDecisionProvider(RouteDecisionProvider decisionProvider) {
+		this.decisionProvider = decisionProvider;
+	}
+    @Override
+    public String toString() {
+        return "RouteSegment{id='" + id + "', label='" + label + "'}";
+    }	
 }

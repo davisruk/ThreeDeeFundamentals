@@ -1,7 +1,10 @@
 package online.davisfamily.threedee.behaviour.routing;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.matrices.Vec3;
@@ -14,7 +17,7 @@ import online.davisfamily.threedee.rendering.RenderableObject;
  **/
 public class GraphFollowerBehaviour implements Behaviour {
 
-    public enum DirectionOfTravel {
+    public enum TravelDirection {
         FORWARD,
         REVERSE
     }
@@ -26,41 +29,60 @@ public class GraphFollowerBehaviour implements Behaviour {
     private final RouteSegment startSegment;
     private RouteSegment currentSegment;
     private float distanceAlongCurrentSegment;
-    private DirectionOfTravel travelDirection;
+    private TravelDirection travelDirection;
     private final float startDistanceAlongSegment;
-    private final DirectionOfTravel startDirection;
-
+    private final TravelDirection startDirection;
     private final WrapMode wrapMode;
-    public GraphFollowerBehaviour(RouteSegment startSegment,
-            RouteDecisionProvider decisionProvider,
+
+    public GraphFollowerBehaviour(
+            RouteSegment startSegment,
+            RouteDecisionProvider defaultDecisionProvider,
             float unitsPerSecond,
+            WrapMode wrapMode,
+            EnumSet<OrientationMode> orientationModes,
+            float yawOffsetRadians) {
+
+        this(startSegment,
+                defaultDecisionProvider,
+                unitsPerSecond,
+                wrapMode,
+                orientationModes,
+                yawOffsetRadians,
+                0f,
+                TravelDirection.FORWARD);
+    }
+
+    public GraphFollowerBehaviour(
+            RouteSegment startSegment,
+            RouteDecisionProvider defaultDecisionProvider,
+            float unitsPerSecond,
+            WrapMode wrapMode,
             EnumSet<OrientationMode> orientationModes,
             float yawOffsetRadians,
-            DirectionOfTravel travelDirection,
-            WrapMode wrapMode,
-            float startDistanceAlongSegment) {
-		super();
+            float startDistanceAlongSegment,
+            TravelDirection startDirection) {
+
         if (startSegment == null) {
             throw new IllegalArgumentException("Start RouteSegment must not be null");
         }
-        if (decisionProvider == null) {
-            throw new IllegalArgumentException("RouteDecisionProvider must not be null");
-        }
-		this.orientationModes = orientationModes;
-		this.decisionProvider = decisionProvider;
-		this.unitsPerSecond = unitsPerSecond;
-		this.yawOffsetRadians = yawOffsetRadians;
-		this.travelDirection = travelDirection;
-		this.currentSegment = startSegment;
-		this.startSegment = startSegment;
-		this.distanceAlongCurrentSegment = 0f;
-		this.wrapMode = wrapMode;
-		this.startDistanceAlongSegment = startDistanceAlongSegment;
-		this.startDirection = travelDirection;
-	}
 
-	@Override
-	public void update(RenderableObject object, double dtSeconds) {
+        this.startSegment = startSegment;
+        this.startDistanceAlongSegment = startDistanceAlongSegment;
+        this.startDirection = startDirection;
+
+        this.currentSegment = startSegment;
+        this.distanceAlongCurrentSegment = startDistanceAlongSegment;
+        this.travelDirection = startDirection;
+
+        this.decisionProvider = defaultDecisionProvider;
+        this.unitsPerSecond = unitsPerSecond;
+        this.wrapMode = wrapMode;
+        this.orientationModes = orientationModes;
+        this.yawOffsetRadians = yawOffsetRadians;
+    }
+
+    @Override
+    public void update(RenderableObject object, double dtSeconds) {
         if (currentSegment == null) {
             return;
         }
@@ -76,20 +98,19 @@ public class GraphFollowerBehaviour implements Behaviour {
             PathSegment3 geometry = currentSegment.getGeometry();
             float segmentLength = geometry.getLength();
 
-            float distanceToBoundary = (travelDirection == DirectionOfTravel.FORWARD)
+            float distanceToBoundary = (travelDirection == TravelDirection.FORWARD)
                     ? (segmentLength - distanceAlongCurrentSegment)
                     : distanceAlongCurrentSegment;
 
             if (remainingDistance < distanceToBoundary) {
-                if (travelDirection == DirectionOfTravel.FORWARD) {
+                if (travelDirection == TravelDirection.FORWARD) {
                     distanceAlongCurrentSegment += remainingDistance;
                 } else {
                     distanceAlongCurrentSegment -= remainingDistance;
                 }
                 remainingDistance = 0f;
             } else {
-                // Move exactly to the boundary
-                if (travelDirection == DirectionOfTravel.FORWARD) {
+                if (travelDirection == TravelDirection.FORWARD) {
                     distanceAlongCurrentSegment = segmentLength;
                 } else {
                     distanceAlongCurrentSegment = 0f;
@@ -97,17 +118,15 @@ public class GraphFollowerBehaviour implements Behaviour {
 
                 remainingDistance -= distanceToBoundary;
 
-                RouteSegment nextSegment = chooseAdjacentSegment(object);
+                RouteSegment adjacent = chooseAdjacentSegment(object);
 
-                if (nextSegment != null) {
-                    currentSegment = nextSegment;
-                    distanceAlongCurrentSegment = (travelDirection == DirectionOfTravel.FORWARD)
+                if (adjacent != null) {
+                    currentSegment = adjacent;
+                    distanceAlongCurrentSegment = (travelDirection == TravelDirection.FORWARD)
                             ? 0f
                             : currentSegment.getGeometry().getLength();
                 } else {
                     handleNoAdjacentSegment();
-                    // if STOP, current segment remains at boundary and we stop consuming
-                    // if LOOP or PING_PONG, continue with the updated state
                     if (wrapMode == WrapMode.CLAMP) {
                         remainingDistance = 0f;
                     }
@@ -115,11 +134,11 @@ public class GraphFollowerBehaviour implements Behaviour {
             }
         }
 
-        applyTransform(object);        
-	}
+        applyTransform(object);
+    }
 
     private RouteSegment chooseAdjacentSegment(RenderableObject object) {
-        List<RouteSegment> options = (travelDirection == DirectionOfTravel.FORWARD)
+        List<RouteSegment> options = (travelDirection == TravelDirection.FORWARD)
                 ? currentSegment.getNextSegments()
                 : currentSegment.getPreviousSegments();
 
@@ -131,7 +150,21 @@ public class GraphFollowerBehaviour implements Behaviour {
             return options.get(0);
         }
 
-        RouteSegment chosen = decisionProvider.chooseNext(object, currentSegment, options, travelDirection);
+        RouteDecisionProvider provider = currentSegment.getDecisionProvider();
+        if (provider == null) {
+            provider = decisionProvider;
+        }
+
+        if (provider == null) {
+            return options.get(0);
+        }
+
+        RouteSegment chosen = provider.chooseNext(
+                object,
+                currentSegment,
+                options,
+                travelDirection
+        );
 
         if (chosen == null || !options.contains(chosen)) {
             return options.get(0);
@@ -143,7 +176,7 @@ public class GraphFollowerBehaviour implements Behaviour {
     private void handleNoAdjacentSegment() {
         switch (wrapMode) {
             case CLAMP -> {
-                // stay at current boundary
+                // remain at the boundary
             }
             case LOOP -> resetToStart();
             case PING_PONG -> reverseDirectionAtBoundary();
@@ -157,12 +190,12 @@ public class GraphFollowerBehaviour implements Behaviour {
     }
 
     private void reverseDirectionAtBoundary() {
-        travelDirection = (travelDirection == DirectionOfTravel.FORWARD)
-                ? DirectionOfTravel.REVERSE
-                : DirectionOfTravel.FORWARD;
+        travelDirection = (travelDirection == TravelDirection.FORWARD)
+                ? TravelDirection.REVERSE
+                : TravelDirection.FORWARD;
     }
-    
-	private void applyTransform(RenderableObject ro) {
+
+    private void applyTransform(RenderableObject ro) {
 		if (currentSegment == null) return;
 		
 		PathSegment3 ps = currentSegment.getGeometry();
@@ -171,7 +204,7 @@ public class GraphFollowerBehaviour implements Behaviour {
 		if (orientationModes.contains(OrientationMode.NONE)) return;
 		
 		Vec3 tangent = ps.sampleTangentByDistance(distanceAlongCurrentSegment);
-		if (travelDirection == DirectionOfTravel.REVERSE) {
+		if (travelDirection == TravelDirection.REVERSE) {
             tangent = tangent.scale(-1f);
         }
 		float yaw = Vec3.yawFromDirection(tangent);
@@ -184,13 +217,82 @@ public class GraphFollowerBehaviour implements Behaviour {
             float pitch = tangent.pitch();
             ro.transformation.angleX = -pitch;
         }
-
-        if (currentSegment == null) {
-            return;
-        }
+/*
+		System.out.println(
+			    "segment=" + currentSegment.getLabel() +
+			    " direction=" + travelDirection +
+			    " distance=" + distanceAlongCurrentSegment
+			);
+*/
 	}
 
-	public RouteDecisionProvider getDecisionProvider() {
+    public List<RouteSegment> getReachableSegments() {
+        List<RouteSegment> ordered = new ArrayList<>();
+        Set<RouteSegment> visited = new HashSet<>();
+        traverseGraph(startSegment, visited, ordered);
+        return ordered;
+    }
+
+    private void traverseGraph(RouteSegment segment, Set<RouteSegment> visited, List<RouteSegment> ordered) {
+        if (segment == null || !visited.add(segment)) {
+            return;
+        }
+
+        ordered.add(segment);
+
+        for (RouteSegment next : segment.getNextSegments()) {
+            traverseGraph(next, visited, ordered);
+        }
+
+        for (RouteSegment previous : segment.getPreviousSegments()) {
+            traverseGraph(previous, visited, ordered);
+        }
+    }
+
+    public String describeGraph() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("GraphPathFollowerBehaviour graph")
+          .append(System.lineSeparator());
+
+        List<RouteSegment> segments = getReachableSegments();
+
+        for (RouteSegment segment : segments) {
+            sb.append("segment=").append(segment.getLabel());
+
+            if (segment == currentSegment) {
+                sb.append(" [CURRENT]");
+            }
+            if (segment == startSegment) {
+                sb.append(" [START]");
+            }
+
+            sb.append(System.lineSeparator());
+            sb.append("  previous=").append(formatSegmentIds(segment.getPreviousSegments()))
+              .append(System.lineSeparator());
+            sb.append("  next=").append(formatSegmentIds(segment.getNextSegments()))
+              .append(System.lineSeparator());
+        }
+
+        return sb.toString();
+    }
+
+    private String formatSegmentIds(List<RouteSegment> segments) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < segments.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(segments.get(i).getLabel());
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return describeGraph();
+    }	
+    public RouteDecisionProvider getDecisionProvider() {
 		return decisionProvider;
 	}
 
@@ -202,11 +304,11 @@ public class GraphFollowerBehaviour implements Behaviour {
 		return distanceAlongCurrentSegment;
 	}
 
-	public DirectionOfTravel getTravelDirection() {
+	public TravelDirection getTravelDirection() {
 		return travelDirection;
 	}
 
-	public void setTravelDirection(DirectionOfTravel travelDirection) {
+	public void setTravelDirection(TravelDirection travelDirection) {
 		this.travelDirection = travelDirection;
 	}
 

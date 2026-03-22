@@ -19,7 +19,7 @@ public class FunctionalRouteDecisionProvider implements RouteDecisionProvider {
             RenderableObject object,
             RouteSegment current,
             List<RouteSegment> options,
-            GraphFollowerBehaviour.DirectionOfTravel travelDirection) {
+            GraphFollowerBehaviour.TravelDirection travelDirection) {
 
         if (options == null || options.isEmpty()) {
             return null;

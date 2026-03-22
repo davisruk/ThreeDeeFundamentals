@@ -2,32 +2,37 @@ package online.davisfamily.threedee.behaviour.routing;
 
 import java.util.List;
 
-import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour.DirectionOfTravel;
+import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour.TravelDirection;
 import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class PreferredRouteIdDecisionProvider implements RouteDecisionProvider {
 
-	private final int preferredId;
+	private final int preferredForwardId;
+	private final int preferredReverseId;
 	
 
-	public PreferredRouteIdDecisionProvider(int preferredId) {
+	public PreferredRouteIdDecisionProvider(int preferredForwardId, int preferredReverseId) {
 		super();
-		this.preferredId = preferredId;
+		this.preferredForwardId = preferredForwardId;
+		this.preferredReverseId = preferredReverseId;
 	}
 
 
 	@Override
-	public RouteSegment chooseNext(RenderableObject object, RouteSegment current, List<RouteSegment> options, DirectionOfTravel travelDirection) {
+	public RouteSegment chooseNext(RenderableObject object, RouteSegment current, List<RouteSegment> options, TravelDirection travelDirection) {
 		if (options == null || options.isEmpty())
 			return null;
 		
-		for(RouteSegment r: options) {
-			int id = r.getId();
-			if ( id == preferredId)
-				return r;
-		}
-		
-		return options.get(0);
+        int preferred = (travelDirection == TravelDirection.FORWARD)
+                ? preferredForwardId
+                : preferredReverseId;
+
+        for (RouteSegment option : options) {
+            if (preferred == option.getId()) {
+                return option;
+            }
+        }
+        return options.get(0);		
 	}
 
 }

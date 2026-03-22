@@ -5,11 +5,10 @@ import java.util.List;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.behaviour.Behaviour.OrientationMode;
-import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.PingPongRotationBehaviour;
-import online.davisfamily.threedee.behaviour.routing.FunctionalRouteDecisionProvider;
+import online.davisfamily.threedee.behaviour.routing.FirstRouteDecisionProvider;
 import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
-import online.davisfamily.threedee.behaviour.routing.RouteDecisionProvider;
+import online.davisfamily.threedee.behaviour.routing.PreferredRouteIdDecisionProvider;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
@@ -71,6 +70,8 @@ public class RenderableToteFactory {
 			);
 */
 		GraphFollowerBehaviour pathFollower = createGraphFollowerBehaviour();
+		
+		System.out.println(pathFollower.describeGraph());
 		
 		// renderable tote
 		RenderableObject rTote = RenderableObject.createWithChildrenAndBehaviours(
@@ -158,7 +159,7 @@ public class RenderableToteFactory {
 	
 	private static GraphFollowerBehaviour createGraphFollowerBehaviour() {
 		RouteSegment mainA = new RouteSegment(
-		    1,
+		    0,
 			"mainA",
 		    new LinearSegment3(
 		        new Vec3(0f, 0f, -3f),
@@ -166,9 +167,9 @@ public class RenderableToteFactory {
 		    )
 		);
 
-		RouteSegment mainB = new RouteSegment(
-		    2,
-			"mainB",
+		RouteSegment junction = new RouteSegment(
+		    1,
+			"junction",
 		    new LinearSegment3(
 		        new Vec3(3f, 0f, -5f),
 		        new Vec3(6f, 0f, -7f)
@@ -176,8 +177,8 @@ public class RenderableToteFactory {
 		);
 
 		RouteSegment mainC = new RouteSegment(
-		    3,
-				"mainC",
+		    2,
+		    "mainC",
 		    new LinearSegment3(
 		        new Vec3(6f, 0f, -7f),
 		        new Vec3(10f, 0f, -7f)
@@ -185,8 +186,8 @@ public class RenderableToteFactory {
 		);
 
 		RouteSegment sidingIn = new RouteSegment(
-		    4,
-			"sidingIn",
+		    3,
+		    "sidingIn",
 		    new BezierSegment3(
 		        new Vec3(6f, 0f, -7f),
 		        new Vec3(7f, 0f, -7f),
@@ -196,8 +197,8 @@ public class RenderableToteFactory {
 		);
 
 		RouteSegment exceptionFix = new RouteSegment(
-		    5,
-			"exceptionFix",
+		    4,
+		    "exceptionFix",
 		    new LinearSegment3(
 		        new Vec3(6f, 0f, -10f),
 		        new Vec3(2f, 0f, -10f)
@@ -205,8 +206,8 @@ public class RenderableToteFactory {
 		);
 
 		RouteSegment rejoin = new RouteSegment(
-		    6,
-			"rejoin",
+		    5,
+		    "rejoin",
 		    new BezierSegment3(
 		        new Vec3(2f, 0f, -10f),
 		        new Vec3(1f, 0f, -10f),
@@ -215,35 +216,26 @@ public class RenderableToteFactory {
 		    )
 		);
 
-		mainA.addNext(mainB);
-		mainB.addNext(mainC);
-		mainB.addNext(sidingIn);
+		// connectivity
+		mainA.addNext(junction);
+		junction.addNext(mainC);
+		junction.addNext(sidingIn);
 
 		sidingIn.addNext(exceptionFix);
 		exceptionFix.addNext(rejoin);
 		rejoin.addNext(mainC);
 		
-		RouteDecisionProvider dynamic = new FunctionalRouteDecisionProvider((current, options) -> {
-			if (current.getId() == 2) {
-		        for (RouteSegment option : options) {
-		            if (option.getId() == 4) {
-		                return option;
-		            }
-		        }
-		    }
-		    return options.get(0);
-		});
+		junction.setDecisionProvider(
+				new PreferredRouteIdDecisionProvider(3, 0)
+		);
 		
 		return new GraphFollowerBehaviour(
-			    mainA,
-			    dynamic,
-			    2.0f,
-			    EnumSet.of(OrientationMode.YAW, OrientationMode.YAW),
-			    0f,
-			    GraphFollowerBehaviour.DirectionOfTravel.FORWARD,
-			    Behaviour.WrapMode.CLAMP,
-			    0f
-			);		
-		
+		    mainA,
+		    new FirstRouteDecisionProvider(), // fallback only
+		    2.0f,
+		    GraphFollowerBehaviour.WrapMode.PING_PONG,
+		    EnumSet.of(OrientationMode.YAW),
+		    0f
+		);
 	}
 }
