@@ -3,22 +3,20 @@ package online.davisfamily.threedee.model.tracks;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.management.MBeanAttributeInfo;
-
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Mesh;
-import online.davisfamily.threedee.path.Path3;
+import online.davisfamily.threedee.path.PathSegment3;
 
 public class TrackMeshFactory {
 
 	private static final Vec3 WORLD_UP = new Vec3(0f,1f,0f);
 	
-	public static Mesh build (Path3 path, TrackSpec spec) {
+	public static Mesh build (PathSegment3 path, TrackSpec spec) {
 		TrackMeshBuilder mb = new TrackMeshBuilder();
 		List<SampleFrame> frames = sampleFrames(path, spec.sampleStep);
-		buildDeck(path,spec,frames,mb);
+		buildDeck(spec,frames,mb);
 		if (spec.includeGuides) {
-			buildGuides(path, spec, frames, mb);
+			buildGuides(spec, frames, mb);
 		}
 		if (spec.includeRollers) {
 			buildRollers(path, spec, mb);
@@ -26,7 +24,7 @@ public class TrackMeshFactory {
 		return mb.build("track");
 	}
 	
-	private static List<SampleFrame> sampleFrames(Path3 path, float sampleStep){
+	private static List<SampleFrame> sampleFrames(PathSegment3 path, float sampleStep){
 		List<SampleFrame> frames = new ArrayList<>();
 		float total = path.getTotalLength();
 		for (float d = 0f; d < total; d+= sampleStep) {
@@ -36,7 +34,7 @@ public class TrackMeshFactory {
 		return frames;
 	}
 	
-	private static SampleFrame createFrame(Path3 path, float distance) {
+	private static SampleFrame createFrame(PathSegment3 path, float distance) {
 		Vec3 centre = path.sampleByDistance(distance);
 		Vec3 tangent = path.sampleTangentByDistance(distance).normalize();
 		Vec3 side = WORLD_UP.cross(tangent).normalize();
@@ -46,7 +44,7 @@ public class TrackMeshFactory {
 		return new SampleFrame(distance, centre, tangent, side, WORLD_UP);
 	}
 	
-	private static void buildDeck(Path3 path, TrackSpec spec, List<SampleFrame> frames, TrackMeshBuilder mb) {
+	private static void buildDeck(TrackSpec spec, List<SampleFrame> frames, TrackMeshBuilder mb) {
 		float half = spec.getRunningWidth() * 0.5f;
 		float topY = spec.deckTopY;
 		float bottomY = spec.deckTopY - spec.deckThickness;
@@ -78,7 +76,7 @@ public class TrackMeshFactory {
 		}
 	}
 	
-	private static void buildGuides(Path3 path, TrackSpec spec, List<SampleFrame> frames, TrackMeshBuilder mb) {
+	private static void buildGuides(TrackSpec spec, List<SampleFrame> frames, TrackMeshBuilder mb) {
 		float innerHalf = spec.getGuideInnerWidth() * 0.5f;
 		float outerHalf = innerHalf + spec.guideThickness;
 		float y0 = spec.deckTopY;
@@ -111,9 +109,9 @@ public class TrackMeshFactory {
 		}
 	}
 	
-	private static void buildRollers(Path3 path, TrackSpec spec, TrackMeshBuilder mb) {
+	private static void buildRollers(PathSegment3 path, TrackSpec spec, TrackMeshBuilder mb) {
 		float total = path.getTotalLength();
-		float rollerWidth = spec.getRunningWidth();
+		float rollerWidth = spec.getRunningWidth() - (2f * spec.rollerWidthInset);;
 		float rollerHalfWidth = rollerWidth * 0.5f;
 		float rollerHalfDepth = spec.rollerDepthAlongPath * 0.5f;
 		

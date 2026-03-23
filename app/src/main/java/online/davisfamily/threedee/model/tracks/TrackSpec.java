@@ -26,14 +26,14 @@ public class TrackSpec {
 	// tessellation
 	public float sampleStep;
 
-	public TrackSpec(ToteEnvelope toteEnvelope, float sideClearance, float sideThickness, float deckTopY,
+	public TrackSpec(ToteEnvelope toteEnvelope, float sideClearance, float deckThickness, float deckTopY,
 			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, boolean includeRollers,
 			float rollerPitch, float rollerWidthInset, float rollerHeight, float rollerDepthAlongPath,
 			float sampleStep) {
 		super();
 		this.toteEnvelope = toteEnvelope;
 		this.sideClearance = sideClearance;
-		this.deckThickness = sideThickness;
+		this.deckThickness = deckThickness;
 		this.deckTopY = deckTopY;
 		this.includeGuides = includeGuides;
 		this.guideHeight = guideHeight;
@@ -55,7 +55,7 @@ public class TrackSpec {
 		return getRunningWidth() + (2f * guideGap);
 	}
 	
-	public float overallWidth() {
+	public float getOverallWidth() {
 		if (!includeGuides) return getRunningWidth();
 		return getGuideInnerWidth() + (2f * guideThickness);
 	}

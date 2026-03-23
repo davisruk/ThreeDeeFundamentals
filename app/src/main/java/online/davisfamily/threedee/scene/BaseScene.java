@@ -3,6 +3,7 @@ package online.davisfamily.threedee.scene;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.Arrays;
+import java.util.List;
 
 import javax.swing.JRootPane;
 
@@ -123,11 +124,12 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	    vp.mutableMultiply(camera.getView());
 	}
 
-	protected void drawObject(RenderableObject ro, double dtSeconds, DirectionalLight lightDirection) {
+	protected void drawObject(List<RenderableObject> objects, double dtSeconds, DirectionalLight lightDirection) {
 		if (!inputState.isSet(Mode.PAUSE_TRANSFORMS))
-			ro.update(dtSeconds);
-
-		ro.draw(camera, perspective, zBuffer, lightDirection, null);
+			for (RenderableObject ro: objects)
+				ro.update(dtSeconds);
+		for (RenderableObject ro: objects)
+			ro.draw(camera, perspective, zBuffer, lightDirection, null);
 	}
 	
 	protected void updateDebug(double tSeconds) {

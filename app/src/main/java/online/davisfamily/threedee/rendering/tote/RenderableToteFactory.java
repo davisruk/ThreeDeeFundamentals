@@ -69,18 +69,18 @@ public class RenderableToteFactory {
 				Behaviour.WrapMode.LOOP
 			);
 */
-		GraphFollowerBehaviour pathFollower = createGraphFollowerBehaviour();
+		//GraphFollowerBehaviour pathFollower = createGraphFollowerBehaviour();
 		
-		System.out.println(pathFollower.describeGraph());
+		//System.out.println(pathFollower.describeGraph());
 		
 		// renderable tote
-		RenderableObject rTote = RenderableObject.createWithChildrenAndBehaviours(
+		RenderableObject rTote = RenderableObject.createWithChildren(
 			tr,
 			mTote, // mesh
 			tTote, // transform
 			blueColour,
 			List.of(rLidRight, rLidLeft), // children
-			List.of(pathFollower), // behaviours
+//			List.of(pathFollower), // behaviours
 			FORWARD_DIRECTION.NEGATIVE_X
 		);
 		
