@@ -158,84 +158,202 @@ public class RenderableToteFactory {
 	}
 	
 	private static GraphFollowerBehaviour createGraphFollowerBehaviour() {
-		RouteSegment mainA = new RouteSegment(
+		// =========================
+		// POINTS
+		// =========================
+
+		Vec3 p0 = new Vec3(0f, 0f,  0f);
+		Vec3 p1 = new Vec3(4f, 0f,  0f);
+		Vec3 p2 = new Vec3(6f, 0f,  0f);   // end of junctionA
+		Vec3 p3 = new Vec3(14f, 0f, 0f);   // start of junctionB
+		Vec3 p4 = new Vec3(16f, 0f, 0f);   // end of junctionB
+		Vec3 p5 = new Vec3(20f, 0f, 0f);
+
+		// Alternative route shape
+		Vec3 c1End        = new Vec3(7.0f,  0f, -0.7f);
+		Vec3 diagInEnd    = new Vec3(8.2f,  0f, -2.6f);
+		Vec3 topStart     = new Vec3(9.3f,  0f, -3f);
+		Vec3 topEnd       = new Vec3(10.7f, 0f, -3f);
+		Vec3 diagOutStart = new Vec3(11.8f, 0f, -2.6f);
+		Vec3 c4Start      = new Vec3(13.0f, 0f, -0.7f);
+		float topCurveHandleLength = 0.7f;
+		float bottomCurveHandleLength = 0.9f;
+		// =========================
+		// MAIN ROUTE SEGMENTS
+		// =========================
+
+		RouteSegment mainIn = new RouteSegment(
 		    0,
-			"mainA",
-		    new LinearSegment3(
-		        new Vec3(0f, 0f, -3f),
-		        new Vec3(3f, 0f, -5f)
-		    )
+			"mainIn",
+		    new LinearSegment3(p0, p1)
 		);
 
-		RouteSegment junction = new RouteSegment(
-		    1,
-			"junction",
-		    new LinearSegment3(
-		        new Vec3(3f, 0f, -5f),
-		        new Vec3(6f, 0f, -7f)
-		    )
+		RouteSegment junctionA = new RouteSegment(
+		    1, 
+		    "junctionA",
+		    new LinearSegment3(p1, p2)
 		);
 
-		RouteSegment mainC = new RouteSegment(
+		RouteSegment mainMiddle = new RouteSegment(
 		    2,
-		    "mainC",
-		    new LinearSegment3(
-		        new Vec3(6f, 0f, -7f),
-		        new Vec3(10f, 0f, -7f)
-		    )
+		    "mainMiddle",
+		    new LinearSegment3(p2, p3)
 		);
 
-		RouteSegment sidingIn = new RouteSegment(
+		RouteSegment junctionB = new RouteSegment(
 		    3,
-		    "sidingIn",
-		    new BezierSegment3(
-		        new Vec3(6f, 0f, -7f),
-		        new Vec3(7f, 0f, -7f),
-		        new Vec3(7f, 0f, -10f),
-		        new Vec3(6f, 0f, -10f)
-		    )
+		    "junctionB",
+		    new LinearSegment3(p3, p4)
 		);
 
-		RouteSegment exceptionFix = new RouteSegment(
+		RouteSegment mainOut = new RouteSegment(
 		    4,
-		    "exceptionFix",
-		    new LinearSegment3(
-		        new Vec3(6f, 0f, -10f),
-		        new Vec3(2f, 0f, -10f)
+		    "mainOut",
+		    new LinearSegment3(p4, p5)
+		);
+
+		// =========================
+		// SUPPORT GEOMETRIES
+		// =========================
+
+		LinearSegment3 diagInGeom = new LinearSegment3(c1End, diagInEnd);
+		LinearSegment3 intoTopGeom = new LinearSegment3(diagInEnd, topStart);
+		LinearSegment3 topGeom = new LinearSegment3(topStart, topEnd);
+		LinearSegment3 outOfTopGeom = new LinearSegment3(topEnd, diagOutStart);
+		LinearSegment3 diagOutGeom = new LinearSegment3(diagOutStart, c4Start);
+
+		// =========================
+		// ALTERNATIVE ROUTE SEGMENTS
+		// =========================
+
+		// Curve 1: turnout from main (bottom-right style)
+		RouteSegment branchCurve1 = new RouteSegment(
+		    5, "branchCurve1",
+		    BezierSegment3.createSmoothConnector(
+		        p2,
+		        c1End,
+		        junctionA.getGeometry(),
+		        diagInGeom,
+		        bottomCurveHandleLength,
+		        bottomCurveHandleLength
 		    )
 		);
 
-		RouteSegment rejoin = new RouteSegment(
-		    5,
-		    "rejoin",
-		    new BezierSegment3(
-		        new Vec3(2f, 0f, -10f),
-		        new Vec3(1f, 0f, -10f),
-		        new Vec3(1f, 0f, -7f),
-		        new Vec3(6f, 0f, -7f)
+		// Diagonal in
+		RouteSegment altDiagIn = new RouteSegment(
+		    6,
+		    "altDiagIn",
+		    diagInGeom
+		);
+
+		// Curve 2: level out onto top straight (top-left style)
+		RouteSegment branchCurve2 = new RouteSegment(
+		   7,
+		   "branchCurve2",
+		    BezierSegment3.createSmoothConnector(
+		        diagInEnd,
+		        topStart,
+		        diagInGeom,
+		        topGeom,
+		        topCurveHandleLength,
+		        topCurveHandleLength
 		    )
 		);
 
-		// connectivity
-		mainA.addNext(junction);
-		junction.addNext(mainC);
-		junction.addNext(sidingIn);
-
-		sidingIn.addNext(exceptionFix);
-		exceptionFix.addNext(rejoin);
-		rejoin.addNext(mainC);
-		
-		junction.setDecisionProvider(
-			new PreferredRouteIdDecisionProvider(3, 0)
+		// Short top straight
+		RouteSegment altStraight = new RouteSegment(
+		    8,
+		    "altStraight",
+		    topGeom
 		);
-		
-		return new GraphFollowerBehaviour(
-		    mainA,
-		    new FirstRouteDecisionProvider(), // fallback only
+
+		// Curve 3: peel off from top straight (top-right style)
+		RouteSegment rejoinCurve1 = new RouteSegment(
+		    9,
+		    "rejoinCurve1",
+		    BezierSegment3.createSmoothConnector(
+		        topEnd,
+		        diagOutStart,
+		        topGeom,
+		        diagOutGeom,
+		        topCurveHandleLength,
+		        topCurveHandleLength
+		    )
+		);
+
+		// Diagonal out
+		RouteSegment altDiagOut = new RouteSegment(
+		    10,
+		    "altDiagOut",
+		    diagOutGeom
+		);
+
+		// Curve 4: smooth rejoin to main (bottom-left style)
+		RouteSegment rejoinCurve2 = new RouteSegment(
+		    11,
+		    "rejoinCurve2",
+		    BezierSegment3.createSmoothConnector(
+		        c4Start,
+		        p3,
+		        diagOutGeom,
+		        junctionB.getGeometry(),
+		        bottomCurveHandleLength,
+		        bottomCurveHandleLength
+		    )
+		);
+
+		// =========================
+		// CONNECTIVITY
+		// =========================
+
+		// Main line
+		mainIn.addNext(junctionA);
+		junctionA.addNext(mainMiddle);
+		mainMiddle.addNext(junctionB);
+		junctionB.addNext(mainOut);
+
+		// Alternative siding
+		junctionA.addNext(branchCurve1);
+		branchCurve1.addNext(altDiagIn);
+		altDiagIn.addNext(branchCurve2);
+		branchCurve2.addNext(altStraight);
+		altStraight.addNext(rejoinCurve1);
+		rejoinCurve1.addNext(altDiagOut);
+		altDiagOut.addNext(rejoinCurve2);
+		rejoinCurve2.addNext(junctionB);
+
+		// =========================
+		// LOCAL DECISION PROVIDERS
+		// =========================
+
+		// Forward at junctionA: choose siding.
+		// Reverse at junctionA: return toward mainIn.
+		junctionA.setDecisionProvider(
+		    new PreferredRouteIdDecisionProvider(5, 0)
+		);
+
+		// Forward at junctionB: continue to mainOut.
+		// Reverse at junctionB: choose rejoinCurve2 so reverse traversal goes back through the siding.
+		junctionB.setDecisionProvider(
+		    new PreferredRouteIdDecisionProvider(4, 11)
+		);
+
+		// =========================
+		// FOLLOWER
+		// =========================
+
+		GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
+		    mainIn,
+		    new FirstRouteDecisionProvider(),
 		    2.0f,
 		    GraphFollowerBehaviour.WrapMode.PING_PONG,
 		    EnumSet.of(OrientationMode.YAW),
 		    0f
 		);
+
+		// Optional debug
+		System.out.println(follower.describeGraph());
+		
+		return follower;
 	}
 }
