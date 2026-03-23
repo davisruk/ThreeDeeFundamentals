@@ -96,7 +96,7 @@ public class GraphFollowerBehaviour implements Behaviour {
 
         while (remainingDistance > 0f && currentSegment != null) {
             PathSegment3 geometry = currentSegment.getGeometry();
-            float segmentLength = geometry.getLength();
+            float segmentLength = geometry.getTotalLength();
 
             float distanceToBoundary = (travelDirection == TravelDirection.FORWARD)
                     ? (segmentLength - distanceAlongCurrentSegment)
@@ -124,7 +124,7 @@ public class GraphFollowerBehaviour implements Behaviour {
                     currentSegment = adjacent;
                     distanceAlongCurrentSegment = (travelDirection == TravelDirection.FORWARD)
                             ? 0f
-                            : currentSegment.getGeometry().getLength();
+                            : currentSegment.getGeometry().getTotalLength();
                 } else {
                     handleNoAdjacentSegment();
                     if (wrapMode == WrapMode.CLAMP) {
@@ -217,13 +217,6 @@ public class GraphFollowerBehaviour implements Behaviour {
             float pitch = tangent.pitch();
             ro.transformation.angleX = -pitch;
         }
-/*
-		System.out.println(
-			    "segment=" + currentSegment.getLabel() +
-			    " direction=" + travelDirection +
-			    " distance=" + distanceAlongCurrentSegment
-			);
-*/
 	}
 
     public List<RouteSegment> getReachableSegments() {

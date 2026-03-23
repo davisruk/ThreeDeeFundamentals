@@ -19,7 +19,7 @@ public class BezierPath3 implements Path3 {
 		this.cumulativeLengths = new float[segmentLengths.length]; 
 		float runningTotal = 0f;
 		for (int i=0; i<segmentLengths.length; i++) {
-	        float length = segments[i].getLength();
+	        float length = segments[i].getTotalLength();
 	        segmentLengths[i] = length;
 	        runningTotal += length;
 	        cumulativeLengths[i] = runningTotal;
@@ -42,7 +42,7 @@ public class BezierPath3 implements Path3 {
 
 	    if (distance >= totalLength) {
 	        return segments[segments.length - 1].sampleByDistance(
-	            segments[segments.length - 1].getLength()
+	            segments[segments.length - 1].getTotalLength()
 	        );
 	    }
 
@@ -67,7 +67,7 @@ public class BezierPath3 implements Path3 {
 
 	    if (distance >= totalLength) {
 	        BezierSegment3 last = segments[segments.length - 1];
-	        return last.sampleTangentByDistance(last.getLength());
+	        return last.sampleTangentByDistance(last.getTotalLength());
 	    }
 
 	    int index = findSegmentIndex(distance);

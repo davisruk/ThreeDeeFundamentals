@@ -15,7 +15,7 @@ public class LinearSegment3 implements PathSegment3 {
 	}
 	
 	@Override
-	public float getLength() {
+	public float getTotalLength() {
 		return length;
 	}
 

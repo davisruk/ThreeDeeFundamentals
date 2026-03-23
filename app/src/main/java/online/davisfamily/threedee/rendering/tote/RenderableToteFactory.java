@@ -226,7 +226,7 @@ public class RenderableToteFactory {
 		rejoin.addNext(mainC);
 		
 		junction.setDecisionProvider(
-				new PreferredRouteIdDecisionProvider(3, 0)
+			new PreferredRouteIdDecisionProvider(3, 0)
 		);
 		
 		return new GraphFollowerBehaviour(

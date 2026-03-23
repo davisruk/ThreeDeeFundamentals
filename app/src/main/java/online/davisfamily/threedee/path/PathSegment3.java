@@ -3,7 +3,7 @@ package online.davisfamily.threedee.path;
 import online.davisfamily.threedee.matrices.Vec3;
 
 public interface PathSegment3 {
-	float getLength();
+	float getTotalLength();
 	Vec3 sampleByDistance(float distance);
 	Vec3 sampleTangentByDistance(float distance);
 	Vec3 getStartPoint();
@@ -14,6 +14,6 @@ public interface PathSegment3 {
 	}
 
 	default Vec3 getEndTangent() {
-		return sampleTangentByDistance(getLength());
+		return sampleTangentByDistance(getTotalLength());
 	}
 }

@@ -4,10 +4,12 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.List;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.bresenham.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.camera.Camera;
@@ -17,6 +19,7 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
 import online.davisfamily.threedee.path.Path3;
+import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class DebugUtils {
@@ -283,23 +286,42 @@ public class DebugUtils {
 	    }
 	}
 	
+/** Needs a refactor
+ *  - GraphFollowerBehaviour & PathFollowerBehaviour only share Behaviour	
+ *  - PathFollowerBehaviour should be an intermediary interface
+ *  - Linear / Composite PathFollowerBehaviour should contain the current PathFollowerBehaviour logic
+ *  - Path3 should be removed and all references should be to PathSegment3
+ *  - drawPath would render all paths, no need for an instanceof check
+ */
+
 	public void drawPathForObject(RenderableObject ro, Mat4 view, Mat4 projection) {
-/*
-		ro.behaviours.stream()
-        .filter(b -> b instanceof PathFollowerBehaviour)
-        .map(b -> (PathFollowerBehaviour) b)
-        .forEach(pb -> drawPath(pb, view, projection));
-*/	    
 	    for (Behaviour b: ro.behaviours) {
 	    	if (b instanceof PathFollowerBehaviour) drawPath((PathFollowerBehaviour)b, view, projection);
 	    	else if (b instanceof GraphFollowerBehaviour) drawGraphPath((GraphFollowerBehaviour)b, view, projection);
 	    }
 	}
 	
-	
 	private void drawGraphPath(GraphFollowerBehaviour gfb, Mat4 view, Mat4 projection) {
-		
+        List<RouteSegment> segments = gfb.getReachableSegments();
+
+	    float pathStep = 0.25f;
+	    float tangentStep = 1.0f;
+	    float markerLength = 0.5f;
+        for (RouteSegment segment : segments) {
+        	PathSegment3 path = segment.getGeometry();
+    	    float total = path.getTotalLength();
+    	    Vec4 prev4 = new Vec4(path.sampleByDistance(0f));
+    	    Vec4 curr4 = new Vec4();
+
+    	    for (float d = pathStep; d <= total; d += pathStep) {
+    	        Vec3 p3 = path.sampleByDistance(Math.min(d, total));
+    	        curr4.set(p3);
+    	        drawWorldLine(view, projection, prev4, curr4, 0xFFFF0000);
+    	        prev4.set(curr4);
+    	    }
+        }
 	}
+
 	
 	private void drawPath(PathFollowerBehaviour pb, Mat4 view, Mat4 projection) {
 	    Path3 path = pb.getPath();
@@ -337,4 +359,8 @@ public class DebugUtils {
 	        drawWorldLine(view, projection, base4, tip4, 0xFFFFFF00);
 	    }
 	}
+/** End of refactor
+ */
+	
+	
 }

@@ -23,7 +23,7 @@ public class BezierSegment3 implements PathSegment3 {
 		this.totalLength = arcLengthData.totalLength;
 	}
 	
-	public float getLength() {
+	public float getTotalLength() {
 		return totalLength;
 	}
 	
