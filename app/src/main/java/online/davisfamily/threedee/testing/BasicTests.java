@@ -12,13 +12,13 @@ import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
-import online.davisfamily.threedee.model.Cube;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.SquareBasedStrategyImpl;
 import online.davisfamily.threedee.path.LinearPath3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
+import online.davisfamily.threedee.testing.cube.Cube;
 
 public class BasicTests {
 	// cube structure

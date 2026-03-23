@@ -1,9 +1,10 @@
-package online.davisfamily.threedee.model;
+package online.davisfamily.threedee.model.tote;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.model.Mesh;
 
 
 // Procedurally generates interlocking lids

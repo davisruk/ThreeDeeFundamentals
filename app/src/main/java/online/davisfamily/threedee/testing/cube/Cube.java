@@ -1,4 +1,4 @@
-package online.davisfamily.threedee.model;
+package online.davisfamily.threedee.testing.cube;
 
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;

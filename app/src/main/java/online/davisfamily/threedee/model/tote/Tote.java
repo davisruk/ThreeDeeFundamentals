@@ -1,4 +1,4 @@
-package online.davisfamily.threedee.model;
+package online.davisfamily.threedee.model.tote;
 
 import online.davisfamily.threedee.matrices.Vec4;
 
