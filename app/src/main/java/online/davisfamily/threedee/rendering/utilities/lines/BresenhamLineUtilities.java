@@ -1,11 +1,10 @@
-package online.davisfamily.threedee.bresenham;
+package online.davisfamily.threedee.rendering.utilities.lines;
 
-import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
-import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper.LineClipResults;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
+import online.davisfamily.threedee.rendering.utilities.lines.CohenSutherlandLineClipper.LineClipResults;
 
 public class BresenhamLineUtilities {
 

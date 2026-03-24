@@ -5,24 +5,24 @@ import java.util.List;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.behaviour.Behaviour.OrientationMode;
-import online.davisfamily.threedee.behaviour.PingPongRotationBehaviour;
 import online.davisfamily.threedee.behaviour.routing.FirstRouteDecisionProvider;
 import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.PreferredRouteIdDecisionProvider;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
+import online.davisfamily.threedee.behaviour.transformation.PingPongRotationBehaviour;
+import online.davisfamily.threedee.deprecated.CompositePath3;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Mesh;
-import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.tote.LidFactory;
 import online.davisfamily.threedee.model.tote.Tote;
 import online.davisfamily.threedee.path.BezierSegment3;
-import online.davisfamily.threedee.path.CompositePath3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
+import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 
 public class RenderableToteFactory {

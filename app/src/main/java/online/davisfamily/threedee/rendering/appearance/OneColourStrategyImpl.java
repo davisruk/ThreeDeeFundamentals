@@ -1,4 +1,4 @@
-package online.davisfamily.threedee.model;
+package online.davisfamily.threedee.rendering.appearance;
 
 public class OneColourStrategyImpl implements ColourPickerStrategy {
 	int colour;

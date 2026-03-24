@@ -120,10 +120,6 @@ public class TrackBuilder {
 	private static List<Mat4.ObjectTransformation> buildRollers(PathSegment3 path, TrackSpec spec) {
 		List<Mat4.ObjectTransformation> transforms = new ArrayList<>();
 		float total = path.getTotalLength();
-		float rollerWidth = spec.getRunningWidth() - (2f * spec.rollerWidthInset);;
-//		float rollerHalfWidth = rollerWidth * 0.5f;
-//		float rollerHalfDepth = spec.rollerDepthAlongPath * 0.5f;
-		
 		for (float d = 0f; d<=total; d+=spec.rollerPitch) {
 			SampleFrame f = createFrame(path,d);
 			float yaw = Vec3.yawFromDirection(f.tangent) + (float)(Math.PI / 2.0);
@@ -139,45 +135,6 @@ public class TrackBuilder {
 			transforms.add(tx);
 		}
 		return transforms;
-	}
-	
-	private static void addOrientedBox(
-			TrackMeshBuilder mb,
-			Vec3 centre,
-			Vec3 forward,
-			Vec3 side,
-			float halfForward,
-			float halfUp,
-			float halfSide) {
-		Vec3 up = new Vec3(0f,1f,0f);
-		Vec3 f = forward.scale(halfForward);
-		Vec3 s = side.scale(halfSide);
-		Vec3 u = up.scale(halfUp);
-        Vec3 p000 = centre.subtract(f).subtract(s).subtract(u);
-        Vec3 p001 = centre.subtract(f).subtract(s).add(u);
-        Vec3 p010 = centre.subtract(f).add(s).subtract(u);
-        Vec3 p011 = centre.subtract(f).add(s).add(u);
-        Vec3 p100 = centre.add(f).subtract(s).subtract(u);
-        Vec3 p101 = centre.add(f).subtract(s).add(u);
-        Vec3 p110 = centre.add(f).add(s).subtract(u);
-        Vec3 p111 = centre.add(f).add(s).add(u);
-
-        int v000 = mb.addVertex(p000.x, p000.y, p000.z);
-        int v001 = mb.addVertex(p001.x, p001.y, p001.z);
-        int v010 = mb.addVertex(p010.x, p010.y, p010.z);
-        int v011 = mb.addVertex(p011.x, p011.y, p011.z);
-        int v100 = mb.addVertex(p100.x, p100.y, p100.z);
-        int v101 = mb.addVertex(p101.x, p101.y, p101.z);
-        int v110 = mb.addVertex(p110.x, p110.y, p110.z);
-        int v111 = mb.addVertex(p111.x, p111.y, p111.z);
-
-        // 6 faces
-        mb.addQuad(v001, v011, v111, v101); // top
-        mb.addQuad(v000, v100, v110, v010); // bottom
-        mb.addQuad(v000, v001, v101, v100); // left
-        mb.addQuad(v011, v010, v110, v111); // right
-        mb.addQuad(v001, v000, v010, v011); // back
-        mb.addQuad(v100, v101, v111, v110); // front
 	}
 	
 	private static final class SampleFrame {

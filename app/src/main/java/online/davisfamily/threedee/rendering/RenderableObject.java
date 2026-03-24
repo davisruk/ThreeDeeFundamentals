@@ -6,11 +6,11 @@ import java.util.List;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.camera.Camera;
-import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
-import online.davisfamily.threedee.model.ColourPickerStrategy;
 import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy;
+import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 
 /** Class that contains all information needed to render an object
  * 

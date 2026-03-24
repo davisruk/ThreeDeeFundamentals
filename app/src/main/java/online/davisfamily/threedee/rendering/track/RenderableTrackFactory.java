@@ -5,7 +5,6 @@ import java.util.List;
 
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
-import online.davisfamily.threedee.model.ColourPickerStrategy;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.tracks.RollerMeshFactory;
 import online.davisfamily.threedee.model.tracks.TrackAppearance;
@@ -15,6 +14,7 @@ import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
+import online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy;
 
 public class RenderableTrackFactory {
 	public static RenderableObject createRenderableTrack(TriangleRenderer tr, PathSegment3 geometry, TrackSpec spec, TrackAppearance appearance) {

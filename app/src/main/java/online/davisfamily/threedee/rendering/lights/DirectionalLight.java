@@ -1,4 +1,4 @@
-package online.davisfamily.threedee.lights;
+package online.davisfamily.threedee.rendering.lights;
 
 import online.davisfamily.threedee.matrices.Vec3;
 

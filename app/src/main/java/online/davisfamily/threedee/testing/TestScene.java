@@ -13,9 +13,7 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
-import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Vec3;
-import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.tote.ToteEnvelope;
 import online.davisfamily.threedee.model.tracks.TrackAppearance;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
@@ -23,6 +21,8 @@ import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
+import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.rendering.tote.RenderableToteFactory;
 import online.davisfamily.threedee.scene.BaseScene;
 
@@ -84,7 +84,7 @@ public class TestScene extends BaseScene{
 			rs1.addNext(rs2);
 			rs2.addNext(rs3);
 			
-			OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); //green
+			OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); // green
 			OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF); // magenta
 			OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF); // cyan
 		    
@@ -112,7 +112,6 @@ public class TestScene extends BaseScene{
 				    0f
 				);
 			rTote.addBehaviour(follower);
-		//rTrack = RenderableTrackFactory.createRenderableTrack(tr, null, spec, yellowColour)
 	}
 		
 	@Override

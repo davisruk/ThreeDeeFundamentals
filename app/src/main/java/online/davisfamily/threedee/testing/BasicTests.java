@@ -1,23 +1,23 @@
 package online.davisfamily.threedee.testing;
 
-import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
-import online.davisfamily.threedee.behaviour.SpinBehaviour;
-import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
+import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.camera.Camera;
+import online.davisfamily.threedee.deprecated.LinearPath3;
+import online.davisfamily.threedee.deprecated.PathFollowerBehaviour;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.mouse.MouseEventDetail;
-import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.model.Mesh;
-import online.davisfamily.threedee.model.OneColourStrategyImpl;
-import online.davisfamily.threedee.model.SquareBasedStrategyImpl;
-import online.davisfamily.threedee.path.LinearPath3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
+import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
+import online.davisfamily.threedee.rendering.appearance.SquareBasedStrategyImpl;
+import online.davisfamily.threedee.rendering.lights.DirectionalLight;
+import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.testing.cube.Cube;
 
 public class BasicTests {

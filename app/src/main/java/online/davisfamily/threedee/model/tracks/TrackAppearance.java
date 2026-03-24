@@ -1,6 +1,6 @@
 package online.davisfamily.threedee.model.tracks;
 
-import online.davisfamily.threedee.model.ColourPickerStrategy;
+import online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy;
 
 public class TrackAppearance {
 	public final ColourPickerStrategy deckColour, rollerColour, guideColour;

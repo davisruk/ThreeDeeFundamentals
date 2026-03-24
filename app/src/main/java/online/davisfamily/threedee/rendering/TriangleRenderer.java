@@ -3,15 +3,15 @@ package online.davisfamily.threedee.rendering;
 import java.util.Arrays;
 import java.util.Comparator;
 
-import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.input.keyboard.InputState;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
-import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
+import online.davisfamily.threedee.rendering.lights.DirectionalLight;
+import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 public class TriangleRenderer {

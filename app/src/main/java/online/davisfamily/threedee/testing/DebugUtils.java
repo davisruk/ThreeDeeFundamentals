@@ -7,20 +7,20 @@ import java.awt.image.BufferedImage;
 import java.util.List;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
-import online.davisfamily.threedee.behaviour.PathFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
-import online.davisfamily.threedee.bresenham.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.camera.Camera;
+import online.davisfamily.threedee.deprecated.Path3;
+import online.davisfamily.threedee.deprecated.PathFollowerBehaviour;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
-import online.davisfamily.threedee.path.Path3;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
+import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities.ClippedLine;
 
 public class DebugUtils {
 

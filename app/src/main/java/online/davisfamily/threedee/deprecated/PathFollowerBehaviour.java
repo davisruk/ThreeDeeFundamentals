@@ -1,10 +1,12 @@
-package online.davisfamily.threedee.behaviour;
+package online.davisfamily.threedee.deprecated;
 
 import java.util.EnumSet;
 
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
+import online.davisfamily.threedee.behaviour.Behaviour;
+import online.davisfamily.threedee.behaviour.Behaviour.OrientationMode;
+import online.davisfamily.threedee.behaviour.Behaviour.WrapMode;
 import online.davisfamily.threedee.matrices.Vec3;
-import online.davisfamily.threedee.path.Path3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class PathFollowerBehaviour implements Behaviour {

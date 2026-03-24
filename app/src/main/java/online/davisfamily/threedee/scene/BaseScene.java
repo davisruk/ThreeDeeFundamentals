@@ -7,9 +7,7 @@ import java.util.List;
 
 import javax.swing.JRootPane;
 
-import online.davisfamily.threedee.bresenham.BresenhamLineUtilities;
 import online.davisfamily.threedee.camera.Camera;
-import online.davisfamily.threedee.cohensutherland.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.CommandBindings;
 import online.davisfamily.threedee.input.keyboard.InputState;
@@ -17,11 +15,13 @@ import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.input.keyboard.KeyBindings;
 import online.davisfamily.threedee.input.mouse.MouseEventConsumer;
 import online.davisfamily.threedee.input.mouse.MouseEventDetail;
-import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
+import online.davisfamily.threedee.rendering.lights.DirectionalLight;
+import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
+import online.davisfamily.threedee.rendering.utilities.lines.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 // provides a good starting point for a Scene

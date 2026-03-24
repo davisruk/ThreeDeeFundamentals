@@ -1,5 +1,6 @@
-package online.davisfamily.threedee.behaviour;
+package online.davisfamily.threedee.behaviour.transformation;
 
+import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.rendering.RenderableObject;

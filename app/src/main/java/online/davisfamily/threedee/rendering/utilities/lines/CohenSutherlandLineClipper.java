@@ -1,4 +1,4 @@
-package online.davisfamily.threedee.cohensutherland;
+package online.davisfamily.threedee.rendering.utilities.lines;
 
 public class CohenSutherlandLineClipper {
 	
