@@ -3,25 +3,28 @@ package online.davisfamily.threedee.model.tracks;
 import java.util.ArrayList;
 import java.util.List;
 
+import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.path.PathSegment3;
 
-public class TrackMeshFactory {
+public class TrackBuilder {
 
 	private static final Vec3 WORLD_UP = new Vec3(0f,1f,0f);
-	
-	public static Mesh build (PathSegment3 path, TrackSpec spec) {
-		TrackMeshBuilder mb = new TrackMeshBuilder();
+ 
+	public static TrackBuildResult build (PathSegment3 path, TrackSpec spec) {
 		List<SampleFrame> frames = sampleFrames(path, spec.sampleStep);
-		buildDeck(spec,frames,mb);
+		Mesh deck = buildDeck(spec,frames);
+		Mesh guides = null;
+		List<ObjectTransformation> rollers = null;
 		if (spec.includeGuides) {
-			buildGuides(spec, frames, mb);
+			guides = buildGuides(spec, frames);
 		}
 		if (spec.includeRollers) {
-			buildRollers(path, spec, mb);
+			rollers = buildRollers(path, spec);
 		}
-		return mb.build("track");
+		return new TrackBuildResult(deck, guides, rollers);
 	}
 	
 	private static List<SampleFrame> sampleFrames(PathSegment3 path, float sampleStep){
@@ -44,7 +47,9 @@ public class TrackMeshFactory {
 		return new SampleFrame(distance, centre, tangent, side, WORLD_UP);
 	}
 	
-	private static void buildDeck(TrackSpec spec, List<SampleFrame> frames, TrackMeshBuilder mb) {
+	private static Mesh buildDeck(TrackSpec spec, List<SampleFrame> frames) {
+		TrackMeshBuilder mb = new TrackMeshBuilder();
+
 		float half = spec.getRunningWidth() * 0.5f;
 		float topY = spec.deckTopY;
 		float bottomY = spec.deckTopY - spec.deckThickness;
@@ -74,9 +79,11 @@ public class TrackMeshFactory {
 			// right side
 			mb.addQuad(tr[i], br[i], br[i+1], tr[i+1]);
 		}
+		return mb.build("Deck");
 	}
 	
-	private static void buildGuides(TrackSpec spec, List<SampleFrame> frames, TrackMeshBuilder mb) {
+	private static Mesh buildGuides(TrackSpec spec, List<SampleFrame> frames) {
+		TrackMeshBuilder mb = new TrackMeshBuilder();
 		float innerHalf = spec.getGuideInnerWidth() * 0.5f;
 		float outerHalf = innerHalf + spec.guideThickness;
 		float y0 = spec.deckTopY;
@@ -84,6 +91,7 @@ public class TrackMeshFactory {
 		
 		buildLongSideStrip(frames, -innerHalf, -outerHalf, y0, y1, mb); //left
 		buildLongSideStrip(frames, outerHalf, innerHalf, y0, y1, mb); //right
+		return mb.build("Guides");
 	}
 	
 	private static void buildLongSideStrip(List<SampleFrame> frames, float innerOffset, float outerOffset, float y0, float y1, TrackMeshBuilder mb) {
@@ -109,25 +117,28 @@ public class TrackMeshFactory {
 		}
 	}
 	
-	private static void buildRollers(PathSegment3 path, TrackSpec spec, TrackMeshBuilder mb) {
+	private static List<Mat4.ObjectTransformation> buildRollers(PathSegment3 path, TrackSpec spec) {
+		List<Mat4.ObjectTransformation> transforms = new ArrayList<>();
 		float total = path.getTotalLength();
 		float rollerWidth = spec.getRunningWidth() - (2f * spec.rollerWidthInset);;
-		float rollerHalfWidth = rollerWidth * 0.5f;
-		float rollerHalfDepth = spec.rollerDepthAlongPath * 0.5f;
+//		float rollerHalfWidth = rollerWidth * 0.5f;
+//		float rollerHalfDepth = spec.rollerDepthAlongPath * 0.5f;
 		
 		for (float d = 0f; d<=total; d+=spec.rollerPitch) {
 			SampleFrame f = createFrame(path,d);
-			Vec3 centre = new Vec3(f.centre.x, spec.deckTopY + spec.rollerHeight * 0.5f, f.centre.z);
-			addOrientedBox(
-				mb,
-				centre,
-				f.tangent,
-				f.side,
-				rollerHalfDepth,
-				spec.rollerHeight * 0.5f,
-				rollerHalfWidth
+			float yaw = Vec3.yawFromDirection(f.tangent) + (float)(Math.PI / 2.0);
+			Mat4.ObjectTransformation tx = new Mat4.ObjectTransformation(
+				0f,
+				yaw,
+				0f,
+				f.centre.x,
+				spec.deckTopY + spec.rollerHeight * 0.5f,
+				f.centre.z,
+				new Mat4()
 			);
+			transforms.add(tx);
 		}
+		return transforms;
 	}
 	
 	private static void addOrientedBox(

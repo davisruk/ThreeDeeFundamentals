@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import online.davisfamily.threedee.model.ColourPickerStrategy;
+import online.davisfamily.threedee.model.tracks.TrackAppearance;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
@@ -16,7 +16,7 @@ public final class RouteTrackFactory {
             TriangleRenderer tr,
             Collection<RouteSegment> routeSegments,
             TrackSpec spec,
-            ColourPickerStrategy colour) {
+            TrackAppearance appearance) {
 
         List<RenderableObject> result = new ArrayList<>();
         for (RouteSegment rs : routeSegments) {
@@ -24,7 +24,7 @@ public final class RouteTrackFactory {
                 tr,
                 rs.getGeometry(),
                 spec,
-                colour
+                appearance
             ));
         }
         return result;

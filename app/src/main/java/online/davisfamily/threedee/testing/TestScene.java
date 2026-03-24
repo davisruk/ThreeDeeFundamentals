@@ -17,6 +17,7 @@ import online.davisfamily.threedee.lights.DirectionalLight;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.OneColourStrategyImpl;
 import online.davisfamily.threedee.model.tote.ToteEnvelope;
+import online.davisfamily.threedee.model.tracks.TrackAppearance;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.LinearSegment3;
@@ -53,10 +54,10 @@ public class TestScene extends BaseScene{
 			    0.010f,  // guideThickness
 			    0.005f,  // guideGap
 			    true,    // includeRollers
-			    0.055f,  // rollerPitch
+			    0.080f,  // rollerPitch
 			    0.010f,  // rollerWidthInset
-			    0.010f,  // rollerHeight
-			    0.020f,  // rollerDepthAlongPath
+			    0.025f,  // rollerHeight
+			    0.018f,  // rollerDepthAlongPath
 			    0.080f   // sampleStep
 			);
 		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
@@ -82,12 +83,22 @@ public class TestScene extends BaseScene{
 			RouteSegment rs3 = new RouteSegment(2, "seg3", seg3);
 			rs1.addNext(rs2);
 			rs2.addNext(rs3);
+			
+			OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); //green
+			OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF); // magenta
+			OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF); // cyan
+		    
+			TrackAppearance appearance = new TrackAppearance(
+					deckColour,
+					guidesColour,
+					rollersColour
+			);
 			List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
 				    tr,
 				    List.of(rs1, rs2, rs3),
 				    spec,
-				    yellowColour
-				);
+				    appearance
+			);
 			for (RenderableObject track : tracks) {
 			    objects.add(track);
 			}

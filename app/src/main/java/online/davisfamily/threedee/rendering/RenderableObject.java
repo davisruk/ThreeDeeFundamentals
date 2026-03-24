@@ -208,6 +208,10 @@ public class RenderableObject {
 		children.add(child);
 	}
 	
+	public void addAllChildren(List<RenderableObject> moreChildren) {
+		children.addAll(moreChildren);
+	}
+	
 	public void update(double dtSeconds) {
 		for (Behaviour b: behaviours)
 			b.update(this, dtSeconds);
