@@ -16,4 +16,8 @@ public interface PathSegment3 {
 	default Vec3 getEndTangent() {
 		return sampleTangentByDistance(getTotalLength());
 	}
+	
+    default Vec3 sampleOrientationDirectionByDistance(float distance) {
+        return sampleTangentByDistance(distance);
+    }	
 }

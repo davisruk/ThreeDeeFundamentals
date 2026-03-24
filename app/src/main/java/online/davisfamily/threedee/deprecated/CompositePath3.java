@@ -1,6 +1,7 @@
-package online.davisfamily.threedee.path;
+package online.davisfamily.threedee.deprecated;
 
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.path.PathSegment3;
 
 public class CompositePath3 implements Path3 {
 

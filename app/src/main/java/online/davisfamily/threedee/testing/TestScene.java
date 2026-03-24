@@ -20,6 +20,7 @@ import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
+import online.davisfamily.threedee.path.TransferSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
@@ -61,57 +62,78 @@ public class TestScene extends BaseScene{
 			    0.080f   // sampleStep
 			);
 		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
+		
+		float startX = 0f;
+		float endX = 8f;
+		float topZ = 0f;
+		float bottomZ = -3f;
+
+		// top straight: +X
 		PathSegment3 seg1 = new LinearSegment3(
-			    new Vec3(0f, 0f, 0f),
-			    new Vec3(2f, 0f, 0f)
-			);
+		    new Vec3(startX, 0f, topZ),
+		    new Vec3(endX,   0f, topZ)
+		);
 
-			PathSegment3 seg2 = new LinearSegment3(
-			    new Vec3(2f, 0f, 0f),
-			    new Vec3(4f, 0f, 0f)
-			);
+		// right-side transfer: move across in -Z, keep tote facing +X
+		PathSegment3 seg2 = new TransferSegment3(
+		    new Vec3(endX, 0f, topZ),
+		    new Vec3(endX, 0f, bottomZ),
+		    new Vec3(1f, 0f, 0f)
+		);
 
-			// Bezier turning from +X to -Z
-			PathSegment3 seg3 = new BezierSegment3(
-			    new Vec3(4f, 0f, 0f),        // start
-			    new Vec3(5f, 0f, 0f),        // control 1 (push forward in +X)
-			    new Vec3(4f, 0f, -1f),       // control 2 (pull down toward -Z)
-			    new Vec3(4f, 0f, -2f)        // end
-			);
-			RouteSegment rs1 = new RouteSegment(0, "seg1", seg1);
-			RouteSegment rs2 = new RouteSegment(1, "seg2", seg2);
-			RouteSegment rs3 = new RouteSegment(2, "seg3", seg3);
-			rs1.addNext(rs2);
-			rs2.addNext(rs3);
-			
-			OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); // green
-			OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF); // magenta
-			OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF); // cyan
-		    
-			TrackAppearance appearance = new TrackAppearance(
-					deckColour,
-					guidesColour,
-					rollersColour
-			);
-			List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
-				    tr,
-				    List.of(rs1, rs2, rs3),
-				    spec,
-				    appearance
-			);
-			for (RenderableObject track : tracks) {
-			    objects.add(track);
-			}
-			objects.add(rTote);
-			GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
-					rs1,
-				    new FirstRouteDecisionProvider(),
-				    2.0f,
-				    GraphFollowerBehaviour.WrapMode.PING_PONG,
-				    EnumSet.of(OrientationMode.YAW),
-				    0f
-				);
-			rTote.addBehaviour(follower);
+		// bottom straight: -X
+		PathSegment3 seg3 = new LinearSegment3(
+		    new Vec3(endX,   0f, bottomZ),
+		    new Vec3(startX, 0f, bottomZ)
+		);
+
+		// left-side return curve: bottom lane back to top lane
+		PathSegment3 seg4 = new BezierSegment3(
+		    new Vec3(startX, 0f, bottomZ),   // start
+		    new Vec3(startX - 2f, 0f, bottomZ), // control 1
+		    new Vec3(startX - 2f, 0f, topZ),    // control 2
+		    new Vec3(startX, 0f, topZ)       // end
+		);
+		
+		RouteSegment rs1 = new RouteSegment(0, "top", seg1);
+		RouteSegment rs2 = new RouteSegment(1, "transfer-right", seg2);
+		RouteSegment rs3 = new RouteSegment(2, "bottom", seg3);
+		RouteSegment rs4 = new RouteSegment(3, "return-left", seg4);
+		rs1.addNext(rs2);
+		rs2.addNext(rs3);
+		rs3.addNext(rs4);
+		
+		
+		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); // green
+		OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF); // magenta
+		OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF); // cyan
+	    
+		TrackAppearance appearance = new TrackAppearance(
+				deckColour,
+				guidesColour,
+				rollersColour
+		);
+		
+		List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
+			    tr,
+			    List.of(rs1, rs2, rs3, rs4),
+			    spec,
+			    appearance
+		);
+		for (RenderableObject track : tracks) {
+		    objects.add(track);
+		}
+		objects.add(rTote);
+
+		GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
+			rs1,
+		    new FirstRouteDecisionProvider(),
+		    2.0f,
+		    GraphFollowerBehaviour.WrapMode.LOOP,
+		    EnumSet.of(OrientationMode.YAW),
+		    0f
+		);
+		rTote.addBehaviour(follower);
 	}
 		
 	@Override

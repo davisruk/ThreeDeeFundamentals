@@ -200,6 +200,7 @@ public class GraphFollowerBehaviour implements Behaviour {
 		
 		PathSegment3 ps = currentSegment.getGeometry();
 		Vec3 pos = ps.sampleByDistance(distanceAlongCurrentSegment);
+		Vec3 orientationDir = ps.sampleOrientationDirectionByDistance(distanceAlongCurrentSegment);
 		ro.transformation.setTranslation(pos);
 		if (orientationModes.contains(OrientationMode.NONE)) return;
 		
@@ -207,7 +208,7 @@ public class GraphFollowerBehaviour implements Behaviour {
 		if (travelDirection == TravelDirection.REVERSE) {
             tangent = tangent.scale(-1f);
         }
-		float yaw = Vec3.yawFromDirection(tangent);
+		float yaw = Vec3.yawFromDirection(orientationDir) + yawOffsetRadians;
 		
 		if (orientationModes.contains(OrientationMode.YAW)) {
             ro.transformation.angleY = yaw + yawOffsetRadians;
