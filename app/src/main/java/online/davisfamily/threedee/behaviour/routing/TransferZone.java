@@ -22,8 +22,14 @@ public final class TransferZone {
         if (decisionStrategy == null) {
             throw new IllegalArgumentException("decisionStrategy must not be null");
         }
+        if (startDistance < 0f) {
+            throw new IllegalArgumentException("startDistance must be >= 0");
+        }
         if (length <= 0f) {
             throw new IllegalArgumentException("length must be > 0");
+        }
+        if (targetStartDistance < 0f) {
+            throw new IllegalArgumentException("targetStartDistance must be >= 0");
         }
 
         this.startDistance = startDistance;

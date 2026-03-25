@@ -1,13 +1,10 @@
 package online.davisfamily.threedee.behaviour.routing;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import online.davisfamily.threedee.path.PathSegment3;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
 
 public final class RouteSegment {
     private final String label;
@@ -47,6 +44,33 @@ public final class RouteSegment {
 
     public List<TransferZone> getTransferZones() {
         return transferZones;
+    }
+
+    public void addTransferZone(TransferZone zone) {
+        if (zone == null) {
+            throw new IllegalArgumentException("zone must not be null");
+        }
+
+        float totalLength = geometry.getTotalLength();
+        if (zone.getStartDistance() < 0f || zone.getEndDistance() > totalLength) {
+            throw new IllegalArgumentException("transfer zone must lie within the source segment length");
+        }
+
+        float targetLength = zone.getTargetSegment().getGeometry().getTotalLength();
+        if (zone.getTargetStartDistance() < 0f || zone.getTargetStartDistance() > targetLength) {
+            throw new IllegalArgumentException("targetStartDistance must lie within the target segment length");
+        }
+
+        for (TransferZone existing : transferZones) {
+            boolean overlaps = zone.getStartDistance() < existing.getEndDistance()
+                    && zone.getEndDistance() > existing.getStartDistance();
+            if (overlaps) {
+                throw new IllegalArgumentException("transfer zones must not overlap on the same source segment");
+            }
+        }
+
+        transferZones.add(zone);
+        transferZones.sort(Comparator.comparing(TransferZone::getStartDistance));
     }
 
     /**

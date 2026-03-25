@@ -23,12 +23,39 @@ public class TrackSpec {
 	public final float rollerHeight;
 	public final float rollerDepthAlongPath;
 	
+	// transfer zone rendering
+	public final boolean suppressRollersInTransferZones;
+	public final boolean suppressGuidesInTransferZones;
+	
 	// tessellation
 	public float sampleStep;
 
 	public TrackSpec(ToteEnvelope toteEnvelope, float sideClearance, float deckThickness, float deckTopY,
 			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, boolean includeRollers,
 			float rollerPitch, float rollerWidthInset, float rollerHeight, float rollerDepthAlongPath,
+			float sampleStep) {
+		this(toteEnvelope,
+				sideClearance,
+				deckThickness,
+				deckTopY,
+				includeGuides,
+				guideHeight,
+				guideThickness,
+				guideGap,
+				includeRollers,
+				rollerPitch,
+				rollerWidthInset,
+				rollerHeight,
+				rollerDepthAlongPath,
+				true,
+				false,
+				sampleStep);
+	}
+
+	public TrackSpec(ToteEnvelope toteEnvelope, float sideClearance, float deckThickness, float deckTopY,
+			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, boolean includeRollers,
+			float rollerPitch, float rollerWidthInset, float rollerHeight, float rollerDepthAlongPath,
+			boolean suppressRollersInTransferZones, boolean suppressGuidesInTransferZones,
 			float sampleStep) {
 		super();
 		this.toteEnvelope = toteEnvelope;
@@ -44,6 +71,8 @@ public class TrackSpec {
 		this.rollerWidthInset = rollerWidthInset;
 		this.rollerHeight = rollerHeight;
 		this.rollerDepthAlongPath = rollerDepthAlongPath;
+		this.suppressRollersInTransferZones = suppressRollersInTransferZones;
+		this.suppressGuidesInTransferZones = suppressGuidesInTransferZones;
 		this.sampleStep = sampleStep;
 	}
 

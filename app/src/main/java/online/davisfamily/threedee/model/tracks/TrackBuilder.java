@@ -14,26 +14,47 @@ public class TrackBuilder {
 	private static final Vec3 WORLD_UP = new Vec3(0f,1f,0f);
  
 	public static TrackBuildResult build (PathSegment3 path, TrackSpec spec) {
-		List<SampleFrame> frames = sampleFrames(path, spec.sampleStep);
+		return build(path, spec, 0f, path.getTotalLength(), spec.includeGuides, spec.includeRollers);
+	}
+
+	public static TrackBuildResult build(PathSegment3 path,
+			TrackSpec spec,
+			float startDistance,
+			float endDistance,
+			boolean includeGuides,
+			boolean includeRollers) {
+		List<SampleFrame> frames = sampleFrames(path, startDistance, endDistance, spec.sampleStep);
 		Mesh deck = buildDeck(spec,frames);
 		Mesh guides = null;
 		List<ObjectTransformation> rollers = null;
-		if (spec.includeGuides) {
+		if (includeGuides) {
 			guides = buildGuides(spec, frames);
 		}
-		if (spec.includeRollers) {
-			rollers = buildRollers(path, spec);
+		if (includeRollers) {
+			rollers = buildRollers(path, spec, startDistance, endDistance);
 		}
 		return new TrackBuildResult(deck, guides, rollers);
 	}
 	
-	private static List<SampleFrame> sampleFrames(PathSegment3 path, float sampleStep){
+	private static List<SampleFrame> sampleFrames(PathSegment3 path, float startDistance, float endDistance, float sampleStep){
 		List<SampleFrame> frames = new ArrayList<>();
 		float total = path.getTotalLength();
-		for (float d = 0f; d < total; d+= sampleStep) {
+		float start = clamp(startDistance, 0f, total);
+		float end = clamp(endDistance, 0f, total);
+
+		if (end < start) {
+			float tmp = start;
+			start = end;
+			end = tmp;
+		}
+
+		for (float d = start; d < end; d += sampleStep) {
 			frames.add(createFrame(path,d));
 		}
-		frames.add(createFrame(path,total));
+		frames.add(createFrame(path,end));
+		if (frames.size() == 1) {
+			frames.add(createFrame(path,end));
+		}
 		return frames;
 	}
 	
@@ -70,13 +91,9 @@ public class TrackBuilder {
 		}
 		
 		for (int i = 0; i<frames.size()-1; i++) {
-			// top
 			mb.addQuad(tl[i], tr[i], tr[i+1], tl[i+1]);
-			// bottom
 			mb.addQuad(bl[i+1], br[i+1], br[i], bl[i]);
-			// left side
 			mb.addQuad(bl[i], tl[i], tl[i+1], bl[i+1]);
-			// right side
 			mb.addQuad(tr[i], br[i], br[i+1], tr[i+1]);
 		}
 		return mb.build("Deck");
@@ -89,8 +106,8 @@ public class TrackBuilder {
 		float y0 = spec.deckTopY;
 		float y1 = spec.deckTopY + spec.guideHeight;
 		
-		buildLongSideStrip(frames, -innerHalf, -outerHalf, y0, y1, mb); //left
-		buildLongSideStrip(frames, outerHalf, innerHalf, y0, y1, mb); //right
+		buildLongSideStrip(frames, -innerHalf, -outerHalf, y0, y1, mb);
+		buildLongSideStrip(frames, outerHalf, innerHalf, y0, y1, mb);
 		return mb.build("Guides");
 	}
 	
@@ -117,10 +134,12 @@ public class TrackBuilder {
 		}
 	}
 	
-	private static List<Mat4.ObjectTransformation> buildRollers(PathSegment3 path, TrackSpec spec) {
+	private static List<Mat4.ObjectTransformation> buildRollers(PathSegment3 path, TrackSpec spec, float startDistance, float endDistance) {
 		List<Mat4.ObjectTransformation> transforms = new ArrayList<>();
 		float total = path.getTotalLength();
-		for (float d = 0f; d<=total; d+=spec.rollerPitch) {
+		float start = clamp(startDistance, 0f, total);
+		float end = clamp(endDistance, 0f, total);
+		for (float d = start; d <= end; d += spec.rollerPitch) {
 			SampleFrame f = createFrame(path,d);
 			float yaw = Vec3.yawFromDirection(f.tangent) + (float)(Math.PI / 2.0);
 			Mat4.ObjectTransformation tx = new Mat4.ObjectTransformation(
@@ -135,6 +154,10 @@ public class TrackBuilder {
 			transforms.add(tx);
 		}
 		return transforms;
+	}
+
+	private static float clamp(float value, float min, float max) {
+		return Math.max(min, Math.min(max, value));
 	}
 	
 	private static final class SampleFrame {

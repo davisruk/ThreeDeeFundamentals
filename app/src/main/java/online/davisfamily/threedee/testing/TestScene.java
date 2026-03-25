@@ -167,8 +167,8 @@ public class TestScene extends BaseScene{
 		    new ToggleTransferStrategy(true)
 		);
 
-		top.getTransferZones().add(zone1);
-		top.getTransferZones().add(zone2);
+		top.addTransferZone(zone1);
+		top.addTransferZone(zone2);
 		
 		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); // green
 		OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF); // magenta
@@ -176,8 +176,9 @@ public class TestScene extends BaseScene{
 	    
 		TrackAppearance appearance = new TrackAppearance(
 				deckColour,
+				rollersColour,
 				guidesColour,
-				rollersColour
+				new OneColourStrategyImpl(0xFFFF8800)
 		);
 		
 		List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(

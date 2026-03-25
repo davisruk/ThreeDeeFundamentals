@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import online.davisfamily.threedee.model.tracks.RouteTrackLayoutFactory;
 import online.davisfamily.threedee.model.tracks.TrackAppearance;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.rendering.RenderableObject;
@@ -22,7 +23,7 @@ public final class RouteTrackFactory {
         for (RouteSegment rs : routeSegments) {
             result.add(RenderableTrackFactory.createRenderableTrack(
                 tr,
-                rs.getGeometry(),
+                RouteTrackLayoutFactory.create(rs),
                 spec,
                 appearance
             ));
