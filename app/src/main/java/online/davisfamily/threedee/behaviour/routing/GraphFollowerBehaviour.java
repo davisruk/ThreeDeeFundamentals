@@ -160,13 +160,16 @@ public class GraphFollowerBehaviour implements Behaviour {
                     distanceAlongCurrentSegment = 0f;
                 }
 
-                RouteSegment adjacent = chooseAdjacentSegment(object);
+                RouteConnection connection = chooseAdjacentConnection(object);
 
-                if (adjacent != null) {
-                    currentSegment = adjacent;
-                    distanceAlongCurrentSegment = (travelDirection == TravelDirection.FORWARD)
-                            ? 0f
-                            : currentSegment.getGeometry().getTotalLength();
+                if (connection != null) {
+                    currentSegment = connection.getSegment();
+
+                    if (travelDirection == TravelDirection.FORWARD) {
+                        distanceAlongCurrentSegment = connection.getEntryDistance();
+                    } else {
+                        distanceAlongCurrentSegment = connection.getEntryDistance();
+                    }
 
                     activeTransferZone = null;
                     transferCommitted = false;
@@ -355,10 +358,10 @@ public class GraphFollowerBehaviour implements Behaviour {
         return null;
     }
 
-    private RouteSegment chooseAdjacentSegment(RenderableObject object) {
-        List<RouteSegment> candidates = (travelDirection == TravelDirection.FORWARD)
-                ? currentSegment.getNextSegments()
-                : currentSegment.getPreviousSegments();
+    private RouteConnection chooseAdjacentConnection(RenderableObject object) {
+        List<RouteConnection> candidates = (travelDirection == TravelDirection.FORWARD)
+                ? currentSegment.getNextConnections()
+                : currentSegment.getPreviousConnections();
 
         if (candidates == null || candidates.isEmpty()) {
             return null;
@@ -368,6 +371,7 @@ public class GraphFollowerBehaviour implements Behaviour {
             return candidates.get(0);
         }
 
+        // Later, use decisionProvider properly here.
         return candidates.get(0);
     }
 
@@ -380,7 +384,7 @@ public class GraphFollowerBehaviour implements Behaviour {
             case PING_PONG -> reverseDirectionAtBoundary();
         }
     }
-
+    
     private void resetToStart() {
         currentSegment = startSegment;
         distanceAlongCurrentSegment = startDistanceAlongSegment;
@@ -436,12 +440,12 @@ public class GraphFollowerBehaviour implements Behaviour {
 
         ordered.add(segment);
 
-        for (RouteSegment next : segment.getNextSegments()) {
-            traverseGraph(next, visited, ordered);
+        for (RouteConnection next : segment.getNextConnections()) {
+            traverseGraph(next.getSegment(), visited, ordered);
         }
 
-        for (RouteSegment previous : segment.getPreviousSegments()) {
-            traverseGraph(previous, visited, ordered);
+        for (RouteConnection previous : segment.getPreviousConnections()) {
+            traverseGraph(previous.getSegment(), visited, ordered);
         }
     }
 
@@ -462,28 +466,30 @@ public class GraphFollowerBehaviour implements Behaviour {
                 sb.append(" [START]");
             }
 
-            sb.append(System.lineSeparator());
-            sb.append("  previous=").append(formatSegmentIds(segment.getPreviousSegments()))
-              .append(System.lineSeparator());
-            sb.append("  next=").append(formatSegmentIds(segment.getNextSegments()))
-              .append(System.lineSeparator());
+            sb.append("  previous=").append(formatConnections(segment.getPreviousConnections()))
+            .append(System.lineSeparator());
+          sb.append("  next=").append(formatConnections(segment.getNextConnections()))
+            .append(System.lineSeparator());            
         }
 
         return sb.toString();
     }
-
-    private String formatSegmentIds(List<RouteSegment> segments) {
+    
+    private String formatConnections(List<RouteConnection> connections) {
         StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < segments.size(); i++) {
+        for (int i = 0; i < connections.size(); i++) {
             if (i > 0) {
                 sb.append(", ");
             }
-            sb.append(segments.get(i).getLabel());
+            RouteConnection c = connections.get(i);
+            sb.append(c.getSegment().getLabel())
+              .append("@")
+              .append(c.getEntryDistance());
         }
         sb.append("]");
         return sb.toString();
     }
-
+ 
     @Override
     public String toString() {
         return describeGraph();

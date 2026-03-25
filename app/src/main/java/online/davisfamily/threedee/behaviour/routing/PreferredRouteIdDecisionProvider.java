@@ -7,14 +7,14 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class PreferredRouteIdDecisionProvider implements RouteDecisionProvider {
 
-	private final int preferredForwardId;
-	private final int preferredReverseId;
+	private final String preferredForwardLabel;
+	private final String preferredReverseLabel;
 	
 
-	public PreferredRouteIdDecisionProvider(int preferredForwardId, int preferredReverseId) {
+	public PreferredRouteIdDecisionProvider(String preferredForwardLabel, String preferredReverseLabel) {
 		super();
-		this.preferredForwardId = preferredForwardId;
-		this.preferredReverseId = preferredReverseId;
+		this.preferredForwardLabel = preferredForwardLabel;
+		this.preferredReverseLabel = preferredReverseLabel;
 	}
 
 
@@ -23,12 +23,12 @@ public class PreferredRouteIdDecisionProvider implements RouteDecisionProvider {
 		if (options == null || options.isEmpty())
 			return null;
 		
-        int preferred = (travelDirection == TravelDirection.FORWARD)
-                ? preferredForwardId
-                : preferredReverseId;
+        String preferred = (travelDirection == TravelDirection.FORWARD)
+                ? preferredForwardLabel
+                : preferredReverseLabel;
 
         for (RouteSegment option : options) {
-            if (preferred == option.getId()) {
+            if (preferred.equals(option.getLabel())) {
                 return option;
             }
         }

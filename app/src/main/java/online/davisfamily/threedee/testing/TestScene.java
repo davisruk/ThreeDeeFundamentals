@@ -74,63 +74,56 @@ public class TestScene extends BaseScene{
 		float topZ = 0f;
 		float bottomZ = -3f;
 
-		// Top straight: +X
 		PathSegment3 topGeometry = new LinearSegment3(
 		    new Vec3(leftX, 0f, topZ),
 		    new Vec3(rightX, 0f, topZ)
 		);
 
-		// Right return curve: top -> bottom
 		PathSegment3 rightReturnGeometry = new BezierSegment3(
-		    new Vec3(rightX, 0f, topZ),         // start
-		    new Vec3(rightX + 2f, 0f, topZ),    // control 1
-		    new Vec3(rightX + 2f, 0f, bottomZ), // control 2
-		    new Vec3(rightX, 0f, bottomZ)       // end
+		    new Vec3(rightX, 0f, topZ),
+		    new Vec3(rightX + 2f, 0f, topZ),
+		    new Vec3(rightX + 2f, 0f, bottomZ),
+		    new Vec3(rightX, 0f, bottomZ)
 		);
 
-		// Bottom straight: -X
 		PathSegment3 bottomGeometry = new LinearSegment3(
 		    new Vec3(rightX, 0f, bottomZ),
 		    new Vec3(leftX, 0f, bottomZ)
 		);
 
-		// Left return curve: bottom -> top
 		PathSegment3 leftReturnGeometry = new BezierSegment3(
-		    new Vec3(leftX, 0f, bottomZ),      // start
-		    new Vec3(leftX - 2f, 0f, bottomZ), // control 1
-		    new Vec3(leftX - 2f, 0f, topZ),    // control 2
-		    new Vec3(leftX, 0f, topZ)          // end
+		    new Vec3(leftX, 0f, bottomZ),
+		    new Vec3(leftX - 2f, 0f, bottomZ),
+		    new Vec3(leftX - 2f, 0f, topZ),
+		    new Vec3(leftX, 0f, topZ)
 		);
 
-		// Middle link: top -> bottom
 		PathSegment3 linkGeometry = new LinearSegment3(
 		    new Vec3(midX, 0f, topZ),
 		    new Vec3(midX, 0f, bottomZ)
 		);
 
 		// Route segments from path
-		RouteSegment top = new RouteSegment(0, "top", topGeometry);
-		RouteSegment rightReturn = new RouteSegment(1, "rightReturn", rightReturnGeometry);
-		RouteSegment bottom = new RouteSegment(2, "bottom", bottomGeometry);
-		RouteSegment leftReturn = new RouteSegment(3, "leftReturn", leftReturnGeometry);
-		RouteSegment link = new RouteSegment(4, "link", linkGeometry);
-		// Ordinary route connections
+		RouteSegment top = new RouteSegment("top", topGeometry);
+		RouteSegment rightReturn = new RouteSegment("rightReturn", rightReturnGeometry);
+		RouteSegment bottom = new RouteSegment("bottom", bottomGeometry);
+		RouteSegment leftReturn = new RouteSegment("leftReturn", leftReturnGeometry);
+		RouteSegment link = new RouteSegment("link", linkGeometry);		// Ordinary route connections
 		
-		top.addNext(rightReturn);
-		rightReturn.addNext(bottom);
-		bottom.addNext(leftReturn);
-		leftReturn.addNext(top);
-		link.addNext(bottom);
+		top.connectTo(rightReturn);
+		rightReturn.connectTo(bottom);
+		bottom.connectTo(leftReturn);
+		leftReturn.connectTo(top);
+		link.connectTo(bottom, 3.0f);
 		// Transfer zone on the top segment
 
 		TransferZone zone = new TransferZone(
-			    4.5f,   // startDistance on top
-			    1.0f,   // length
-			    link,   // target segment
-			    0.0f    // hand off at top of link
+			    4.5f,
+			    1.0f,
+			    link,
+			    0.0f
 			);
-
-		top.getTransferZones().add(zone);
+			top.getTransferZones().add(zone);
 		
 		
 		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); // green
