@@ -16,6 +16,7 @@ public class TrackSpec {
 	public final float guideThickness;
 	public final float guideGap;
 	public final float connectionGuideCutback;
+	public final float targetGuideOpeningLength;
 	
 	// rollers
 	public final boolean includeRollers;
@@ -33,7 +34,7 @@ public class TrackSpec {
 	public float sampleStep;
 
 	public TrackSpec(ToteEnvelope toteEnvelope, float sideClearance, float deckThickness, float deckTopY,
-			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, float connectionGuideCutback, boolean includeRollers,
+			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, float connectionGuideCutback, float targetGuideOpeningLength, boolean includeRollers,
 			float rollerPitch, float rollerWidthInset, float rollerHeight, float rollerDepthAlongPath,
 			float sampleStep) {
 		this(toteEnvelope,
@@ -45,6 +46,7 @@ public class TrackSpec {
 				guideThickness,
 				guideGap,
 				connectionGuideCutback,
+				targetGuideOpeningLength,
 				includeRollers,
 				rollerPitch,
 				rollerWidthInset,
@@ -65,6 +67,7 @@ public class TrackSpec {
 			float guideThickness,
 			float guideGap,
 			float connectionGuideCutback,
+			float targetGuideOpeningLength,
 			boolean includeRollers,
 			float rollerPitch,
 			float rollerWidthInset,
@@ -91,6 +94,7 @@ public class TrackSpec {
 		this.suppressRollersInTransferZones = suppressRollersInTransferZones;
 		this.suppressGuidesInTransferZones = suppressGuidesInTransferZones;
 		this.sampleStep = sampleStep;
+		this.targetGuideOpeningLength = targetGuideOpeningLength;
 	}
 
 	public float getRunningWidth() {

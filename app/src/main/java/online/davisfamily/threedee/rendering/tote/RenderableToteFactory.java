@@ -17,12 +17,11 @@ import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 
 public class RenderableToteFactory {
 
-	public static RenderableObject createRenderableTote(TriangleRenderer tr) {
+	public static RenderableObject createRenderableTote(TriangleRenderer tr, Tote tote) {
 		OneColourStrategyImpl blueColour = new OneColourStrategyImpl(0xFF0000FF);
 		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
 		OneColourStrategyImpl redColour = new OneColourStrategyImpl(0xFFFF0000);
 
-		Tote tote = new Tote();		
 		float openingWidth = 0.371f;   // same value passed into LidFactory
 		float halfWidth = openingWidth / 2f;
 
@@ -51,17 +50,6 @@ public class RenderableToteFactory {
 
 		// tote mesh
 		Mesh mTote = new Mesh(tote.v4Vertices, tote.triangles);
-/*
-		// tote path
-		PathFollowerBehaviour pathFollower = new PathFollowerBehaviour(
-				createCompositePath(),
-				2.0f, // unitsPerSecond / speed
-				Behaviour.WrapMode.LOOP
-			);
-*/
-		//GraphFollowerBehaviour pathFollower = createGraphFollowerBehaviour();
-		
-		//System.out.println(pathFollower.describeGraph());
 		
 		// renderable tote
 		RenderableObject rTote = RenderableObject.createWithChildren(
@@ -70,7 +58,6 @@ public class RenderableToteFactory {
 			tTote, // transform
 			blueColour,
 			List.of(rLidRight, rLidLeft), // children
-//			List.of(pathFollower), // behaviours
 			FORWARD_DIRECTION.NEGATIVE_X
 		);
 		

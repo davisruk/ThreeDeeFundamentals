@@ -202,4 +202,89 @@ public class Tote {
 		    {0, 7, 4}
 		};		
 	}
+
+	public float getS() {
+		return s;
+	}
+
+	public float getOuterTopWidth() {
+		return outerTopWidth;
+	}
+
+	public float getOuterTopDepth() {
+		return outerTopDepth;
+	}
+
+	public float getOuterHeight() {
+		return outerHeight;
+	}
+
+	public float getInnerTopWidth() {
+		return innerTopWidth;
+	}
+
+	public float getInnerTopDepth() {
+		return innerTopDepth;
+	}
+
+	public float getInnerHeight() {
+		return innerHeight;
+	}
+
+	public float getOuterBottomWidth() {
+		return outerBottomWidth;
+	}
+
+	public float getOuterBottomDepth() {
+		return outerBottomDepth;
+	}
+
+	public float getInnerBottomWidth() {
+		return innerBottomWidth;
+	}
+
+	public float getInnerBottomDepth() {
+		return innerBottomDepth;
+	}
+
+	public float getObhw() {
+		return obhw;
+	}
+
+	public float getObhd() {
+		return obhd;
+	}
+
+	public float getOthw() {
+		return othw;
+	}
+
+	public float getOthd() {
+		return othd;
+	}
+
+	public float getIbhw() {
+		return ibhw;
+	}
+
+	public float getIbhd() {
+		return ibhd;
+	}
+
+	public float getIthw() {
+		return ithw;
+	}
+
+	public float getIthd() {
+		return ithd;
+	}
+
+	public Vec4[] getV4Vertices() {
+		return v4Vertices;
+	}
+
+	public int[][] getTriangles() {
+		return triangles;
+	}
+
 }

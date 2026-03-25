@@ -13,7 +13,24 @@ import online.davisfamily.threedee.rendering.track.RenderableTrackFactory;
 
 public final class RouteTrackFactory {
 
-    public static List<RenderableObject> createRenderableTracks(
+    public static class SpecAndSegment {
+    	TrackSpec spec;
+    	RouteSegment segment;
+    	
+    	
+    	public SpecAndSegment(TrackSpec spec, RouteSegment segment) {
+			super();
+			this.spec = spec;
+			this.segment = segment;
+		}
+
+
+		public static SpecAndSegment createSpecAndSegment(TrackSpec ts, RouteSegment rs) {
+    		return new SpecAndSegment(ts, rs);
+    	}
+    }
+    
+	public static List<RenderableObject> createRenderableTracks(
             TriangleRenderer tr,
             Collection<RouteSegment> routeSegments,
             TrackSpec spec,
@@ -29,4 +46,21 @@ public final class RouteTrackFactory {
         }
         return result;
     }
+	
+	public static List<RenderableObject> createRenderableTracks(
+            TriangleRenderer tr,
+            Collection<SpecAndSegment> segments,
+            TrackAppearance appearance) {
+
+        List<RenderableObject> result = new ArrayList<>();
+        for (SpecAndSegment ss : segments) {
+            result.add(RenderableTrackFactory.createRenderableTrack(
+                    tr,
+                    ss.segment,
+                    ss.spec,
+                    appearance));
+        }
+        return result;
+    }
+	
 }

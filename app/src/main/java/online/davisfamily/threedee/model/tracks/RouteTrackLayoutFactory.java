@@ -53,46 +53,72 @@ public final class RouteTrackLayoutFactory {
         return new RouteTrackLayout(segment, intervals);
     }
 
-    public static List<TrackSpan> createGuideSpans(RouteTrackLayout layout, TrackSpec spec) {
-        if (layout == null) {
-            throw new IllegalArgumentException("layout must not be null");
-        }
-        if (spec == null) {
-            throw new IllegalArgumentException("spec must not be null");
-        }
+    public static List<TrackSpan> createGuideSpans(RouteTrackLayout layout, TrackSpec spec, GuideSide side) {
 
         float total = layout.getGeometry().getTotalLength();
 
-        float guideStart = layout.getRouteSegment().getPreviousConnections().isEmpty()
-                ? 0f
-                : spec.connectionGuideCutback;
+        List<TrackSpan> openings = new ArrayList<>();
 
-        float guideEnd = layout.getRouteSegment().getNextConnections().isEmpty()
-                ? total
-                : total - spec.connectionGuideCutback;
-
-        guideStart = Math.max(0f, guideStart);
-        guideEnd = Math.min(total, guideEnd);
-
-        if (guideEnd <= guideStart) {
-            return List.of();
-        }
-
-        List<TrackSpan> spans = new ArrayList<>();
-
-        for (TrackInterval interval : layout.getIntervals()) {
-            if (interval.getType() != TrackIntervalType.NORMAL) {
-                continue;
-            }
-
-            float start = Math.max(interval.getStartDistance(), guideStart);
-            float end = Math.min(interval.getEndDistance(), guideEnd);
-
-            if (end > start) {
-                spans.add(new TrackSpan(start, end));
+        for (GuideOpening opening : layout.getRouteSegment().getGuideOpenings()) {
+            if (opening.getSide() == side) {
+                openings.add(new TrackSpan(
+                        opening.getStartDistance(),
+                        opening.getEndDistance()));
             }
         }
 
-        return spans;
+        List<TrackSpan> clipped = clipAndMerge(openings, 0f, total);
+        return subtractOpenings(0f, total, clipped);
+    }
+    
+  
+    private static List<TrackSpan> clipAndMerge(List<TrackSpan> spans, float min, float max) {
+        List<TrackSpan> clipped = new ArrayList<>();
+
+        for (TrackSpan span : spans) {
+            float s = Math.max(min, span.getStartDistance());
+            float e = Math.min(max, span.getEndDistance());
+            if (e > s) {
+                clipped.add(new TrackSpan(s, e));
+            }
+        }
+
+        clipped.sort(Comparator.comparing(TrackSpan::getStartDistance));
+
+        List<TrackSpan> merged = new ArrayList<>();
+        for (TrackSpan span : clipped) {
+            if (merged.isEmpty()) {
+                merged.add(span);
+            } else {
+                TrackSpan last = merged.get(merged.size() - 1);
+                if (span.getStartDistance() <= last.getEndDistance()) {
+                    merged.set(merged.size() - 1,
+                            new TrackSpan(last.getStartDistance(),
+                                    Math.max(last.getEndDistance(), span.getEndDistance())));
+                } else {
+                    merged.add(span);
+                }
+            }
+        }
+
+        return merged;
+    }
+
+    private static List<TrackSpan> subtractOpenings(float guideStart, float guideEnd, List<TrackSpan> openings) {
+        List<TrackSpan> result = new ArrayList<>();
+        float cursor = guideStart;
+
+        for (TrackSpan opening : openings) {
+            if (opening.getStartDistance() > cursor) {
+                result.add(new TrackSpan(cursor, opening.getStartDistance()));
+            }
+            cursor = Math.max(cursor, opening.getEndDistance());
+        }
+
+        if (cursor < guideEnd) {
+            result.add(new TrackSpan(cursor, guideEnd));
+        }
+
+        return result;
     }
 }

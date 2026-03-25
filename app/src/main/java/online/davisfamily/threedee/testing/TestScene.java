@@ -12,13 +12,14 @@ import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
 import online.davisfamily.threedee.behaviour.routing.TransferZone;
-import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStrategy;
 import online.davisfamily.threedee.behaviour.routing.transfer.ToggleTransferStrategy;
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.model.tote.Tote;
 import online.davisfamily.threedee.model.tote.ToteEnvelope;
+import online.davisfamily.threedee.model.tracks.GuideSide;
 import online.davisfamily.threedee.model.tracks.TrackAppearance;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.path.BezierSegment3;
@@ -40,41 +41,76 @@ public class TestScene extends BaseScene{
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions,	CameraPosition.aboveLeft());
 		objects = new ArrayList<RenderableObject>();
-		rTote = RenderableToteFactory.createRenderableTote(tr);
+		Tote tote = new Tote();
+		rTote = RenderableToteFactory.createRenderableTote(tr, tote);
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
+/*
 		ToteEnvelope toteEnvelope = new ToteEnvelope(
-			    0.320f, // bottom width
+				0.320f, // bottom width
 			    0.500f, // bottom depth
 			    0.310f  // height
 			);
+*/
+		ToteEnvelope widthToteEnvelope = new ToteEnvelope(
+			    tote.getOuterBottomWidth(),
+			    tote.getOuterBottomDepth(),
+			    tote.getOuterHeight()
+		);
 
-			TrackSpec spec = new TrackSpec(
-			    toteEnvelope,
-			    0.030f,  // sideClearance
-			    0.040f,  // deckThickness
-			    0.000f,  // deckTopY
-			    true,    // includeGuides
-			    0.050f,  // guideHeight
-			    0.010f,  // guideThickness
-			    0.005f,  // guideGap
-			    0.4f,
-			    true,    // includeRollers
-			    0.080f,  // rollerPitch
-			    0.010f,  // rollerWidthInset
-			    0.025f,  // rollerHeight
-			    0.018f,  // rollerDepthAlongPath
-			    0.080f   // sampleStep
-			);
+		TrackSpec specToteWidthWise = new TrackSpec(
+			widthToteEnvelope,
+		    0.030f,  // sideClearance
+		    0.040f,  // deckThickness
+		    0.000f,  // deckTopY
+		    true,    // includeGuides
+		    0.050f,  // guideHeight
+		    0.010f,  // guideThickness
+		    0.005f,  // guideGap
+		    0.4f,
+		    0.4f,
+		    true,    // includeRollers
+		    0.080f,  // rollerPitch
+		    0.010f,  // rollerWidthInset
+		    0.025f,  // rollerHeight
+		    0.018f,  // rollerDepthAlongPath
+		    0.080f   // sampleStep
+		);
+
+		ToteEnvelope lengthToteEnvelope = new ToteEnvelope(
+			    tote.getOuterBottomDepth(),
+			    tote.getOuterBottomWidth(),
+			    tote.getOuterHeight()
+		);
+
+		TrackSpec specToteLengthWise = new TrackSpec(
+			lengthToteEnvelope,
+		    0.030f,  // sideClearance
+		    0.040f,  // deckThickness
+		    0.000f,  // deckTopY
+		    true,    // includeGuides
+		    0.050f,  // guideHeight
+		    0.010f,  // guideThickness
+		    0.005f,  // guideGap
+		    0.4f,
+		    0.4f,
+		    true,    // includeRollers
+		    0.080f,  // rollerPitch
+		    0.010f,  // rollerWidthInset
+		    0.025f,  // rollerHeight
+		    0.018f,  // rollerDepthAlongPath
+		    0.080f   // sampleStep
+		);
+
 		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
-		
+		float toteLength = tote.getOuterBottomDepth();
 		// Path Geometry
-		
 		float leftX = 0f;
 		float link1X = 3f;
 		float link2X = 5f;
 		float rightX = 8f;
 		float topZ = 0f;
 		float bottomZ = -3f;
+		float linkClearance = 0.2f; // tweak visually
 		
 		// Top straight: +X
 		PathSegment3 topGeometry = new LinearSegment3(
@@ -104,16 +140,16 @@ public class TestScene extends BaseScene{
 		    new Vec3(leftX, 0f, topZ)
 		);
 
-		// Middle link 1: top -> bottom at x=3
+		// Middle link 1: top -> bottom at x=3 (trimmed)
 		PathSegment3 link1Geometry = new LinearSegment3(
-		    new Vec3(link1X, 0f, topZ),
-		    new Vec3(link1X, 0f, bottomZ)
+		    new Vec3(link1X, 0f, topZ - linkClearance),
+		    new Vec3(link1X, 0f, bottomZ + linkClearance)
 		);
 
-		// Middle link 2: top -> bottom at x=5
+		// Middle link 2: top -> bottom at x=5 (trimmed)
 		PathSegment3 link2Geometry = new LinearSegment3(
-		    new Vec3(link2X, 0f, topZ),
-		    new Vec3(link2X, 0f, bottomZ)
+		    new Vec3(link2X, 0f, topZ - linkClearance),
+		    new Vec3(link2X, 0f, bottomZ + linkClearance)
 		);
 
 		// =====================
@@ -143,9 +179,23 @@ public class TestScene extends BaseScene{
 		// bottom runs from x=8 to x=0 at z=-3
 		// so entry distance is (8 - linkX)
 
-		link1.connectTo(bottom, 5.0f); // x=3 -> distance 5 along bottom
-		link2.connectTo(bottom, 3.0f); // x=5 -> distance 3 along bottom
+		float opening = 0.4f; // test value
 
+		link1.connectTo(
+		        bottom,
+		        link1.getGeometry().getTotalLength(),
+		        5.0f,
+		        null,
+		        GuideSide.RIGHT,
+		        toteLength);
+
+		link2.connectTo(
+		        bottom,
+		        link2.getGeometry().getTotalLength(),
+		        3.0f,
+		        null,
+		        GuideSide.RIGHT,
+		        toteLength);
 		// =====================
 		// Transfer zones on top
 		// =====================
@@ -153,18 +203,22 @@ public class TestScene extends BaseScene{
 		// top runs from x=0 to x=8, so distance along top == x
 
 		TransferZone zone1 = new TransferZone(
-		    2.5f,                         // start near x=3
-		    1.0f,                         // spans roughly x=2.5..3.5
-		    link1,
+		    link1X - (toteLength * 0.5f),
+		    toteLength,
+			link1,
 		    0.0f,
+	        GuideSide.RIGHT,
+	        GuideSide.LEFT,
 		    new ToggleTransferStrategy(false)
 		);
 
 		TransferZone zone2 = new TransferZone(
-		    4.5f,                         // start near x=5
-		    1.0f,                         // spans roughly x=4.5..5.5
-		    link2,
+		    link2X - (toteLength * 0.5f),
+		    toteLength,
+			link2,
 		    0.0f,
+	        GuideSide.RIGHT,
+	        GuideSide.LEFT,
 		    new ToggleTransferStrategy(true)
 		);
 
@@ -176,18 +230,27 @@ public class TestScene extends BaseScene{
 		OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF); // cyan
 	    
 		TrackAppearance appearance = new TrackAppearance(
-				deckColour,
-				rollersColour,
-				guidesColour,
-				new OneColourStrategyImpl(0xFFFF8800)
+			deckColour,
+			rollersColour,
+			guidesColour,
+			new OneColourStrategyImpl(0xFFFF8800)
+		);
+		
+		List<RouteTrackFactory.SpecAndSegment> specsAndSegs = List.of(
+			RouteTrackFactory.SpecAndSegment.createSpecAndSegment(specToteWidthWise, top),
+			RouteTrackFactory.SpecAndSegment.createSpecAndSegment(specToteWidthWise, rightReturn),
+			RouteTrackFactory.SpecAndSegment.createSpecAndSegment(specToteWidthWise, bottom),
+			RouteTrackFactory.SpecAndSegment.createSpecAndSegment(specToteWidthWise, leftReturn),
+			RouteTrackFactory.SpecAndSegment.createSpecAndSegment(specToteLengthWise, link1),
+			RouteTrackFactory.SpecAndSegment.createSpecAndSegment(specToteLengthWise, link2)
 		);
 		
 		List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
-			    tr,
-			    List.of(top, rightReturn, bottom, leftReturn, link1, link2),
-			    spec,
-			    appearance
+		    tr,
+		    specsAndSegs,
+		    appearance
 		);
+		
 		for (RenderableObject track : tracks) {
 		    objects.add(track);
 		}

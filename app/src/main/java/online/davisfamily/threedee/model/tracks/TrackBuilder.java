@@ -99,6 +99,38 @@ public class TrackBuilder {
 		return mb.build("Deck");
 	}
 	
+	public static Mesh buildGuide(
+	        PathSegment3 path,
+	        TrackSpec spec,
+	        float startDistance,
+	        float endDistance,
+	        GuideSide side) {
+
+	    if (!spec.includeGuides) {
+	        return null;
+	    }
+
+	    List<SampleFrame> frames = sampleFrames(path, startDistance, endDistance, spec.sampleStep);
+	    if (frames.size() < 2) {
+	        return null;
+	    }
+
+	    TrackMeshBuilder mb = new TrackMeshBuilder();
+
+	    float innerHalf = spec.getGuideInnerWidth() * 0.5f;
+	    float outerHalf = innerHalf + spec.guideThickness;
+	    float y0 = spec.deckTopY;
+	    float y1 = spec.deckTopY + spec.guideHeight;
+
+	    if (side == GuideSide.LEFT) {
+	        buildLongSideStrip(frames, -innerHalf, -outerHalf, y0, y1, mb);
+	    } else {
+	        buildLongSideStrip(frames, outerHalf, innerHalf, y0, y1, mb);
+	    }
+
+	    return mb.build("Guide-" + side.name());
+	}
+	
 	public static Mesh buildGuides(PathSegment3 path, TrackSpec spec, float startDistance, float endDistance) {
 	    if (!spec.includeGuides) {
 	        return null;

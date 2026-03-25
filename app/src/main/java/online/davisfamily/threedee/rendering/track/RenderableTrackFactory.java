@@ -7,6 +7,7 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.model.tracks.GuideSide;
 import online.davisfamily.threedee.model.tracks.RollerMeshFactory;
 import online.davisfamily.threedee.model.tracks.RouteTrackLayout;
 import online.davisfamily.threedee.model.tracks.RouteTrackLayoutFactory;
@@ -69,13 +70,32 @@ public final class RenderableTrackFactory {
 
         // Build guide sections from one-or-more allowed spans
         if (spec.includeGuides) {
-            List<TrackSpan> guideSpans = RouteTrackLayoutFactory.createGuideSpans(layout, spec);
-            for (TrackSpan span : guideSpans) {
-                Mesh guideMesh = TrackBuilder.buildGuides(
+            List<TrackSpan> leftSpans = RouteTrackLayoutFactory.createGuideSpans(layout, spec, GuideSide.LEFT);
+            for (TrackSpan span : leftSpans) {
+                Mesh guideMesh = TrackBuilder.buildGuide(
                         layout.getGeometry(),
                         spec,
                         span.getStartDistance(),
-                        span.getEndDistance());
+                        span.getEndDistance(),
+                        GuideSide.LEFT);
+
+                if (guideMesh != null) {
+                    parts.add(RenderableObject.create(
+                            tr,
+                            guideMesh,
+                            identity,
+                            appearance.guideColour));
+                }
+            }
+
+            List<TrackSpan> rightSpans = RouteTrackLayoutFactory.createGuideSpans(layout, spec, GuideSide.RIGHT);
+            for (TrackSpan span : rightSpans) {
+                Mesh guideMesh = TrackBuilder.buildGuide(
+                        layout.getGeometry(),
+                        spec,
+                        span.getStartDistance(),
+                        span.getEndDistance(),
+                        GuideSide.RIGHT);
 
                 if (guideMesh != null) {
                     parts.add(RenderableObject.create(
