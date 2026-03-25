@@ -11,6 +11,7 @@ import online.davisfamily.threedee.behaviour.routing.FirstRouteDecisionProvider;
 import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
+import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Vec3;
@@ -35,7 +36,7 @@ public class TestScene extends BaseScene{
 	private List<RenderableObject> objects;
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
-		super(pane, dimensions);
+		super(pane, dimensions,	CameraPosition.aboveLeft());
 		objects = new ArrayList<RenderableObject>();
 		rTote = RenderableToteFactory.createRenderableTote(tr);
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);

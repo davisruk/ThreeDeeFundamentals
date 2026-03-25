@@ -13,7 +13,13 @@ public class Camera {
 	private Mat4 view;
 	
 	public Camera () {
-		this.position = new Vec3(0,0,0);
+		this(new CameraPosition());
+	}
+	
+	public Camera (CameraPosition camPos) {
+		this.position = camPos.position;
+		this.yaw = camPos.yaw;
+		this.pitch = camPos.pitch;
 		this.forward = new Vec3(0,0,-1);
 		this.forwardXZ = new Vec3(0,0,-1);
 		this.right = new Vec3(1,0,0);

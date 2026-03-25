@@ -8,6 +8,7 @@ import java.util.List;
 import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.camera.Camera;
+import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.CommandBindings;
 import online.davisfamily.threedee.input.keyboard.InputState;
@@ -53,9 +54,11 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	// debug variables
 	protected DebugUtils debug;
 
-	public BaseScene (JRootPane pane, ViewDimensions dimensions) {
+	public BaseScene (JRootPane pane, ViewDimensions dimensions, CameraPosition camPos) {
 		root = pane;
 		vd = dimensions;
+
+		
 		this.inputState = new InputState();
 		this.image = new BufferedImage(vd.width, vd.height, BufferedImage.TYPE_INT_ARGB);
 		this.pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
@@ -63,7 +66,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 		this.aspect = (float)vd.width / (float)vd.height;
 		this.perspective = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
 		this.projection = Mat4.perspective((float) Math.toRadians(60), aspect, 0.1f, 100f);
-		this.camera = new Camera();
+		this.camera = new Camera(camPos);
 		this.move = new Vec3(0,0,0);
 		this.mouseInfo = new MouseEventDetail();
 		KeyBindings.installKeyBindings(root, this.inputState);
@@ -72,6 +75,10 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 		this.debug = new DebugUtils(bl,camera,vd);
 		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug);
 		this.vp = new Mat4();
+	}
+	
+	public BaseScene (JRootPane pane, ViewDimensions dimensions) {
+		this (pane, dimensions, new CameraPosition());
 	}
 	
 	// base classes must override this method
