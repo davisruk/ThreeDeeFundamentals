@@ -57,6 +57,7 @@ public class TestScene extends BaseScene{
 			    0.050f,  // guideHeight
 			    0.010f,  // guideThickness
 			    0.005f,  // guideGap
+			    0.4f,
 			    true,    // includeRollers
 			    0.080f,  // rollerPitch
 			    0.010f,  // rollerWidthInset

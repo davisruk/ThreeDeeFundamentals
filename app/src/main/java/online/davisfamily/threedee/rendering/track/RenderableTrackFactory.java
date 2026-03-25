@@ -3,86 +3,113 @@ package online.davisfamily.threedee.rendering.track;
 import java.util.ArrayList;
 import java.util.List;
 
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.tracks.RollerMeshFactory;
 import online.davisfamily.threedee.model.tracks.RouteTrackLayout;
+import online.davisfamily.threedee.model.tracks.RouteTrackLayoutFactory;
 import online.davisfamily.threedee.model.tracks.TrackAppearance;
 import online.davisfamily.threedee.model.tracks.TrackBuildResult;
 import online.davisfamily.threedee.model.tracks.TrackBuilder;
 import online.davisfamily.threedee.model.tracks.TrackInterval;
+import online.davisfamily.threedee.model.tracks.TrackIntervalType;
+import online.davisfamily.threedee.model.tracks.TrackSpan;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
-import online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy;
-import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 
-public class RenderableTrackFactory {
+public final class RenderableTrackFactory {
 
-	private static final ColourPickerStrategy DEFAULT_CONTAINER_COLOUR = new OneColourStrategyImpl(0x00000000);
+    private RenderableTrackFactory() {
+    }
 
-	public static RenderableObject createRenderableTrack(TriangleRenderer tr,
-			RouteTrackLayout layout,
-			TrackSpec spec,
-			TrackAppearance appearance) {
+    public static RenderableObject createRenderableTrack(
+            TriangleRenderer tr,
+            RouteSegment routeSegment,
+            TrackSpec spec,
+            TrackAppearance appearance) {
 
-		ObjectTransformation identity = new Mat4.ObjectTransformation(0f,0f,0f,0f,0f,0f, new Mat4());
-		List<RenderableObject> intervalObjects = new ArrayList<>();
+        RouteTrackLayout layout = RouteTrackLayoutFactory.create(routeSegment);
+        ObjectTransformation identity =
+                new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4());
 
-		for (TrackInterval interval : layout.getIntervals()) {
-			boolean includeGuides = spec.includeGuides
-					&& !(interval.isTransfer() && spec.suppressGuidesInTransferZones);
-			boolean includeRollers = spec.includeRollers
-					&& !(interval.isTransfer() && spec.suppressRollersInTransferZones);
+        List<RenderableObject> parts = new ArrayList<>();
 
-			TrackBuildResult track = TrackBuilder.build(
-					layout.getGeometry(),
-					spec,
-					interval.getStartDistance(),
-					interval.getEndDistance(),
-					includeGuides,
-					includeRollers);
+        Mesh sharedRollerMesh = spec.includeRollers
+                ? RollerMeshFactory.createBoxRollerMesh(spec)
+                : null;
 
-			ColourPickerStrategy deckColour = interval.isTransfer()
-					? appearance.transferDeckColour
-					: appearance.deckColour;
+        // Build deck sections (normal / transfer) and attach rollers per interval
+        for (TrackInterval interval : layout.getIntervals()) {
+            TrackBuildResult built = TrackBuilder.buildInterval(
+                    layout.getGeometry(),
+                    interval,
+                    spec);
 
-			RenderableObject intervalRoot = RenderableObject.create(tr, track.deckMesh, identity, deckColour);
-			if (track.guideMesh != null) {
-				intervalRoot.addChild(RenderableObject.create(tr, track.guideMesh, identity, appearance.guideColour));
-			}
-			if (track.rollerTransforms != null && !track.rollerTransforms.isEmpty()) {
-				createAndAddRollers(tr, spec, intervalRoot, track.rollerTransforms, appearance.rollerColour);
-			}
-			intervalObjects.add(intervalRoot);
-		}
+            if (built.deckMesh == null) {
+                continue;
+            }
 
-		if (intervalObjects.isEmpty()) {
-			throw new IllegalStateException("Track layout produced no interval geometry");
-		}
+            RenderableObject deckObject = RenderableObject.create(
+                    tr,
+                    built.deckMesh,
+                    identity,
+                    interval.getType() == TrackIntervalType.TRANSFER
+                            ? appearance.transferDeckColour
+                            : appearance.deckColour);
 
-		RenderableObject root = RenderableObject.create(tr, intervalObjects.get(0).mesh, identity, DEFAULT_CONTAINER_COLOUR);
-		root.children = new ArrayList<>();
-		root.colourPicker = intervalObjects.get(0).colourPicker;
-		root.addAllChildren(intervalObjects.get(0).children);
-		for (int i = 1; i < intervalObjects.size(); i++) {
-			root.addChild(intervalObjects.get(i));
-		}
-		return root;
-	}
-	
-	private static RenderableObject createAndAddRollers(TriangleRenderer tr,
-			TrackSpec spec,
-			RenderableObject parent,
-			List<ObjectTransformation> rollerTransforms,
-			ColourPickerStrategy colour) {
-		List<RenderableObject> rollers = new ArrayList<>();
-		Mesh rollerMesh = RollerMeshFactory.createBoxRollerMesh(spec);
-		for (ObjectTransformation t:rollerTransforms) {
-			rollers.add(RenderableObject.create(tr, rollerMesh, t, colour));
-		}
-		parent.addAllChildren(rollers);
-		return parent;
-	}
+            if (spec.includeRollers && sharedRollerMesh != null && built.rollerTransforms != null) {
+                addRollers(tr, deckObject, sharedRollerMesh, built.rollerTransforms, appearance.rollerColour);
+            }
+
+            parts.add(deckObject);
+        }
+
+        // Build guide sections from one-or-more allowed spans
+        if (spec.includeGuides) {
+            List<TrackSpan> guideSpans = RouteTrackLayoutFactory.createGuideSpans(layout, spec);
+            for (TrackSpan span : guideSpans) {
+                Mesh guideMesh = TrackBuilder.buildGuides(
+                        layout.getGeometry(),
+                        spec,
+                        span.getStartDistance(),
+                        span.getEndDistance());
+
+                if (guideMesh != null) {
+                    parts.add(RenderableObject.create(
+                            tr,
+                            guideMesh,
+                            identity,
+                            appearance.guideColour));
+                }
+            }
+        }
+
+        if (parts.isEmpty()) {
+            throw new IllegalStateException("No renderable track parts were built for route segment " + routeSegment.getLabel());
+        }
+
+        RenderableObject root = parts.get(0);
+        if (parts.size() > 1) {
+            root.addAllChildren(parts.subList(1, parts.size()));
+        }
+
+        return root;
+    }
+
+    private static void addRollers(
+            TriangleRenderer tr,
+            RenderableObject parent,
+            Mesh rollerMesh,
+            List<ObjectTransformation> rollerTransforms,
+            online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy colour) {
+
+        List<RenderableObject> rollers = new ArrayList<>();
+        for (ObjectTransformation t : rollerTransforms) {
+            rollers.add(RenderableObject.create(tr, rollerMesh, t, colour));
+        }
+        parent.addAllChildren(rollers);
+    }
 }

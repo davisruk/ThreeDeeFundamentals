@@ -28,7 +28,7 @@ public class TrackBuilder {
 		Mesh guides = null;
 		List<ObjectTransformation> rollers = null;
 		if (includeGuides) {
-			guides = buildGuides(spec, frames);
+			guides = buildGuides(path, spec, startDistance, endDistance);
 		}
 		if (includeRollers) {
 			rollers = buildRollers(path, spec, startDistance, endDistance);
@@ -99,18 +99,58 @@ public class TrackBuilder {
 		return mb.build("Deck");
 	}
 	
-	private static Mesh buildGuides(TrackSpec spec, List<SampleFrame> frames) {
-		TrackMeshBuilder mb = new TrackMeshBuilder();
-		float innerHalf = spec.getGuideInnerWidth() * 0.5f;
-		float outerHalf = innerHalf + spec.guideThickness;
-		float y0 = spec.deckTopY;
-		float y1 = spec.deckTopY + spec.guideHeight;
-		
-		buildLongSideStrip(frames, -innerHalf, -outerHalf, y0, y1, mb);
-		buildLongSideStrip(frames, outerHalf, innerHalf, y0, y1, mb);
-		return mb.build("Guides");
+	public static Mesh buildGuides(PathSegment3 path, TrackSpec spec, float startDistance, float endDistance) {
+	    if (!spec.includeGuides) {
+	        return null;
+	    }
+
+	    List<SampleFrame> frames = sampleFrames(path, startDistance, endDistance, spec.sampleStep);
+	    if (frames.size() < 2) {
+	        return null;
+	    }
+
+	    TrackMeshBuilder mb = new TrackMeshBuilder();
+
+	    float innerHalf = spec.getGuideInnerWidth() * 0.5f;
+	    float outerHalf = innerHalf + spec.guideThickness;
+
+	    float y0 = spec.deckTopY;
+	    float y1 = spec.deckTopY + spec.guideHeight;
+
+	    buildLongSideStrip(frames, -innerHalf, -outerHalf, y0, y1, mb);
+	    buildLongSideStrip(frames, outerHalf, innerHalf, y0, y1, mb);
+
+	    return mb.build("Guides");
 	}
 	
+	
+	public static TrackBuildResult buildInterval(PathSegment3 path, TrackInterval interval, TrackSpec spec) {
+		float start = interval.getStartDistance();
+		float end = interval.getEndDistance();
+
+		if (end <= start) {
+			return new TrackBuildResult(null, null, List.of());
+		}
+
+		List<SampleFrame> frames = sampleFrames(path, start, end, spec.sampleStep);
+		if (frames.size() < 2) {
+			return new TrackBuildResult(null, null, List.of());
+		}
+
+		Mesh deck = buildDeck(spec, frames);
+
+		boolean suppressRollers =
+				interval.getType() == TrackIntervalType.TRANSFER
+				&& spec.suppressRollersInTransferZones;
+
+		List<ObjectTransformation> rollers = List.of();
+		if (spec.includeRollers && !suppressRollers) {
+			rollers = buildRollers(path, spec, start, end);
+		}
+
+		return new TrackBuildResult(deck, null, rollers);
+	}
+
 	private static void buildLongSideStrip(List<SampleFrame> frames, float innerOffset, float outerOffset, float y0, float y1, TrackMeshBuilder mb) {
 		int[] ib = new int[frames.size()];
 		int[] it = new int[frames.size()];
@@ -136,11 +176,13 @@ public class TrackBuilder {
 	
 	private static List<Mat4.ObjectTransformation> buildRollers(PathSegment3 path, TrackSpec spec, float startDistance, float endDistance) {
 		List<Mat4.ObjectTransformation> transforms = new ArrayList<>();
-		float total = path.getTotalLength();
-		float start = clamp(startDistance, 0f, total);
-		float end = clamp(endDistance, 0f, total);
-		for (float d = start; d <= end; d += spec.rollerPitch) {
-			SampleFrame f = createFrame(path,d);
+		if (endDistance <= startDistance) {
+			return transforms;
+		}
+
+		float d = startDistance;
+		while (d <= endDistance) {
+			SampleFrame f = createFrame(path, d);
 			float yaw = Vec3.yawFromDirection(f.tangent) + (float)(Math.PI / 2.0);
 			Mat4.ObjectTransformation tx = new Mat4.ObjectTransformation(
 				0f,
@@ -152,7 +194,9 @@ public class TrackBuilder {
 				new Mat4()
 			);
 			transforms.add(tx);
+			d += spec.rollerPitch;
 		}
+
 		return transforms;
 	}
 

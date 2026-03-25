@@ -15,6 +15,7 @@ public class TrackSpec {
 	public final float guideHeight;
 	public final float guideThickness;
 	public final float guideGap;
+	public final float connectionGuideCutback;
 	
 	// rollers
 	public final boolean includeRollers;
@@ -22,6 +23,7 @@ public class TrackSpec {
 	public final float rollerWidthInset;
 	public final float rollerHeight;
 	public final float rollerDepthAlongPath;
+
 	
 	// transfer zone rendering
 	public final boolean suppressRollersInTransferZones;
@@ -31,7 +33,7 @@ public class TrackSpec {
 	public float sampleStep;
 
 	public TrackSpec(ToteEnvelope toteEnvelope, float sideClearance, float deckThickness, float deckTopY,
-			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, boolean includeRollers,
+			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, float connectionGuideCutback, boolean includeRollers,
 			float rollerPitch, float rollerWidthInset, float rollerHeight, float rollerDepthAlongPath,
 			float sampleStep) {
 		this(toteEnvelope,
@@ -42,6 +44,7 @@ public class TrackSpec {
 				guideHeight,
 				guideThickness,
 				guideGap,
+				connectionGuideCutback,
 				includeRollers,
 				rollerPitch,
 				rollerWidthInset,
@@ -52,12 +55,25 @@ public class TrackSpec {
 				sampleStep);
 	}
 
-	public TrackSpec(ToteEnvelope toteEnvelope, float sideClearance, float deckThickness, float deckTopY,
-			boolean includeGuides, float guideHeight, float guideThickness, float guideGap, boolean includeRollers,
-			float rollerPitch, float rollerWidthInset, float rollerHeight, float rollerDepthAlongPath,
-			boolean suppressRollersInTransferZones, boolean suppressGuidesInTransferZones,
+	public TrackSpec(
+			ToteEnvelope toteEnvelope,
+			float sideClearance,
+			float deckThickness,
+			float deckTopY,
+			boolean includeGuides,
+			float guideHeight,
+			float guideThickness,
+			float guideGap,
+			float connectionGuideCutback,
+			boolean includeRollers,
+			float rollerPitch,
+			float rollerWidthInset,
+			float rollerHeight,
+			float rollerDepthAlongPath,
+			boolean suppressRollersInTransferZones,
+			boolean suppressGuidesInTransferZones,
 			float sampleStep) {
-		super();
+
 		this.toteEnvelope = toteEnvelope;
 		this.sideClearance = sideClearance;
 		this.deckThickness = deckThickness;
@@ -66,6 +82,7 @@ public class TrackSpec {
 		this.guideHeight = guideHeight;
 		this.guideThickness = guideThickness;
 		this.guideGap = guideGap;
+		this.connectionGuideCutback = connectionGuideCutback;
 		this.includeRollers = includeRollers;
 		this.rollerPitch = rollerPitch;
 		this.rollerWidthInset = rollerWidthInset;

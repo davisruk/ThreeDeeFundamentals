@@ -22,11 +22,10 @@ public final class RouteTrackFactory {
         List<RenderableObject> result = new ArrayList<>();
         for (RouteSegment rs : routeSegments) {
             result.add(RenderableTrackFactory.createRenderableTrack(
-                tr,
-                RouteTrackLayoutFactory.create(rs),
-                spec,
-                appearance
-            ));
+                    tr,
+                    rs,
+                    spec,
+                    appearance));
         }
         return result;
     }
