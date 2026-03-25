@@ -7,10 +7,13 @@ import java.util.List;
 import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.behaviour.Behaviour.OrientationMode;
-import online.davisfamily.threedee.behaviour.routing.FirstRouteDecisionProvider;
+import online.davisfamily.threedee.behaviour.Behaviour.WrapMode;
 import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
+import online.davisfamily.threedee.behaviour.routing.TransferZone;
+import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStrategy;
+import online.davisfamily.threedee.behaviour.routing.transfer.ToggleTransferStrategy;
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
@@ -21,7 +24,6 @@ import online.davisfamily.threedee.model.tracks.TrackSpec;
 import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
-import online.davisfamily.threedee.path.TransferSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
@@ -64,45 +66,71 @@ public class TestScene extends BaseScene{
 			);
 		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
 		
-		float startX = 0f;
-		float endX = 8f;
+		// Path Geometry
+		
+		float leftX = 0f;
+		float midX = 5f;
+		float rightX = 8f;
 		float topZ = 0f;
 		float bottomZ = -3f;
 
-		// top straight: +X
-		PathSegment3 seg1 = new LinearSegment3(
-		    new Vec3(startX, 0f, topZ),
-		    new Vec3(endX,   0f, topZ)
+		// Top straight: +X
+		PathSegment3 topGeometry = new LinearSegment3(
+		    new Vec3(leftX, 0f, topZ),
+		    new Vec3(rightX, 0f, topZ)
 		);
 
-		// right-side transfer: move across in -Z, keep tote facing +X
-		PathSegment3 seg2 = new TransferSegment3(
-		    new Vec3(endX, 0f, topZ),
-		    new Vec3(endX, 0f, bottomZ),
-		    new Vec3(1f, 0f, 0f)
+		// Right return curve: top -> bottom
+		PathSegment3 rightReturnGeometry = new BezierSegment3(
+		    new Vec3(rightX, 0f, topZ),         // start
+		    new Vec3(rightX + 2f, 0f, topZ),    // control 1
+		    new Vec3(rightX + 2f, 0f, bottomZ), // control 2
+		    new Vec3(rightX, 0f, bottomZ)       // end
 		);
 
-		// bottom straight: -X
-		PathSegment3 seg3 = new LinearSegment3(
-		    new Vec3(endX,   0f, bottomZ),
-		    new Vec3(startX, 0f, bottomZ)
+		// Bottom straight: -X
+		PathSegment3 bottomGeometry = new LinearSegment3(
+		    new Vec3(rightX, 0f, bottomZ),
+		    new Vec3(leftX, 0f, bottomZ)
 		);
 
-		// left-side return curve: bottom lane back to top lane
-		PathSegment3 seg4 = new BezierSegment3(
-		    new Vec3(startX, 0f, bottomZ),   // start
-		    new Vec3(startX - 2f, 0f, bottomZ), // control 1
-		    new Vec3(startX - 2f, 0f, topZ),    // control 2
-		    new Vec3(startX, 0f, topZ)       // end
+		// Left return curve: bottom -> top
+		PathSegment3 leftReturnGeometry = new BezierSegment3(
+		    new Vec3(leftX, 0f, bottomZ),      // start
+		    new Vec3(leftX - 2f, 0f, bottomZ), // control 1
+		    new Vec3(leftX - 2f, 0f, topZ),    // control 2
+		    new Vec3(leftX, 0f, topZ)          // end
 		);
+
+		// Middle link: top -> bottom
+		PathSegment3 linkGeometry = new LinearSegment3(
+		    new Vec3(midX, 0f, topZ),
+		    new Vec3(midX, 0f, bottomZ)
+		);
+
+		// Route segments from path
+		RouteSegment top = new RouteSegment(0, "top", topGeometry);
+		RouteSegment rightReturn = new RouteSegment(1, "rightReturn", rightReturnGeometry);
+		RouteSegment bottom = new RouteSegment(2, "bottom", bottomGeometry);
+		RouteSegment leftReturn = new RouteSegment(3, "leftReturn", leftReturnGeometry);
+		RouteSegment link = new RouteSegment(4, "link", linkGeometry);
+		// Ordinary route connections
 		
-		RouteSegment rs1 = new RouteSegment(0, "top", seg1);
-		RouteSegment rs2 = new RouteSegment(1, "transfer-right", seg2);
-		RouteSegment rs3 = new RouteSegment(2, "bottom", seg3);
-		RouteSegment rs4 = new RouteSegment(3, "return-left", seg4);
-		rs1.addNext(rs2);
-		rs2.addNext(rs3);
-		rs3.addNext(rs4);
+		top.addNext(rightReturn);
+		rightReturn.addNext(bottom);
+		bottom.addNext(leftReturn);
+		leftReturn.addNext(top);
+		link.addNext(bottom);
+		// Transfer zone on the top segment
+
+		TransferZone zone = new TransferZone(
+			    4.5f,   // startDistance on top
+			    1.0f,   // length
+			    link,   // target segment
+			    0.0f    // hand off at top of link
+			);
+
+		top.getTransferZones().add(zone);
 		
 		
 		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); // green
@@ -117,7 +145,7 @@ public class TestScene extends BaseScene{
 		
 		List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
 			    tr,
-			    List.of(rs1, rs2, rs3, rs4),
+			    List.of(top, rightReturn, bottom, leftReturn, link),
 			    spec,
 			    appearance
 		);
@@ -126,14 +154,19 @@ public class TestScene extends BaseScene{
 		}
 		objects.add(rTote);
 
+
 		GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
-			rs1,
-		    new FirstRouteDecisionProvider(),
-		    2.0f,
-		    GraphFollowerBehaviour.WrapMode.LOOP,
-		    EnumSet.of(OrientationMode.YAW),
-		    0f
-		);
+			    top,
+			    null,
+			    2.0f,
+			    WrapMode.LOOP,
+			    EnumSet.of(OrientationMode.YAW),
+			    0f,
+			    0f,
+			    GraphFollowerBehaviour.TravelDirection.FORWARD,
+			    new ToggleTransferStrategy()
+			);		
+	
 		rTote.addBehaviour(follower);
 	}
 		

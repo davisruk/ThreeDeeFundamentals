@@ -13,6 +13,8 @@ public class RouteSegment {
 	private final PathSegment3 geometry;
 	private RouteDecisionProvider decisionProvider;
 	
+    private final List<TransferZone> transferZones = new ArrayList<>();
+
 
 	public RouteSegment(int id, String label, PathSegment3 geometry) {
 		this.id = id;
@@ -23,6 +25,7 @@ public class RouteSegment {
 	public List<RouteSegment> getNextSegments() {
 		return nextSegments;
 	}
+	
 	public List<RouteSegment> getPreviousSegments() {
 		return previousSegments;
 	}
@@ -41,7 +44,16 @@ public class RouteSegment {
 	    }
 
 	    return this;
-	}	
+	}
+	
+    public List<TransferZone> getTransferZones() {
+        return transferZones;
+    }
+    
+    public void addTransferZone(TransferZone tz) {
+    	transferZones.add(tz);
+    }
+    
 	public int getId() {
 		return id;
 	}

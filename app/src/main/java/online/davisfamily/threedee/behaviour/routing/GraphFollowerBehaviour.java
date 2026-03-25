@@ -7,24 +7,23 @@ import java.util.List;
 import java.util.Set;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
+import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStrategy;
+import online.davisfamily.threedee.behaviour.routing.transfer.TransferDecisionStrategy;
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 
-/** follows one route segment at a time
- ** keeps local distance within the segment
- ** asks the provider when a branch is reached
- **/
 public class GraphFollowerBehaviour implements Behaviour {
 
     public enum TravelDirection {
         FORWARD,
         REVERSE
     }
-    
+
     private final EnumSet<OrientationMode> orientationModes;
     private final RouteDecisionProvider decisionProvider;
-	private final float unitsPerSecond;
+    private final float unitsPerSecond;
     private final float yawOffsetRadians;
     private final RouteSegment startSegment;
     private RouteSegment currentSegment;
@@ -34,6 +33,16 @@ public class GraphFollowerBehaviour implements Behaviour {
     private final TravelDirection startDirection;
     private final WrapMode wrapMode;
 
+    private final TransferDecisionStrategy transferDecisionStrategy;
+    private TransferZone activeTransferZone;
+    private boolean transferCommitted;
+    private TransferZone lastDeclinedTransferZone;
+
+    // Yaw state
+    private float currentYawRadians;
+    private boolean yawInitialised;
+    private Float frozenTransferYawRadians;
+
     public GraphFollowerBehaviour(
             RouteSegment startSegment,
             RouteDecisionProvider defaultDecisionProvider,
@@ -42,14 +51,17 @@ public class GraphFollowerBehaviour implements Behaviour {
             EnumSet<OrientationMode> orientationModes,
             float yawOffsetRadians) {
 
-        this(startSegment,
+        this(
+                startSegment,
                 defaultDecisionProvider,
                 unitsPerSecond,
                 wrapMode,
                 orientationModes,
                 yawOffsetRadians,
                 0f,
-                TravelDirection.FORWARD);
+                TravelDirection.FORWARD,
+                new AlwaysTransferStrategy()
+        );
     }
 
     public GraphFollowerBehaviour(
@@ -60,7 +72,8 @@ public class GraphFollowerBehaviour implements Behaviour {
             EnumSet<OrientationMode> orientationModes,
             float yawOffsetRadians,
             float startDistanceAlongSegment,
-            TravelDirection startDirection) {
+            TravelDirection startDirection,
+            TransferDecisionStrategy transferDecisionStrategy) {
 
         if (startSegment == null) {
             throw new IllegalArgumentException("Start RouteSegment must not be null");
@@ -79,6 +92,9 @@ public class GraphFollowerBehaviour implements Behaviour {
         this.wrapMode = wrapMode;
         this.orientationModes = orientationModes;
         this.yawOffsetRadians = yawOffsetRadians;
+        this.transferDecisionStrategy = transferDecisionStrategy;
+
+        initialiseYaw();
     }
 
     @Override
@@ -88,13 +104,17 @@ public class GraphFollowerBehaviour implements Behaviour {
         }
 
         if (unitsPerSecond <= 0f || dtSeconds <= 0d) {
-            applyTransform(object);
+            object.transformation.setTranslation(computeDisplayPosition());
+            applyOrientation(object);
             return;
         }
 
         float remainingDistance = unitsPerSecond * (float) dtSeconds;
 
         while (remainingDistance > 0f && currentSegment != null) {
+
+            maybeStartTransfer(object);
+
             PathSegment3 geometry = currentSegment.getGeometry();
             float segmentLength = geometry.getTotalLength();
 
@@ -102,21 +122,43 @@ public class GraphFollowerBehaviour implements Behaviour {
                     ? (segmentLength - distanceAlongCurrentSegment)
                     : distanceAlongCurrentSegment;
 
-            if (remainingDistance < distanceToBoundary) {
-                if (travelDirection == TravelDirection.FORWARD) {
-                    distanceAlongCurrentSegment += remainingDistance;
-                } else {
-                    distanceAlongCurrentSegment -= remainingDistance;
-                }
-                remainingDistance = 0f;
+            float distanceToTransferEnd = Float.POSITIVE_INFINITY;
+            if (transferCommitted && activeTransferZone != null && travelDirection == TravelDirection.FORWARD) {
+                distanceToTransferEnd = activeTransferZone.getEndDistance() - distanceAlongCurrentSegment;
+            }
+
+            float stepDistance = Math.min(remainingDistance, Math.min(distanceToBoundary, distanceToTransferEnd));
+            if (stepDistance < 0f) {
+                stepDistance = 0f;
+            }
+
+            if (travelDirection == TravelDirection.FORWARD) {
+                distanceAlongCurrentSegment += stepDistance;
             } else {
+                distanceAlongCurrentSegment -= stepDistance;
+            }
+
+            remainingDistance -= stepDistance;
+
+            updateYawForCurrentState();
+
+            if (maybeCompleteTransfer()) {
+                continue;
+            }
+
+            geometry = currentSegment.getGeometry();
+            segmentLength = geometry.getTotalLength();
+
+            boolean atBoundary =
+                    (travelDirection == TravelDirection.FORWARD && distanceAlongCurrentSegment >= segmentLength)
+                 || (travelDirection == TravelDirection.REVERSE && distanceAlongCurrentSegment <= 0f);
+
+            if (atBoundary) {
                 if (travelDirection == TravelDirection.FORWARD) {
                     distanceAlongCurrentSegment = segmentLength;
                 } else {
                     distanceAlongCurrentSegment = 0f;
                 }
-
-                remainingDistance -= distanceToBoundary;
 
                 RouteSegment adjacent = chooseAdjacentSegment(object);
 
@@ -125,58 +167,214 @@ public class GraphFollowerBehaviour implements Behaviour {
                     distanceAlongCurrentSegment = (travelDirection == TravelDirection.FORWARD)
                             ? 0f
                             : currentSegment.getGeometry().getTotalLength();
+
+                    activeTransferZone = null;
+                    transferCommitted = false;
+                    lastDeclinedTransferZone = null;
+                    frozenTransferYawRadians = null;
+
+                    onEnterSegment(currentSegment);
                 } else {
                     handleNoAdjacentSegment();
                     if (wrapMode == WrapMode.CLAMP) {
                         remainingDistance = 0f;
                     }
                 }
+            } else if (stepDistance == 0f) {
+                remainingDistance = 0f;
             }
         }
 
-        applyTransform(object);
+        object.transformation.setTranslation(computeDisplayPosition());
+        applyOrientation(object);
+    }
+
+    private void initialiseYaw() {
+        if (yawInitialised || currentSegment == null) {
+            return;
+        }
+
+        PathSegment3 ps = currentSegment.getGeometry();
+        Vec3 dir = ps.sampleOrientationDirectionByDistance(distanceAlongCurrentSegment);
+        currentYawRadians = Vec3.yawFromDirection(dir) + yawOffsetRadians;
+        yawInitialised = true;
+    }
+
+    private void onEnterSegment(RouteSegment segment) {
+        if (segment == null) {
+            return;
+        }
+
+        PathSegment3 ps = segment.getGeometry();
+
+        if (ps instanceof BezierSegment3) {
+            Vec3 dir = ps.sampleOrientationDirectionByDistance(distanceAlongCurrentSegment);
+            currentYawRadians = Vec3.yawFromDirection(dir) + yawOffsetRadians;
+        }
+        // LinearSegment3 and other non-bezier segments preserve currentYawRadians
+    }
+
+    private void updateYawForCurrentState() {
+        if (!yawInitialised || currentSegment == null) {
+            initialiseYaw();
+        }
+
+        if (transferCommitted && activeTransferZone != null) {
+            if (frozenTransferYawRadians == null) {
+                frozenTransferYawRadians = currentYawRadians;
+            }
+            return;
+        }
+
+        PathSegment3 ps = currentSegment.getGeometry();
+
+        if (ps instanceof BezierSegment3) {
+            Vec3 dir = ps.sampleOrientationDirectionByDistance(distanceAlongCurrentSegment);
+            if (travelDirection == TravelDirection.REVERSE) {
+                dir = dir.scale(-1f);
+            }
+            currentYawRadians = Vec3.yawFromDirection(dir) + yawOffsetRadians;
+        }
+        // LinearSegment3 preserves yaw
+    }
+
+    private void maybeStartTransfer(RenderableObject object) {
+        if (activeTransferZone != null) {
+            return;
+        }
+
+        TransferZone currentZone = findContainingTransferZone(currentSegment, distanceAlongCurrentSegment);
+
+        if (currentZone != null && currentZone != lastDeclinedTransferZone) {
+            boolean shouldTransfer = transferDecisionStrategy.shouldTransfer(
+                    currentSegment,
+                    currentZone,
+                    object
+            );
+
+            if (shouldTransfer) {
+                activeTransferZone = currentZone;
+                transferCommitted = true;
+                lastDeclinedTransferZone = null;
+                frozenTransferYawRadians = currentYawRadians;
+            } else {
+                lastDeclinedTransferZone = currentZone;
+            }
+        }
+
+        if (currentZone == null && activeTransferZone == null) {
+            lastDeclinedTransferZone = null;
+        }
+    }
+
+    private boolean maybeCompleteTransfer() {
+        if (!transferCommitted || activeTransferZone == null) {
+            return false;
+        }
+
+        if (travelDirection != TravelDirection.FORWARD) {
+            return false;
+        }
+
+        if (distanceAlongCurrentSegment >= activeTransferZone.getEndDistance()) {
+            currentSegment = activeTransferZone.getTargetSegment();
+            distanceAlongCurrentSegment = activeTransferZone.getTargetStartDistance();
+
+            if (frozenTransferYawRadians != null) {
+                currentYawRadians = frozenTransferYawRadians;
+            }
+
+            activeTransferZone = null;
+            transferCommitted = false;
+            lastDeclinedTransferZone = null;
+            frozenTransferYawRadians = null;
+
+            onEnterSegment(currentSegment);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private Vec3 computeDisplayPosition() {
+        if (currentSegment == null) {
+            return new Vec3(0f, 0f, 0f);
+        }
+
+        Vec3 sourcePos = currentSegment.getGeometry().sampleByDistance(distanceAlongCurrentSegment);
+
+        if (transferCommitted && activeTransferZone != null) {
+            float t = (distanceAlongCurrentSegment - activeTransferZone.getStartDistance())
+                    / activeTransferZone.getLength();
+            t = clamp(t, 0f, 1f);
+
+            float blend = smoothStep(t);
+
+            Vec3 targetPos = activeTransferZone.getTargetSegment()
+                    .getGeometry()
+                    .sampleByDistance(activeTransferZone.getTargetStartDistance());
+
+            return lerp(sourcePos, targetPos, blend);
+        }
+
+        return sourcePos;
+    }
+
+    private void applyOrientation(RenderableObject ro) {
+        if (currentSegment == null) return;
+        if (orientationModes.contains(OrientationMode.NONE)) return;
+
+        float yawToApply = currentYawRadians;
+        if (transferCommitted && activeTransferZone != null && frozenTransferYawRadians != null) {
+            yawToApply = frozenTransferYawRadians;
+        }
+
+        if (orientationModes.contains(OrientationMode.YAW)) {
+            ro.transformation.angleY = yawToApply;
+        }
+
+        if (orientationModes.contains(OrientationMode.PITCH)) {
+            PathSegment3 ps = currentSegment.getGeometry();
+            Vec3 tangent = ps.sampleTangentByDistance(distanceAlongCurrentSegment);
+            if (travelDirection == TravelDirection.REVERSE) {
+                tangent = tangent.scale(-1f);
+            }
+
+            float pitch = tangent.pitch();
+            ro.transformation.angleX = -pitch;
+        }
+    }
+
+    private TransferZone findContainingTransferZone(RouteSegment segment, float distanceOnSegment) {
+        for (TransferZone zone : segment.getTransferZones()) {
+            if (zone.contains(distanceOnSegment)) {
+                return zone;
+            }
+        }
+        return null;
     }
 
     private RouteSegment chooseAdjacentSegment(RenderableObject object) {
-        List<RouteSegment> options = (travelDirection == TravelDirection.FORWARD)
+        List<RouteSegment> candidates = (travelDirection == TravelDirection.FORWARD)
                 ? currentSegment.getNextSegments()
                 : currentSegment.getPreviousSegments();
 
-        if (options.isEmpty()) {
+        if (candidates == null || candidates.isEmpty()) {
             return null;
         }
 
-        if (options.size() == 1) {
-            return options.get(0);
+        if (candidates.size() == 1) {
+            return candidates.get(0);
         }
 
-        RouteDecisionProvider provider = currentSegment.getDecisionProvider();
-        if (provider == null) {
-            provider = decisionProvider;
-        }
-
-        if (provider == null) {
-            return options.get(0);
-        }
-
-        RouteSegment chosen = provider.chooseNext(
-                object,
-                currentSegment,
-                options,
-                travelDirection
-        );
-
-        if (chosen == null || !options.contains(chosen)) {
-            return options.get(0);
-        }
-
-        return chosen;
+        return candidates.get(0);
     }
 
     private void handleNoAdjacentSegment() {
         switch (wrapMode) {
             case CLAMP -> {
-                // remain at the boundary
+                // remain at boundary
             }
             case LOOP -> resetToStart();
             case PING_PONG -> reverseDirectionAtBoundary();
@@ -187,38 +385,42 @@ public class GraphFollowerBehaviour implements Behaviour {
         currentSegment = startSegment;
         distanceAlongCurrentSegment = startDistanceAlongSegment;
         travelDirection = startDirection;
+
+        activeTransferZone = null;
+        transferCommitted = false;
+        lastDeclinedTransferZone = null;
+        frozenTransferYawRadians = null;
+
+        initialiseYaw();
+        onEnterSegment(currentSegment);
     }
 
     private void reverseDirectionAtBoundary() {
         travelDirection = (travelDirection == TravelDirection.FORWARD)
                 ? TravelDirection.REVERSE
                 : TravelDirection.FORWARD;
+
+        activeTransferZone = null;
+        transferCommitted = false;
+        lastDeclinedTransferZone = null;
+        frozenTransferYawRadians = null;
     }
 
-    private void applyTransform(RenderableObject ro) {
-		if (currentSegment == null) return;
-		
-		PathSegment3 ps = currentSegment.getGeometry();
-		Vec3 pos = ps.sampleByDistance(distanceAlongCurrentSegment);
-		Vec3 orientationDir = ps.sampleOrientationDirectionByDistance(distanceAlongCurrentSegment);
-		ro.transformation.setTranslation(pos);
-		if (orientationModes.contains(OrientationMode.NONE)) return;
-		
-		Vec3 tangent = ps.sampleTangentByDistance(distanceAlongCurrentSegment);
-		if (travelDirection == TravelDirection.REVERSE) {
-            tangent = tangent.scale(-1f);
-        }
-		float yaw = Vec3.yawFromDirection(orientationDir) + yawOffsetRadians;
-		
-		if (orientationModes.contains(OrientationMode.YAW)) {
-            ro.transformation.angleY = yaw + yawOffsetRadians;
-            ro.transformation.angleX = 0f;
-		}
-		if (orientationModes.contains(OrientationMode.PITCH)) {
-            float pitch = tangent.pitch();
-            ro.transformation.angleX = -pitch;
-        }
-	}
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private static float smoothStep(float t) {
+        return t * t * (3f - 2f * t);
+    }
+
+    private static Vec3 lerp(Vec3 a, Vec3 b, float t) {
+        return new Vec3(
+                a.x + (b.x - a.x) * t,
+                a.y + (b.y - a.y) * t,
+                a.z + (b.z - a.z) * t
+        );
+    }
 
     public List<RouteSegment> getReachableSegments() {
         List<RouteSegment> ordered = new ArrayList<>();
@@ -245,7 +447,7 @@ public class GraphFollowerBehaviour implements Behaviour {
 
     public String describeGraph() {
         StringBuilder sb = new StringBuilder();
-        sb.append("GraphPathFollowerBehaviour graph")
+        sb.append("GraphFollowerBehaviour graph")
           .append(System.lineSeparator());
 
         List<RouteSegment> segments = getReachableSegments();
@@ -285,29 +487,29 @@ public class GraphFollowerBehaviour implements Behaviour {
     @Override
     public String toString() {
         return describeGraph();
-    }	
+    }
+
     public RouteDecisionProvider getDecisionProvider() {
-		return decisionProvider;
-	}
+        return decisionProvider;
+    }
 
-	public RouteSegment getCurrentSegment() {
-		return currentSegment;
-	}
+    public RouteSegment getCurrentSegment() {
+        return currentSegment;
+    }
 
-	public float getDistanceAlongCurrentSegment() {
-		return distanceAlongCurrentSegment;
-	}
+    public float getDistanceAlongCurrentSegment() {
+        return distanceAlongCurrentSegment;
+    }
 
-	public TravelDirection getTravelDirection() {
-		return travelDirection;
-	}
+    public TravelDirection getTravelDirection() {
+        return travelDirection;
+    }
 
-	public void setTravelDirection(TravelDirection travelDirection) {
-		this.travelDirection = travelDirection;
-	}
+    public void setTravelDirection(TravelDirection travelDirection) {
+        this.travelDirection = travelDirection;
+    }
 
-	public RouteSegment getStartSegment() {
-		return startSegment;
-	}
-
+    public RouteSegment getStartSegment() {
+        return startSegment;
+    }
 }
