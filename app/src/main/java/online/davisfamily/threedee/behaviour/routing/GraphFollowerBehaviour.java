@@ -33,7 +33,6 @@ public class GraphFollowerBehaviour implements Behaviour {
     private final TravelDirection startDirection;
     private final WrapMode wrapMode;
 
-    private final TransferDecisionStrategy transferDecisionStrategy;
     private TransferZone activeTransferZone;
     private boolean transferCommitted;
     private TransferZone lastDeclinedTransferZone;
@@ -59,9 +58,7 @@ public class GraphFollowerBehaviour implements Behaviour {
                 orientationModes,
                 yawOffsetRadians,
                 0f,
-                TravelDirection.FORWARD,
-                new AlwaysTransferStrategy()
-        );
+                TravelDirection.FORWARD);
     }
 
     public GraphFollowerBehaviour(
@@ -72,8 +69,7 @@ public class GraphFollowerBehaviour implements Behaviour {
             EnumSet<OrientationMode> orientationModes,
             float yawOffsetRadians,
             float startDistanceAlongSegment,
-            TravelDirection startDirection,
-            TransferDecisionStrategy transferDecisionStrategy) {
+            TravelDirection startDirection) {
 
         if (startSegment == null) {
             throw new IllegalArgumentException("Start RouteSegment must not be null");
@@ -92,7 +88,6 @@ public class GraphFollowerBehaviour implements Behaviour {
         this.wrapMode = wrapMode;
         this.orientationModes = orientationModes;
         this.yawOffsetRadians = yawOffsetRadians;
-        this.transferDecisionStrategy = transferDecisionStrategy;
 
         initialiseYaw();
     }
@@ -249,12 +244,12 @@ public class GraphFollowerBehaviour implements Behaviour {
         TransferZone currentZone = findContainingTransferZone(currentSegment, distanceAlongCurrentSegment);
 
         if (currentZone != null && currentZone != lastDeclinedTransferZone) {
-            boolean shouldTransfer = transferDecisionStrategy.shouldTransfer(
-                    currentSegment,
-                    currentZone,
-                    object
-            );
-
+        	boolean shouldTransfer = currentZone.getDecisionStrategy().shouldTransfer(
+        		    currentSegment,
+        		    currentZone,
+        		    object
+        		);
+        	
             if (shouldTransfer) {
                 activeTransferZone = currentZone;
                 transferCommitted = true;

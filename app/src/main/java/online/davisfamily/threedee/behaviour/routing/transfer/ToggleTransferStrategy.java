@@ -7,6 +7,13 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 public class ToggleTransferStrategy implements TransferDecisionStrategy {
 
 	private boolean transfer = true;
+	
+	
+	public ToggleTransferStrategy(boolean intialState) {
+		this.transfer = intialState;
+	}
+
+
 	@Override
 	public boolean shouldTransfer(RouteSegment currentSegment, TransferZone transferZone,
 			RenderableObject renderableObject) {

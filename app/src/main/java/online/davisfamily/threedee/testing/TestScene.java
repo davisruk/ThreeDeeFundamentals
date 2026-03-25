@@ -69,16 +69,19 @@ public class TestScene extends BaseScene{
 		// Path Geometry
 		
 		float leftX = 0f;
-		float midX = 5f;
+		float link1X = 3f;
+		float link2X = 5f;
 		float rightX = 8f;
 		float topZ = 0f;
 		float bottomZ = -3f;
-
+		
+		// Top straight: +X
 		PathSegment3 topGeometry = new LinearSegment3(
 		    new Vec3(leftX, 0f, topZ),
 		    new Vec3(rightX, 0f, topZ)
 		);
 
+		// Right return curve: top -> bottom
 		PathSegment3 rightReturnGeometry = new BezierSegment3(
 		    new Vec3(rightX, 0f, topZ),
 		    new Vec3(rightX + 2f, 0f, topZ),
@@ -86,11 +89,13 @@ public class TestScene extends BaseScene{
 		    new Vec3(rightX, 0f, bottomZ)
 		);
 
+		// Bottom straight: -X
 		PathSegment3 bottomGeometry = new LinearSegment3(
 		    new Vec3(rightX, 0f, bottomZ),
 		    new Vec3(leftX, 0f, bottomZ)
 		);
 
+		// Left return curve: bottom -> top
 		PathSegment3 leftReturnGeometry = new BezierSegment3(
 		    new Vec3(leftX, 0f, bottomZ),
 		    new Vec3(leftX - 2f, 0f, bottomZ),
@@ -98,33 +103,72 @@ public class TestScene extends BaseScene{
 		    new Vec3(leftX, 0f, topZ)
 		);
 
-		PathSegment3 linkGeometry = new LinearSegment3(
-		    new Vec3(midX, 0f, topZ),
-		    new Vec3(midX, 0f, bottomZ)
+		// Middle link 1: top -> bottom at x=3
+		PathSegment3 link1Geometry = new LinearSegment3(
+		    new Vec3(link1X, 0f, topZ),
+		    new Vec3(link1X, 0f, bottomZ)
 		);
 
-		// Route segments from path
+		// Middle link 2: top -> bottom at x=5
+		PathSegment3 link2Geometry = new LinearSegment3(
+		    new Vec3(link2X, 0f, topZ),
+		    new Vec3(link2X, 0f, bottomZ)
+		);
+
+		// =====================
+		// Route segments
+		// =====================
+
 		RouteSegment top = new RouteSegment("top", topGeometry);
 		RouteSegment rightReturn = new RouteSegment("rightReturn", rightReturnGeometry);
 		RouteSegment bottom = new RouteSegment("bottom", bottomGeometry);
 		RouteSegment leftReturn = new RouteSegment("leftReturn", leftReturnGeometry);
-		RouteSegment link = new RouteSegment("link", linkGeometry);		// Ordinary route connections
-		
+		RouteSegment link1 = new RouteSegment("link1", link1Geometry);
+		RouteSegment link2 = new RouteSegment("link2", link2Geometry);
+
+		// =====================
+		// Main oval loop
+		// =====================
+
 		top.connectTo(rightReturn);
 		rightReturn.connectTo(bottom);
 		bottom.connectTo(leftReturn);
 		leftReturn.connectTo(top);
-		link.connectTo(bottom, 3.0f);
-		// Transfer zone on the top segment
 
-		TransferZone zone = new TransferZone(
-			    4.5f,
-			    1.0f,
-			    link,
-			    0.0f
-			);
-			top.getTransferZones().add(zone);
-		
+		// =====================
+		// Link connections into bottom
+		// =====================
+
+		// bottom runs from x=8 to x=0 at z=-3
+		// so entry distance is (8 - linkX)
+
+		link1.connectTo(bottom, 5.0f); // x=3 -> distance 5 along bottom
+		link2.connectTo(bottom, 3.0f); // x=5 -> distance 3 along bottom
+
+		// =====================
+		// Transfer zones on top
+		// =====================
+
+		// top runs from x=0 to x=8, so distance along top == x
+
+		TransferZone zone1 = new TransferZone(
+		    2.5f,                         // start near x=3
+		    1.0f,                         // spans roughly x=2.5..3.5
+		    link1,
+		    0.0f,
+		    new ToggleTransferStrategy(false)
+		);
+
+		TransferZone zone2 = new TransferZone(
+		    4.5f,                         // start near x=5
+		    1.0f,                         // spans roughly x=4.5..5.5
+		    link2,
+		    0.0f,
+		    new ToggleTransferStrategy(true)
+		);
+
+		top.getTransferZones().add(zone1);
+		top.getTransferZones().add(zone2);
 		
 		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00); // green
 		OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF); // magenta
@@ -138,7 +182,7 @@ public class TestScene extends BaseScene{
 		
 		List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
 			    tr,
-			    List.of(top, rightReturn, bottom, leftReturn, link),
+			    List.of(top, rightReturn, bottom, leftReturn, link1, link2),
 			    spec,
 			    appearance
 		);
@@ -156,8 +200,7 @@ public class TestScene extends BaseScene{
 			    EnumSet.of(OrientationMode.YAW),
 			    0f,
 			    0f,
-			    GraphFollowerBehaviour.TravelDirection.FORWARD,
-			    new ToggleTransferStrategy()
+			    GraphFollowerBehaviour.TravelDirection.FORWARD
 			);		
 	
 		rTote.addBehaviour(follower);
