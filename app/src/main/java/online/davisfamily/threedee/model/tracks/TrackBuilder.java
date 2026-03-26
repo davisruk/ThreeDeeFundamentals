@@ -91,18 +91,25 @@ public class TrackBuilder {
 		}
 
 		for (int i = 0; i < frames.size() - 1; i++) {
-			mb.addQuad(tl[i], tr[i], tr[i + 1], tl[i + 1]);       // top
-			mb.addQuad(bl[i + 1], br[i + 1], br[i], bl[i]);       // bottom
-			mb.addQuad(bl[i], tl[i], tl[i + 1], bl[i + 1]);       // left side
-			mb.addQuad(tr[i], br[i], br[i + 1], tr[i + 1]);       // right side
+			// top face: outward normal +Y
+			mb.addQuad(tl[i], tl[i + 1], tr[i + 1], tr[i]);
+
+			// bottom face: outward normal -Y
+			mb.addQuad(bl[i], br[i], br[i + 1], bl[i + 1]);
+
+			// left side: outward normal toward the deck's left exterior
+			mb.addQuad(tl[i], bl[i], bl[i + 1], tl[i + 1]);
+
+			// right side: outward normal toward the deck's right exterior
+			mb.addQuad(tr[i], tr[i + 1], br[i + 1], br[i]);
 		}
 
-		// start cap
-		mb.addQuad(tl[0], tr[0], br[0], bl[0]);
+		// start cap: outward normal opposite tangent
+		mb.addQuad(tr[0], br[0], bl[0], tl[0]);
 
-		// end cap
+		// end cap: outward normal along tangent
 		int last = frames.size() - 1;
-		mb.addQuad(bl[last], br[last], tr[last], tl[last]);
+		mb.addQuad(tl[last], bl[last], br[last], tr[last]);
 
 		return mb.build("Deck");
 	}
@@ -199,34 +206,58 @@ public class TrackBuilder {
 	        float y1,
 	        TrackMeshBuilder mb) {
 
-		int[] ib = new int[frames.size()];
-		int[] it = new int[frames.size()];
-		int[] ob = new int[frames.size()];
-		int[] ot = new int[frames.size()];
+	    int[] ib = new int[frames.size()];
+	    int[] it = new int[frames.size()];
+	    int[] ob = new int[frames.size()];
+	    int[] ot = new int[frames.size()];
 
-		for (int i = 0; i < frames.size(); i++) {
-			SampleFrame f = frames.get(i);
-			Vec3 inner = f.centre.add(f.side.scale(innerOffset));
-			Vec3 outer = f.centre.add(f.side.scale(outerOffset));
-			ib[i] = mb.addVertex(inner.x, y0, inner.z);
-			it[i] = mb.addVertex(inner.x, y1, inner.z);
-			ob[i] = mb.addVertex(outer.x, y0, outer.z);
-			ot[i] = mb.addVertex(outer.x, y1, outer.z);
-		}
+	    for (int i = 0; i < frames.size(); i++) {
+	        SampleFrame f = frames.get(i);
+	        Vec3 inner = f.centre.add(f.side.scale(innerOffset));
+	        Vec3 outer = f.centre.add(f.side.scale(outerOffset));
 
-		for (int i = 0; i < frames.size() - 1; i++) {
-			mb.addQuad(it[i], ot[i], ot[i + 1], it[i + 1]);       // top
-			mb.addQuad(ob[i], ib[i], ib[i + 1], ob[i + 1]);       // bottom
-			mb.addQuad(ib[i], it[i], it[i + 1], ib[i + 1]);       // inner face
-			mb.addQuad(ot[i], ob[i], ob[i + 1], ot[i + 1]);       // outer face
-		}
+	        ib[i] = mb.addVertex(inner.x, y0, inner.z);
+	        it[i] = mb.addVertex(inner.x, y1, inner.z);
+	        ob[i] = mb.addVertex(outer.x, y0, outer.z);
+	        ot[i] = mb.addVertex(outer.x, y1, outer.z);
+	    }
 
-		// start cap
-		mb.addQuad(ob[0], ot[0], it[0], ib[0]);
+	    boolean outerIsPositiveSide = outerOffset > innerOffset;
 
-		// end cap
-		int last = frames.size() - 1;
-		mb.addQuad(ib[last], it[last], ot[last], ob[last]);
+	    for (int i = 0; i < frames.size() - 1; i++) {
+	        if (outerIsPositiveSide) {
+	            // top (+Y)
+	            mb.addQuad(it[i], it[i + 1], ot[i + 1], ot[i]);
+
+	            // bottom (-Y)
+	            mb.addQuad(ib[i], ob[i], ob[i + 1], ib[i + 1]);
+
+	            // inner face (negative side)
+	            mb.addQuad(it[i], ib[i], ib[i + 1], it[i + 1]);
+
+	            // outer face (positive side)
+	            mb.addQuad(ot[i], ot[i + 1], ob[i + 1], ob[i]);
+	        } else {
+	            // top (+Y)
+	            mb.addQuad(ot[i], ot[i + 1], it[i + 1], it[i]);
+
+	            // bottom (-Y)
+	            mb.addQuad(ob[i], ib[i], ib[i + 1], ob[i + 1]);
+
+	            // inner face (positive side)
+	            mb.addQuad(it[i], it[i + 1], ib[i + 1], ib[i]);
+
+	            // outer face (negative side)
+	            mb.addQuad(ot[i], ob[i], ob[i + 1], ot[i + 1]);
+	        }
+	    }
+
+	    // start cap (outward opposite tangent)
+	    mb.addQuad(ob[0], ot[0], it[0], ib[0]);
+
+	    // end cap (outward along tangent)
+	    int last = frames.size() - 1;
+	    mb.addQuad(ib[last], it[last], ot[last], ob[last]);
 	}
 	
 	private static List<Mat4.ObjectTransformation> buildRollers(PathSegment3 path, TrackSpec spec, float startDistance, float endDistance) {

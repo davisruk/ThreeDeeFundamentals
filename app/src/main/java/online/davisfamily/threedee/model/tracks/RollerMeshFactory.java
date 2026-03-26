@@ -41,22 +41,22 @@ public final class RollerMeshFactory {
 
         int[][] triangles = new int[][] {
             // back (-X)
-            {0, 2, 1}, {0, 3, 2},
+            {0, 1, 2}, {0, 2, 3},
 
             // front (+X)
-            {4, 5, 6}, {4, 6, 7},
+            {4, 7, 6}, {4, 6, 5},
 
             // left (-Z)
-            {0, 4, 7}, {0, 7, 3},
+            {0, 3, 7}, {0, 7, 4},
 
             // right (+Z)
-            {1, 2, 6}, {1, 6, 5},
+            {1, 5, 6}, {1, 6, 2},
 
             // bottom (-Y)
-            {0, 1, 5}, {0, 5, 4},
+            {0, 4, 5}, {0, 5, 1},
 
             // top (+Y)
-            {3, 7, 6}, {3, 6, 2}
+            {3, 2, 6}, {3, 6, 7}
         };
 
         return new Mesh(vertices, triangles, "roller");

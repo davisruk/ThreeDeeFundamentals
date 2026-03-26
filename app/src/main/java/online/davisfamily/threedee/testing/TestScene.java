@@ -43,8 +43,8 @@ public class TestScene extends BaseScene{
 		objects = new ArrayList<RenderableObject>();
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
 		Tote t = setupTote();
-//		setupOvalTrack(t);
-		setupParallelTracks(t);
+		setupOvalTrack(t);
+//		setupParallelTracks(t);
 	}
 		
 	@Override
@@ -336,7 +336,7 @@ public class TestScene extends BaseScene{
 		        GuideSide.RIGHT,
 		        always
 		);
-		
+	
 		builder.renderWith(upper, spec)
 	       .renderWith(lower, spec);
 		
@@ -363,7 +363,7 @@ public class TestScene extends BaseScene{
 			    upper,         					// startSegment
 			    null,        					// defaultDecisionProvider
 			    2.0f,        					// unitsPerSecond
-			    WrapMode.LOOP,  				// wrapMode
+			    WrapMode.PING_PONG,  				// wrapMode
 			    EnumSet.of(OrientationMode.YAW),// orientationModes
 			    0f,        						// yawOffsetRadians
 			    rollerYOffset,					// yOffset - raise object on track above the rollers
