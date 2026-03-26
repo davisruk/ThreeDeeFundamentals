@@ -7,8 +7,6 @@ import java.util.List;
 import java.util.Set;
 
 import online.davisfamily.threedee.behaviour.Behaviour;
-import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStrategy;
-import online.davisfamily.threedee.behaviour.routing.transfer.TransferDecisionStrategy;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
@@ -32,6 +30,19 @@ public class GraphFollowerBehaviour implements Behaviour {
     private final float startDistanceAlongSegment;
     private final TravelDirection startDirection;
     private final WrapMode wrapMode;
+    private final float yOffset;
+
+    /**
+     * Length of the travelling object used to determine when its rear edge reaches
+     * the end of the transfer zone.
+     */
+    private final float transferObjectLength;
+
+    private Vec3 transferSourceAnchor;
+    private Vec3 transferTargetAnchor;
+    private float lateralTransferProgress;
+    private float lateralTransferDistance;
+    private boolean lateralTransferInProgress;
 
     private TransferZone activeTransferZone;
     private boolean transferCommitted;
@@ -48,7 +59,8 @@ public class GraphFollowerBehaviour implements Behaviour {
             float unitsPerSecond,
             WrapMode wrapMode,
             EnumSet<OrientationMode> orientationModes,
-            float yawOffsetRadians) {
+            float yawOffsetRadians,
+            float yOffset) {
 
         this(
                 startSegment,
@@ -57,8 +69,11 @@ public class GraphFollowerBehaviour implements Behaviour {
                 wrapMode,
                 orientationModes,
                 yawOffsetRadians,
+                yOffset,
                 0f,
-                TravelDirection.FORWARD);
+                TravelDirection.FORWARD,
+                0f
+        );
     }
 
     public GraphFollowerBehaviour(
@@ -68,16 +83,45 @@ public class GraphFollowerBehaviour implements Behaviour {
             WrapMode wrapMode,
             EnumSet<OrientationMode> orientationModes,
             float yawOffsetRadians,
+            float yOffset,
             float startDistanceAlongSegment,
             TravelDirection startDirection) {
+
+        this(
+                startSegment,
+                defaultDecisionProvider,
+                unitsPerSecond,
+                wrapMode,
+                orientationModes,
+                yawOffsetRadians,
+                yOffset,
+                startDistanceAlongSegment,
+                startDirection,
+                0f
+        );
+    }
+
+    public GraphFollowerBehaviour(
+            RouteSegment startSegment,
+            RouteDecisionProvider defaultDecisionProvider,
+            float unitsPerSecond,
+            WrapMode wrapMode,
+            EnumSet<OrientationMode> orientationModes,
+            float yawOffsetRadians,
+            float yOffset,
+            float startDistanceAlongSegment,
+            TravelDirection startDirection,
+            float transferObjectLength) {
 
         if (startSegment == null) {
             throw new IllegalArgumentException("Start RouteSegment must not be null");
         }
 
+        this.yOffset = yOffset;
         this.startSegment = startSegment;
         this.startDistanceAlongSegment = startDistanceAlongSegment;
         this.startDirection = startDirection;
+        this.transferObjectLength = Math.max(0f, transferObjectLength);
 
         this.currentSegment = startSegment;
         this.distanceAlongCurrentSegment = startDistanceAlongSegment;
@@ -108,6 +152,33 @@ public class GraphFollowerBehaviour implements Behaviour {
 
         while (remainingDistance > 0f && currentSegment != null) {
 
+            // If we are in lateral transfer, consume distance only into the lateral motion.
+            if (lateralTransferInProgress) {
+                float remainingLateralDistance = (1f - lateralTransferProgress) * lateralTransferDistance;
+                float lateralStep = Math.min(remainingDistance, remainingLateralDistance);
+
+                if (lateralTransferDistance > 0f) {
+                    lateralTransferProgress += lateralStep / lateralTransferDistance;
+                } else {
+                    lateralTransferProgress = 1f;
+                }
+
+                lateralTransferProgress = clamp(lateralTransferProgress, 0f, 1f);
+                remainingDistance -= lateralStep;
+
+                updateYawForCurrentState();
+
+                if (maybeCompleteTransfer()) {
+                    continue;
+                }
+
+                if (lateralStep == 0f) {
+                    remainingDistance = 0f;
+                }
+
+                continue;
+            }
+
             maybeStartTransfer(object);
 
             PathSegment3 geometry = currentSegment.getGeometry();
@@ -117,12 +188,13 @@ public class GraphFollowerBehaviour implements Behaviour {
                     ? (segmentLength - distanceAlongCurrentSegment)
                     : distanceAlongCurrentSegment;
 
-            float distanceToTransferEnd = Float.POSITIVE_INFINITY;
-            if (transferCommitted && activeTransferZone != null && travelDirection == TravelDirection.FORWARD) {
-                distanceToTransferEnd = activeTransferZone.getEndDistance() - distanceAlongCurrentSegment;
+            float distanceToLateralStart = Float.POSITIVE_INFINITY;
+            if (shouldUseTwoPhaseTransfer()) {
+                float triggerDistance = getLateralTransferTriggerDistance(activeTransferZone);
+                distanceToLateralStart = triggerDistance - distanceAlongCurrentSegment;
             }
 
-            float stepDistance = Math.min(remainingDistance, Math.min(distanceToBoundary, distanceToTransferEnd));
+            float stepDistance = Math.min(remainingDistance, Math.min(distanceToBoundary, distanceToLateralStart));
             if (stepDistance < 0f) {
                 stepDistance = 0f;
             }
@@ -137,7 +209,8 @@ public class GraphFollowerBehaviour implements Behaviour {
 
             updateYawForCurrentState();
 
-            if (maybeCompleteTransfer()) {
+            if (shouldUseTwoPhaseTransfer() && shouldStartLateralTransferNow()) {
+                beginLateralTransfer();
                 continue;
             }
 
@@ -159,18 +232,9 @@ public class GraphFollowerBehaviour implements Behaviour {
 
                 if (connection != null) {
                     currentSegment = connection.getSegment();
+                    distanceAlongCurrentSegment = connection.getEntryDistance();
 
-                    if (travelDirection == TravelDirection.FORWARD) {
-                        distanceAlongCurrentSegment = connection.getEntryDistance();
-                    } else {
-                        distanceAlongCurrentSegment = connection.getEntryDistance();
-                    }
-
-                    activeTransferZone = null;
-                    transferCommitted = false;
-                    lastDeclinedTransferZone = null;
-                    frozenTransferYawRadians = null;
-
+                    clearTransferState();
                     onEnterSegment(currentSegment);
                 } else {
                     handleNoAdjacentSegment();
@@ -217,7 +281,7 @@ public class GraphFollowerBehaviour implements Behaviour {
             initialiseYaw();
         }
 
-        if (transferCommitted && activeTransferZone != null) {
+        if ((transferCommitted && activeTransferZone != null) || lateralTransferInProgress) {
             if (frozenTransferYawRadians == null) {
                 frozenTransferYawRadians = currentYawRadians;
             }
@@ -244,12 +308,12 @@ public class GraphFollowerBehaviour implements Behaviour {
         TransferZone currentZone = findContainingTransferZone(currentSegment, distanceAlongCurrentSegment);
 
         if (currentZone != null && currentZone != lastDeclinedTransferZone) {
-        	boolean shouldTransfer = currentZone.getDecisionStrategy().shouldTransfer(
-        		    currentSegment,
-        		    currentZone,
-        		    object
-        		);
-        	
+            boolean shouldTransfer = currentZone.getDecisionStrategy().shouldTransfer(
+                    currentSegment,
+                    currentZone,
+                    object
+            );
+
             if (shouldTransfer) {
                 activeTransferZone = currentZone;
                 transferCommitted = true;
@@ -265,16 +329,51 @@ public class GraphFollowerBehaviour implements Behaviour {
         }
     }
 
+    private boolean shouldUseTwoPhaseTransfer() {
+        return transferCommitted
+                && activeTransferZone != null
+                && travelDirection == TravelDirection.FORWARD
+                && !lateralTransferInProgress;
+    }
+
+    private float getLateralTransferTriggerDistance(TransferZone zone) {
+        // Trigger when the rear edge of the object reaches the end of the zone.
+        // If object length is zero, this degenerates to the zone end.
+        float halfObjectLength = transferObjectLength * 0.5f;
+        return zone.getEndDistance() - halfObjectLength;
+    }
+
+    private boolean shouldStartLateralTransferNow() {
+        if (!shouldUseTwoPhaseTransfer()) {
+            return false;
+        }
+        return distanceAlongCurrentSegment >= getLateralTransferTriggerDistance(activeTransferZone);
+    }
+
+    private void beginLateralTransfer() {
+        lateralTransferInProgress = true;
+        lateralTransferProgress = 0f;
+
+        Vec3 sourcePos = currentSegment.getGeometry().sampleByDistance(distanceAlongCurrentSegment);
+        Vec3 targetPos = activeTransferZone.getTargetSegment()
+                .getGeometry()
+                .sampleByDistance(activeTransferZone.getTargetStartDistance());
+
+        transferSourceAnchor = sourcePos;
+        transferTargetAnchor = targetPos;
+        lateralTransferDistance = sourcePos.distanceTo(targetPos);
+
+        if (frozenTransferYawRadians == null) {
+            frozenTransferYawRadians = currentYawRadians;
+        }
+    }
+
     private boolean maybeCompleteTransfer() {
-        if (!transferCommitted || activeTransferZone == null) {
+        if (!lateralTransferInProgress || activeTransferZone == null) {
             return false;
         }
 
-        if (travelDirection != TravelDirection.FORWARD) {
-            return false;
-        }
-
-        if (distanceAlongCurrentSegment >= activeTransferZone.getEndDistance()) {
+        if (lateralTransferProgress >= 1f) {
             currentSegment = activeTransferZone.getTargetSegment();
             distanceAlongCurrentSegment = activeTransferZone.getTargetStartDistance();
 
@@ -282,13 +381,8 @@ public class GraphFollowerBehaviour implements Behaviour {
                 currentYawRadians = frozenTransferYawRadians;
             }
 
-            activeTransferZone = null;
-            transferCommitted = false;
-            lastDeclinedTransferZone = null;
-            frozenTransferYawRadians = null;
-
+            clearTransferState();
             onEnterSegment(currentSegment);
-
             return true;
         }
 
@@ -300,22 +394,14 @@ public class GraphFollowerBehaviour implements Behaviour {
             return new Vec3(0f, 0f, 0f);
         }
 
-        Vec3 sourcePos = currentSegment.getGeometry().sampleByDistance(distanceAlongCurrentSegment);
-
-        if (transferCommitted && activeTransferZone != null) {
-            float t = (distanceAlongCurrentSegment - activeTransferZone.getStartDistance())
-                    / activeTransferZone.getLength();
-            t = clamp(t, 0f, 1f);
-
-            float blend = smoothStep(t);
-
-            Vec3 targetPos = activeTransferZone.getTargetSegment()
-                    .getGeometry()
-                    .sampleByDistance(activeTransferZone.getTargetStartDistance());
-
-            return lerp(sourcePos, targetPos, blend);
+        if (lateralTransferInProgress && transferSourceAnchor != null && transferTargetAnchor != null) {
+            float blend = smoothStep(clamp(lateralTransferProgress, 0f, 1f));
+            Vec3 blended = lerp(transferSourceAnchor, transferTargetAnchor, blend);
+            return new Vec3(blended.x, blended.y + yOffset, blended.z);
         }
 
+        Vec3 sourcePos = currentSegment.getGeometry().sampleByDistance(distanceAlongCurrentSegment);
+        sourcePos.y += yOffset;
         return sourcePos;
     }
 
@@ -324,7 +410,7 @@ public class GraphFollowerBehaviour implements Behaviour {
         if (orientationModes.contains(OrientationMode.NONE)) return;
 
         float yawToApply = currentYawRadians;
-        if (transferCommitted && activeTransferZone != null && frozenTransferYawRadians != null) {
+        if ((transferCommitted && activeTransferZone != null || lateralTransferInProgress) && frozenTransferYawRadians != null) {
             yawToApply = frozenTransferYawRadians;
         }
 
@@ -333,6 +419,11 @@ public class GraphFollowerBehaviour implements Behaviour {
         }
 
         if (orientationModes.contains(OrientationMode.PITCH)) {
+            if (lateralTransferInProgress) {
+                // Hold pitch steady during lateral transfer.
+                return;
+            }
+
             PathSegment3 ps = currentSegment.getGeometry();
             Vec3 tangent = ps.sampleTangentByDistance(distanceAlongCurrentSegment);
             if (travelDirection == TravelDirection.REVERSE) {
@@ -379,16 +470,13 @@ public class GraphFollowerBehaviour implements Behaviour {
             case PING_PONG -> reverseDirectionAtBoundary();
         }
     }
-    
+
     private void resetToStart() {
         currentSegment = startSegment;
         distanceAlongCurrentSegment = startDistanceAlongSegment;
         travelDirection = startDirection;
 
-        activeTransferZone = null;
-        transferCommitted = false;
-        lastDeclinedTransferZone = null;
-        frozenTransferYawRadians = null;
+        clearTransferState();
 
         initialiseYaw();
         onEnterSegment(currentSegment);
@@ -399,10 +487,19 @@ public class GraphFollowerBehaviour implements Behaviour {
                 ? TravelDirection.REVERSE
                 : TravelDirection.FORWARD;
 
+        clearTransferState();
+    }
+
+    private void clearTransferState() {
         activeTransferZone = null;
         transferCommitted = false;
         lastDeclinedTransferZone = null;
         frozenTransferYawRadians = null;
+        transferSourceAnchor = null;
+        transferTargetAnchor = null;
+        lateralTransferInProgress = false;
+        lateralTransferProgress = 0f;
+        lateralTransferDistance = 0f;
     }
 
     private static float clamp(float value, float min, float max) {
@@ -462,14 +559,14 @@ public class GraphFollowerBehaviour implements Behaviour {
             }
 
             sb.append("  previous=").append(formatConnections(segment.getPreviousConnections()))
-            .append(System.lineSeparator());
-          sb.append("  next=").append(formatConnections(segment.getNextConnections()))
-            .append(System.lineSeparator());            
+              .append(System.lineSeparator());
+            sb.append("  next=").append(formatConnections(segment.getNextConnections()))
+              .append(System.lineSeparator());
         }
 
         return sb.toString();
     }
-    
+
     private String formatConnections(List<RouteConnection> connections) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < connections.size(); i++) {
@@ -484,7 +581,7 @@ public class GraphFollowerBehaviour implements Behaviour {
         sb.append("]");
         return sb.toString();
     }
- 
+
     @Override
     public String toString() {
         return describeGraph();
