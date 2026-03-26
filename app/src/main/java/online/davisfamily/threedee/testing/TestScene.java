@@ -19,6 +19,8 @@ import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.tote.Tote;
 import online.davisfamily.threedee.model.tote.ToteEnvelope;
+import online.davisfamily.threedee.model.tracks.GuideOpening;
+import online.davisfamily.threedee.model.tracks.GuideOpening.GuideOpeningType;
 import online.davisfamily.threedee.model.tracks.GuideSide;
 import online.davisfamily.threedee.model.tracks.TrackAppearance;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
@@ -44,13 +46,7 @@ public class TestScene extends BaseScene{
 		Tote tote = new Tote();
 		rTote = RenderableToteFactory.createRenderableTote(tr, tote);
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
-/*
-		ToteEnvelope toteEnvelope = new ToteEnvelope(
-				0.320f, // bottom width
-			    0.500f, // bottom depth
-			    0.310f  // height
-			);
-*/
+
 		ToteEnvelope widthToteEnvelope = new ToteEnvelope(
 			    tote.getOuterBottomWidth(),
 			    tote.getOuterBottomDepth(),
@@ -66,8 +62,8 @@ public class TestScene extends BaseScene{
 		    0.050f,  // guideHeight
 		    0.010f,  // guideThickness
 		    0.005f,  // guideGap
-		    0.4f,
-		    0.4f,
+		    0.5f,	 // connectionGuideCutback
+		    0.5f,	 // targetGuideOpeningLength
 		    true,    // includeRollers
 		    0.080f,  // rollerPitch
 		    0.010f,  // rollerWidthInset
@@ -87,12 +83,12 @@ public class TestScene extends BaseScene{
 		    0.030f,  // sideClearance
 		    0.040f,  // deckThickness
 		    0.000f,  // deckTopY
-		    true,    // includeGuides
+		    true,   // includeGuides
 		    0.050f,  // guideHeight
 		    0.010f,  // guideThickness
 		    0.005f,  // guideGap
-		    0.4f,
-		    0.4f,
+		    0.5f,	 // connectionGuideCutback
+		    0.5f,	 // targetGuideOpeningLength
 		    true,    // includeRollers
 		    0.080f,  // rollerPitch
 		    0.010f,  // rollerWidthInset
@@ -101,8 +97,8 @@ public class TestScene extends BaseScene{
 		    0.080f   // sampleStep
 		);
 
-		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
 		float toteLength = tote.getOuterBottomDepth();
+		float linkOpeningLength = specToteLengthWise.getOverallWidth();
 		// Path Geometry
 		float leftX = 0f;
 		float link1X = 3f;
@@ -179,15 +175,13 @@ public class TestScene extends BaseScene{
 		// bottom runs from x=8 to x=0 at z=-3
 		// so entry distance is (8 - linkX)
 
-		float opening = 0.4f; // test value
-
 		link1.connectTo(
 		        bottom,
 		        link1.getGeometry().getTotalLength(),
 		        5.0f,
 		        null,
 		        GuideSide.RIGHT,
-		        toteLength);
+		        linkOpeningLength);
 
 		link2.connectTo(
 		        bottom,
@@ -195,7 +189,7 @@ public class TestScene extends BaseScene{
 		        3.0f,
 		        null,
 		        GuideSide.RIGHT,
-		        toteLength);
+		        linkOpeningLength);
 		// =====================
 		// Transfer zones on top
 		// =====================
@@ -221,7 +215,20 @@ public class TestScene extends BaseScene{
 	        GuideSide.LEFT,
 		    new ToggleTransferStrategy(true)
 		);
+		float halfLinkOpening = linkOpeningLength * 0.5f;
 
+		top.addGuideOpening(new GuideOpening(
+		        link1X - halfLinkOpening,
+		        link1X + halfLinkOpening,
+		        GuideSide.RIGHT,
+		        GuideOpeningType.TRANSFER_SOURCE));
+
+		top.addGuideOpening(new GuideOpening(
+		        link2X - halfLinkOpening,
+		        link2X + halfLinkOpening,
+		        GuideSide.RIGHT,
+		        GuideOpeningType.TRANSFER_SOURCE));
+		
 		top.addTransferZone(zone1);
 		top.addTransferZone(zone2);
 		

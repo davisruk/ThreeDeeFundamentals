@@ -100,11 +100,13 @@ public final class RouteSegment {
         transferZones.sort(Comparator.comparing(TransferZone::getStartDistance));
 
         // Register source-side guide opening (range = transfer zone)
+/*
         addGuideOpening(new GuideOpening(
                 zone.getStartDistance(),
                 zone.getEndDistance(),
                 zone.getSourceOpenSide(),
                 GuideOpeningType.TRANSFER_SOURCE));
+*/
     }
 
     public void connectTo(RouteSegment next) {
