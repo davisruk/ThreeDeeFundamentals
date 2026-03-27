@@ -230,7 +230,8 @@ public class TestScene extends BaseScene{
 			    0f,        						// yawOffsetRadians
 			    rollerYOffset,					// yOffset - raise object on track above the rollers
 			    0f,         					// startDistanceAlongSegment,
-			    TravelDirection.FORWARD  		// startDirection
+			    TravelDirection.FORWARD,  		// startDirection
+			    tote.getOuterBottomDepth()
 			);		
 	
 		rTote.addBehaviour(follower);

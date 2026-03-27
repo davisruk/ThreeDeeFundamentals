@@ -91,7 +91,7 @@ public class RouteSceneBuilder {
                 transferStart,
                 transferLength,
                 linkSegment,
-                0.0f,
+                0f,
                 sourceOpenSide,
                 linkOpenSide,
                 new ToggleTransferStrategy(initialToggleState)
