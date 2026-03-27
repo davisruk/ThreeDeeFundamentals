@@ -116,7 +116,7 @@ public class TestScene extends BaseScene{
 	    );
 
 	    float toteLength = tote.getOuterBottomDepth();
-	    float linkOpeningLength = specToteLengthWise.getRunningWidth();
+	    float linkOpeningLength = specToteLengthWise.getGuideJoinOpeningLength();
 
 	    // Path geometry
 	    float leftX = 0f;
@@ -180,8 +180,8 @@ public class TestScene extends BaseScene{
 	    //
 	    // Top side: pull the source guides back where totes transfer into the links.
 	    // Bottom side: pull the target guides back where the trimmed links join the bottom run.
-	    float topConnectionClearance = topLinkClearance + 0.005f;
-	    float bottomConnectionClearance = linkTrimEnd + 0.005f;
+	    float topConnectionClearance = topLinkClearance;
+	    float bottomConnectionClearance = linkTrimEnd;
 
 	    // Rendering specs per segment
 	    builder.renderWith(top, specToteWidthWise)

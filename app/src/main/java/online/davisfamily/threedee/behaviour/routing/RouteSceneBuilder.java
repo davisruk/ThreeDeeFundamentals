@@ -2,7 +2,9 @@ package online.davisfamily.threedee.behaviour.routing;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory.SpecAndSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.ToggleTransferStrategy;
@@ -16,6 +18,7 @@ public class RouteSceneBuilder {
 
     private final List<RouteSegment> segments = new ArrayList<>();
     private final List<SpecAndSegment> specsAndSegments = new ArrayList<>();
+    private final Map<RouteSegment, TrackSpec> specBySegment = new IdentityHashMap<>();
 
     public RouteSegment segment(String label, online.davisfamily.threedee.path.PathSegment3 geometry) {
         RouteSegment segment = new RouteSegment(label, geometry);
@@ -25,6 +28,7 @@ public class RouteSceneBuilder {
 
     public RouteSceneBuilder renderWith(RouteSegment segment, TrackSpec spec) {
         specsAndSegments.add(new SpecAndSegment(spec, segment));
+        specBySegment.put(segment, spec);
         return this;
     }
 
@@ -58,6 +62,22 @@ public class RouteSceneBuilder {
             RouteSegment linkSegment,
             RouteSegment destinationSegment,
             float targetEntryDistance,
+            GuideSide targetOpenSide) {
+
+        TrackSpec linkSpec = requireSpec(linkSegment);
+        return connectLinkInto(
+                linkSegment,
+                destinationSegment,
+                targetEntryDistance,
+                targetOpenSide,
+                linkSpec.getGuideJoinOpeningLength(),
+                linkSegment.getRenderTrimEndDistance());
+    }
+
+    public RouteSceneBuilder connectLinkInto(
+            RouteSegment linkSegment,
+            RouteSegment destinationSegment,
+            float targetEntryDistance,
             GuideSide targetOpenSide,
             float openingLength,
             float targetConnectionClearanceLength) {
@@ -81,6 +101,28 @@ public class RouteSceneBuilder {
                 ConnectionClearance.ConnectionClearanceType.CONNECTION_TARGET);
 
         return this;
+    }
+
+    public RouteSceneBuilder addTransferToLink(
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState) {
+
+        TrackSpec linkSpec = requireSpec(linkSegment);
+        return addTransferToLink(
+                sourceSegment,
+                linkSegment,
+                transferCentreDistance,
+                transferLength,
+                linkSpec.getGuideJoinOpeningLength(),
+                sourceOpenSide,
+                linkOpenSide,
+                initialToggleState,
+                linkSegment.getRenderTrimStartDistance());
     }
 
     public RouteSceneBuilder addTransferToLink(
@@ -249,6 +291,15 @@ public class RouteSceneBuilder {
 
     public List<SpecAndSegment> getSpecsAndSegments() {
         return Collections.unmodifiableList(specsAndSegments);
+    }
+
+    private TrackSpec requireSpec(RouteSegment segment) {
+        TrackSpec spec = specBySegment.get(segment);
+        if (spec == null) {
+            throw new IllegalStateException(
+                    "No TrackSpec registered for segment " + segment.getLabel() + ". Call renderWith(segment, spec) before creating derived guide joins.");
+        }
+        return spec;
     }
 
     private static void addCentredGuideOpening(
