@@ -17,7 +17,11 @@ import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStra
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
+import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.model.cylinder.CylinderFactory;
 import online.davisfamily.threedee.model.tote.Tote;
 import online.davisfamily.threedee.model.tote.ToteEnvelope;
 import online.davisfamily.threedee.model.tracks.GuideSide;
@@ -27,6 +31,7 @@ import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.rendering.tote.RenderableToteFactory;
@@ -42,9 +47,10 @@ public class TestScene extends BaseScene{
 		super(pane, dimensions,	CameraPosition.aboveLeft());
 		objects = new ArrayList<RenderableObject>();
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
-		Tote t = setupTote();
-		setupOvalTrack(t);
+		//Tote t = setupTote();
+		//setupOvalTrack(t);
 		//setupParallelTracks(t);
+		setupCylinder();
 	}
 		
 	@Override
@@ -416,5 +422,22 @@ public class TestScene extends BaseScene{
 		for (RenderableObject track : tracks) {
 		    objects.add(track);
 		}		
+	}
+	
+	private void setupCylinder() {
+		Mesh m = CylinderFactory.buildCylinder(1f, 3f, 24, true);
+		ObjectTransformation ot = new ObjectTransformation(
+				0.0f,0.0f,0f, // rotation xyz
+				0f,0f,-5f, // translation xyz
+				new Mat4()
+			);
+		RenderableObject rc = RenderableObject.create(
+				tr,
+				m, // mesh
+				ot, // transform
+				new OneColourStrategyImpl(0xFF0000FF),
+				FORWARD_DIRECTION.NEGATIVE_X
+			);
+		objects.add(rc);
 	}
 }
