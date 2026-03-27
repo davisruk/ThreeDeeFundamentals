@@ -18,60 +18,101 @@ public final class RouteTrackLayoutFactory {
         }
 
         float totalLength = segment.getGeometry().getTotalLength();
+
+        float renderStart = segment.getRenderTrimStartDistance();
+        float renderEnd = totalLength - segment.getRenderTrimEndDistance();
+
+        renderStart = Math.max(0f, renderStart);
+        renderEnd = Math.min(totalLength, renderEnd);
+
+        if (renderEnd < renderStart) {
+            renderEnd = renderStart;
+        }
+
         List<TransferZone> zones = new ArrayList<>(segment.getTransferZones());
         zones.sort(Comparator.comparing(TransferZone::getStartDistance));
 
         List<TrackInterval> intervals = new ArrayList<>();
-        float cursor = 0f;
+        float cursor = renderStart;
 
         for (TransferZone zone : zones) {
-            if (zone.getStartDistance() > cursor) {
+            float zoneStart = Math.max(zone.getStartDistance(), renderStart);
+            float zoneEnd = Math.min(zone.getEndDistance(), renderEnd);
+
+            if (zoneEnd <= renderStart || zoneStart >= renderEnd) {
+                continue;
+            }
+
+            if (zoneStart > cursor) {
                 intervals.add(new TrackInterval(
                         cursor,
-                        zone.getStartDistance(),
+                        zoneStart,
                         TrackIntervalType.NORMAL,
                         null));
             }
 
-            intervals.add(new TrackInterval(
-                    zone.getStartDistance(),
-                    zone.getEndDistance(),
-                    TrackIntervalType.TRANSFER,
-                    zone));
+            if (zoneEnd > zoneStart) {
+                intervals.add(new TrackInterval(
+                        zoneStart,
+                        zoneEnd,
+                        TrackIntervalType.TRANSFER,
+                        zone));
+            }
 
-            cursor = zone.getEndDistance();
+            cursor = Math.max(cursor, zoneEnd);
         }
 
-        if (cursor < totalLength) {
+        if (cursor < renderEnd) {
             intervals.add(new TrackInterval(
                     cursor,
-                    totalLength,
+                    renderEnd,
                     TrackIntervalType.NORMAL,
                     null));
         }
 
-        return new RouteTrackLayout(segment, intervals);
+        return new RouteTrackLayout(segment, intervals, renderStart, renderEnd);
     }
 
     public static List<TrackSpan> createGuideSpans(RouteTrackLayout layout, TrackSpec spec, GuideSide side) {
+        if (layout == null) {
+            throw new IllegalArgumentException("layout must not be null");
+        }
+        if (spec == null) {
+            throw new IllegalArgumentException("spec must not be null");
+        }
+        if (side == null) {
+            throw new IllegalArgumentException("side must not be null");
+        }
 
-        float total = layout.getGeometry().getTotalLength();
+        float guideStart = layout.getRenderStartDistance();
+        float guideEnd = layout.getRenderEndDistance();
 
-        List<TrackSpan> openings = new ArrayList<>();
+        if (guideEnd <= guideStart) {
+            return List.of();
+        }
+
+        List<TrackSpan> blockedSpans = new ArrayList<>();
 
         for (GuideOpening opening : layout.getRouteSegment().getGuideOpenings()) {
             if (opening.getSide() == side) {
-                openings.add(new TrackSpan(
+                blockedSpans.add(new TrackSpan(
                         opening.getStartDistance(),
                         opening.getEndDistance()));
             }
         }
 
-        List<TrackSpan> clipped = clipAndMerge(openings, 0f, total);
-        return subtractOpenings(0f, total, clipped);
+        for (ConnectionClearance clearance : layout.getRouteSegment().getConnectionClearances()) {
+            if (clearance.getSide() == side) {
+                blockedSpans.add(new TrackSpan(
+                        clearance.getStartDistance(),
+                        clearance.getEndDistance()));
+            }
+        }
+
+        List<TrackSpan> clipped = clipAndMerge(blockedSpans, guideStart, guideEnd);
+        return subtractBlockedSpans(guideStart, guideEnd, clipped);
     }
-    
-  
+
     private static List<TrackSpan> clipAndMerge(List<TrackSpan> spans, float min, float max) {
         List<TrackSpan> clipped = new ArrayList<>();
 
@@ -93,7 +134,8 @@ public final class RouteTrackLayoutFactory {
                 TrackSpan last = merged.get(merged.size() - 1);
                 if (span.getStartDistance() <= last.getEndDistance()) {
                     merged.set(merged.size() - 1,
-                            new TrackSpan(last.getStartDistance(),
+                            new TrackSpan(
+                                    last.getStartDistance(),
                                     Math.max(last.getEndDistance(), span.getEndDistance())));
                 } else {
                     merged.add(span);
@@ -104,15 +146,15 @@ public final class RouteTrackLayoutFactory {
         return merged;
     }
 
-    private static List<TrackSpan> subtractOpenings(float guideStart, float guideEnd, List<TrackSpan> openings) {
+    private static List<TrackSpan> subtractBlockedSpans(float guideStart, float guideEnd, List<TrackSpan> blockedSpans) {
         List<TrackSpan> result = new ArrayList<>();
         float cursor = guideStart;
 
-        for (TrackSpan opening : openings) {
-            if (opening.getStartDistance() > cursor) {
-                result.add(new TrackSpan(cursor, opening.getStartDistance()));
+        for (TrackSpan blockedSpan : blockedSpans) {
+            if (blockedSpan.getStartDistance() > cursor) {
+                result.add(new TrackSpan(cursor, blockedSpan.getStartDistance()));
             }
-            cursor = Math.max(cursor, opening.getEndDistance());
+            cursor = Math.max(cursor, blockedSpan.getEndDistance());
         }
 
         if (cursor < guideEnd) {

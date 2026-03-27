@@ -44,7 +44,7 @@ public class TestScene extends BaseScene{
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
 		Tote t = setupTote();
 		setupOvalTrack(t);
-//		setupParallelTracks(t);
+		//setupParallelTracks(t);
 	}
 		
 	@Override
@@ -63,183 +63,221 @@ public class TestScene extends BaseScene{
 
 	private void setupOvalTrack(Tote tote) {
 
-		if (tote == null) tote = setupTote();
-		
-		ToteEnvelope widthToteEnvelope = new ToteEnvelope(
-		        tote.getOuterBottomWidth(),
-		        tote.getOuterBottomDepth(),
-		        tote.getOuterHeight()
-		);
+	    if (tote == null) tote = setupTote();
 
-		TrackSpec specToteWidthWise = new TrackSpec(
-		        widthToteEnvelope,
-		        0.030f,
-		        0.040f,
-		        0.000f,
-		        true,
-		        0.050f,
-		        0.010f,
-		        0.005f,
-		        0.5f,
-		        1.0f,
-		        true,
-		        0.080f,
-		        0.010f,
-		        0.025f,
-		        0.018f,
-		        0.080f
-		);
+	    ToteEnvelope widthToteEnvelope = new ToteEnvelope(
+	            tote.getOuterBottomWidth(),
+	            tote.getOuterBottomDepth(),
+	            tote.getOuterHeight()
+	    );
 
-		ToteEnvelope lengthToteEnvelope = new ToteEnvelope(
-		        tote.getOuterBottomDepth(),
-		        tote.getOuterBottomWidth(),
-		        tote.getOuterHeight()
-		);
+	    TrackSpec specToteWidthWise = new TrackSpec(
+	            widthToteEnvelope,
+	            0.030f,
+	            0.040f,
+	            0.000f,
+	            true,
+	            0.050f,
+	            0.010f,
+	            0.005f,
+	            0.5f,
+	            1.0f,
+	            true,
+	            0.080f,
+	            0.010f,
+	            0.025f,
+	            0.018f,
+	            0.080f
+	    );
 
-		TrackSpec specToteLengthWise = new TrackSpec(
-		        lengthToteEnvelope,
-		        0.030f,
-		        0.040f,
-		        0.000f,
-		        true,
-		        0.050f,
-		        0.010f,
-		        0.005f,
-		        0.5f,
-		        0.5f,
-		        true,
-		        0.080f,
-		        0.010f,
-		        0.025f,
-		        0.018f,
-		        0.080f
-		);
+	    ToteEnvelope lengthToteEnvelope = new ToteEnvelope(
+	            tote.getOuterBottomDepth(),
+	            tote.getOuterBottomWidth(),
+	            tote.getOuterHeight()
+	    );
 
-		float toteLength = tote.getOuterBottomDepth();
-		float linkOpeningLength = specToteLengthWise.getRunningWidth();
+	    TrackSpec specToteLengthWise = new TrackSpec(
+	            lengthToteEnvelope,
+	            0.030f,
+	            0.040f,
+	            0.000f,
+	            true,
+	            0.050f,
+	            0.010f,
+	            0.005f,
+	            0.5f,
+	            0.5f,
+	            true,
+	            0.080f,
+	            0.010f,
+	            0.025f,
+	            0.018f,
+	            0.080f
+	    );
 
-		// Path geometry
-		float leftX = 0f;
-		float link1X = 3f;
-		float link2X = 5f;
-		float rightX = 8f;
-		float topZ = 0f;
-		float bottomZ = -3f;
-		float linkClearance = 0.2f;
+	    float toteLength = tote.getOuterBottomDepth();
+	    float linkOpeningLength = specToteLengthWise.getRunningWidth();
 
-		RouteSceneBuilder builder = new RouteSceneBuilder();
+	    // Path geometry
+	    float leftX = 0f;
+	    float link1X = 3f;
+	    float link2X = 5f;
+	    float rightX = 8f;
+	    float topZ = 0f;
+	    float bottomZ = -3f;
 
-		RouteSegment top = builder.segment("top", new LinearSegment3(
-		        new Vec3(leftX, 0f, topZ),
-		        new Vec3(rightX, 0f, topZ)
-		));
+	    RouteSceneBuilder builder = new RouteSceneBuilder();
 
-		RouteSegment rightReturn = builder.segment("rightReturn", new BezierSegment3(
-		        new Vec3(rightX, 0f, topZ),
-		        new Vec3(rightX + 2f, 0f, topZ),
-		        new Vec3(rightX + 2f, 0f, bottomZ),
-		        new Vec3(rightX, 0f, bottomZ)
-		));
+	    RouteSegment top = builder.segment("top", new LinearSegment3(
+	            new Vec3(leftX, 0f, topZ),
+	            new Vec3(rightX, 0f, topZ)
+	    ));
 
-		RouteSegment bottom = builder.segment("bottom", new LinearSegment3(
-		        new Vec3(rightX, 0f, bottomZ),
-		        new Vec3(leftX, 0f, bottomZ)
-		));
+	    RouteSegment rightReturn = builder.segment("rightReturn", new BezierSegment3(
+	            new Vec3(rightX, 0f, topZ),
+	            new Vec3(rightX + 2f, 0f, topZ),
+	            new Vec3(rightX + 2f, 0f, bottomZ),
+	            new Vec3(rightX, 0f, bottomZ)
+	    ));
 
-		RouteSegment leftReturn = builder.segment("leftReturn", new BezierSegment3(
-		        new Vec3(leftX, 0f, bottomZ),
-		        new Vec3(leftX - 2f, 0f, bottomZ),
-		        new Vec3(leftX - 2f, 0f, topZ),
-		        new Vec3(leftX, 0f, topZ)
-		));
+	    RouteSegment bottom = builder.segment("bottom", new LinearSegment3(
+	            new Vec3(rightX, 0f, bottomZ),
+	            new Vec3(leftX, 0f, bottomZ)
+	    ));
 
-		RouteSegment link1 = builder.segment("link1", new LinearSegment3(
-		        new Vec3(link1X, 0f, topZ - linkClearance),
-		        new Vec3(link1X, 0f, bottomZ + linkClearance)
-		));
+	    RouteSegment leftReturn = builder.segment("leftReturn", new BezierSegment3(
+	            new Vec3(leftX, 0f, bottomZ),
+	            new Vec3(leftX - 2f, 0f, bottomZ),
+	            new Vec3(leftX - 2f, 0f, topZ),
+	            new Vec3(leftX, 0f, topZ)
+	    ));
 
-		RouteSegment link2 = builder.segment("link2", new LinearSegment3(
-		        new Vec3(link2X, 0f, topZ - linkClearance),
-		        new Vec3(link2X, 0f, bottomZ + linkClearance)
-		));
+	    float topLinkClearance = 0.2f;
+	    float bottomLinkClearance = 0.0f;
 
-		// Rendering specs per segment
-		builder.renderWith(top, specToteWidthWise)
-		       .renderWith(rightReturn, specToteWidthWise)
-		       .renderWith(bottom, specToteWidthWise)
-		       .renderWith(leftReturn, specToteWidthWise)
-		       .renderWith(link1, specToteLengthWise)
-		       .renderWith(link2, specToteLengthWise);
+	    RouteSegment link1 = builder.segment("link1", new LinearSegment3(
+	            new Vec3(link1X, 0f, topZ - topLinkClearance),
+	            new Vec3(link1X, 0f, bottomZ + bottomLinkClearance)
+	    ));
 
-		// Main loop
-		builder.connectLoop(top, rightReturn)
-		       .connectLoop(rightReturn, bottom)
-		       .connectLoop(bottom, leftReturn)
-		       .connectLoop(leftReturn, top);
+	    RouteSegment link2 = builder.segment("link2", new LinearSegment3(
+	            new Vec3(link2X, 0f, topZ - topLinkClearance),
+	            new Vec3(link2X, 0f, bottomZ + bottomLinkClearance)
+	    ));
 
-		// Link into bottom (target opening only)
-		builder.connectLinkInto(link1, bottom, 5.0f, GuideSide.RIGHT, linkOpeningLength)
-		       .connectLinkInto(link2, bottom, 3.0f, GuideSide.RIGHT, linkOpeningLength);
+	    // Visual trim on the link segments themselves
+	    float linkTrimStart = 0.0f;
+	    float linkTrimEnd = 0.195f;
 
-		// Transfers from top into links
-		builder.addTransferToLink(
-		        top,
-		        link1,
-		        link1X,
-		        toteLength,
-		        linkOpeningLength,
-		        GuideSide.RIGHT,
-		        GuideSide.LEFT,
-		        false
-		).addTransferToLink(
-		        top,
-		        link2,
-		        link2X,
-		        toteLength,
-		        linkOpeningLength,
-		        GuideSide.RIGHT,
-		        GuideSide.LEFT,
-		        true
-		);
+	    link1.setRenderTrimStartDistance(linkTrimStart);
+	    link1.setRenderTrimEndDistance(linkTrimEnd);
 
-		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
-		OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);
-		OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF);
+	    link2.setRenderTrimStartDistance(linkTrimStart);
+	    link2.setRenderTrimEndDistance(linkTrimEnd);
 
-		TrackAppearance appearance = new TrackAppearance(
-		        deckColour,
-		        rollersColour,
-		        guidesColour,
-		        new OneColourStrategyImpl(0xFFFF8800)
-		);
+	    // Connection clearances on neighbouring segments.
+	    // These are now explicit rather than implicit.
+	    //
+	    // Top side: pull the source guides back where totes transfer into the links.
+	    // Bottom side: pull the target guides back where the trimmed links join the bottom run.
+	    float topConnectionClearance = topLinkClearance + 0.005f;
+	    float bottomConnectionClearance = linkTrimEnd + 0.005f;
 
-		List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
-		        tr,
-		        builder.getSpecsAndSegments(),
-		        appearance
-		);
+	    // Rendering specs per segment
+	    builder.renderWith(top, specToteWidthWise)
+	           .renderWith(rightReturn, specToteWidthWise)
+	           .renderWith(bottom, specToteWidthWise)
+	           .renderWith(leftReturn, specToteWidthWise)
+	           .renderWith(link1, specToteLengthWise)
+	           .renderWith(link2, specToteLengthWise);
 
-		float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight : 0f;
+	    // Main loop
+	    builder.connectLoop(top, rightReturn)
+	           .connectLoop(rightReturn, bottom)
+	           .connectLoop(bottom, leftReturn)
+	           .connectLoop(leftReturn, top);
 
-		GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
-			    top,         					// startSegment
-			    null,        					// defaultDecisionProvider
-			    2.0f,        					// unitsPerSecond
-			    WrapMode.LOOP,  				// wrapMode
-			    EnumSet.of(OrientationMode.YAW),// orientationModes
-			    0f,        						// yawOffsetRadians
-			    rollerYOffset,					// yOffset - raise object on track above the rollers
-			    0f,         					// startDistanceAlongSegment,
-			    TravelDirection.FORWARD,  		// startDirection
-			    tote.getOuterBottomDepth()
-			);		
-	
-		rTote.addBehaviour(follower);
-		
-		for (RenderableObject track : tracks) {
-		    objects.add(track);
-		}
+	    // Link into bottom:
+	    // openingLength controls the guide opening itself
+	    // bottomConnectionClearance controls how far the bottom guides pull back
+	    builder.connectLinkInto(
+	            link1,
+	            bottom,
+	            5.0f,
+	            GuideSide.RIGHT,
+	            linkOpeningLength,
+	            bottomConnectionClearance
+	    ).connectLinkInto(
+	            link2,
+	            bottom,
+	            3.0f,
+	            GuideSide.RIGHT,
+	            linkOpeningLength,
+	            bottomConnectionClearance
+	    );
 
+	    // Transfers from top into links:
+	    // sourceOpeningLength controls the opening in the top guides
+	    // topConnectionClearance controls how far the top guides pull back visually
+	    builder.addTransferToLink(
+	            top,
+	            link1,
+	            link1X,
+	            toteLength,
+	            linkOpeningLength,
+	            GuideSide.RIGHT,
+	            GuideSide.LEFT,
+	            false,
+	            topConnectionClearance
+	    ).addTransferToLink(
+	            top,
+	            link2,
+	            link2X,
+	            toteLength,
+	            linkOpeningLength,
+	            GuideSide.RIGHT,
+	            GuideSide.LEFT,
+	            true,
+	            topConnectionClearance
+	    );
+
+	    OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
+	    OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);
+	    OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF);
+
+	    TrackAppearance appearance = new TrackAppearance(
+	            deckColour,
+	            rollersColour,
+	            guidesColour,
+	            new OneColourStrategyImpl(0xFFFF8800)
+	    );
+
+	    List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
+	            tr,
+	            builder.getSpecsAndSegments(),
+	            appearance
+	    );
+
+	    float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight : 0f;
+
+	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
+	            top,                              // startSegment
+	            null,                             // defaultDecisionProvider
+	            2.0f,                             // unitsPerSecond
+	            WrapMode.LOOP,                    // wrapMode
+	            EnumSet.of(OrientationMode.YAW),  // orientationModes
+	            0f,                               // yawOffsetRadians
+	            rollerYOffset,                    // yOffset
+	            0f,                               // startDistanceAlongSegment
+	            TravelDirection.FORWARD,          // startDirection
+	            tote.getOuterBottomDepth()
+	    );
+
+	    rTote.addBehaviour(follower);
+
+	    for (RenderableObject track : tracks) {
+	        objects.add(track);
+	    }
 	}
 	
 	private void setupParallelTracks(Tote tote){

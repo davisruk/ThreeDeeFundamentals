@@ -5,8 +5,8 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import online.davisfamily.threedee.model.tracks.ConnectionClearance;
 import online.davisfamily.threedee.model.tracks.GuideOpening;
-import online.davisfamily.threedee.model.tracks.GuideOpening.GuideOpeningType;
 import online.davisfamily.threedee.model.tracks.GuideSide;
 import online.davisfamily.threedee.model.tracks.TargetGuideOpening;
 import online.davisfamily.threedee.path.PathSegment3;
@@ -20,7 +20,11 @@ public final class RouteSegment {
     private final List<TransferZone> transferZones = new ArrayList<>();
     private final List<TargetGuideOpening> targetGuideOpenings = new ArrayList<>();
     private final List<GuideOpening> guideOpenings = new ArrayList<>();
-    
+    private final List<ConnectionClearance> connectionClearances = new ArrayList<>();
+
+    private float renderTrimStartDistance;
+    private float renderTrimEndDistance;
+
     public RouteSegment(String label, PathSegment3 geometry) {
         if (label == null || label.isBlank()) {
             throw new IllegalArgumentException("label must not be blank");
@@ -33,23 +37,6 @@ public final class RouteSegment {
         this.geometry = geometry;
     }
 
-    public List<TargetGuideOpening> getTargetGuideOpenings() {
-        return Collections.unmodifiableList(targetGuideOpenings);
-    }
-
-    public void addTargetGuideOpening(TargetGuideOpening opening) {
-        if (opening == null) {
-            throw new IllegalArgumentException("opening must not be null");
-        }
-
-        float total = geometry.getTotalLength();
-        float centre = opening.getCentreDistance();
-        if (centre < 0f || centre > total) {
-            throw new IllegalArgumentException("target guide opening out of range for segment " + label);
-        }
-
-        targetGuideOpenings.add(opening);
-    }    
     public String getLabel() {
         return label;
     }
@@ -68,6 +55,32 @@ public final class RouteSegment {
 
     public List<TransferZone> getTransferZones() {
         return transferZones;
+    }
+
+    public List<TargetGuideOpening> getTargetGuideOpenings() {
+        return Collections.unmodifiableList(targetGuideOpenings);
+    }
+
+    public List<GuideOpening> getGuideOpenings() {
+        return Collections.unmodifiableList(guideOpenings);
+    }
+
+    public List<ConnectionClearance> getConnectionClearances() {
+        return Collections.unmodifiableList(connectionClearances);
+    }
+
+    public void addTargetGuideOpening(TargetGuideOpening opening) {
+        if (opening == null) {
+            throw new IllegalArgumentException("opening must not be null");
+        }
+
+        float total = geometry.getTotalLength();
+        float centre = opening.getCentreDistance();
+        if (centre < 0f || centre > total) {
+            throw new IllegalArgumentException("target guide opening out of range for segment " + label);
+        }
+
+        targetGuideOpenings.add(opening);
     }
 
     public void addTransferZone(TransferZone zone) {
@@ -98,15 +111,6 @@ public final class RouteSegment {
 
         transferZones.add(zone);
         transferZones.sort(Comparator.comparing(TransferZone::getStartDistance));
-
-        // Register source-side guide opening (range = transfer zone)
-/*
-        addGuideOpening(new GuideOpening(
-                zone.getStartDistance(),
-                zone.getEndDistance(),
-                zone.getSourceOpenSide(),
-                GuideOpeningType.TRANSFER_SOURCE));
-*/
     }
 
     public void connectTo(RouteSegment next) {
@@ -125,14 +129,6 @@ public final class RouteSegment {
         next.previousConnections.add(previousConnection);
     }
 
-    /**
-     * Full form:
-     * this segment connects from thisExitDistance
-     * to next segment at nextEntryDistance.
-     *
-     * For now, your follower only uses nextEntryDistance for forward traversal,
-     * but keeping both values makes the model more honest and future-proof.
-     */
     public RouteConnection connectTo(
             RouteSegment targetSegment,
             float sourceExitDistance,
@@ -160,35 +156,48 @@ public final class RouteSegment {
 
         if (sourceOpenSide != null) {
             float sourceTotal = this.geometry.getTotalLength();
-
-
             float sStart = clamp(sourceExitDistance - half, 0f, sourceTotal);
             float sEnd = clamp(sourceExitDistance + half, 0f, sourceTotal);
-	        this.addGuideOpening(new GuideOpening(
-	                sStart,
-	                sEnd,
-	                sourceOpenSide,
-	                GuideOpeningType.CONNECTION_SOURCE));
-    	}
-        
+            this.addGuideOpening(new GuideOpening(
+                    sStart,
+                    sEnd,
+                    sourceOpenSide,
+                    GuideOpening.GuideOpeningType.CONNECTION_SOURCE));
+        }
+
         if (targetOpenSide != null) {
-        float tStart = clamp(targetEntryDistance - half, 0f, targetTotal);
-        float tEnd = clamp(targetEntryDistance + half, 0f, targetTotal);
-
-
-	        targetSegment.addGuideOpening(new GuideOpening(
-	                tStart,
-	                tEnd,
-	                targetOpenSide,
-	                GuideOpeningType.CONNECTION_TARGET));
-        	
+            float tStart = clamp(targetEntryDistance - half, 0f, targetTotal);
+            float tEnd = clamp(targetEntryDistance + half, 0f, targetTotal);
+            targetSegment.addGuideOpening(new GuideOpening(
+                    tStart,
+                    tEnd,
+                    targetOpenSide,
+                    GuideOpening.GuideOpeningType.CONNECTION_TARGET));
         }
 
         return nextConnection;
     }
-    
-    public List<GuideOpening> getGuideOpenings() {
-        return Collections.unmodifiableList(guideOpenings);
+
+    public void setRenderTrimStartDistance(float renderTrimStartDistance) {
+        if (renderTrimStartDistance < 0f) {
+            throw new IllegalArgumentException("renderTrimStartDistance must be >= 0");
+        }
+        this.renderTrimStartDistance = renderTrimStartDistance;
+    }
+
+    public void setRenderTrimEndDistance(float renderTrimEndDistance) {
+        if (renderTrimEndDistance < 0f) {
+            throw new IllegalArgumentException("renderTrimEndDistance must be >= 0");
+        }
+        this.renderTrimEndDistance = renderTrimEndDistance;
+    }
+
+    public float getRenderTrimStartDistance() {
+        return renderTrimStartDistance;
+    }
+
+    public float getRenderTrimEndDistance() {
+        return renderTrimEndDistance;
     }
 
     public void addGuideOpening(GuideOpening opening) {
@@ -196,14 +205,26 @@ public final class RouteSegment {
             throw new IllegalArgumentException("opening must not be null");
         }
 
-        float total = geometry.getTotalLength();
-
-        if (opening.getStartDistance() < 0f || opening.getEndDistance() > total) {
-            throw new IllegalArgumentException("guide opening out of range for segment " + label);
-        }
-
+        validateRange(opening.getStartDistance(), opening.getEndDistance(), "guide opening");
         guideOpenings.add(opening);
     }
+
+    public void addConnectionClearance(ConnectionClearance clearance) {
+        if (clearance == null) {
+            throw new IllegalArgumentException("clearance must not be null");
+        }
+
+        validateRange(clearance.getStartDistance(), clearance.getEndDistance(), "connection clearance");
+        connectionClearances.add(clearance);
+    }
+
+    private void validateRange(float startDistance, float endDistance, String description) {
+        float total = geometry.getTotalLength();
+        if (startDistance < 0f || endDistance > total) {
+            throw new IllegalArgumentException(description + " out of range for segment " + label);
+        }
+    }
+
     private static float clamp(float v, float min, float max) {
         return Math.max(min, Math.min(max, v));
     }

@@ -7,14 +7,14 @@ import java.util.List;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory.SpecAndSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.ToggleTransferStrategy;
 import online.davisfamily.threedee.behaviour.routing.transfer.TransferDecisionStrategy;
+import online.davisfamily.threedee.model.tracks.ConnectionClearance;
 import online.davisfamily.threedee.model.tracks.GuideOpening;
-import online.davisfamily.threedee.model.tracks.GuideOpening.GuideOpeningType;
 import online.davisfamily.threedee.model.tracks.GuideSide;
 import online.davisfamily.threedee.model.tracks.TrackSpec;
 
 public class RouteSceneBuilder {
 
-	private final List<RouteSegment> segments = new ArrayList<>();
+    private final List<RouteSegment> segments = new ArrayList<>();
     private final List<SpecAndSegment> specsAndSegments = new ArrayList<>();
 
     public RouteSegment segment(String label, online.davisfamily.threedee.path.PathSegment3 geometry) {
@@ -28,31 +28,39 @@ public class RouteSceneBuilder {
         return this;
     }
 
-    /**
-     * Ordinary topology connection with no guide openings.
-     */
     public RouteSceneBuilder connectLoop(RouteSegment from, RouteSegment to) {
         from.connectTo(to);
         return this;
     }
 
-    /**
-     * Ordinary topology connection with no guide openings, entering the target at an arbitrary distance.
-     */
     public RouteSceneBuilder connectLoop(RouteSegment from, RouteSegment to, float targetEntryDistance) {
         from.connectTo(to, targetEntryDistance);
         return this;
     }
 
-    /**
-     * A linking segment entering a destination segment and creating a guide opening on the destination only.
-     */
     public RouteSceneBuilder connectLinkInto(
             RouteSegment linkSegment,
             RouteSegment destinationSegment,
             float targetEntryDistance,
             GuideSide targetOpenSide,
             float openingLength) {
+
+        return connectLinkInto(
+                linkSegment,
+                destinationSegment,
+                targetEntryDistance,
+                targetOpenSide,
+                openingLength,
+                linkSegment.getRenderTrimEndDistance());
+    }
+
+    public RouteSceneBuilder connectLinkInto(
+            RouteSegment linkSegment,
+            RouteSegment destinationSegment,
+            float targetEntryDistance,
+            GuideSide targetOpenSide,
+            float openingLength,
+            float targetConnectionClearanceLength) {
 
         float sourceExitDistance = linkSegment.getGeometry().getTotalLength();
 
@@ -65,16 +73,16 @@ public class RouteSceneBuilder {
                 openingLength
         );
 
+        addCentredConnectionClearance(
+                destinationSegment,
+                targetEntryDistance,
+                targetConnectionClearanceLength,
+                targetOpenSide,
+                ConnectionClearance.ConnectionClearanceType.CONNECTION_TARGET);
+
         return this;
     }
 
-    /**
-     * A transfer from a source segment into a link.
-     *
-     * Movement length is based on transferLength.
-     * Source guide opening width is based on sourceOpeningLength.
-     * The opening is centred on transferCentreDistance.
-     */
     public RouteSceneBuilder addTransferToLink(
             RouteSegment sourceSegment,
             RouteSegment linkSegment,
@@ -84,6 +92,29 @@ public class RouteSceneBuilder {
             GuideSide sourceOpenSide,
             GuideSide linkOpenSide,
             boolean initialToggleState) {
+
+        return addTransferToLink(
+                sourceSegment,
+                linkSegment,
+                transferCentreDistance,
+                transferLength,
+                sourceOpeningLength,
+                sourceOpenSide,
+                linkOpenSide,
+                initialToggleState,
+                linkSegment.getRenderTrimStartDistance());
+    }
+
+    public RouteSceneBuilder addTransferToLink(
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            float sourceOpeningLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState,
+            float sourceConnectionClearanceLength) {
 
         float transferStart = transferCentreDistance - (transferLength * 0.5f);
 
@@ -99,22 +130,23 @@ public class RouteSceneBuilder {
 
         sourceSegment.addTransferZone(zone);
 
-        float halfOpening = sourceOpeningLength * 0.5f;
-        float sourceTotal = sourceSegment.getGeometry().getTotalLength();
-
-        float openingStart = clamp(transferCentreDistance - halfOpening, 0f, sourceTotal);
-        float openingEnd = clamp(transferCentreDistance + halfOpening, 0f, sourceTotal);
-
-        sourceSegment.addGuideOpening(new GuideOpening(
-                openingStart,
-                openingEnd,
+        addCentredGuideOpening(
+                sourceSegment,
+                transferCentreDistance,
+                sourceOpeningLength,
                 sourceOpenSide,
-                GuideOpeningType.TRANSFER_SOURCE
-        ));
+                GuideOpening.GuideOpeningType.TRANSFER_SOURCE);
+
+        addCentredConnectionClearance(
+                sourceSegment,
+                transferCentreDistance,
+                sourceConnectionClearanceLength,
+                sourceOpenSide,
+                ConnectionClearance.ConnectionClearanceType.TRANSFER_SOURCE);
 
         return this;
     }
-    
+
     public RouteSceneBuilder addDirectTransfer(
             RouteSegment sourceSegment,
             RouteSegment targetSegment,
@@ -124,6 +156,31 @@ public class RouteSceneBuilder {
             GuideSide sourceOpenSide,
             GuideSide targetOpenSide,
             TransferDecisionStrategy transferStrategy) {
+
+        return addDirectTransfer(
+                sourceSegment,
+                targetSegment,
+                sourceTransferCentreDistance,
+                openingLength,
+                targetEntryDistance,
+                sourceOpenSide,
+                targetOpenSide,
+                transferStrategy,
+                0f,
+                0f);
+    }
+
+    public RouteSceneBuilder addDirectTransfer(
+            RouteSegment sourceSegment,
+            RouteSegment targetSegment,
+            float sourceTransferCentreDistance,
+            float openingLength,
+            float targetEntryDistance,
+            GuideSide sourceOpenSide,
+            GuideSide targetOpenSide,
+            TransferDecisionStrategy transferStrategy,
+            float sourceConnectionClearanceLength,
+            float targetConnectionClearanceLength) {
 
         if (sourceSegment == null) {
             throw new IllegalArgumentException("sourceSegment must not be null");
@@ -138,7 +195,7 @@ public class RouteSceneBuilder {
             throw new IllegalArgumentException("targetOpenSide must not be null");
         }
         if (openingLength <= 0f) {
-            throw new IllegalArgumentException("sourceTransferLength must be > 0");
+            throw new IllegalArgumentException("openingLength must be > 0");
         }
 
         float sourceStart = sourceTransferCentreDistance - (openingLength * 0.5f);
@@ -155,33 +212,36 @@ public class RouteSceneBuilder {
 
         sourceSegment.addTransferZone(zone);
 
-        float sourceTotal = sourceSegment.getGeometry().getTotalLength();
-        float targetTotal = targetSegment.getGeometry().getTotalLength();
-
-        float sourceHalf = openingLength * 0.5f;
-        float sourceOpeningStart = clamp(sourceTransferCentreDistance - sourceHalf, 0f, sourceTotal);
-        float sourceOpeningEnd = clamp(sourceTransferCentreDistance + sourceHalf, 0f, sourceTotal);
-
-        sourceSegment.addGuideOpening(new GuideOpening(
-                sourceOpeningStart,
-                sourceOpeningEnd,
+        addCentredGuideOpening(
+                sourceSegment,
+                sourceTransferCentreDistance,
+                openingLength,
                 sourceOpenSide,
-                GuideOpeningType.TRANSFER_SOURCE
-        ));
+                GuideOpening.GuideOpeningType.TRANSFER_SOURCE);
 
-        float targetHalf = openingLength * 0.5f;
-        float targetOpeningStart = clamp(targetEntryDistance - targetHalf, 0f, targetTotal);
-        float targetOpeningEnd = clamp(targetEntryDistance + targetHalf, 0f, targetTotal);
-
-        targetSegment.addGuideOpening(new GuideOpening(
-                targetOpeningStart,
-                targetOpeningEnd,
+        addCentredGuideOpening(
+                targetSegment,
+                targetEntryDistance,
+                openingLength,
                 targetOpenSide,
-                GuideOpeningType.CONNECTION_TARGET
-        ));
+                GuideOpening.GuideOpeningType.CONNECTION_TARGET);
+
+        addCentredConnectionClearance(
+                sourceSegment,
+                sourceTransferCentreDistance,
+                sourceConnectionClearanceLength,
+                sourceOpenSide,
+                ConnectionClearance.ConnectionClearanceType.TRANSFER_SOURCE);
+
+        addCentredConnectionClearance(
+                targetSegment,
+                targetEntryDistance,
+                targetConnectionClearanceLength,
+                targetOpenSide,
+                ConnectionClearance.ConnectionClearanceType.CONNECTION_TARGET);
 
         return this;
-    }    
+    }
 
     public List<RouteSegment> getSegments() {
         return Collections.unmodifiableList(segments);
@@ -189,6 +249,52 @@ public class RouteSceneBuilder {
 
     public List<SpecAndSegment> getSpecsAndSegments() {
         return Collections.unmodifiableList(specsAndSegments);
+    }
+
+    private static void addCentredGuideOpening(
+            RouteSegment segment,
+            float centreDistance,
+            float openingLength,
+            GuideSide side,
+            GuideOpening.GuideOpeningType type) {
+
+        if (openingLength <= 0f || side == null) {
+            return;
+        }
+
+        float total = segment.getGeometry().getTotalLength();
+        float halfOpening = openingLength * 0.5f;
+        float openingStart = clamp(centreDistance - halfOpening, 0f, total);
+        float openingEnd = clamp(centreDistance + halfOpening, 0f, total);
+
+        segment.addGuideOpening(new GuideOpening(
+                openingStart,
+                openingEnd,
+                side,
+                type));
+    }
+
+    private static void addCentredConnectionClearance(
+            RouteSegment segment,
+            float centreDistance,
+            float clearanceLength,
+            GuideSide side,
+            ConnectionClearance.ConnectionClearanceType type) {
+
+        if (clearanceLength <= 0f || side == null) {
+            return;
+        }
+
+        float total = segment.getGeometry().getTotalLength();
+        float halfClearance = clearanceLength * 0.5f;
+        float clearanceStart = clamp(centreDistance - halfClearance, 0f, total);
+        float clearanceEnd = clamp(centreDistance + halfClearance, 0f, total);
+
+        segment.addConnectionClearance(new ConnectionClearance(
+                clearanceStart,
+                clearanceEnd,
+                side,
+                type));
     }
 
     private static float clamp(float v, float min, float max) {
