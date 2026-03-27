@@ -47,10 +47,10 @@ public class TestScene extends BaseScene{
 		super(pane, dimensions,	CameraPosition.aboveLeft());
 		objects = new ArrayList<RenderableObject>();
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
-		//Tote t = setupTote();
-		//setupOvalTrack(t);
+		Tote t = setupTote();
+		setupOvalTrack(t);
 		//setupParallelTracks(t);
-		setupCylinder();
+		//setupCylinder();
 	}
 		
 	@Override

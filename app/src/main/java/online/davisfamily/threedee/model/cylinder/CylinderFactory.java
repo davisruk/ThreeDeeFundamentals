@@ -28,65 +28,68 @@ public final class CylinderFactory {
         int totalVertexCount = capEnds ? sideVertexCount + 2 : sideVertexCount;
 
         Vec4[] vertices = new Vec4[totalVertexCount];
+
+        // near ring:  0 .. segments-1   (z = -halfLen)
+        // far ring:   segments .. 2*segments-1   (z = +halfLen)
         double step = (Math.PI * 2.0) / segments;
-        // Build rings
+
         for (int i = 0; i < segments; i++) {
             double angle = i * step;
-            float y = radius * (float) Math.cos(angle);
-            float z = radius * (float) Math.sin(angle);
+            float x = radius * (float) Math.cos(angle);
+            float y = radius * (float) Math.sin(angle);
 
-            vertices[left(i)] = new Vec4(-halfLen, y, z, 1.0f);
-            vertices[right(i, segments)] = new Vec4(+halfLen, y, z, 1.0f);
+            vertices[near(i)] = new Vec4(x, y, -halfLen, 1.0f);
+            vertices[far(i, segments)] = new Vec4(x, y, +halfLen, 1.0f);
         }
 
-        int leftCentre = -1;
-        int rightCentre = -1;
+        int nearCentre = -1;
+        int farCentre = -1;
 
         if (capEnds) {
-            leftCentre = sideVertexCount;
-            rightCentre = sideVertexCount + 1;
+            nearCentre = sideVertexCount;
+            farCentre = sideVertexCount + 1;
 
-            vertices[leftCentre] = new Vec4(-halfLen, 0f, 0f, 1.0f);
-            vertices[rightCentre] = new Vec4(+halfLen, 0f, 0f, 1.0f);
+            vertices[nearCentre] = new Vec4(0f, 0f, -halfLen, 1.0f);
+            vertices[farCentre] = new Vec4(0f, 0f, +halfLen, 1.0f);
         }
 
         List<int[]> triangles = new ArrayList<>();
 
-        // Side faces
+        // side faces
         for (int i = 0; i < segments; i++) {
             int next = (i + 1) % segments;
 
-            int li = left(i);
-            int ln = left(next);
-            int ri = right(i, segments);
-            int rn = right(next, segments);
+            int ni = near(i);
+            int nn = near(next);
+            int fi = far(i, segments);
+            int fn = far(next, segments);
 
-            addTri(triangles, li, rn, ri);
-            addTri(triangles, li, ln, rn);
+            addTri(triangles, ni, fn, fi);
+            addTri(triangles, ni, nn, fn);
         }
 
         if (capEnds) {
-            // Left cap (-X)
+            // near cap outward normal = -Z
             for (int i = 0; i < segments; i++) {
                 int next = (i + 1) % segments;
-                addTri(triangles, leftCentre, left(next), left(i));
+                addTri(triangles, nearCentre, near(next), near(i));
             }
 
-            // Right cap (+X)
+            // far cap outward normal = +Z
             for (int i = 0; i < segments; i++) {
                 int next = (i + 1) % segments;
-                addTri(triangles, rightCentre, right(i, segments), right(next, segments));
+                addTri(triangles, farCentre, far(i, segments), far(next, segments));
             }
         }
 
-        return new Mesh(vertices, triangles.toArray(new int[0][]), "Cylinder");
+        return new Mesh(vertices, triangles.toArray(new int[0][]), "cylinder");
     }
 
-    private static int left(int i) {
+    private static int near(int i) {
         return i;
     }
 
-    private static int right(int i, int segments) {
+    private static int far(int i, int segments) {
         return segments + i;
     }
 

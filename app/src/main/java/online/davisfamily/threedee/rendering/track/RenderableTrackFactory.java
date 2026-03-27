@@ -7,6 +7,7 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.model.cylinder.CylinderFactory;
 import online.davisfamily.threedee.model.tracks.GuideSide;
 import online.davisfamily.threedee.model.tracks.RollerMeshFactory;
 import online.davisfamily.threedee.model.tracks.RouteTrackLayout;
@@ -39,7 +40,7 @@ public final class RenderableTrackFactory {
         List<RenderableObject> parts = new ArrayList<>();
 
         Mesh sharedRollerMesh = spec.includeRollers
-                ? RollerMeshFactory.createBoxRollerMesh(spec)
+                ? RollerMeshFactory.createCylinderRollerMesh(spec)//RollerMeshFactory.createBoxRollerMesh(spec)
                 : null;
 
         // Build deck sections (normal / transfer) and attach rollers per interval

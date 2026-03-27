@@ -2,6 +2,7 @@ package online.davisfamily.threedee.model.tracks;
 
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.model.cylinder.CylinderFactory;
 
 public final class RollerMeshFactory {
 
@@ -72,5 +73,12 @@ public final class RollerMeshFactory {
             spec.rollerHeight,
             widthAcross
         );
+    }
+    
+    public static Mesh createCylinderRollerMesh(TrackSpec spec) {
+        float widthAcross = spec.getRunningWidth() - (2f * spec.rollerWidthInset);
+        float radius = spec.rollerHeight * 0.5f;
+        int segments = 12; // tune later
+        return CylinderFactory.buildCylinder(radius, widthAcross, segments, true);
     }
 }
