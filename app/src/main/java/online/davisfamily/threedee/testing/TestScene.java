@@ -14,11 +14,12 @@ import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
 import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStrategy;
+import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.InputState.Mode;
-import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.cylinder.CylinderFactory;
@@ -425,18 +426,19 @@ public class TestScene extends BaseScene{
 	}
 	
 	private void setupCylinder() {
-		Mesh m = CylinderFactory.buildCylinder(1f, 3f, 24, true);
+		Mesh m = CylinderFactory.buildCylinder(1f, 3f, 360, true);
 		ObjectTransformation ot = new ObjectTransformation(
 				0.0f,0.0f,0f, // rotation xyz
 				0f,0f,-5f, // translation xyz
 				new Mat4()
 			);
-		RenderableObject rc = RenderableObject.create(
+		RenderableObject rc = RenderableObject.createWithBehaviours(
 				tr,
 				m, // mesh
 				ot, // transform
 				new OneColourStrategyImpl(0xFF0000FF),
-				FORWARD_DIRECTION.NEGATIVE_X
+				//FORWARD_DIRECTION.NEGATIVE_X,
+				new SpinBehaviour(0f,0f,0f)
 			);
 		objects.add(rc);
 	}

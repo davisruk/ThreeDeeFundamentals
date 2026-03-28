@@ -1,7 +1,7 @@
 DSP emulator things to do
-tidy up tote on Y - needs raising
+* tidy up tote on Y - needs raising
 * tidy up guide rail endings near transfer zones they are overlapping slightly - done but linking segment ends are black
-test that procedural generation of tracks works for transfer zones that do not include linking segment
+* test that procedural generation of tracks works for transfer zones that do not include linking segment
 
 animation of transfer zones
 - needs some way of knowing object is approaching
@@ -21,4 +21,9 @@ selectable objects
  - allow editing of object variables
   - could likely use Swing for a dialog rather than creating graphically
 
-  
+Cyclinders
+* - create cylinders
+* - make rollers spin
+ - change track to calculate number of cylinders (maybe density?)
+ - add spin to roller def in track spec
+ - add number of spin vertices to track spec

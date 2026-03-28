@@ -3,11 +3,12 @@ package online.davisfamily.threedee.rendering.track;
 import java.util.ArrayList;
 import java.util.List;
 
+import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
+import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.model.Mesh;
-import online.davisfamily.threedee.model.cylinder.CylinderFactory;
 import online.davisfamily.threedee.model.tracks.GuideSide;
 import online.davisfamily.threedee.model.tracks.RollerMeshFactory;
 import online.davisfamily.threedee.model.tracks.RouteTrackLayout;
@@ -126,10 +127,10 @@ public final class RenderableTrackFactory {
             Mesh rollerMesh,
             List<ObjectTransformation> rollerTransforms,
             online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy colour) {
-
+    	Behaviour spin = new SpinBehaviour(0f,0f,1f);
         List<RenderableObject> rollers = new ArrayList<>();
         for (ObjectTransformation t : rollerTransforms) {
-            rollers.add(RenderableObject.create(tr, rollerMesh, t, colour));
+            rollers.add(RenderableObject.createWithBehaviours(tr, rollerMesh, t, colour, spin));
         }
         parent.addAllChildren(rollers);
     }

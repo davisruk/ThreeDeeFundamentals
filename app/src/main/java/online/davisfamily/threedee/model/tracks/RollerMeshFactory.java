@@ -77,8 +77,8 @@ public final class RollerMeshFactory {
     
     public static Mesh createCylinderRollerMesh(TrackSpec spec) {
         float widthAcross = spec.getRunningWidth() - (2f * spec.rollerWidthInset);
-        float radius = spec.rollerHeight * 0.5f;
-        int segments = 12; // tune later
+        float radius = Math.max(spec.rollerHeight, spec.rollerDepthAlongPath) * 1.2f;
+        int segments = 8;
         return CylinderFactory.buildCylinder(radius, widthAcross, segments, true);
     }
 }
