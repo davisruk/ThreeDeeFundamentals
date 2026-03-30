@@ -18,7 +18,7 @@ behaviour at point on a route
 selectable objects
 * - allow a mouse click to select an object
 * - highlight / change colour of object
- - composite selection (select parent if child clicked)
+* - composite selection (select parent if child clicked)
  - allow editing of object variables
   - could likely use Swing for a dialog rather than creating graphically
 

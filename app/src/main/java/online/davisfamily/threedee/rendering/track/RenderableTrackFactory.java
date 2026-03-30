@@ -55,15 +55,14 @@ public final class RenderableTrackFactory {
                 continue;
             }
 
+            boolean isTransfer = interval.getType() == TrackIntervalType.TRANSFER;
             RenderableObject deckObject = RenderableObject.create(
-                    "deck",
+                    isTransfer ? "transfer" : "deck",
             		tr,
                     built.deckMesh,
                     identity,
-                    interval.getType() == TrackIntervalType.TRANSFER
-                            ? appearance.transferDeckColour
-                            : appearance.deckColour,
-                    false);
+                    isTransfer ? appearance.transferDeckColour : appearance.deckColour,
+                    isTransfer);
 
             if (spec.includeRollers && sharedRollerMesh != null && built.rollerTransforms != null) {
                 addRollers(tr, deckObject, sharedRollerMesh, built.rollerTransforms, appearance.rollerColour);

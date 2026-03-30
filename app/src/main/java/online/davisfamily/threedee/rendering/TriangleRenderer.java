@@ -21,6 +21,7 @@ public class TriangleRenderer {
 
 	private BresenhamLineUtilities bl;
 	private InputState is;
+	private boolean[] selectedMask;
 	int minX, minY, maxX, maxY; // the viewport on the cavas
 	int[] pixels; // the world canvas
 	int pw;
@@ -54,8 +55,13 @@ public class TriangleRenderer {
 		this.bl = lineDrawer;
 		this.dbg = debug;
 		this.is = input;
+		selectedMask = new boolean[pw * ph];
 	}
 
+	public void clearSelectedMask() {
+	    Arrays.fill(selectedMask, false);
+	}
+	
 	private class ScreenCoord {
 		public ScreenCoord() {}
 		public ScreenCoord(int x, int y, float z) {
@@ -132,91 +138,80 @@ public class TriangleRenderer {
 	// fills scan lines between 2 points when those 2 points intersect the edges a triangle
 	// p1.y must always be equal or less than p2.y
 	// for a single triangle call twice, once for top and once for bottom
-	private static final int SELECTION_OUTLINE_COLOUR = 0xFFFFFF00;
-	private static final int SELECTION_OUTLINE_THICKNESS = 1;
+	private void fillHalfTriangle(ScreenCoord p1, float e1xInc, float e1zInc, ScreenCoord p2, float e2xInc,
+			float e2zInc, int colour, float[] zBuff, boolean selected) {
 
-	private void fillHalfTriangle(ScreenCoord p1,
-	                              float e1xInc, float e1zInc,
-	                              ScreenCoord p2,
-	                              float e2xInc, float e2zInc,
-	                              int colour,
-	                              float[] zBuff,
-	                              boolean selected) {
+		int startY = Math.max(p1.y, minY);
+		int endY = Math.min(p2.y, maxY + 1);
+		if (startY >= endY)
+			return;
 
-	    int startY = Math.max(p1.y, minY);
-	    int endY = Math.min(p2.y, maxY + 1);
-	    if (startY >= endY) return;
+		int ySkip = startY - p1.y;
+		float p2ySkip = p2.y - startY;
 
-	    int ySkip = startY - p1.y;
-	    float p2ySkip = p2.y - startY;
+		float edge1xIntersection = ySkip * e1xInc + p1.x;
+		float edge1zIntersection = ySkip * e1zInc + p1.z;
+		float edge2xIntersection = p2.x - p2ySkip * e2xInc;
+		float edge2zIntersection = p2.z - p2ySkip * e2zInc;
 
-	    float edge1xIntersection = ySkip * e1xInc + p1.x;
-	    float edge1zIntersection = ySkip * e1zInc + p1.z;
-	    float edge2xIntersection = p2.x - p2ySkip * e2xInc;
-	    float edge2zIntersection = p2.z - p2ySkip * e2zInc;
+		float leftz = edge1zIntersection;
+		float rightz = edge2zIntersection;
+		int leftx = Math.round(edge1xIntersection);
+		int rightx = Math.round(edge2xIntersection);
 
-	    float leftz = edge1zIntersection;
-	    float rightz = edge2zIntersection;
-	    int leftx = Math.round(edge1xIntersection);
-	    int rightx = Math.round(edge2xIntersection);
+		for (int y = startY; y < endY; y++) {
+			if (rightx < leftx) {
+				int t = leftx;
+				leftx = rightx;
+				rightx = t;
 
-	    for (int y = startY; y < endY; y++) {
-	        if (rightx < leftx) {
-	            int t = leftx;
-	            leftx = rightx;
-	            rightx = t;
+				float tz = leftz;
+				leftz = rightz;
+				rightz = tz;
+			}
 
-	            float tz = leftz;
-	            leftz = rightz;
-	            rightz = tz;
-	        }
+			int unclippedLeftx = leftx;
+			float dlx = rightx - leftx;
+			float zInc = (dlx != 0) ? (rightz - leftz) / dlx : 0f;
 
-	        int unclippedLeftx = leftx;
-	        int unclippedRightx = rightx;
+			if (!(rightx < minX || leftx > maxX)) {
+				if (leftx < minX)
+					leftx = minX;
+				if (rightx > maxX)
+					rightx = maxX;
 
-	        float dlx = rightx - leftx;
-	        float zInc = (dlx != 0) ? (rightz - leftz) / dlx : 0f;
+				float z = leftz + (leftx - unclippedLeftx) * zInc;
+				int row = y * pw;
 
-	        if (!(rightx < minX || leftx > maxX)) {
-	            if (leftx < minX) leftx = minX;
-	            if (rightx > maxX) rightx = maxX;
+				for (int x = leftx; x <= rightx; x++) {
+					int idx = row + x;
 
-	            float z = leftz + (leftx - unclippedLeftx) * zInc;
-	            int row = y * pw;
+					if (z > zBuff[idx]) {
+						zBuff[idx] = z;
+						pixels[idx] = colour;
 
-	            for (int x = leftx; x <= rightx; x++) {
-	                if (z > zBuff[row + x]) {
-	                    int pixelColour = colour;
+						if (selected) {
+							selectedMask[idx] = true;
+						} else {
+							selectedMask[idx] = false;
+						}
+					}
 
-	                    if (selected) {
-	                        boolean leftBorder = (x - unclippedLeftx) < SELECTION_OUTLINE_THICKNESS;
-	                        boolean rightBorder = (unclippedRightx - x) < SELECTION_OUTLINE_THICKNESS;
+					z += zInc;
+				}
+			}
 
-	                        if (leftBorder || rightBorder) {
-	                            pixelColour = SELECTION_OUTLINE_COLOUR;
-	                        }
-	                    }
+edge1xIntersection += e1xInc;
+edge1zIntersection += e1zInc;
+edge2xIntersection += e2xInc;
+edge2zIntersection += e2zInc;
 
-	                    zBuff[row + x] = z;
-	                    pixels[row + x] = pixelColour;
-	                }
-
-	                z += zInc;
-	            }
-	        }
-
-	        edge1xIntersection += e1xInc;
-	        edge1zIntersection += e1zInc;
-	        edge2xIntersection += e2xInc;
-	        edge2zIntersection += e2zInc;
-
-	        leftx = Math.round(edge1xIntersection);
-	        rightx = Math.round(edge2xIntersection);
-	        leftz = edge1zIntersection;
-	        rightz = edge2zIntersection;
-	    }
-	}	
-
+leftx = Math.round(edge1xIntersection);
+rightx = Math.round(edge2xIntersection);
+leftz = edge1zIntersection;
+rightz = edge2zIntersection;
+}
+}
 	// mutable instances for drawProjectedTriangle
 	Vec4 clipA = new Vec4();
 	Vec4 clipB = new Vec4();
@@ -294,6 +289,35 @@ public class TriangleRenderer {
 		}
 	}
 	
+	private static final int SELECTION_OUTLINE_COLOUR = 0xFFFFFF00;
+
+	public void drawSelectedOutlineFromMask() {
+	    for (int y = 1; y < ph - 1; y++) {
+	        int row = y * pw;
+
+	        for (int x = 1; x < pw - 1; x++) {
+	            int idx = row + x;
+
+	            if (!selectedMask[idx]) {
+	                continue;
+	            }
+
+	            boolean isEdge =
+	                    !selectedMask[idx - 1] ||
+	                    !selectedMask[idx + 1] ||
+	                    !selectedMask[idx - pw] ||
+	                    !selectedMask[idx + pw] ||
+	                    !selectedMask[idx - pw - 1] ||
+	                    !selectedMask[idx - pw + 1] ||
+	                    !selectedMask[idx + pw - 1] ||
+	                    !selectedMask[idx + pw + 1];
+
+	            if (isEdge) {
+	                pixels[idx] = SELECTION_OUTLINE_COLOUR;
+	            }
+	        }
+	    }
+	}	
 	private int multiplyColour(int argb, float brightness) {
 	    int a = (argb >>> 24) & 0xFF;
 	    int r = (argb >>> 16) & 0xFF;
@@ -399,5 +423,6 @@ public class TriangleRenderer {
 	public void drawCapturedSelectionOverlay(RenderableObject ro, Mat4 worldModel, Camera cam, Mat4 projection) {
 	    if (ro == null || worldModel == null) return;
         drawBoundingBox(ro, cam, projection, worldModel);
-	}	
+	}
+	
 }

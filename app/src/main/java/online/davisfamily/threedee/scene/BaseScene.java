@@ -176,19 +176,15 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	
 	@Override
 	public void renderFrame(double tSeconds) {
-/*
-		if (!hasPrinted) {
-	    	rTote.children.stream().forEach(ro -> System.out.println(ro.mesh));
-	    	hasPrinted = true;
-	    }
-*/	    
 		if (!inputState.isSet(Mode.PAUSE_ALL)) {
 			updateCamera();
 			updatePosition(tSeconds);
 		    this.clear(0xFF000000);
 			buildVP();
+			tr.clearSelectedMask();
 			executeChildRenderOperations(tSeconds);
 			updateDebug(tSeconds);
+			tr.drawSelectedOutlineFromMask();
 	    }
 	}
 	
