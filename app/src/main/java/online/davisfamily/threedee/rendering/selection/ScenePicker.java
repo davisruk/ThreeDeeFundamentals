@@ -121,8 +121,9 @@ public class ScenePicker {
             tempVecD.set(localRay.direction).mutableScale(t).mutableAdd(localRay.origin);
             worldModel.transformPoint(tempVecD, tempVecE);
 
-            float worldDistance = tempVecE.subtract(worldRay.origin).length();
-
+            tempVecF.set(tempVecE).mutableSubtract(worldRay.origin);
+            float worldDistance = tempVecF.length();
+            
             if (worldDistance < bestHit.distance) {
                 bestHit.object = ro.getSelectionTarget();
                 bestHit.distance = worldDistance;

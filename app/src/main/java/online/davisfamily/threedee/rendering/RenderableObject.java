@@ -47,13 +47,15 @@ public class RenderableObject {
 	}
 
     private RenderableObject(
-            TriangleRenderer triangleRenderer,
+            String id,
+    		TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
             ColourPickerStrategy colourPicker,
             List<RenderableObject> childObjects,
             List<Behaviour> behaviourObjects,
-            FORWARD_DIRECTION forwardDirection) {
+            FORWARD_DIRECTION forwardDirection,
+            boolean selectable) {
 
         this.tr = triangleRenderer;
         this.mesh = mesh;
@@ -63,146 +65,180 @@ public class RenderableObject {
 
         this.children = childObjects != null ? new ArrayList<>(childObjects) : new ArrayList<>();
         this.behaviours = behaviourObjects != null ? new ArrayList<>(behaviourObjects) : new ArrayList<>();
+        this.selectable = selectable;
+        this.id = id;
     }
 
     public static RenderableObject create(
-            TriangleRenderer triangleRenderer,
+    		String id,
+    		TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
-            ColourPickerStrategy colourPicker) {
+            ColourPickerStrategy colourPicker,
+            boolean selectable) {
 
         return new RenderableObject(
-                triangleRenderer,
+        		id,
+        		triangleRenderer,
                 mesh,
                 transform,
                 colourPicker,
                 null,
                 null,
-                FORWARD_DIRECTION.POSITIVE_X);
+                FORWARD_DIRECTION.POSITIVE_X,
+                selectable);
     }
 
     public static RenderableObject create(
+    		String id,
             TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
             ColourPickerStrategy colourPicker,
-            FORWARD_DIRECTION forwardDirection) {
+            FORWARD_DIRECTION forwardDirection,
+            boolean selectable) {
 
         return new RenderableObject(
-                triangleRenderer,
+                id,
+        		triangleRenderer,
                 mesh,
                 transform,
                 colourPicker,
                 null,
                 null,
-                forwardDirection);
+                forwardDirection,
+                selectable);
     }
 
     public static RenderableObject createWithChildren(
-            TriangleRenderer triangleRenderer,
-            Mesh mesh,
-            ObjectTransformation transform,
-            ColourPickerStrategy colourPicker,
-            List<RenderableObject> childObjects) {
-
-        return new RenderableObject(
-                triangleRenderer,
-                mesh,
-                transform,
-                colourPicker,
-                childObjects,
-                null,
-                FORWARD_DIRECTION.POSITIVE_X);
-    }
-
-    public static RenderableObject createWithChildren(
-            TriangleRenderer triangleRenderer,
+            String id,
+    		TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
             ColourPickerStrategy colourPicker,
             List<RenderableObject> childObjects,
-            FORWARD_DIRECTION forwardDirection) {
+            boolean selectable) {
 
         return new RenderableObject(
+        		id,
                 triangleRenderer,
                 mesh,
                 transform,
                 colourPicker,
                 childObjects,
                 null,
-                forwardDirection);
+                FORWARD_DIRECTION.POSITIVE_X,
+                selectable);
     }
 
-    public static RenderableObject createWithBehaviours(
-            TriangleRenderer triangleRenderer,
+    public static RenderableObject createWithChildren(
+            String id,
+    		TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
             ColourPickerStrategy colourPicker,
-            List<Behaviour> behaviourObjects) {
+            List<RenderableObject> childObjects,
+            FORWARD_DIRECTION forwardDirection,
+            boolean selectable) {
 
         return new RenderableObject(
-                triangleRenderer,
+                id,
+        		triangleRenderer,
                 mesh,
                 transform,
                 colourPicker,
+                childObjects,
                 null,
-                behaviourObjects,
-                FORWARD_DIRECTION.POSITIVE_X);
+                forwardDirection,
+                selectable);
     }
 
     public static RenderableObject createWithBehaviours(
-            TriangleRenderer triangleRenderer,
+            String id,
+    		TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
             ColourPickerStrategy colourPicker,
             List<Behaviour> behaviourObjects,
-            FORWARD_DIRECTION forwardDirection) {
+            boolean selectable) {
 
         return new RenderableObject(
-                triangleRenderer,
+                id,
+        		triangleRenderer,
                 mesh,
                 transform,
                 colourPicker,
                 null,
                 behaviourObjects,
-                forwardDirection);
+                FORWARD_DIRECTION.POSITIVE_X,
+                selectable);
     }
-    
+
     public static RenderableObject createWithBehaviours(
-            TriangleRenderer triangleRenderer,
+            String id,
+    		TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
             ColourPickerStrategy colourPicker,
+            List<Behaviour> behaviourObjects,
+            FORWARD_DIRECTION forwardDirection,
+            boolean selectable) {
+
+        return new RenderableObject(
+                id,
+        		triangleRenderer,
+                mesh,
+                transform,
+                colourPicker,
+                null,
+                behaviourObjects,
+                forwardDirection,
+                selectable);
+    }
+    
+    public static RenderableObject createWithBehaviours(
+            String id,
+    		TriangleRenderer triangleRenderer,
+            Mesh mesh,
+            ObjectTransformation transform,
+            ColourPickerStrategy colourPicker,
+            boolean selectable,
             Behaviour... behaviour) {
 
         List<Behaviour> behaviourObjects = Arrays.asList(behaviour);
     	return new RenderableObject(
-                triangleRenderer,
+                id,
+    			triangleRenderer,
                 mesh,
                 transform,
                 colourPicker,
                 null,
                 behaviourObjects,
-                FORWARD_DIRECTION.POSITIVE_X);
+                FORWARD_DIRECTION.POSITIVE_X,
+                selectable);
     }
     
     public static RenderableObject createWithChildrenAndBehaviours(
-            TriangleRenderer triangleRenderer,
+            String id,
+    		TriangleRenderer triangleRenderer,
             Mesh mesh,
             ObjectTransformation transform,
             ColourPickerStrategy colourPicker,
             List<RenderableObject> childObjects,
             List<Behaviour> behaviourObjects,
-            FORWARD_DIRECTION forwardDirection) {
+            FORWARD_DIRECTION forwardDirection,
+            boolean selectable) {
 
         return new RenderableObject(
-                triangleRenderer,
+                id,
+        		triangleRenderer,
                 mesh,
                 transform,
                 colourPicker,
                 childObjects,
                 behaviourObjects,
-                forwardDirection);
+                forwardDirection,
+                selectable);
     }
     
 	public void addBehaviour(Behaviour behaviour) {

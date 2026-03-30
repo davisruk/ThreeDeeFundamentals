@@ -60,15 +60,9 @@ public class TestScene extends BaseScene{
 		drawObject(objects, tSeconds, lightDirection);
 	}
 	
-	@Override
-	public void pickAt(int x, int y) {
-		super.pickAt(x, y);
-	}
 	private Tote setupTote() {
 		Tote tote = new Tote();
-		rTote = RenderableToteFactory.createRenderableTote(tr, tote);
-		rTote.id = "Tote";
-		rTote.selectable = true;
+		rTote = RenderableToteFactory.createRenderableTote("Tote", tr, tote, true);
 		objects.add(rTote);
 		return tote;
 	}
@@ -438,11 +432,13 @@ public class TestScene extends BaseScene{
 				new Mat4()
 			);
 		RenderableObject rc = RenderableObject.createWithBehaviours(
+				"cylinder",
 				tr,
 				m, // mesh
 				ot, // transform
 				new OneColourStrategyImpl(0xFF0000FF),
 				//FORWARD_DIRECTION.NEGATIVE_X,
+				true,
 				new SpinBehaviour(0f,0f,0f)
 			);
 		objects.add(rc);

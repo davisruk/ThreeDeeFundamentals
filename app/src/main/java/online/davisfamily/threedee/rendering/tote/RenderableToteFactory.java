@@ -17,7 +17,7 @@ import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 
 public class RenderableToteFactory {
 
-	public static RenderableObject createRenderableTote(TriangleRenderer tr, Tote tote) {
+	public static RenderableObject createRenderableTote(String id, TriangleRenderer tr, Tote tote, boolean selectable) {
 		OneColourStrategyImpl blueColour = new OneColourStrategyImpl(0xFF0000FF);
 		OneColourStrategyImpl yellowColour = new OneColourStrategyImpl(0xFFFFFF00);
 		OneColourStrategyImpl redColour = new OneColourStrategyImpl(0xFFFF0000);
@@ -37,10 +37,11 @@ public class RenderableToteFactory {
 		);
 
 		// left lid
-		RenderableObject rLidLeft = createRenderableLid(lids.leftMesh, tote.outerHeight, -halfWidth, tr, yellowColour, true);
+		RenderableObject rLidLeft = createRenderableLid(id, lids.leftMesh, tote.outerHeight, -halfWidth, tr, yellowColour, true);
+		rLidLeft.selectable = true;
 		// right lid
-		RenderableObject rLidRight = createRenderableLid(lids.rightMesh, tote.outerHeight, +halfWidth, tr, redColour, false);
-		
+		RenderableObject rLidRight = createRenderableLid(id, lids.rightMesh, tote.outerHeight, +halfWidth, tr, redColour, false);
+		rLidRight.selectable = true;
 		// tote transformation
 		ObjectTransformation tTote = new ObjectTransformation(
 			0.0f,0.0f,0f, // rotation xyz
@@ -53,19 +54,24 @@ public class RenderableToteFactory {
 		
 		// renderable tote
 		RenderableObject rTote = RenderableObject.createWithChildren(
+			id,
 			tr,
 			mTote, // mesh
 			tTote, // transform
 			blueColour,
 			List.of(rLidRight, rLidLeft), // children
-			FORWARD_DIRECTION.NEGATIVE_X
+			FORWARD_DIRECTION.NEGATIVE_X,
+			selectable
 		);
-		
+		if (selectable) {
+			rLidLeft.setSelectionTarget(rTote);
+			rLidRight.setSelectionTarget(rTote);
+		}
 		return rTote;
 	}
 	
 
-	private static RenderableObject createRenderableLid(Mesh lidMesh, float yOffset, float lidWidth, TriangleRenderer tr, OneColourStrategyImpl colour, boolean isLeft) {
+	private static RenderableObject createRenderableLid(String parentId, Mesh lidMesh, float yOffset, float lidWidth, TriangleRenderer tr, OneColourStrategyImpl colour, boolean isLeft) {
 		ObjectTransformation tLid = new ObjectTransformation(
 			    0f, 0f, 0f, // rotation xyz
 			    lidWidth, yOffset, 0f, // translation xyz
@@ -75,13 +81,16 @@ public class RenderableToteFactory {
 		Behaviour openClose = isLeft ? 
 				new PingPongRotationBehaviour(Axis.Z, 0f, 255f, 90f):
 				new PingPongRotationBehaviour(Axis.Z, -255f, 0f, 90f);
-		
+		String id = isLeft? parentId +"_LeftLid":parentId +"_RightLid";
 		return RenderableObject.createWithBehaviours(
+			id,
 			tr,
 			lidMesh, // mesh
 			tLid, // transform
 			colour,
-			List.of(openClose)
+			List.of(openClose),
+			true
 		);
+		
 	}
 }

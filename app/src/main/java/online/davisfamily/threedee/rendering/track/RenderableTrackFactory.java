@@ -56,12 +56,14 @@ public final class RenderableTrackFactory {
             }
 
             RenderableObject deckObject = RenderableObject.create(
-                    tr,
+                    "deck",
+            		tr,
                     built.deckMesh,
                     identity,
                     interval.getType() == TrackIntervalType.TRANSFER
                             ? appearance.transferDeckColour
-                            : appearance.deckColour);
+                            : appearance.deckColour,
+                    false);
 
             if (spec.includeRollers && sharedRollerMesh != null && built.rollerTransforms != null) {
                 addRollers(tr, deckObject, sharedRollerMesh, built.rollerTransforms, appearance.rollerColour);
@@ -83,10 +85,12 @@ public final class RenderableTrackFactory {
 
                 if (guideMesh != null) {
                     parts.add(RenderableObject.create(
+                            "left_guide",
                             tr,
                             guideMesh,
                             identity,
-                            appearance.guideColour));
+                            appearance.guideColour,
+                            false));
                 }
             }
 
@@ -101,10 +105,12 @@ public final class RenderableTrackFactory {
 
                 if (guideMesh != null) {
                     parts.add(RenderableObject.create(
-                            tr,
+                            "right_guide",
+                    		tr,
                             guideMesh,
                             identity,
-                            appearance.guideColour));
+                            appearance.guideColour,
+                    		false));
                 }
             }
         }
@@ -129,8 +135,10 @@ public final class RenderableTrackFactory {
             online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy colour) {
     	Behaviour spin = new SpinBehaviour(0f,0f,1f);
         List<RenderableObject> rollers = new ArrayList<>();
+        int i=0;
         for (ObjectTransformation t : rollerTransforms) {
-            rollers.add(RenderableObject.createWithBehaviours(tr, rollerMesh, t, colour, spin));
+            rollers.add(RenderableObject.createWithBehaviours("roller_" + i, tr, rollerMesh, t, colour, false, spin));
+            i++;
         }
         parent.addAllChildren(rollers);
     }
