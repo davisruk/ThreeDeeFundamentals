@@ -263,21 +263,21 @@ public class RenderableObject {
 	}
 	
 	public void draw(Camera cam, Mat4 perspective, float[]zBuffer, DirectionalLight lightDirection, Mat4 parentModel, SelectionManager selectionManager) {
-		transformation.setupModel();
+	    transformation.setupModel();
+
 	    Mat4 worldModel = new Mat4();
 	    if (parentModel == null) parentModel = Mat4.identity();
 	    worldModel.set(parentModel);
 	    worldModel.mutableMultiply(transformation.model);
 
-	    tr.drawMesh(this, cam, perspective, zBuffer, lightDirection, worldModel);
-	    
-	    // setup so selection overlay can be drawn later
-	    if (selectionManager.getSelected() == this && mesh != null) {
-	    	selectionManager.setWorldModel(worldModel);
-	    }
+	    boolean selected = selectionManager != null
+	            && selectionManager.getSelected() != null
+	            && selectionManager.getSelected() == getSelectionTarget();
 
-		    for (RenderableObject ro: children) {
-	        ro.draw(cam, perspective, zBuffer, lightDirection, worldModel, selectionManager);
+	    tr.drawMesh(this, cam, perspective, zBuffer, lightDirection, worldModel, selected);
+	    
+	    for (RenderableObject ro: children) {
+        ro.draw(cam, perspective, zBuffer, lightDirection, worldModel, selectionManager);
 	    }
 	}
 	

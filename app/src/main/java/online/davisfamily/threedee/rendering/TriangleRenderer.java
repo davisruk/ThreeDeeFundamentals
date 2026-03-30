@@ -11,7 +11,6 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
-import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.testing.DebugUtils;
@@ -69,7 +68,7 @@ public class TriangleRenderer {
 	// Fills a triangle given the x,y,z coords for that triangle
 	// Triangle is determined as A(x,y) B(x,y) C(x,y)
 	// Edges are determined as AB, AC, BC
-	public void fillTriangle(ScreenCoord p1, ScreenCoord p2, ScreenCoord p3, int colour, float[] zBuff) {
+	public void fillTriangle(ScreenCoord p1, ScreenCoord p2, ScreenCoord p3, int colour, float[] zBuff, boolean selected) {
 		ScreenCoord[] coords = new ScreenCoord[] {p1,p2,p3};
 		// Sort coords into y order ascending
 		Arrays.sort(coords, Comparator.comparingInt(i -> i.y));
@@ -102,7 +101,8 @@ public class TriangleRenderer {
 				coords[B],
 				abXinc, abZinc,
 				colour,
-				zBuff
+				zBuff,
+				selected
 			);
 		
 		// fill bottom half of triangle (edges AC BC)
@@ -124,77 +124,97 @@ public class TriangleRenderer {
 				bcXinc, // BCx slope - amount x advances on BC as we move up y
 				bcZinc, // BCz slope - amount z advances on BC as we move up y
 				colour,
-				zBuff
+				zBuff,
+				selected
 			);
 	}
 	
 	// fills scan lines between 2 points when those 2 points intersect the edges a triangle
 	// p1.y must always be equal or less than p2.y
 	// for a single triangle call twice, once for top and once for bottom
-	private void fillHalfTriangle(ScreenCoord p1, float e1xInc, float e1zInc, ScreenCoord p2, float e2xInc, float e2zInc, int colour, float[] zBuff) {
-		int startY = Math.max(p1.y, minY);
-		int endY = Math.min(p2.y, maxY + 1);
-		if (startY >= endY) return; // no visible lines
-		int ySkip = startY - p1.y; // amount p1.y has been clipped
-		float p2ySkip = p2.y - startY; // amount p2.y has been clipped
-		
-		float edge1xIntersection = ySkip * e1xInc + p1.x; // x intersection for first edge at starting y
-		float edge1zIntersection = ySkip * e1zInc + p1.z; // z intersection for first edge at starting y
-		float edge2xIntersection = p2.x - p2ySkip * e2xInc; // x intersection for second edge at starting y
-		float edge2zIntersection = p2.z - p2ySkip * e2zInc;	// z intersection for second edge at starting y	
+	private static final int SELECTION_OUTLINE_COLOUR = 0xFFFFFF00;
+	private static final int SELECTION_OUTLINE_THICKNESS = 1;
 
-		// transitory fields, useful if edge1.x > edge2.x
-		float leftz = edge1zIntersection;
-		float rightz = edge2zIntersection;
-		int leftx = Math.round(edge1xIntersection);
-		int rightx = Math.round(edge2xIntersection);
-		
-		// for each scanline fill in the pixels between the x intersections
-		for (int y=startY; y<endY;y++) {
-			// ensure we always go left to right
-			if(rightx < leftx) {
-				// swap the x and z values
-				int t=leftx;	
-				leftx = rightx;
-				rightx = t;
-				float tz = leftz;
-				leftz = rightz;
-				rightz = tz;
-			}
+	private void fillHalfTriangle(ScreenCoord p1,
+	                              float e1xInc, float e1zInc,
+	                              ScreenCoord p2,
+	                              float e2xInc, float e2zInc,
+	                              int colour,
+	                              float[] zBuff,
+	                              boolean selected) {
 
-			// z-buffer - calculate the z pos for current x, y
-			int unclippedLeftx = leftx;
-			float dlx = rightx - leftx;
-			float zInc = (dlx != 0) ? (rightz - leftz) / dlx : 0f;	
+	    int startY = Math.max(p1.y, minY);
+	    int endY = Math.min(p2.y, maxY + 1);
+	    if (startY >= endY) return;
 
-			if (!(rightx < minX || leftx > maxX)) {
-				if (leftx < minX) leftx = minX;
-				if (rightx > maxX) rightx = maxX;
-				// advance z if we clipped leftx to minX;
-				float z = leftz + (leftx - unclippedLeftx) * zInc;
-				int row = y * pw;
-				for (int x = leftx; x<=rightx; x++) {
-					// store the current z (depth) if it is less than (nearer)
-					// than the currently stored depth for this pixel
-					// overwrite the colour of the pixel as this object is nearer
-					//if (z < zBuff[row+x]) {
-					if (z > zBuff[row+x]) {
-						zBuff[row+x]=z;
-						pixels[row+x] = colour;
-					}
-					z += zInc;
-				}
-			}
-			// work out the intersections for the next scanline
-			edge1xIntersection += e1xInc;
-			edge1zIntersection += e1zInc;
-			edge2xIntersection += e2xInc;
-			edge2zIntersection += e2zInc;		
-			leftx = Math.round(edge1xIntersection);
-			rightx = Math.round(edge2xIntersection);
-			leftz = edge1zIntersection;
-			rightz = edge2zIntersection;
-		}		
+	    int ySkip = startY - p1.y;
+	    float p2ySkip = p2.y - startY;
+
+	    float edge1xIntersection = ySkip * e1xInc + p1.x;
+	    float edge1zIntersection = ySkip * e1zInc + p1.z;
+	    float edge2xIntersection = p2.x - p2ySkip * e2xInc;
+	    float edge2zIntersection = p2.z - p2ySkip * e2zInc;
+
+	    float leftz = edge1zIntersection;
+	    float rightz = edge2zIntersection;
+	    int leftx = Math.round(edge1xIntersection);
+	    int rightx = Math.round(edge2xIntersection);
+
+	    for (int y = startY; y < endY; y++) {
+	        if (rightx < leftx) {
+	            int t = leftx;
+	            leftx = rightx;
+	            rightx = t;
+
+	            float tz = leftz;
+	            leftz = rightz;
+	            rightz = tz;
+	        }
+
+	        int unclippedLeftx = leftx;
+	        int unclippedRightx = rightx;
+
+	        float dlx = rightx - leftx;
+	        float zInc = (dlx != 0) ? (rightz - leftz) / dlx : 0f;
+
+	        if (!(rightx < minX || leftx > maxX)) {
+	            if (leftx < minX) leftx = minX;
+	            if (rightx > maxX) rightx = maxX;
+
+	            float z = leftz + (leftx - unclippedLeftx) * zInc;
+	            int row = y * pw;
+
+	            for (int x = leftx; x <= rightx; x++) {
+	                if (z > zBuff[row + x]) {
+	                    int pixelColour = colour;
+
+	                    if (selected) {
+	                        boolean leftBorder = (x - unclippedLeftx) < SELECTION_OUTLINE_THICKNESS;
+	                        boolean rightBorder = (unclippedRightx - x) < SELECTION_OUTLINE_THICKNESS;
+
+	                        if (leftBorder || rightBorder) {
+	                            pixelColour = SELECTION_OUTLINE_COLOUR;
+	                        }
+	                    }
+
+	                    zBuff[row + x] = z;
+	                    pixels[row + x] = pixelColour;
+	                }
+
+	                z += zInc;
+	            }
+	        }
+
+	        edge1xIntersection += e1xInc;
+	        edge1zIntersection += e1zInc;
+	        edge2xIntersection += e2xInc;
+	        edge2zIntersection += e2zInc;
+
+	        leftx = Math.round(edge1xIntersection);
+	        rightx = Math.round(edge2xIntersection);
+	        leftz = edge1zIntersection;
+	        rightz = edge2zIntersection;
+	    }
 	}	
 
 	// mutable instances for drawProjectedTriangle
@@ -204,7 +224,7 @@ public class TriangleRenderer {
 	ScreenCoord screenA = new ScreenCoord();
 	ScreenCoord screenB = new ScreenCoord();
 	ScreenCoord screenC = new ScreenCoord();
-	public void drawProjectedTriangle(Mat4 perspective, Vertex[] v, int colour, float[] zBuff) {
+	public void drawProjectedTriangle(Mat4 perspective, Vertex[] v, int colour, float[] zBuff, boolean selected) {
 		clipA = perspective.multiplyVec(v[0], clipA);
 		clipB = perspective.multiplyVec(v[1], clipB);
 		clipC = perspective.multiplyVec(v[2], clipC);
@@ -238,7 +258,7 @@ public class TriangleRenderer {
 		
 		if (cross >=0 ) return;
 		if (is.isSet(Mode.FILL_MODEL)) {
-			fillTriangle(screenA, screenB, screenC, colour, zBuff);
+			fillTriangle(screenA, screenB, screenC, colour, zBuff,selected);
 		}
 		
 		if (is.isSet(Mode.SHOW_WIREFRAME)) {
@@ -249,7 +269,7 @@ public class TriangleRenderer {
 
 	}
 	
-	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff, DirectionalLight light, Mat4 worldModel) {
+	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff, DirectionalLight light, Mat4 worldModel, boolean selected) {
 		Mat4 mv = new Mat4();
 		mv.set(cam.getView());
 		mv.mutableMultiply(worldModel);
@@ -267,16 +287,10 @@ public class TriangleRenderer {
 			//int litColour = applyFlatLighting(v0,v1,v2,ro.faceColours[i/2], light);
 			int litColour = ro.getColour(i);
 			litColour = applyFlatLighting(v0, v1, v2, litColour, light);
-/*
-			if (selectionManager != null && selectionManager.isSelected(ro)) {
-				    litColour = 0xFFFFFF00; // yellow
-			} else {
-				litColour = applyFlatLighting(v0, v1, v2, litColour, light);
-			}
-*/
 			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
-			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, litColour, zBuff);
-			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, litColour, zBuff);
+
+			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, litColour, zBuff, selected);
+			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, litColour, zBuff, selected);
 		}
 	}
 	

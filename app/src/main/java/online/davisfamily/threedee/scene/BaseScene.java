@@ -189,8 +189,6 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 			buildVP();
 			executeChildRenderOperations(tSeconds);
 			updateDebug(tSeconds);
-			// formalise into drawOverlays
-			tr.drawCapturedSelectionOverlay(selectionManager.getSelected(), selectionManager.getWorldModel(), camera, projection);
 	    }
 	}
 	
