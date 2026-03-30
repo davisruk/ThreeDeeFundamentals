@@ -13,6 +13,7 @@ import online.davisfamily.threedee.matrices.Vertex;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
+import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities.ClippedLine;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 public class TriangleRenderer {
@@ -21,14 +22,29 @@ public class TriangleRenderer {
 
 	private BresenhamLineUtilities bl;
 	private InputState is;
-	private final SelectionManager selectionManager;
 	int minX, minY, maxX, maxY; // the viewport on the cavas
 	int[] pixels; // the world canvas
 	int pw;
 	int ph;
 	DebugUtils dbg;
 	
-	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer, InputState input, DebugUtils debug, SelectionManager sm) {
+	private final Vec4[] bboxLocal = {
+		    new Vec4(), new Vec4(), new Vec4(), new Vec4(),
+		    new Vec4(), new Vec4(), new Vec4(), new Vec4()
+		};
+
+		private final Vec4[] bboxWorld = {
+		    new Vec4(), new Vec4(), new Vec4(), new Vec4(),
+		    new Vec4(), new Vec4(), new Vec4(), new Vec4()
+		};
+
+		private static final int[][] BBOX_EDGES = {
+		    {0,1}, {1,2}, {2,3}, {3,0},
+		    {4,5}, {5,6}, {6,7}, {7,4},
+		    {0,4}, {1,5}, {2,6}, {3,7}
+		};
+
+	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer, InputState input, DebugUtils debug) {
 		pixels = canvas;
 		pw = canvasWidth;
 		ph = pixels.length / pw;
@@ -39,7 +55,6 @@ public class TriangleRenderer {
 		this.bl = lineDrawer;
 		this.dbg = debug;
 		this.is = input;
-		this.selectionManager = sm;
 	}
 
 	private class ScreenCoord {
@@ -251,12 +266,14 @@ public class TriangleRenderer {
 			
 			//int litColour = applyFlatLighting(v0,v1,v2,ro.faceColours[i/2], light);
 			int litColour = ro.getColour(i);
+			litColour = applyFlatLighting(v0, v1, v2, litColour, light);
+/*
 			if (selectionManager != null && selectionManager.isSelected(ro)) {
 				    litColour = 0xFFFFFF00; // yellow
 			} else {
 				litColour = applyFlatLighting(v0, v1, v2, litColour, light);
 			}
-
+*/
 			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
 			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, litColour, zBuff);
 			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, litColour, zBuff);
@@ -286,4 +303,87 @@ public class TriangleRenderer {
 	    float brightness = light.getAmbient() + light.getDiffuseStrength() * diffuse;
 	    return multiplyColour(baseColour, Math.min(1f, brightness));
 	}
+	
+	public void drawBoundingBox(RenderableObject ro, Camera cam, Mat4 projection, Mat4 worldModel) {
+	    if (ro == null || ro.mesh == null) return;
+
+	    float minX = ro.mesh.minX;
+	    float minY = ro.mesh.minY;
+	    float minZ = ro.mesh.minZ;
+	    float maxX = ro.mesh.maxX;
+	    float maxY = ro.mesh.maxY;
+	    float maxZ = ro.mesh.maxZ;
+
+	    bboxLocal[0].set(minX, minY, minZ, 1f);
+	    bboxLocal[1].set(maxX, minY, minZ, 1f);
+	    bboxLocal[2].set(maxX, maxY, minZ, 1f);
+	    bboxLocal[3].set(minX, maxY, minZ, 1f);
+
+	    bboxLocal[4].set(minX, minY, maxZ, 1f);
+	    bboxLocal[5].set(maxX, minY, maxZ, 1f);
+	    bboxLocal[6].set(maxX, maxY, maxZ, 1f);
+	    bboxLocal[7].set(minX, maxY, maxZ, 1f);
+
+	    for (int i = 0; i < 8; i++) {
+	        bboxWorld[i] = worldModel.multiplyVec(bboxLocal[i], bboxWorld[i]);
+	    }
+
+	    Mat4 view = cam.getView();
+
+	    for (int[] edge : BBOX_EDGES) {
+	        drawLineWorldSpace(view, projection,
+	                bboxWorld[edge[0]],
+	                bboxWorld[edge[1]],
+	                0xFFFFFF00);
+	    }
+	}
+	
+	private void drawLineWorldSpace(Mat4 view, Mat4 projection, Vec4 a, Vec4 b, int colour) {
+	    Vec4 viewA4 = view.multiplyVec(a);
+	    Vec4 viewB4 = view.multiplyVec(b);
+	    
+	    Vertex viewA = new Vertex(viewA4);
+	    Vertex viewB = new Vertex(viewB4);
+	    
+	    // clip against the near plane
+	    
+	    float near = 0.1f;
+	    ClippedLine clippedLine = ClippedLine.clipLineNear(viewA, viewB, near);
+	    if (!clippedLine.visible) return;
+	    
+	    Vec4 clipA = projection.multiplyVec(new Vec4(clippedLine.a));
+	    Vec4 clipB = projection.multiplyVec(new Vec4(clippedLine.b));
+	    
+	    
+	    float epsilon = 0.001f;
+	    if (clipA.w <= epsilon || clipB.w <= epsilon) {
+	        return;
+	    }
+
+	    float ndcAx = clipA.x / clipA.w;
+	    float ndcAy = clipA.y / clipA.w;
+
+	    float ndcBx = clipB.x / clipB.w;
+	    float ndcBy = clipB.y / clipB.w;
+
+	    // reject non-infinite results
+	    if (!Float.isFinite(ndcAx) || !Float.isFinite(ndcAy) ||
+	        !Float.isFinite(ndcBx) || !Float.isFinite(ndcBy)) {
+	        return;
+	    }
+	    
+	    //map to screen
+	    int sx0 = Math.round((ndcAx * 0.5f + 0.5f) * (maxX - 1));
+	    int sy0 = Math.round((-ndcAy * 0.5f + 0.5f) * (maxY - 1));
+
+	    int sx1 = Math.round((ndcBx * 0.5f + 0.5f) * (maxX - 1));
+	    int sy1 = Math.round((-ndcBy * 0.5f + 0.5f) * (maxY - 1));
+
+	    bl.drawLineUnsafeClipped(sx0, sy0, sx1, sy1, colour);
+	}
+	
+	public void drawCapturedSelectionOverlay(RenderableObject ro, Mat4 worldModel, Camera cam, Mat4 projection) {
+	    if (ro == null || worldModel == null) return;
+        drawBoundingBox(ro, cam, projection, worldModel);
+	}	
 }

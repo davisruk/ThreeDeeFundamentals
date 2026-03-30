@@ -80,7 +80,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 		CommandBindings.installCommandBindings(root, this.inputState);
 		this.bl = new BresenhamLineUtilities(pixels, vd.width, new CohenSutherlandLineClipper(vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1));
 		this.debug = new DebugUtils(bl,camera,vd, selectionManager);
-		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug, selectionManager);
+		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug);
 		this.vp = new Mat4();
 	}
 	
@@ -143,7 +143,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 			for (RenderableObject ro: objects)
 				ro.update(dtSeconds);
 		for (RenderableObject ro: objects)
-			ro.draw(camera, perspective, zBuffer, lightDirection, null);
+			ro.draw(camera, perspective, zBuffer, lightDirection, null, selectionManager);
 	}
 	
 	protected void updateDebug(double tSeconds) {
@@ -183,12 +183,14 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	    }
 */	    
 		if (!inputState.isSet(Mode.PAUSE_ALL)) {
-	    	updateCamera();
+			updateCamera();
 			updatePosition(tSeconds);
 		    this.clear(0xFF000000);
 			buildVP();
 			executeChildRenderOperations(tSeconds);
 			updateDebug(tSeconds);
+			// formalise into drawOverlays
+			tr.drawCapturedSelectionOverlay(selectionManager.getSelected(), selectionManager.getWorldModel(), camera, projection);
 	    }
 	}
 	

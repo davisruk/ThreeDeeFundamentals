@@ -68,4 +68,19 @@ public class Vec4 {
 		w = a.w;
 		return this;
 	}
+	public Vec4 set(float x, float y, float z, float w) {
+		this.x = x;
+		this.y = y;
+		this.z = z;
+		this.w = w;
+		return this;
+	}
+	public Vec4 set(float x, float y, float z) {
+		this.x = x;
+		this.y = y;
+		this.z = z;
+		this.w = 1f;
+		return this;
+	}
+	
 }

@@ -13,6 +13,12 @@ public class Mesh {
 
 	public Vec3 boundsCentre;
 	public float boundsRadius;
+	public float minX;
+	public float minY;
+	public float minZ;
+	public float maxX;
+	public float maxY;
+	public float maxZ;	
 	
 	public Mesh(Vec4[] vertices, int[][] triangles) {
 		name = "none";
@@ -54,12 +60,12 @@ public class Mesh {
 			return;
 		}
 		
-		float minX = Float.POSITIVE_INFINITY;
-		float minY = Float.POSITIVE_INFINITY;
-		float minZ = Float.POSITIVE_INFINITY;
-		float maxX = Float.NEGATIVE_INFINITY;
-		float maxY = Float.NEGATIVE_INFINITY;
-		float maxZ = Float.NEGATIVE_INFINITY;
+		minX = Float.POSITIVE_INFINITY;
+		minY = Float.POSITIVE_INFINITY;
+		minZ = Float.POSITIVE_INFINITY;
+		maxX = Float.NEGATIVE_INFINITY;
+		maxY = Float.NEGATIVE_INFINITY;
+		maxZ = Float.NEGATIVE_INFINITY;
 		
 		for (Vec4 v:v4Vertices) {
 			if (v.x < minX) minX = v.x;

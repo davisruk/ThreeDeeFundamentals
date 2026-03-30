@@ -11,6 +11,7 @@ import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
+import online.davisfamily.threedee.rendering.selection.SelectionManager;
 
 /** Class that contains all information needed to render an object
  * 
@@ -261,16 +262,23 @@ public class RenderableObject {
 			r.update(dtSeconds);
 	}
 	
-	public void draw(Camera cam, Mat4 perspective, float[]zBuffer, DirectionalLight lightDirection, Mat4 parentModel) {
+	public void draw(Camera cam, Mat4 perspective, float[]zBuffer, DirectionalLight lightDirection, Mat4 parentModel, SelectionManager selectionManager) {
 		transformation.setupModel();
 	    Mat4 worldModel = new Mat4();
 	    if (parentModel == null) parentModel = Mat4.identity();
 	    worldModel.set(parentModel);
 	    worldModel.mutableMultiply(transformation.model);
 
-	    tr.drawMesh(this, cam, perspective, zBuffer, lightDirection, worldModel);		
+	    tr.drawMesh(this, cam, perspective, zBuffer, lightDirection, worldModel);
+	    
+	    // setup so selection overlay can be drawn later
+	    if (selectionManager.getSelected() == this && mesh != null) {
+	    	selectionManager.setWorldModel(worldModel);
+	    }
 
-	    for (RenderableObject ro: children) ro.draw(cam, perspective, zBuffer, lightDirection,worldModel);
+		    for (RenderableObject ro: children) {
+	        ro.draw(cam, perspective, zBuffer, lightDirection, worldModel, selectionManager);
+	    }
 	}
 	
 	public int getColour(int triangleIndex) {
