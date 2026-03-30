@@ -2,6 +2,7 @@ package online.davisfamily.threedee.scene;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -21,6 +22,8 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
+import online.davisfamily.threedee.rendering.selection.ScenePicker;
+import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.rendering.utilities.lines.CohenSutherlandLineClipper;
 import online.davisfamily.threedee.testing.DebugUtils;
@@ -53,12 +56,16 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 
 	// debug variables
 	protected DebugUtils debug;
-
+	
+	protected final SelectionManager selectionManager = new SelectionManager();
+	protected final ScenePicker scenePicker = new ScenePicker();
+	protected final float pickerFovYRadians = (float) Math.toRadians(60);
+	protected List<RenderableObject> objects;
+	
 	public BaseScene (JRootPane pane, ViewDimensions dimensions, CameraPosition camPos) {
 		root = pane;
 		vd = dimensions;
-
-		
+		objects = new ArrayList<RenderableObject>();		
 		this.inputState = new InputState();
 		this.image = new BufferedImage(vd.width, vd.height, BufferedImage.TYPE_INT_ARGB);
 		this.pixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
@@ -72,8 +79,8 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 		KeyBindings.installKeyBindings(root, this.inputState);
 		CommandBindings.installCommandBindings(root, this.inputState);
 		this.bl = new BresenhamLineUtilities(pixels, vd.width, new CohenSutherlandLineClipper(vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1));
-		this.debug = new DebugUtils(bl,camera,vd);
-		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug);
+		this.debug = new DebugUtils(bl,camera,vd, selectionManager);
+		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug, selectionManager);
 		this.vp = new Mat4();
 	}
 	
@@ -146,6 +153,27 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	    if (inputState.isSet(Mode.SHOW_DEBUG_INFO)) debug.drawDebugText(image, tSeconds, perspective);
 	}
 	
+	protected void selectAt(List<RenderableObject> objects, int mouseX, int mouseY) {
+	    var hit = scenePicker.pick(
+	            objects,
+	            camera,
+	            pickerFovYRadians,
+	            mouseX,
+	            mouseY,
+	            vd.width,
+	            vd.height);
+
+	    if (hit != null) {
+	        selectionManager.setSelected(hit.object);
+	    } else {
+	        selectionManager.clear();
+	    }
+	}
+	
+	public RenderableObject getSelectedObject() {
+		return selectionManager.getSelected();
+	}
+	
 	@Override
 	public void renderFrame(double tSeconds) {
 /*
@@ -166,6 +194,11 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	
 	@Override
 	public BufferedImage getImage() {return image;}	
+	
+	@Override
+	public void pickAt(int x, int y) {
+		selectAt(objects, x, y);		
+	}
 	
 	@Override
 	public void consume(MouseEventDetail detail) {

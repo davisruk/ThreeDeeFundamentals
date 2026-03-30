@@ -42,11 +42,10 @@ public class TestScene extends BaseScene{
 
 	private RenderableObject rTote;
 	private DirectionalLight lightDirection;
-	private List<RenderableObject> objects;
+
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions,	CameraPosition.aboveLeft());
-		objects = new ArrayList<RenderableObject>();
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
 		Tote t = setupTote();
 		setupOvalTrack(t);
@@ -61,9 +60,15 @@ public class TestScene extends BaseScene{
 		drawObject(objects, tSeconds, lightDirection);
 	}
 	
+	@Override
+	public void pickAt(int x, int y) {
+		super.pickAt(x, y);
+	}
 	private Tote setupTote() {
 		Tote tote = new Tote();
 		rTote = RenderableToteFactory.createRenderableTote(tr, tote);
+		rTote.id = "Tote";
+		rTote.selectable = true;
 		objects.add(rTote);
 		return tote;
 	}

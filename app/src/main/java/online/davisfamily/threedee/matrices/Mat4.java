@@ -404,6 +404,39 @@ public class Mat4 {
 		
 		return this;
 	}
+	
+	public Mat4 setRigidInverse(Mat4 src) {
+	    // transpose 3x3 rotation
+	    m[0] = src.m[0];  m[1] = src.m[4];  m[2] = src.m[8];
+	    m[4] = src.m[1];  m[5] = src.m[5];  m[6] = src.m[9];
+	    m[8] = src.m[2];  m[9] = src.m[6];  m[10] = src.m[10];
+
+	    m[12] = 0f; m[13] = 0f; m[14] = 0f; m[15] = 1f;
+
+	    float tx = src.m[3];
+	    float ty = src.m[7];
+	    float tz = src.m[11];
+
+	    m[3]  = -(m[0] * tx + m[1] * ty + m[2] * tz);
+	    m[7]  = -(m[4] * tx + m[5] * ty + m[6] * tz);
+	    m[11] = -(m[8] * tx + m[9] * ty + m[10] * tz);
+
+	    return this;
+	}
+	
+	public Vec3 transformPoint(Vec3 p, Vec3 out) {
+	    out.x = m[0] * p.x + m[1] * p.y + m[2] * p.z + m[3];
+	    out.y = m[4] * p.x + m[5] * p.y + m[6] * p.z + m[7];
+	    out.z = m[8] * p.x + m[9] * p.y + m[10] * p.z + m[11];
+	    return out;
+	}
+	
+	public Vec3 transformDirection(Vec3 d, Vec3 out) {
+	    out.x = m[0] * d.x + m[1] * d.y + m[2] * d.z;
+	    out.y = m[4] * d.x + m[5] * d.y + m[6] * d.z;
+	    out.z = m[8] * d.x + m[9] * d.y + m[10] * d.z;
+	    return out;
+	}
 
 	public String toString() {
 		StringBuffer buf = new StringBuffer("[\r\n");

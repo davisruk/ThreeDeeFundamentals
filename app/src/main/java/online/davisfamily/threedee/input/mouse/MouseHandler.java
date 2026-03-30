@@ -49,6 +49,9 @@ public class MouseHandler extends MouseInputAdapter {
 		if (SwingUtilities.isLeftMouseButton(e)) {
             toggleMouseCapture(e.getComponent());
         }
+		if (SwingUtilities.isRightMouseButton(e)) {
+		    consumer.pickAt(e.getX(), e.getY());
+		}
     }
 	
 	private void updateCentreFrom(Component component) {
@@ -76,25 +79,7 @@ public class MouseHandler extends MouseInputAdapter {
 	public void mouseDragged(MouseEvent e) {
 		mouseMoved(e);
 	}
-/*	
-	@Override
-    public void mouseMoved(MouseEvent e){
-		int x = e.getX();
-		int y = e.getY();
-		if (!detail.hasOld) {
-			detail.hasOld = true;
-			detail.oldx = x;
-			detail.oldy = y;
-		} else {
-			detail.oldx = detail.x;
-			detail.oldy = detail.y;
-		}
-		detail.x = x;
-		detail.y = y;
-		detail.consumed = false;
-		consumer.consume(detail);
-	}
-*/
+
 	@Override
 	public void mouseMoved(MouseEvent e) {
 	    if (!mouseCaptured) return;

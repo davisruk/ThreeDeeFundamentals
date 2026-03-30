@@ -11,6 +11,7 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
+import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.testing.DebugUtils;
 
@@ -20,13 +21,14 @@ public class TriangleRenderer {
 
 	private BresenhamLineUtilities bl;
 	private InputState is;
+	private final SelectionManager selectionManager;
 	int minX, minY, maxX, maxY; // the viewport on the cavas
 	int[] pixels; // the world canvas
 	int pw;
 	int ph;
 	DebugUtils dbg;
 	
-	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer, InputState input, DebugUtils debug) {
+	public TriangleRenderer(int[] canvas, int canvasWidth, int minX, int minY, int maxX, int maxY, BresenhamLineUtilities lineDrawer, InputState input, DebugUtils debug, SelectionManager sm) {
 		pixels = canvas;
 		pw = canvasWidth;
 		ph = pixels.length / pw;
@@ -37,6 +39,7 @@ public class TriangleRenderer {
 		this.bl = lineDrawer;
 		this.dbg = debug;
 		this.is = input;
+		this.selectionManager = sm;
 	}
 
 	private class ScreenCoord {
@@ -247,7 +250,13 @@ public class TriangleRenderer {
 			// probably need a getColour(i) where i is the triangle index
 			
 			//int litColour = applyFlatLighting(v0,v1,v2,ro.faceColours[i/2], light);
-			int litColour = applyFlatLighting(v0,v1,v2,ro.getColour(i), light);
+			int litColour = ro.getColour(i);
+			if (selectionManager != null && selectionManager.isSelected(ro)) {
+				    litColour = 0xFFFFFF00; // yellow
+			} else {
+				litColour = applyFlatLighting(v0, v1, v2, litColour, light);
+			}
+
 			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
 			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, litColour, zBuff);
 			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, litColour, zBuff);

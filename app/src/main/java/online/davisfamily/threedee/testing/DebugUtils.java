@@ -19,6 +19,7 @@ import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities.ClippedLine;
 
@@ -27,11 +28,13 @@ public class DebugUtils {
 	private BresenhamLineUtilities bl;
 	private Camera camera;
 	private ViewDimensions vd;
+	private SelectionManager selectionManager;
 	
-	public DebugUtils(BresenhamLineUtilities lineUtilities, Camera cam, ViewDimensions dimensions) {
+	public DebugUtils(BresenhamLineUtilities lineUtilities, Camera cam, ViewDimensions dimensions, SelectionManager sm) {
 		bl = lineUtilities;
 		camera = cam;
 		vd = dimensions;
+		selectionManager = sm;
 	}
 	
 	// tested
@@ -245,7 +248,9 @@ public class DebugUtils {
 	        	g.drawString(String.format("Perspective %d:(%.3f, %.3f, %.3f, %3f)", i/4, perspective.m[i],perspective.m[i+1],perspective.m[i+2],perspective.m[i+3]), x, y);
 	        	y += line;
 	        }
-
+	        String s = selectionManager.getSelected() == null ? "None" : selectionManager.getSelected().id;
+	        g.drawString("Selected object: " + s, x, y);
+	        y += line;
 
 	    } finally {
 	        g.dispose();

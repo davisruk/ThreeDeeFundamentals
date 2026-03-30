@@ -21,6 +21,7 @@ import online.davisfamily.threedee.rendering.lights.DirectionalLight;
  *
  **/
 public class RenderableObject {
+	public String id;
 	public TriangleRenderer tr;
 	public ObjectTransformation transformation;
 	public Mesh mesh;
@@ -28,6 +29,10 @@ public class RenderableObject {
 	public ColourPickerStrategy colourPicker;
 	public List<Behaviour> behaviours;
 
+	// RayPicking metadata
+	public boolean selectable;
+	public RenderableObject selectionTarget;
+	
 	// use below to determine forward direction
 	public float yawOffsetRadians;
 	public enum FORWARD_DIRECTION{POSITIVE_X(0d), NEGATIVE_X(180d), POSITIVE_Z(90d), NEGATIVE_Z(270d);
@@ -234,6 +239,22 @@ public class RenderableObject {
 	
 	public int getColour(int triangleIndex) {
 		return  colourPicker.chooseColour(triangleIndex);
+	}
+
+	public boolean isSelectable() {
+		return selectable;
+	}
+
+	public void setSelectable(boolean selectable) {
+		this.selectable = selectable;
+	}
+
+	public RenderableObject getSelectionTarget() {
+		return selectionTarget != null ? selectionTarget : this;
+	}
+
+	public void setSelectionTarget(RenderableObject selectionTarget) {
+		this.selectionTarget = selectionTarget;
 	}
 
 }
