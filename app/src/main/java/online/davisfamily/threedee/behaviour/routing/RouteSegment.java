@@ -5,11 +5,11 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import online.davisfamily.threedee.model.tracks.ConnectionClearance;
-import online.davisfamily.threedee.model.tracks.GuideOpening;
-import online.davisfamily.threedee.model.tracks.GuideSide;
-import online.davisfamily.threedee.model.tracks.TargetGuideOpening;
 import online.davisfamily.threedee.path.PathSegment3;
+import online.davisfamily.warehouse.rendering.model.tracks.ConnectionClearance;
+import online.davisfamily.warehouse.rendering.model.tracks.GuideOpening;
+import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
+import online.davisfamily.warehouse.rendering.model.tracks.TargetGuideOpening;
 
 public final class RouteSegment {
     private final String label;

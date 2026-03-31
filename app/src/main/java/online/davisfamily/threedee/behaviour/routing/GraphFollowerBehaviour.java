@@ -4,7 +4,7 @@ import online.davisfamily.threedee.behaviour.Behaviour;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
-import online.davisfamily.threedee.sim.objects.SimTote;
+import online.davisfamily.warehouse.sim.tote.Tote;
 
 public class GraphFollowerBehaviour implements Behaviour {
 
@@ -13,12 +13,12 @@ public class GraphFollowerBehaviour implements Behaviour {
         REVERSE
     }
     
-    private final SimTote tote;
+    private final Tote tote;
     private final SimulationContext context;
 	
 
 
-	public GraphFollowerBehaviour(SimTote tote, SimulationContext context) {
+	public GraphFollowerBehaviour(Tote tote, SimulationContext context) {
 		super();
 		this.tote = tote;
 		this.context = context;

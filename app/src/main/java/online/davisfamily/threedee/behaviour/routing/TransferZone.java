@@ -1,7 +1,7 @@
 package online.davisfamily.threedee.behaviour.routing;
 
 import online.davisfamily.threedee.behaviour.routing.transfer.TransferDecisionStrategy;
-import online.davisfamily.threedee.model.tracks.GuideSide;
+import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 
 public class TransferZone {
     private final float startDistance;

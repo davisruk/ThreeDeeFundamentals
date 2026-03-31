@@ -9,10 +9,10 @@ import java.util.Map;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory.SpecAndSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.ToggleTransferStrategy;
 import online.davisfamily.threedee.behaviour.routing.transfer.TransferDecisionStrategy;
-import online.davisfamily.threedee.model.tracks.ConnectionClearance;
-import online.davisfamily.threedee.model.tracks.GuideOpening;
-import online.davisfamily.threedee.model.tracks.GuideSide;
-import online.davisfamily.threedee.model.tracks.TrackSpec;
+import online.davisfamily.warehouse.rendering.model.tracks.ConnectionClearance;
+import online.davisfamily.warehouse.rendering.model.tracks.GuideOpening;
+import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
+import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 
 public class RouteSceneBuilder {
 
