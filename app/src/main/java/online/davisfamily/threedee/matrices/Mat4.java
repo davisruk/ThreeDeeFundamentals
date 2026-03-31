@@ -21,6 +21,16 @@ public class Mat4 {
 			this.model = model;
 		}
 		
+		public ObjectTransformation set(ObjectTransformation ot) {
+			angleX = ot.angleX;
+			angleY = ot.angleY;
+			angleZ = ot.angleZ;
+			xTranslation = ot.xTranslation;
+			yTranslation = ot.yTranslation;
+			zTranslation = ot.zTranslation;
+			return this;
+		}
+		
 		public void setupModel() {
 			model.setModel(this);
 		}

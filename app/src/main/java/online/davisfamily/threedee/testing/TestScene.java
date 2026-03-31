@@ -1,15 +1,11 @@
 package online.davisfamily.threedee.testing;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 
 import javax.swing.JRootPane;
 
-import online.davisfamily.threedee.behaviour.Behaviour.OrientationMode;
-import online.davisfamily.threedee.behaviour.Behaviour.WrapMode;
 import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
-import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour.TravelDirection;
+import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
@@ -17,7 +13,6 @@ import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStra
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
-import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
@@ -32,11 +27,12 @@ import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
-import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.rendering.tote.RenderableToteFactory;
 import online.davisfamily.threedee.scene.BaseScene;
+import online.davisfamily.threedee.sim.framework.SimulationContext;
+import online.davisfamily.threedee.sim.objects.SimTote;
 
 public class TestScene extends BaseScene{	
 
@@ -55,8 +51,8 @@ public class TestScene extends BaseScene{
 		
 	@Override
 	public void executeChildRenderOperations(double tSeconds) {
-		if (inputState.isSet(Mode.SHOW_PATH))
-			debug.drawPathForObject(rTote, camera.getView(), projection);
+//		if (inputState.isSet(Mode.SHOW_PATH))
+//			debug.drawPathForObject(rTote, camera.getView(), projection);
 		drawObject(objects, tSeconds, lightDirection);
 	}
 	
@@ -265,7 +261,7 @@ public class TestScene extends BaseScene{
 	    );
 
 	    float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight : 0f;
-
+/*
 	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
 	            top,                              // startSegment
 	            null,                             // defaultDecisionProvider
@@ -278,7 +274,10 @@ public class TestScene extends BaseScene{
 	            TravelDirection.FORWARD,          // startDirection
 	            tote.getOuterBottomDepth()
 	    );
-
+*/	    
+	    RouteFollower rtf = new RouteFollower(top, 0f, 2.0f);
+	    SimTote st = new SimTote("tote1", rtf, rTote.transformation);
+	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
 	    rTote.addBehaviour(follower);
 
 	    for (RenderableObject track : tracks) {
@@ -403,7 +402,7 @@ public class TestScene extends BaseScene{
 		);
 
 		float rollerYOffset = spec.includeRollers ? spec.rollerHeight : 0f;
-
+/*
 		GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
 			    upper,         					// startSegment
 			    null,        					// defaultDecisionProvider
@@ -416,8 +415,11 @@ public class TestScene extends BaseScene{
 			    TravelDirection.FORWARD,  		// startDirection
 			    tote.getOuterBottomDepth()
 			);		
-	
-		rTote.addBehaviour(follower);
+*/	
+	    RouteFollower rtf = new RouteFollower(upper, 0f, 2.0f);
+	    SimTote st = new SimTote("tote1", rtf, rTote.transformation);
+	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
+	    rTote.addBehaviour(follower);
 		
 		for (RenderableObject track : tracks) {
 		    objects.add(track);

@@ -298,7 +298,7 @@ public class DebugUtils {
  *  - Path3 should be removed and all references should be to PathSegment3
  *  - drawPath would render all paths, no need for an instanceof check
  */
-
+/*
 	public void drawPathForObject(RenderableObject ro, Mat4 view, Mat4 projection) {
 	    for (Behaviour b: ro.behaviours) {
 	    	if (b instanceof PathFollowerBehaviour) drawPath((PathFollowerBehaviour)b, view, projection);
@@ -326,7 +326,7 @@ public class DebugUtils {
     	    }
         }
 	}
-
+*/
 	
 	private void drawPath(PathFollowerBehaviour pb, Mat4 view, Mat4 projection) {
 	    Path3 path = pb.getPath();

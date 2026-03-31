@@ -45,6 +45,10 @@ public final class RouteSegment {
         return geometry;
     }
 
+    public float length() {
+    	return geometry.getTotalLength();
+    }
+    
     public List<RouteConnection> getNextConnections() {
         return nextConnections;
     }
