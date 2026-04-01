@@ -13,13 +13,15 @@ public class RouteFollower {
 	private float distanceAlongSegment;
 	private double speedUnitsPerSecond;
 	private TravelDirection travelDirection;
+	private String owningId;
 	
-	public RouteFollower(RouteSegment routeSegment, float distanceAlongSegment, double speedUnitsPerSecond) {
+	public RouteFollower(String owningId, RouteSegment routeSegment, float distanceAlongSegment, double speedUnitsPerSecond) {
 		super();
 		this.currentSegment = routeSegment;
 		this.speedUnitsPerSecond = speedUnitsPerSecond;
 		this.distanceAlongSegment = distanceAlongSegment;
 		this.travelDirection = TravelDirection.FORWARD;
+		this.owningId = owningId;
 	}
 
 	public RouteFollowerSnapshot advance(double dtSeconds, boolean blocked) {
@@ -85,6 +87,7 @@ public class RouteFollower {
         float length = currentSegment.length();
 		float remaining = length - distanceAlongSegment;
 		return new RouteFollowerSnapshot(
+				owningId,
 				currentSegment,
 				distanceAlongSegment,
 				pos,

@@ -4,6 +4,7 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Vec3;
 
 public record RouteFollowerSnapshot(
+	String followerId,
 	RouteSegment currentSegment,
 	float distanceAlongSegment,
 	Vec3 position,

@@ -279,7 +279,7 @@ public class TestScene extends BaseScene{
 	            tote.getOuterBottomDepth()
 	    );
 */	    
-	    RouteFollower rtf = new RouteFollower(top, 0f, 2.0f);
+	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
 	    Tote st = new Tote("tote1", rtf, rTote.transformation, builder.getTransferZoneControllers());
 	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
 	    rTote.addBehaviour(follower);
@@ -422,7 +422,7 @@ public class TestScene extends BaseScene{
 			    tote.getOuterBottomDepth()
 			);		
 */	
-	    RouteFollower rtf = new RouteFollower(upper, 0f, 2.0f);
+	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
 	    Tote st = new Tote("tote1", rtf, rTote.transformation);
 	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
 	    rTote.addBehaviour(follower);
