@@ -24,16 +24,17 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.scene.BaseScene;
+import online.davisfamily.threedee.sim.framework.Sensor;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
-import online.davisfamily.threedee.sim.objects.Sensor;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
-import online.davisfamily.warehouse.sim.sensor.ProximitySensor;
+import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
+import online.davisfamily.warehouse.sim.sensor.MembershipSensorController;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 
@@ -41,7 +42,7 @@ public class TestScene extends BaseScene{
 
 	private RenderableObject rTote;
 	private DirectionalLight lightDirection;
-	private final SimulationWorld sim = new SimulationWorld();
+
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions,	CameraPosition.aboveLeft());
@@ -53,11 +54,10 @@ public class TestScene extends BaseScene{
 	}
 		
 	@Override
-	public void executeChildRenderOperations(double tSeconds) {
+	public void executeChildRenderOperations(double dtSeconds) {
 //		if (inputState.isSet(Mode.SHOW_PATH))
 //			debug.drawPathForObject(rTote, camera.getView(), projection);
-		sim.update(tSeconds);
-		drawObject(objects, tSeconds, lightDirection);
+		drawObject(objects, dtSeconds, lightDirection);
 	}
 	
 	private ToteGeometry setupTote() {
@@ -280,10 +280,12 @@ public class TestScene extends BaseScene{
 	    );
 */	    
 	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
-	    Tote st = new Tote("tote1", rtf, rTote.transformation, builder.getTransferZoneControllers());
+	    Tote st = new Tote("tote1", rtf, rTote.transformation);
 	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
 	    rTote.addBehaviour(follower);
-	    Sensor s = new ProximitySensor("prox", top);
+	    Sensor s = new MembershipSensor("top_member_sensor", top);
+	    MembershipSensorController msc = new MembershipSensorController();
+	    sim.addController(msc);
 	    sim.addSensor(s);
 	    sim.addTrackableObject(st);
 	    for (RenderableObject track : tracks) {

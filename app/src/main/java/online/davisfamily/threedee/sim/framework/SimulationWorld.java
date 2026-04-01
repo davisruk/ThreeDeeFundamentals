@@ -3,8 +3,6 @@ package online.davisfamily.threedee.sim.framework;
 import java.util.ArrayList;
 import java.util.List;
 
-import online.davisfamily.threedee.sim.objects.Sensor;
-
 public class SimulationWorld {
 
 	private final SimulationContext context = new SimulationContext();
@@ -26,12 +24,19 @@ public class SimulationWorld {
 	}
 	
 	public void addTrackableObject(TrackableObject obj) {
-		simObjects.add(obj);
-		context.addTrackedObject(obj);
+		if (!simObjects.contains(obj)) {
+			simObjects.add(obj);
+			context.addTrackedObject(obj);
+		}
 	}
 	
 	public void addSensor(Sensor s) {
 		sensors.add(s);
+	}
+	
+	public void addController(SimulationController controller) {
+		if (!controllers.contains(controller))
+			controllers.add(controller);
 	}
 	
 	private void updateSimObjects(double dtSeconds) {
