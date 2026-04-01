@@ -7,6 +7,7 @@ import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteInteractionMode;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDirection;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class TransferZoneController {
 	private final TransferZoneMachine machine;

@@ -9,7 +9,6 @@ import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
-import online.davisfamily.threedee.behaviour.routing.transfer.AlwaysTransferStrategy;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
@@ -33,6 +32,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 
 public class TestScene extends BaseScene{	
 
@@ -242,7 +242,7 @@ public class TestScene extends BaseScene{
 	            true,
 	            topConnectionClearance
 	    );
-
+	    
 	    OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
 	    OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);
 	    OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF);
@@ -276,7 +276,7 @@ public class TestScene extends BaseScene{
 	    );
 */	    
 	    RouteFollower rtf = new RouteFollower(top, 0f, 2.0f);
-	    Tote st = new Tote("tote1", rtf, rTote.transformation);
+	    Tote st = new Tote("tote1", rtf, rTote.transformation, builder.getTransferZoneControllers());
 	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
 	    rTote.addBehaviour(follower);
 

@@ -7,18 +7,22 @@ import java.util.List;
 import java.util.Map;
 
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory.SpecAndSegment;
-import online.davisfamily.threedee.behaviour.routing.transfer.ToggleTransferStrategy;
-import online.davisfamily.threedee.behaviour.routing.transfer.TransferDecisionStrategy;
 import online.davisfamily.warehouse.rendering.model.tracks.ConnectionClearance;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideOpening;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
+import online.davisfamily.warehouse.sim.transfer.TransferZone;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
+import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class RouteSceneBuilder {
 
     private final List<RouteSegment> segments = new ArrayList<>();
     private final List<SpecAndSegment> specsAndSegments = new ArrayList<>();
     private final Map<RouteSegment, TrackSpec> specBySegment = new IdentityHashMap<>();
+    private final List<TransferZoneController> transferZoneControllers = new ArrayList<>();
 
     public RouteSegment segment(String label, online.davisfamily.threedee.path.PathSegment3 geometry) {
         RouteSegment segment = new RouteSegment(label, geometry);
@@ -159,17 +163,20 @@ public class RouteSceneBuilder {
             float sourceConnectionClearanceLength) {
 
         float transferStart = transferCentreDistance - (transferLength * 0.5f);
-
+        ToggleStrategy strategy = new ToggleStrategy(initialToggleState);
         TransferZone zone = new TransferZone(
                 transferStart,
                 transferLength,
+                sourceSegment,
                 linkSegment,
                 0f,
                 sourceOpenSide,
                 linkOpenSide,
-                new ToggleTransferStrategy(initialToggleState)
+                strategy
         );
-
+        TransferZoneMachine machine = new TransferZoneMachine("Transfer_Machine", zone);
+        TransferZoneController controller = new TransferZoneController(machine, strategy);
+        transferZoneControllers.add(controller);
         sourceSegment.addTransferZone(zone);
 
         addCentredGuideOpening(
@@ -245,6 +252,7 @@ public class RouteSceneBuilder {
         TransferZone zone = new TransferZone(
                 sourceStart,
                 openingLength,
+                sourceSegment,
                 targetSegment,
                 targetEntryDistance,
                 sourceOpenSide,
@@ -252,6 +260,9 @@ public class RouteSceneBuilder {
                 transferStrategy
         );
 
+        TransferZoneMachine machine = new TransferZoneMachine("Transfer_Machine", zone);
+        TransferZoneController controller = new TransferZoneController(machine, transferStrategy);
+        transferZoneControllers.add(controller);
         sourceSegment.addTransferZone(zone);
 
         addCentredGuideOpening(
@@ -293,7 +304,12 @@ public class RouteSceneBuilder {
         return Collections.unmodifiableList(specsAndSegments);
     }
 
-    private TrackSpec requireSpec(RouteSegment segment) {
+
+    public List<TransferZoneController> getTransferZoneControllers() {
+		return transferZoneControllers;
+	}
+
+	private TrackSpec requireSpec(RouteSegment segment) {
         TrackSpec spec = specBySegment.get(segment);
         if (spec == null) {
             throw new IllegalStateException(

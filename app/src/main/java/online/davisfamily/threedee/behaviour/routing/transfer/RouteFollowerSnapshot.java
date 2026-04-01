@@ -5,7 +5,7 @@ import online.davisfamily.threedee.matrices.Vec3;
 
 public record RouteFollowerSnapshot(
 	RouteSegment currentSegment,
-	double distanceAlongSegment,
+	float distanceAlongSegment,
 	Vec3 position,
 	Vec3 forward,
 	Vec3 up,

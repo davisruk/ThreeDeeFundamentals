@@ -1,11 +1,13 @@
-package online.davisfamily.threedee.behaviour.routing;
+package online.davisfamily.warehouse.sim.transfer;
 
-import online.davisfamily.threedee.behaviour.routing.transfer.TransferDecisionStrategy;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class TransferZone {
     private final float startDistance;
     private final float length;
+    private final RouteSegment sourceSegment;
     private final RouteSegment targetSegment;
     private final float targetStartDistance;
     private final TransferDecisionStrategy decisionStrategy;
@@ -15,6 +17,7 @@ public class TransferZone {
     public TransferZone(
             float startDistance,
             float length,
+            RouteSegment sourceSegment,
             RouteSegment targetSegment,
             float targetStartDistance,
             GuideSide sourceOpenSide,
@@ -39,6 +42,7 @@ public class TransferZone {
 
         this.startDistance = startDistance;
         this.length = length;
+        this.sourceSegment = sourceSegment;
         this.targetSegment = targetSegment;
         this.targetStartDistance = targetStartDistance;
         this.sourceOpenSide = sourceOpenSide;
@@ -61,8 +65,12 @@ public class TransferZone {
     public RouteSegment getTargetSegment() {
         return targetSegment;
     }
+    
+    public RouteSegment getSourceSegment() {
+		return sourceSegment;
+	}
 
-    public float getTargetStartDistance() {
+	public float getTargetStartDistance() {
         return targetStartDistance;
     }
 

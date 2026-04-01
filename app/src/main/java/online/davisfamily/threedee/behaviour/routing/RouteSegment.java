@@ -10,6 +10,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.ConnectionClearance;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideOpening;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TargetGuideOpening;
+import online.davisfamily.warehouse.sim.transfer.TransferZone;
 
 public final class RouteSegment {
     private final String label;

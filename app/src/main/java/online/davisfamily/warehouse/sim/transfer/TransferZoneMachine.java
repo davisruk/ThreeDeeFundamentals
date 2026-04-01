@@ -1,6 +1,5 @@
 package online.davisfamily.warehouse.sim.transfer;
 
-import online.davisfamily.threedee.behaviour.routing.TransferZone;
 import online.davisfamily.warehouse.sim.tote.Tote;
 
 public class TransferZoneMachine {
@@ -69,7 +68,13 @@ public class TransferZoneMachine {
 	public double getTimeInStateSeconds() {
 		return timeInStateSeconds;
 	}
-	
-	
 
+	public void clearActiveTransfer() {
+		reservedTote = null;
+		state = TransferZoneState.IDLE; 
+	}
+
+	public TransferZone getDefinition() {
+		return definition;
+	}
 }
