@@ -195,6 +195,18 @@ public class Vec3 {
 		return a.x * x + a.y*y + a.z * z;
 	}
 	
+	public static Vec3 immutableLerp(Vec3 a, Vec3 b, float t) {
+		return new Vec3(
+				lerp(a.x, b.x, t),
+				lerp(a.y, b.y, t),
+				lerp(a.z, b.z, t)
+		);
+	}
+	
+	private static float lerp(float a, float b, float t) {
+		return  a + ((b - a) * (float)t);
+	}
+
 	public static Vec3 copy(Vec3 a) {
 		return new Vec3(a.x, a.y, a.z);
 	}

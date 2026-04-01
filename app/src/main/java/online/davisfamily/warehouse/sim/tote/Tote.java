@@ -4,16 +4,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
-import online.davisfamily.threedee.sim.framework.SimObject;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
+import online.davisfamily.threedee.sim.framework.TrackableObject;
+import online.davisfamily.warehouse.sim.transfer.TransferMotionState;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 
-public class Tote implements SimObject {
+public class Tote implements TrackableObject {
 	
 	public enum ToteInteractionMode {
 		FREE, RESERVED_FOR_TRANSFER, RESERVED,STOPPED,TRANSFERRING,STATION_HELD
@@ -21,11 +23,11 @@ public class Tote implements SimObject {
 	
 	private final String id;
 	private final RouteFollower routeFollower;
+	private RouteFollowerSnapshot lastRouteSnapshot;
 	private final ObjectTransformation transformation;
-	
 	private ToteInteractionMode interactionMode = ToteInteractionMode.FREE;
-	private TransferZoneMachine controllingTransferZone;
 	private List<TransferZoneController> transferZoneControllers = new ArrayList<>();
+	private TransferMotionState transfer;
 	private String controllingEquipmentId;
 	
 	public Tote(String id, RouteFollower routeFollower, ObjectTransformation transformation) {
@@ -54,12 +56,18 @@ public class Tote implements SimObject {
 	}
 	
 	public void update(SimulationContext context, double dtSeconds) {
-		RouteFollowerSnapshot snapshot = routeFollower.advance(dtSeconds, isMotionBlocked());
-		applySnapshot(snapshot);
-		evaluateWarehouseInteractions(context, snapshot);
+		if (interactionMode == ToteInteractionMode.TRANSFERRING) {
+			updateTransferMotion(dtSeconds);
+			return;
+		}
+
+		lastRouteSnapshot = routeFollower.advance(dtSeconds, isMotionBlocked());
+		applySnapshot(lastRouteSnapshot);
+//		evaluateWarehouseInteractions(context, snapshot);
 	}
 	
 	private boolean isMotionBlocked() {
+		//return false;
 		return interactionMode != ToteInteractionMode.FREE;
 	}
 	
@@ -80,9 +88,30 @@ public class Tote implements SimObject {
 				tzc.onToteApproaching(this, snapshot);
 			}
 			if (isInTransferWindow(machine, distance)) {
+				transfer = new TransferMotionState(tzc.getMachine(), snapshot.position());
 				tzc.onToteEnteredTransferWindow(this);
 			}
 		}
+	}
+	
+	private void updateTransferMotion(double dt) {
+		transfer.update(dt);
+		double t = transfer.t();
+		t=t*t*(3-2*t); // smooth
+		Vec3 start = transfer.getStartPosition();
+		Vec3 end = transfer.getTargetSegment().getGeometry().sampleByDistance(0f);
+		transformation.setTranslation(Vec3.immutableLerp(start,end,(float)t));
+		if (transfer.done()) {
+			completeTransfer();
+		}
+	}
+	
+	private void completeTransfer() {
+		RouteSegment target = transfer.getTargetSegment();
+		routeFollower.setCurrentSegment(target);
+		routeFollower.setDistanceAlongSegment(0f);
+		transfer = null;
+		interactionMode = ToteInteractionMode.FREE;
 	}
 	
 	private boolean isInTransferWindow(TransferZoneMachine machine, float distanceAlongSegment) {
@@ -122,12 +151,8 @@ public class Tote implements SimObject {
 		return routeFollower;
 	}
 
-	public TransferZoneMachine getControllingTransferZone() {
-		return controllingTransferZone;
+	@Override
+	public RouteFollowerSnapshot getLastSnapshot() {
+		return lastRouteSnapshot;
 	}
-
-	public void setControllingTransferZone(TransferZoneMachine controllingTransferZone) {
-		this.controllingTransferZone = controllingTransferZone;
-	}
-
 }

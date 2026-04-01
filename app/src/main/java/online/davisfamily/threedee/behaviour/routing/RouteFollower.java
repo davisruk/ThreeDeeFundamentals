@@ -118,6 +118,14 @@ public class RouteFollower {
 	public void setTravelDirection(TravelDirection travelDirection) {
 		this.travelDirection = travelDirection;
 	}
+
+	public void setCurrentSegment(RouteSegment currentSegment) {
+		this.currentSegment = currentSegment;
+	}
+
+	public void setDistanceAlongSegment(float distanceAlongSegment) {
+		this.distanceAlongSegment = distanceAlongSegment;
+	}
 	
 
 }

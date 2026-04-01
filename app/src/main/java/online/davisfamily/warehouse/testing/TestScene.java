@@ -25,12 +25,15 @@ import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.scene.BaseScene;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
+import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.threedee.sim.objects.Sensor;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
+import online.davisfamily.warehouse.sim.sensor.ProximitySensor;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 
@@ -38,7 +41,7 @@ public class TestScene extends BaseScene{
 
 	private RenderableObject rTote;
 	private DirectionalLight lightDirection;
-
+	private final SimulationWorld sim = new SimulationWorld();
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions,	CameraPosition.aboveLeft());
@@ -53,6 +56,7 @@ public class TestScene extends BaseScene{
 	public void executeChildRenderOperations(double tSeconds) {
 //		if (inputState.isSet(Mode.SHOW_PATH))
 //			debug.drawPathForObject(rTote, camera.getView(), projection);
+		sim.update(tSeconds);
 		drawObject(objects, tSeconds, lightDirection);
 	}
 	
@@ -279,7 +283,9 @@ public class TestScene extends BaseScene{
 	    Tote st = new Tote("tote1", rtf, rTote.transformation, builder.getTransferZoneControllers());
 	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
 	    rTote.addBehaviour(follower);
-
+	    Sensor s = new ProximitySensor("prox", top);
+	    sim.addSensor(s);
+	    sim.addTrackableObject(st);
 	    for (RenderableObject track : tracks) {
 	        objects.add(track);
 	    }

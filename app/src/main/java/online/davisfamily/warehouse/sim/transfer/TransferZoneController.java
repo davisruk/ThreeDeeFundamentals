@@ -35,7 +35,6 @@ public class TransferZoneController {
 		machine.setActiveDirection(decision.get());
 		
 		tote.setInteractionMode(ToteInteractionMode.RESERVED_FOR_TRANSFER);
-		tote.setControllingTransferZone(machine);
 		
 		machine.transitionTo(
 				decision.get() == TransferDirection.LEFT ? 
@@ -57,7 +56,6 @@ public class TransferZoneController {
 			return;
 		}
 		tote.setInteractionMode(ToteInteractionMode.FREE);
-		tote.setControllingTransferZone(null);
 		machine.transitionTo(TransferZoneState.RESETTING);
 	}
 	

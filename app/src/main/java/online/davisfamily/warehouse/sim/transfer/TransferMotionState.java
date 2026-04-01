@@ -10,21 +10,23 @@ public class TransferMotionState {
 	
 	private double elapsedSeconds;
 
-	public TransferMotionState(TransferZoneMachine machine, Vec3 startPosition, RouteSegment routeSegment) {
+	public TransferMotionState(TransferZoneMachine machine, Vec3 startPosition) {
 		super();
 		this.machine = machine;
 		this.startPosition = startPosition;
-		this.targetSegment = routeSegment;
+		this.targetSegment = machine.getDefinition().getTargetSegment();
 	}
 	
 	public void update(double dtSeconds) {
-		elapsedSeconds = dtSeconds;
+		elapsedSeconds += dtSeconds;
 	}
 	
+	public double t() {return Math.min(1.0, elapsedSeconds / 0.5);}
 	public double getElapsedSeconds() {
 		return elapsedSeconds;
 	}
 
+	public boolean done() {return t() >= 1.0;}
 	public TransferZoneMachine getMachine() {
 		return machine;
 	}
