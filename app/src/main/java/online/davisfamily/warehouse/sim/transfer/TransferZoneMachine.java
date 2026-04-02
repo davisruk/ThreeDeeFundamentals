@@ -1,11 +1,14 @@
 package online.davisfamily.warehouse.sim.transfer;
 
-import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.threedee.sim.framework.SimulationContext;
+import online.davisfamily.threedee.sim.framework.objects.StatefulSimObject;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
 
-public class TransferZoneMachine {
+public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>{
 	
 	public enum TransferZoneState {
 		IDLE,
+		RESERVED,
 		READY_LEFT,
 		READY_RIGHT,
 		TRANSFERRING,
@@ -19,20 +22,27 @@ public class TransferZoneMachine {
 	}
 	
 	private final String id;
-	private final TransferZone definition;
-	
+	private String approachSensorId;
 	private TransferZoneState state = TransferZoneState.IDLE;
-	private Tote reservedTote;
+	private String reservedToteId;
 	private TransferDirection activeDirection;
 	private double timeInStateSeconds;
 	
-	public TransferZoneMachine(String id, TransferZone definition) {
+	public TransferZoneMachine(String id, String sensorId) {
 		super();
 		this.id = id;
-		this.definition = definition;
+		this.approachSensorId = sensorId;
 	}
 	
-	public void update(double dtSeconds) {
+	@Override
+	public String toString() {
+		return "TransferZoneMachine [id=" + id + ", approachSensorId=" + approachSensorId + ", state=" + state
+				+ ", reservedToteId=" + reservedToteId + ", activeDirection=" + activeDirection
+				+ ", timeInStateSeconds=" + timeInStateSeconds + "]";
+	}
+
+	@Override
+	public void update(SimulationContext context, double dtSeconds) {
 		timeInStateSeconds += dtSeconds;
 	}
 	
@@ -41,12 +51,12 @@ public class TransferZoneMachine {
 		timeInStateSeconds = 0.0;
 	}
 
-	public Tote getReservedTote() {
-		return reservedTote;
+	public String getReservedToteId() {
+		return reservedToteId;
 	}
 
-	public void setReservedTote(Tote reservedTote) {
-		this.reservedTote = reservedTote;
+	public void setReservedTote(String reservedToteId) {
+		this.reservedToteId = reservedToteId;
 	}
 
 	public TransferDirection getActiveDirection() {
@@ -69,12 +79,18 @@ public class TransferZoneMachine {
 		return timeInStateSeconds;
 	}
 
+	public String getApproachSensorId() {
+		return approachSensorId;
+	}
+
+	public void setReservedToteId(String reservedToteId) {
+		this.reservedToteId = reservedToteId;
+	}
+
 	public void clearActiveTransfer() {
-		reservedTote = null;
+		reservedToteId = null;
 		state = TransferZoneState.IDLE; 
 	}
 
-	public TransferZone getDefinition() {
-		return definition;
-	}
+
 }

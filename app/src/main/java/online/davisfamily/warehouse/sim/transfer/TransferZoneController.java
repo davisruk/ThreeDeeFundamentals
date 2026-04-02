@@ -1,15 +1,15 @@
 package online.davisfamily.warehouse.sim.transfer;
 
-import java.util.Optional;
-
-import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
+import online.davisfamily.threedee.sim.framework.SimulationContext;
+import online.davisfamily.threedee.sim.framework.SimulationController;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
+import online.davisfamily.threedee.sim.framework.events.SimulationEventListener;
 import online.davisfamily.warehouse.sim.tote.Tote;
-import online.davisfamily.warehouse.sim.tote.Tote.ToteInteractionMode;
-import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDirection;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
-public class TransferZoneController {
+public class TransferZoneController implements SimulationController, SimulationEventListener<DetectionEvent>{
 	private final TransferZoneMachine machine;
 	private final TransferDecisionStrategy decisionStrategy;
 	
@@ -19,47 +19,36 @@ public class TransferZoneController {
 		this.decisionStrategy = decisionStrategy;
 	}
 	
-	public void update(double dtSeconds) {
-		machine.update(dtSeconds);
-		if (machine.getState() == TransferZoneState.RESETTING && machine.getTimeInStateSeconds() > 0.1) {
-			machine.clearActiveTransfer();
-		}
-	}
-	
-	public void onToteApproaching(Tote tote, RouteFollowerSnapshot snapshot) {
-		if (machine.getState() != TransferZoneState.IDLE) {
-			return;
-		}
-		Optional<TransferDirection> decision = decisionStrategy.decide(tote, machine);
-		machine.setReservedTote(tote);
+	@Override
+	public void handleEvent(DetectionEvent event, SimulationContext context) {
+		if (!machine.getApproachSensorId().equals(event.getSensorId())) return;
+		if (event.getType() != DetectionType.ENTER) return;
+		if (machine.getState() != TransferZoneState.IDLE) return;
+		// could check the detected object is a Tote here but not worth it yet
+		Tote t = (Tote) context.getTrackedObjects().stream()
+				.filter(to -> to.getId().equals(event.getObjectId()))
+				.findAny()
+				.orElse(null);
+		
+		var decision = decisionStrategy.decide(t, machine);
+		if (decision.isEmpty()) return;
+		
+		machine.setReservedToteId(t.getId());
 		machine.setActiveDirection(decision.get());
-		
-		tote.setInteractionMode(ToteInteractionMode.RESERVED_FOR_TRANSFER);
-		
-		machine.transitionTo(
-				decision.get() == TransferDirection.LEFT ? 
-				TransferZoneState.READY_LEFT :
-				TransferZoneState.READY_RIGHT
-		);
+		machine.transitionTo(TransferZoneState.RESERVED);
+		t.reserveForTransfer(machine);
+		System.out.println(machine);
+		System.out.println(t);
 	}
-	
-	public void onToteEnteredTransferWindow(Tote tote) {
-		if (machine.getReservedTote() != tote) {
-			return;
-		}
-		tote.setInteractionMode(ToteInteractionMode.TRANSFERRING);
-		machine.transitionTo(TransferZoneState.TRANSFERRING);
-	}
-	
-	public void onTransferComplete(Tote tote) {
-		if (machine.getReservedTote() != tote) {
-			return;
-		}
-		tote.setInteractionMode(ToteInteractionMode.FREE);
-		machine.transitionTo(TransferZoneState.RESETTING);
+
+	@Override
+	public void update(SimulationContext context, double dtSeconds) {
+		// TODO Auto-generated method stub
+		
 	}
 	
 	public TransferZoneMachine getMachine() {
 		return machine;
 	}
+
 }

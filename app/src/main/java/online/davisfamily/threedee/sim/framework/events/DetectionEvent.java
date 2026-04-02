@@ -1,7 +1,5 @@
 package online.davisfamily.threedee.sim.framework.events;
 
-import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
-
 public class DetectionEvent implements SimulationEvent {
     private String sourceId;
     private double simulationTimeSeconds;

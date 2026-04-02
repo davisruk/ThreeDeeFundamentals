@@ -2,9 +2,7 @@ package online.davisfamily.threedee.behaviour.routing;
 
 import java.util.List;
 
-import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour.TravelDirection;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
-import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.PathSegment3;
 
@@ -15,6 +13,9 @@ public class RouteFollower {
 	private TravelDirection travelDirection;
 	private String owningId;
 	
+	public enum TravelDirection {
+		FORWARD, REVERSE
+	}
 	public RouteFollower(String owningId, RouteSegment routeSegment, float distanceAlongSegment, double speedUnitsPerSecond) {
 		super();
 		this.currentSegment = routeSegment;

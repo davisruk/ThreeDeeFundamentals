@@ -174,9 +174,9 @@ public class RouteSceneBuilder {
                 linkOpenSide,
                 strategy
         );
-        TransferZoneMachine machine = new TransferZoneMachine("Transfer_Machine", zone);
-        TransferZoneController controller = new TransferZoneController(machine, strategy);
-        transferZoneControllers.add(controller);
+//        TransferZoneMachine machine = new TransferZoneMachine("Transfer_Machine", zone);
+//       TransferZoneController controller = new TransferZoneController(machine, strategy);
+//        transferZoneControllers.add(controller);
         sourceSegment.addTransferZone(zone);
 
         addCentredGuideOpening(
@@ -260,9 +260,9 @@ public class RouteSceneBuilder {
                 transferStrategy
         );
 
-        TransferZoneMachine machine = new TransferZoneMachine("Transfer_Machine", zone);
-        TransferZoneController controller = new TransferZoneController(machine, transferStrategy);
-        transferZoneControllers.add(controller);
+//        TransferZoneMachine machine = new TransferZoneMachine("Transfer_Machine", zone);
+//        TransferZoneController controller = new TransferZoneController(machine, transferStrategy);
+//        transferZoneControllers.add(controller);
         sourceSegment.addTransferZone(zone);
 
         addCentredGuideOpening(

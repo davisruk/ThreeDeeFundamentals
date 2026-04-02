@@ -1,31 +1,26 @@
 package online.davisfamily.warehouse.sim.tote;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
-import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
-import online.davisfamily.warehouse.sim.transfer.TransferMotionState;
-import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 
 public class Tote implements TrackableObject {
 	
-	public enum ToteInteractionMode {
-		FREE, RESERVED_FOR_TRANSFER, RESERVED,STOPPED,TRANSFERRING,STATION_HELD
+	public enum ToteMotionState {
+		MOVING, HELD, BLOCKED, TRANSFERRING
 	}
 	
 	private final String id;
 	private final RouteFollower routeFollower;
 	private RouteFollowerSnapshot lastRouteSnapshot;
 	private final ObjectTransformation transformation;
-	private ToteInteractionMode interactionMode = ToteInteractionMode.FREE;
+	private ToteMotionState interactionMode = ToteMotionState.MOVING;
+	private String reservedByMachineId;
 	
 	public Tote(String id, RouteFollower routeFollower, ObjectTransformation transformation) {
 		super();
@@ -50,7 +45,7 @@ public class Tote implements TrackableObject {
 	
 	private boolean isMotionBlocked() {
 		//return false;
-		return interactionMode != ToteInteractionMode.FREE;
+		return interactionMode == ToteMotionState.BLOCKED;
 	}
 	
 	private void applySnapshot(RouteFollowerSnapshot snapshot) {
@@ -59,11 +54,15 @@ public class Tote implements TrackableObject {
 		//transformation.setAxisRotation(Axis.X, snapshot.up().x); //pitch
 	}
 	
-	public ToteInteractionMode getInteractionMode() {
+	public void reserveForTransfer(TransferZoneMachine machine) {
+		if (reservedByMachineId == null) reservedByMachineId = machine.getId();
+	}
+	
+	public ToteMotionState getInteractionMode() {
 		return interactionMode;
 	}
 
-	public void setInteractionMode(ToteInteractionMode interactionMode) {
+	public void setInteractionMode(ToteMotionState interactionMode) {
 		this.interactionMode = interactionMode;
 	}
 
@@ -75,4 +74,12 @@ public class Tote implements TrackableObject {
 	public RouteFollowerSnapshot getLastSnapshot() {
 		return lastRouteSnapshot;
 	}
+
+	@Override
+	public String toString() {
+		return "Tote [id=" + id + ", interactionMode=" + interactionMode + ", reservedByMachineId="
+				+ reservedByMachineId + "]";
+	}
+	
+	
 }

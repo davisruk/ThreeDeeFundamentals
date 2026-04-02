@@ -4,7 +4,6 @@ import java.util.List;
 
 import javax.swing.JRootPane;
 
-import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -24,8 +23,6 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.scene.BaseScene;
-import online.davisfamily.threedee.sim.framework.SimulationContext;
-import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
 import online.davisfamily.threedee.sim.framework.objects.Sensor;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
@@ -35,9 +32,11 @@ import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
-import online.davisfamily.warehouse.sim.sensor.MembershipSensorController;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
 
 public class TestScene extends BaseScene{	
 
@@ -266,28 +265,13 @@ public class TestScene extends BaseScene{
 	    );
 
 	    float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight : 0f;
-/*
-	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
-	            top,                              // startSegment
-	            null,                             // defaultDecisionProvider
-	            2.0f,                             // unitsPerSecond
-	            WrapMode.LOOP,                    // wrapMode
-	            EnumSet.of(OrientationMode.YAW),  // orientationModes
-	            0f,                               // yawOffsetRadians
-	            rollerYOffset,                    // yOffset
-	            0f,                               // startDistanceAlongSegment
-	            TravelDirection.FORWARD,          // startDirection
-	            tote.getOuterBottomDepth()
-	    );
-*/	    
 	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
-	    Tote st = new Tote("tote1", rtf, rTote.transformation);
-	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
-	    rTote.addBehaviour(follower);
+	    Tote st = new Tote(rTote.id, rtf, rTote.transformation);
 	    Sensor s = new MembershipSensor("top_member_sensor", top);
-	    MembershipSensorController msc = new MembershipSensorController();
-	    sim.addController(msc);
-	    sim.registerListener(DetectionEvent.class, msc);
+        TransferZoneMachine tzm = new TransferZoneMachine("Transfer_Machine", s.getId());	    
+        TransferZoneController tzc = new TransferZoneController(tzm, new ToggleStrategy(false));
+	    sim.addController(tzc);
+	    sim.registerListener(DetectionEvent.class, tzc);
 	    sim.addSensor(s);
 	    sim.addTrackableObject(st);
 	    for (RenderableObject track : tracks) {
@@ -428,8 +412,6 @@ public class TestScene extends BaseScene{
 */	
 	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
 	    Tote st = new Tote("tote1", rtf, rTote.transformation);
-	    GraphFollowerBehaviour follower = new GraphFollowerBehaviour(st, new SimulationContext());
-	    rTote.addBehaviour(follower);
 		
 		for (RenderableObject track : tracks) {
 		    objects.add(track);

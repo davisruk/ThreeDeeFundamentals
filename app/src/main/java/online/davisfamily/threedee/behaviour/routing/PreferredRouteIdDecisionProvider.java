@@ -2,7 +2,7 @@ package online.davisfamily.threedee.behaviour.routing;
 
 import java.util.List;
 
-import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour.TravelDirection;
+import online.davisfamily.threedee.behaviour.routing.RouteFollower.TravelDirection;
 import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class PreferredRouteIdDecisionProvider implements RouteDecisionProvider {
