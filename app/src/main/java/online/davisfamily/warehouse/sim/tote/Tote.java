@@ -10,7 +10,7 @@ import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
-import online.davisfamily.threedee.sim.framework.TrackableObject;
+import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionState;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;

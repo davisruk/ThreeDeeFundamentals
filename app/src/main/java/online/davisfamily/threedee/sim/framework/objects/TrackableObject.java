@@ -1,4 +1,4 @@
-package online.davisfamily.threedee.sim.framework;
+package online.davisfamily.threedee.sim.framework.objects;
 
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
 

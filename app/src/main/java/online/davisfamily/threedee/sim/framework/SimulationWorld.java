@@ -5,6 +5,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import online.davisfamily.threedee.sim.framework.events.SimulationEvent;
+import online.davisfamily.threedee.sim.framework.events.SimulationEventListener;
+import online.davisfamily.threedee.sim.framework.objects.Sensor;
+import online.davisfamily.threedee.sim.framework.objects.SimObject;
+import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
+
 public class SimulationWorld {
 
 	private final SimulationContext context = new SimulationContext();
@@ -43,6 +49,7 @@ public class SimulationWorld {
 			controllers.add(controller);
 	}
 	
+	// Register a SimulationEventListener against a SimulationEvent
 	public <S extends SimulationEvent> void registerListener(Class<S> eventType, SimulationEventListener<S> listener) {
 		listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(listener);
 	}
@@ -69,8 +76,10 @@ public class SimulationWorld {
 		}
 	}
 	
+	// need a single cast here to prevent cast / instanceof in each listener 
+	// compiler will complain but the register method protects us so suppress
 	@SuppressWarnings("unchecked")
-	private <E extends SimulationEvent> void notifyListener(SimulationEvent event, SimulationEventListener<?> listener) {
+	private <E extends SimulationEvent> void notifyListener(SimulationEvent event, SimulationEventListener<E> listener) {
 		((SimulationEventListener<E>) listener).handleEvent((E)event, context);
 	}
 	

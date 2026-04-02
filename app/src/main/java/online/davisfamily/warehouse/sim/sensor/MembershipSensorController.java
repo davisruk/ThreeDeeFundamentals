@@ -1,10 +1,10 @@
 package online.davisfamily.warehouse.sim.sensor;
 
-import online.davisfamily.threedee.sim.framework.DetectionEvent;
-import online.davisfamily.threedee.sim.framework.DetectionEvent.DetectionType;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
-import online.davisfamily.threedee.sim.framework.SimulationEventListener;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
+import online.davisfamily.threedee.sim.framework.events.SimulationEventListener;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
 
 public class MembershipSensorController implements SimulationController, SimulationEventListener<DetectionEvent>{
 

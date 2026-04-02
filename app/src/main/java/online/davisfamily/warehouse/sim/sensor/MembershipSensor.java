@@ -6,10 +6,10 @@ import java.util.Set;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
 import online.davisfamily.threedee.path.PathSegment3;
-import online.davisfamily.threedee.sim.framework.DetectionEvent;
-import online.davisfamily.threedee.sim.framework.DetectionEvent.DetectionType;
-import online.davisfamily.threedee.sim.framework.Sensor;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
+import online.davisfamily.threedee.sim.framework.objects.Sensor;
 
 public class MembershipSensor implements Sensor {
 	private String id;
