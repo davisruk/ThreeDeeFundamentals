@@ -24,6 +24,7 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.scene.BaseScene;
+import online.davisfamily.threedee.sim.framework.DetectionEvent;
 import online.davisfamily.threedee.sim.framework.Sensor;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
@@ -286,6 +287,7 @@ public class TestScene extends BaseScene{
 	    Sensor s = new MembershipSensor("top_member_sensor", top);
 	    MembershipSensorController msc = new MembershipSensorController();
 	    sim.addController(msc);
+	    sim.registerListener(DetectionEvent.class, msc);
 	    sim.addSensor(s);
 	    sim.addTrackableObject(st);
 	    for (RenderableObject track : tracks) {

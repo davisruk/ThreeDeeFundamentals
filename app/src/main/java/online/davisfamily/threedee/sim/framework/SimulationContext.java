@@ -6,11 +6,11 @@ import java.util.List;
 import java.util.Queue;
 
 public class SimulationContext {
-	private final Queue<SimulationEvent> eventQueue = new ArrayDeque<>();
+	private final Queue<SimulationEvent<?>> eventQueue = new ArrayDeque<>();
 	private double simulationTimeSeconds;
 	private final List<TrackableObject> trackedObjects = new ArrayList<>();
 	
-	public void publish(SimulationEvent event) {
+	public void publish(SimulationEvent<?> event) {
 		eventQueue.add(event);
 	}
 	public double getSimulationTimeSeconds() {
@@ -23,7 +23,7 @@ public class SimulationContext {
 	public void setSimulationTimeSeconds(double simulationTimeSeconds) {
 		this.simulationTimeSeconds = simulationTimeSeconds;
 	}
-	public Queue<SimulationEvent> getEventQueue() {
+	public Queue<SimulationEvent<?>> getEventQueue() {
 		return eventQueue;
 	}
 	public void addTrackedObject(TrackableObject obj) {

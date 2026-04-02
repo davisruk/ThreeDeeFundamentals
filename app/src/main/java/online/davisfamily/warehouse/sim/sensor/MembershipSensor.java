@@ -7,10 +7,10 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.sim.framework.DetectionEvent;
-import online.davisfamily.threedee.sim.framework.DetectionType;
+import online.davisfamily.threedee.sim.framework.DetectionEventPayload;
+import online.davisfamily.threedee.sim.framework.DetectionEventPayload.DetectionType;
 import online.davisfamily.threedee.sim.framework.Sensor;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
-import online.davisfamily.threedee.sim.framework.SimulationEvent;
 
 public class MembershipSensor implements Sensor {
 	private String id;
@@ -39,31 +39,31 @@ public class MembershipSensor implements Sensor {
 				if (snap.currentSegment() == segment) {
 					if (!trackablesOnSegment.contains(snap.followerId())) {
 						trackablesOnSegment.add(snap.followerId());
-						context.publish(new DetectionEvent(
+						context.publish(new DetectionEvent(new DetectionEventPayload(
 						        getId(),
 						        context.getSimulationTimeSeconds(),
 						        getId(),
 						        snap.followerId(),
 						        DetectionType.ENTER
-						));
+						)));
 					} else {
-						context.publish(new DetectionEvent(
+						context.publish(new DetectionEvent(new DetectionEventPayload(
 						        getId(),
 						        context.getSimulationTimeSeconds(),
 						        getId(),
 						        snap.followerId(),
-						        DetectionType.PRESENT));
+						        DetectionType.PRESENT)));
 					}
 					
 				} else if (trackablesOnSegment.contains(snap.followerId())) {
 					trackablesOnSegment.remove(snap.followerId());
-					context.publish(new DetectionEvent(
+					context.publish(new DetectionEvent(new DetectionEventPayload(
 					        getId(),
 					        context.getSimulationTimeSeconds(),
 					        getId(),
 					        snap.followerId(),
 					        DetectionType.EXIT
-					));
+					)));
 
 				}
 			}

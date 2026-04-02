@@ -1,12 +1,13 @@
 package online.davisfamily.warehouse.sim.sensor;
 
 import online.davisfamily.threedee.sim.framework.DetectionEvent;
-import online.davisfamily.threedee.sim.framework.DetectionType;
+import online.davisfamily.threedee.sim.framework.DetectionEventPayload;
+import online.davisfamily.threedee.sim.framework.DetectionEventPayload.DetectionType;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
-import online.davisfamily.threedee.sim.framework.SimulationEvent;
+import online.davisfamily.threedee.sim.framework.SimulationEventListener;
 
-public class MembershipSensorController implements SimulationController {
+public class MembershipSensorController implements SimulationController, SimulationEventListener<DetectionEvent>{
 
 	@Override
 	public void update(SimulationContext context, double dtSeconds) {
@@ -15,20 +16,18 @@ public class MembershipSensorController implements SimulationController {
 	}
 
 	@Override
-	public void handleEvent(SimulationEvent event, SimulationContext context) {
-	    if (event instanceof DetectionEvent detection) {
-	    	DetectionEvent evt = (DetectionEvent) detection;
-	        String secs = String.format("%.3f", evt.simulationTimeSeconds());
-	    	if (detection.type() == DetectionType.ENTER) {
-	        	System.out.println("MembershipSensorController (" + evt.sourceId() + "): Object: " + evt.objectId() + " entered at " + secs);
-	        }
+	public void handleEvent(DetectionEvent event, SimulationContext context) {
+	    DetectionEventPayload payload = event.getPayload();
+        String secs = String.format("%.3f", payload.simulationTimeSeconds());
+    	if (payload.type() == DetectionType.ENTER) {
+        	System.out.println("MembershipSensorController (" + payload.sourceId() + "): Object: " + payload.objectId() + " entered at " + secs);
+        }
 
-	        if (detection.type() == DetectionType.EXIT) {
-	        	System.out.println("MembershipSensorController (" + evt.sourceId() + "): Object: " + evt.objectId() + " left at " + secs);
-	        }
-	        if (detection.type() == DetectionType.PRESENT) {
-	        	//System.out.println("MembershipSensorController (" + evt.sourceId() + "): Object: " + evt.objectId() + " still present at " + secs);
-	        }
+        if (payload.type() == DetectionType.EXIT) {
+        	System.out.println("MembershipSensorController (" + payload.sourceId() + "): Object: " + payload.objectId() + " left at " + secs);
+        }
+        if (payload.type() == DetectionType.PRESENT) {
+        	//System.out.println("MembershipSensorController (" + evt.sourceId() + "): Object: " + evt.objectId() + " still present at " + secs);
 	        
 	    }		
 	}

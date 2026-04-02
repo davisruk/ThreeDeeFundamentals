@@ -1,7 +1,9 @@
 package online.davisfamily.threedee.sim.framework;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SimulationWorld {
 
@@ -9,7 +11,7 @@ public class SimulationWorld {
 	private final List<SimObject> simObjects = new ArrayList<>();
 	private final List<Sensor> sensors = new ArrayList<>();
 	private final List<SimulationController> controllers = new ArrayList<>();
-	
+	private final Map<Class<?>, List<SimulationEventListener<?>>> listeners = new HashMap<>();
 	public void update(double dtSeconds) {
 		context.addToSimulationTimeSeconds(dtSeconds);
 		updateSimObjects(dtSeconds);
@@ -39,6 +41,10 @@ public class SimulationWorld {
 			controllers.add(controller);
 	}
 	
+	public <S extends SimulationEvent<?>> void registerListener(Class<S> eventType, SimulationEventListener<S> listener) {
+		listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(listener);
+	}
+	
 	private void updateSimObjects(double dtSeconds) {
 		for (SimObject simObject: simObjects) {
 			simObject.update(context, dtSeconds);
@@ -53,11 +59,17 @@ public class SimulationWorld {
 	
 	private void dispatchEvents() {
 		while (!context.getEventQueue().isEmpty()) {
-			SimulationEvent evt = context.getEventQueue().poll();
-			for (SimulationController ctl: controllers) {
-				ctl.handleEvent(evt, context);
+			SimulationEvent<?> evt = context.getEventQueue().poll();
+			List<SimulationEventListener<?>> registered = listeners.getOrDefault(evt.getClass(), List.of());
+			for (SimulationEventListener<?> l: registered) {
+				notifyListener(evt, l);
 			}
 		}
+	}
+	
+	@SuppressWarnings("unchecked")
+	private <E extends SimulationEvent<?>> void notifyListener(SimulationEvent<?> event, SimulationEventListener<?> listener) {
+		((SimulationEventListener<E>) listener).handleEvent((E)event, context);
 	}
 	
 	private void updateControllers(double dtSeconds) {
