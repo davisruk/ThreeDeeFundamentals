@@ -11,7 +11,9 @@ public class SimulationWorld {
 	private final List<SimObject> simObjects = new ArrayList<>();
 	private final List<Sensor> sensors = new ArrayList<>();
 	private final List<SimulationController> controllers = new ArrayList<>();
-	private final Map<Class<?>, List<SimulationEventListener<?>>> listeners = new HashMap<>();
+	// Map holds a list of event listeners keyed on the event class 
+	private final Map<Class<? extends SimulationEvent>, List<SimulationEventListener<? extends SimulationEvent>>> listeners = new HashMap<>();
+
 	public void update(double dtSeconds) {
 		context.addToSimulationTimeSeconds(dtSeconds);
 		updateSimObjects(dtSeconds);
@@ -41,7 +43,7 @@ public class SimulationWorld {
 			controllers.add(controller);
 	}
 	
-	public <S extends SimulationEvent<?>> void registerListener(Class<S> eventType, SimulationEventListener<S> listener) {
+	public <S extends SimulationEvent> void registerListener(Class<S> eventType, SimulationEventListener<S> listener) {
 		listeners.computeIfAbsent(eventType, k -> new ArrayList<>()).add(listener);
 	}
 	
@@ -59,7 +61,7 @@ public class SimulationWorld {
 	
 	private void dispatchEvents() {
 		while (!context.getEventQueue().isEmpty()) {
-			SimulationEvent<?> evt = context.getEventQueue().poll();
+			SimulationEvent evt = context.getEventQueue().poll();
 			List<SimulationEventListener<?>> registered = listeners.getOrDefault(evt.getClass(), List.of());
 			for (SimulationEventListener<?> l: registered) {
 				notifyListener(evt, l);
@@ -68,7 +70,7 @@ public class SimulationWorld {
 	}
 	
 	@SuppressWarnings("unchecked")
-	private <E extends SimulationEvent<?>> void notifyListener(SimulationEvent<?> event, SimulationEventListener<?> listener) {
+	private <E extends SimulationEvent> void notifyListener(SimulationEvent event, SimulationEventListener<?> listener) {
 		((SimulationEventListener<E>) listener).handleEvent((E)event, context);
 	}
 	

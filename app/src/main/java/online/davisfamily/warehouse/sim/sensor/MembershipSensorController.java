@@ -1,8 +1,7 @@
 package online.davisfamily.warehouse.sim.sensor;
 
 import online.davisfamily.threedee.sim.framework.DetectionEvent;
-import online.davisfamily.threedee.sim.framework.DetectionEventPayload;
-import online.davisfamily.threedee.sim.framework.DetectionEventPayload.DetectionType;
+import online.davisfamily.threedee.sim.framework.DetectionEvent.DetectionType;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.threedee.sim.framework.SimulationEventListener;
@@ -17,16 +16,16 @@ public class MembershipSensorController implements SimulationController, Simulat
 
 	@Override
 	public void handleEvent(DetectionEvent event, SimulationContext context) {
-	    DetectionEventPayload payload = event.getPayload();
-        String secs = String.format("%.3f", payload.simulationTimeSeconds());
-    	if (payload.type() == DetectionType.ENTER) {
-        	System.out.println("MembershipSensorController (" + payload.sourceId() + "): Object: " + payload.objectId() + " entered at " + secs);
+
+        String secs = String.format("%.3f", event.getSimulationTimeSeconds());
+    	if (event.getType() == DetectionType.ENTER) {
+        	System.out.println("MembershipSensorController (" + event.getSourceId() + "): Object: " + event.getObjectId() + " entered at " + secs);
         }
 
-        if (payload.type() == DetectionType.EXIT) {
-        	System.out.println("MembershipSensorController (" + payload.sourceId() + "): Object: " + payload.objectId() + " left at " + secs);
+        if (event.getType() == DetectionType.EXIT) {
+        	System.out.println("MembershipSensorController (" + event.getSourceId() + "): Object: " + event.getObjectId() + " left at " + secs);
         }
-        if (payload.type() == DetectionType.PRESENT) {
+        if (event.getType() == DetectionType.PRESENT) {
         	//System.out.println("MembershipSensorController (" + evt.sourceId() + "): Object: " + evt.objectId() + " still present at " + secs);
 	        
 	    }		
