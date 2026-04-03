@@ -300,5 +300,20 @@ public class RenderableObject {
 	public void setSelectionTarget(RenderableObject selectionTarget) {
 		this.selectionTarget = selectionTarget;
 	}
+	
+	public static List<RenderableObject> traverseAndExtractAllWithIdStartsWith(RenderableObject start, String id, List<RenderableObject> result) {
+	    
+        if (start.id.startsWith(id)) result.add(start);
+        
+        if (start.children == null || start.children.size() == 0)
+        	return result;
+        
+        for (RenderableObject ro : start.children) {
+        	traverseAndExtractAllWithIdStartsWith(ro, id, result);
+        }
+
+        return result;
+    }	
+
 
 }

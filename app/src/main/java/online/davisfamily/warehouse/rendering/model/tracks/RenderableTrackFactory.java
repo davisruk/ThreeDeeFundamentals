@@ -46,7 +46,7 @@ public final class RenderableTrackFactory {
 
             boolean isTransfer = interval.getType() == TrackIntervalType.TRANSFER;
             RenderableObject deckObject = RenderableObject.create(
-                    isTransfer ? "transfer" : "deck",
+                    isTransfer ? interval.getTransferZone().getId() : "deck",
             		tr,
                     built.deckMesh,
                     identity,

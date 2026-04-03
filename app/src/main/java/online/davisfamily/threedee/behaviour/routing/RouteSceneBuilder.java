@@ -108,7 +108,8 @@ public class RouteSceneBuilder {
     }
 
     public RouteSceneBuilder addTransferToLink(
-            RouteSegment sourceSegment,
+            String transferId,
+    		RouteSegment sourceSegment,
             RouteSegment linkSegment,
             float transferCentreDistance,
             float transferLength,
@@ -118,7 +119,8 @@ public class RouteSceneBuilder {
 
         TrackSpec linkSpec = requireSpec(linkSegment);
         return addTransferToLink(
-                sourceSegment,
+                transferId,
+        		sourceSegment,
                 linkSegment,
                 transferCentreDistance,
                 transferLength,
@@ -130,7 +132,8 @@ public class RouteSceneBuilder {
     }
 
     public RouteSceneBuilder addTransferToLink(
-            RouteSegment sourceSegment,
+            String transferId,
+    		RouteSegment sourceSegment,
             RouteSegment linkSegment,
             float transferCentreDistance,
             float transferLength,
@@ -140,7 +143,8 @@ public class RouteSceneBuilder {
             boolean initialToggleState) {
 
         return addTransferToLink(
-                sourceSegment,
+                transferId,
+        		sourceSegment,
                 linkSegment,
                 transferCentreDistance,
                 transferLength,
@@ -152,7 +156,8 @@ public class RouteSceneBuilder {
     }
 
     public RouteSceneBuilder addTransferToLink(
-            RouteSegment sourceSegment,
+            String transferId,
+    		RouteSegment sourceSegment,
             RouteSegment linkSegment,
             float transferCentreDistance,
             float transferLength,
@@ -165,7 +170,8 @@ public class RouteSceneBuilder {
         float transferStart = transferCentreDistance - (transferLength * 0.5f);
         ToggleStrategy strategy = new ToggleStrategy(initialToggleState);
         TransferZone zone = new TransferZone(
-                transferStart,
+                transferId,
+        		transferStart,
                 transferLength,
                 sourceSegment,
                 linkSegment,
@@ -197,7 +203,8 @@ public class RouteSceneBuilder {
     }
 
     public RouteSceneBuilder addDirectTransfer(
-            RouteSegment sourceSegment,
+            String transferId,
+    		RouteSegment sourceSegment,
             RouteSegment targetSegment,
             float sourceTransferCentreDistance,
             float openingLength,
@@ -207,7 +214,8 @@ public class RouteSceneBuilder {
             TransferDecisionStrategy transferStrategy) {
 
         return addDirectTransfer(
-                sourceSegment,
+                transferId,
+        		sourceSegment,
                 targetSegment,
                 sourceTransferCentreDistance,
                 openingLength,
@@ -220,7 +228,8 @@ public class RouteSceneBuilder {
     }
 
     public RouteSceneBuilder addDirectTransfer(
-            RouteSegment sourceSegment,
+            String transferId,
+    		RouteSegment sourceSegment,
             RouteSegment targetSegment,
             float sourceTransferCentreDistance,
             float openingLength,
@@ -250,7 +259,8 @@ public class RouteSceneBuilder {
         float sourceStart = sourceTransferCentreDistance - (openingLength * 0.5f);
 
         TransferZone zone = new TransferZone(
-                sourceStart,
+                transferId,
+        		sourceStart,
                 openingLength,
                 sourceSegment,
                 targetSegment,

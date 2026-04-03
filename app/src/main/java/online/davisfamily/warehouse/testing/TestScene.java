@@ -1,9 +1,13 @@
 package online.davisfamily.warehouse.testing;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import javax.swing.JRootPane;
 
+import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -226,7 +230,8 @@ public class TestScene extends BaseScene{
 	    // sourceOpeningLength controls the opening in the top guides
 	    // topConnectionClearance controls how far the top guides pull back visually
 	    builder.addTransferToLink(
-	            top,
+	            "transfer_1",
+	    		top,
 	            link1,
 	            link1X,
 	            toteLength,
@@ -236,7 +241,8 @@ public class TestScene extends BaseScene{
 	            false,
 	            topConnectionClearance
 	    ).addTransferToLink(
-	            top,
+	            "transfer_2",
+	    		top,
 	            link2,
 	            link2X,
 	            toteLength,
@@ -274,9 +280,23 @@ public class TestScene extends BaseScene{
 	    sim.registerListener(DetectionEvent.class, tzc);
 	    sim.addSensor(s);
 	    sim.addTrackableObject(st);
+
+	    List<RenderableObject> tzl = new ArrayList<>();
+	    tzl = processTransferZones(tracks, tzl);
+	    for (RenderableObject tz : tzl) {
+	    	System.out.println(tz.id);
+	    }
 	    for (RenderableObject track : tracks) {
 	        objects.add(track);
 	    }
+	}
+	
+	
+	public List<RenderableObject> processTransferZones(List<RenderableObject> rol, List<RenderableObject> result) {
+	    for (RenderableObject ro : rol) {
+	    	RenderableObject.traverseAndExtractAllWithIdStartsWith(ro, "transfer_", result);
+	    }
+	    return result;
 	}
 	
 	private void setupParallelTracks(ToteGeometry tote){
@@ -346,7 +366,8 @@ public class TestScene extends BaseScene{
 
 		AlwaysTransferStrategy always = new AlwaysTransferStrategy();
 		builder.addDirectTransfer(
-		        upper,
+		        "transfer_1",
+				upper,
 		        lower,
 		        transferCentre,
 		        toteLength,
@@ -365,7 +386,8 @@ public class TestScene extends BaseScene{
 		float upperEntryDistance = lowerTransferX - leftX;
 
 		builder.addDirectTransfer(
-		        lower,
+		        "transfer_2",
+				lower,
 		        upper,
 		        lowerTransferCentre,
 		        toteLength,

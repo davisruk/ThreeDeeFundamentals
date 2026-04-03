@@ -5,7 +5,8 @@ import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class TransferZone {
-    private final float startDistance;
+    private String id;
+	private final float startDistance;
     private final float length;
     private final RouteSegment sourceSegment;
     private final RouteSegment targetSegment;
@@ -15,7 +16,8 @@ public class TransferZone {
     private final GuideSide targetOpenSide;
 
     public TransferZone(
-            float startDistance,
+            String id,
+    		float startDistance,
             float length,
             RouteSegment sourceSegment,
             RouteSegment targetSegment,
@@ -39,7 +41,7 @@ public class TransferZone {
         if (targetOpenSide == null) {
             throw new IllegalArgumentException("targetOpenSide must not be null");
         }
-
+        this.id = id;
         this.startDistance = startDistance;
         this.length = length;
         this.sourceSegment = sourceSegment;
@@ -50,7 +52,13 @@ public class TransferZone {
         this.decisionStrategy = decisionStrategy;
     }
 
-    public float getStartDistance() {
+    
+    public String getId() {
+		return id;
+	}
+
+
+	public float getStartDistance() {
         return startDistance;
     }
 
