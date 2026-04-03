@@ -1,13 +1,10 @@
 package online.davisfamily.warehouse.testing;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import javax.swing.JRootPane;
 
-import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -37,6 +34,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
@@ -276,16 +274,35 @@ public class TestScene extends BaseScene{
 	    Sensor s = new MembershipSensor("top_member_sensor", top);
         TransferZoneMachine tzm = new TransferZoneMachine("Transfer_Machine", s.getId());	    
         TransferZoneController tzc = new TransferZoneController(tzm, new ToggleStrategy(false));
-	    sim.addController(tzc);
+	    
+        // below is not enough for transfer zones
+        // at the moment detection is done via current route segment of the trackable object
+        // transfer zones are not route segments, they are contained by route segments
+        // need to compute if the current position on the segment is within the transfer zone's geometry
+        // best to create a WindowSensor that takes in the route segment, zoneid, startwindow, end window
+        // can use transferzone getStartDistance and getEndDistance for this.
+        // if the current position of the snapshot within the segment is within the start / end distances
+        // then sensor can fire an detectionevent
+        for (TransferZone tz: top.getTransferZones()) {
+        	Sensor tzs = new MembershipSensor(tz.getId() + "_sensor", top);
+            TransferZoneController c = new TransferZoneController(tzm, new ToggleStrategy(false));
+            
+        	sim.addController(c);
+    	    sim.registerListener(DetectionEvent.class, c);
+    	    sim.addSensor(tzs);
+        }
+        
+        sim.addController(tzc);
 	    sim.registerListener(DetectionEvent.class, tzc);
 	    sim.addSensor(s);
 	    sim.addTrackableObject(st);
-
+/*	    
 	    List<RenderableObject> tzl = new ArrayList<>();
 	    tzl = processTransferZones(tracks, tzl);
 	    for (RenderableObject tz : tzl) {
 	    	System.out.println(tz.id);
 	    }
+*/
 	    for (RenderableObject track : tracks) {
 	        objects.add(track);
 	    }
