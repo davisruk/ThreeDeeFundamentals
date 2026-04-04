@@ -1,6 +1,5 @@
 package online.davisfamily.warehouse.testing;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.JRootPane;
@@ -9,6 +8,7 @@ import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
+import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
@@ -25,7 +25,9 @@ import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.scene.BaseScene;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
-import online.davisfamily.threedee.sim.framework.objects.Sensor;
+import online.davisfamily.threedee.sim.framework.objects.sensors.Sensor;
+import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensor;
+import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensorAreaImpl;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
@@ -34,7 +36,6 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
 import online.davisfamily.warehouse.sim.tote.Tote;
-import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
@@ -271,9 +272,6 @@ public class TestScene extends BaseScene{
 	    float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight : 0f;
 	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
 	    Tote st = new Tote(rTote.id, rtf, rTote.transformation);
-	    Sensor s = new MembershipSensor("top_member_sensor", top);
-        TransferZoneMachine tzm = new TransferZoneMachine("Transfer_Machine", s.getId());	    
-        TransferZoneController tzc = new TransferZoneController(tzm, new ToggleStrategy(false));
 	    
         // below is not enough for transfer zones
         // at the moment detection is done via current route segment of the trackable object
@@ -283,18 +281,23 @@ public class TestScene extends BaseScene{
         // can use transferzone getStartDistance and getEndDistance for this.
         // if the current position of the snapshot within the segment is within the start / end distances
         // then sensor can fire an detectionevent
-        for (TransferZone tz: top.getTransferZones()) {
-        	Sensor tzs = new MembershipSensor(tz.getId() + "_sensor", top);
-            TransferZoneController c = new TransferZoneController(tzm, new ToggleStrategy(false));
-            
-        	sim.addController(c);
-    	    sim.registerListener(DetectionEvent.class, c);
-    	    sim.addSensor(tzs);
+	    float member_start = 1f;
+	    for (TransferZone tz: top.getTransferZones()) {
+        	String id = tz.getId();
+    	    WindowSensorAreaImpl m_wsai = new WindowSensorAreaImpl(id + "_member_sensor_area", top, member_start, tz.getStartDistance());
+    	    Sensor tzms = new MembershipSensor(id + "_member_sensor", m_wsai);
+    	    WindowSensorAreaImpl w_wsai = new WindowSensorAreaImpl(id + "_window_sensor_area", top, tz.getStartDistance(), tz.getEndDistance());
+    	    Sensor tzws = new WindowSensor(tz.getId() + "_sensor", w_wsai);
+    	    TransferZoneMachine tzm = new TransferZoneMachine("Transfer_Machine_" + tz.getId(), tzms.getId(), tzws.getId());
+    	    TransferZoneController tzc = new TransferZoneController(tzm, new ToggleStrategy(false));
+        	sim.addController(tzc);
+    	    sim.registerListener(DetectionEvent.class, tzc);
+    	    sim.addSensor(tzms);
+    	    sim.addSensor(tzws);
+    	    // hack as we know there are only 2 tzs
+    	    member_start = tz.getEndDistance();
         }
         
-        sim.addController(tzc);
-	    sim.registerListener(DetectionEvent.class, tzc);
-	    sim.addSensor(s);
 	    sim.addTrackableObject(st);
 /*	    
 	    List<RenderableObject> tzl = new ArrayList<>();

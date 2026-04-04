@@ -1,6 +1,7 @@
-package online.davisfamily.warehouse.sim.transfer;
+package online.davisfamily.threedee.behaviour.routing.transfer;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
+import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensorArea;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
@@ -97,4 +98,8 @@ public class TransferZone {
     public GuideSide getTargetOpenSide() {
         return targetOpenSide;
     }
+    
+	public RouteSegment getRouteSegment() {
+		return sourceSegment;
+	}
 }

@@ -7,11 +7,11 @@ import java.util.List;
 import java.util.Map;
 
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory.SpecAndSegment;
+import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.warehouse.rendering.model.tracks.ConnectionClearance;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideOpening;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
-import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;

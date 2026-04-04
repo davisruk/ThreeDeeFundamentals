@@ -21,7 +21,12 @@ public class TransferZoneController implements SimulationController, SimulationE
 	
 	@Override
 	public void handleEvent(DetectionEvent event, SimulationContext context) {
-		if (!machine.getApproachSensorId().equals(event.getSensorId())) return;
+		if (machine.getApproachSensorId().equals(event.getSensorId())) handleApproachSensor(event, context);
+		if (machine.getWindowSensorId().equals(event.getSensorId())) handleWindowSensor(event, context);
+
+	}
+	
+	private void handleApproachSensor(DetectionEvent event, SimulationContext context) {
 		if (event.getType() != DetectionType.ENTER) return;
 		if (machine.getState() != TransferZoneState.IDLE) return;
 		// could check the detected object is a Tote here but not worth it yet
@@ -39,6 +44,9 @@ public class TransferZoneController implements SimulationController, SimulationE
 		t.reserveForTransfer(machine);
 		System.out.println(machine);
 		System.out.println(t);
+	}
+	private void handleWindowSensor(DetectionEvent event, SimulationContext context) {
+		System.out.println(event);
 	}
 
 	@Override

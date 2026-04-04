@@ -5,21 +5,23 @@ import java.util.Set;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
-import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
-import online.davisfamily.threedee.sim.framework.objects.Sensor;
+import online.davisfamily.threedee.sim.framework.objects.sensors.Sensor;
+import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensorArea;
 
 public class MembershipSensor implements Sensor {
 	private String id;
 	private final RouteSegment segment;
 	private final Set<String> trackablesOnSegment = new HashSet<>();
 	private final DetectionEvent cachedEvent;
-	public MembershipSensor(String id, RouteSegment segment) {
+	private final WindowSensorArea area;
+	public MembershipSensor(String id, WindowSensorArea area) {
 		super();
 		this.id = id;
-		this.segment = segment;
+		this.segment = area.routeSegment();
+		this.area = area;
 		cachedEvent = new DetectionEvent();
 		cachedEvent.set(id, 0, id, null, DetectionType.ENTER);
 	}
@@ -36,20 +38,23 @@ public class MembershipSensor implements Sensor {
 			RouteFollowerSnapshot snap = t.getLastSnapshot();
 			if (snap != null) {
 				if (snap.currentSegment() == segment) {
-					if (!trackablesOnSegment.contains(snap.followerId())) {
-						trackablesOnSegment.add(snap.followerId());
-						cachedEvent.set(
-					        context.getSimulationTimeSeconds(),
-					        snap.followerId(),
-					        DetectionType.ENTER
-						);
-						context.publish(cachedEvent);
-					} else {
-						cachedEvent.set(
-					        context.getSimulationTimeSeconds(),
-					        snap.followerId(),
-					        DetectionType.PRESENT);
-						context.publish(cachedEvent);
+					float distance = snap.distanceAlongSegment();
+					if (distance >= area.startDistance() && distance <= area.endDistance()) {
+						if (!trackablesOnSegment.contains(snap.followerId())) {
+							trackablesOnSegment.add(snap.followerId());
+							cachedEvent.set(
+						        context.getSimulationTimeSeconds(),
+						        snap.followerId(),
+						        DetectionType.ENTER
+							);
+							context.publish(cachedEvent);
+						} else {
+							cachedEvent.set(
+						        context.getSimulationTimeSeconds(),
+						        snap.followerId(),
+						        DetectionType.PRESENT);
+							context.publish(cachedEvent);
+						}
 					}
 				} else if (trackablesOnSegment.contains(snap.followerId())) {
 					trackablesOnSegment.remove(snap.followerId());

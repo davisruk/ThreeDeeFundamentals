@@ -2,7 +2,6 @@ package online.davisfamily.threedee.behaviour.routing.transfer;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.rendering.RenderableObject;
-import online.davisfamily.warehouse.sim.transfer.TransferZone;
 
 public class AlwaysTransferStrategy implements TransferDecisionStrategy {
 	@Override

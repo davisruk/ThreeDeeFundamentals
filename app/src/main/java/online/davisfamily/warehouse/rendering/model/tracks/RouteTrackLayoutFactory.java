@@ -5,7 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.warehouse.sim.transfer.TransferZone;
+import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 
 public final class RouteTrackLayoutFactory {
 

@@ -7,9 +7,9 @@ import java.util.Map;
 
 import online.davisfamily.threedee.sim.framework.events.SimulationEvent;
 import online.davisfamily.threedee.sim.framework.events.SimulationEventListener;
-import online.davisfamily.threedee.sim.framework.objects.Sensor;
 import online.davisfamily.threedee.sim.framework.objects.SimObject;
 import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
+import online.davisfamily.threedee.sim.framework.objects.sensors.Sensor;
 
 public class SimulationWorld {
 

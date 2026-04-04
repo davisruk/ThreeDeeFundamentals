@@ -1,6 +1,6 @@
 package online.davisfamily.warehouse.rendering.model.tracks;
 
-import online.davisfamily.warehouse.sim.transfer.TransferZone;
+import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 
 public final class TrackInterval {
     private final float startDistance;

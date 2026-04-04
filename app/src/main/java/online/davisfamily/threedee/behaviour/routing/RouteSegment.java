@@ -5,12 +5,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.warehouse.rendering.model.tracks.ConnectionClearance;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideOpening;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TargetGuideOpening;
-import online.davisfamily.warehouse.sim.transfer.TransferZone;
 
 public final class RouteSegment {
     private final String label;
@@ -22,7 +22,7 @@ public final class RouteSegment {
     private final List<TargetGuideOpening> targetGuideOpenings = new ArrayList<>();
     private final List<GuideOpening> guideOpenings = new ArrayList<>();
     private final List<ConnectionClearance> connectionClearances = new ArrayList<>();
-
+    
     private float renderTrimStartDistance;
     private float renderTrimEndDistance;
 
@@ -61,7 +61,7 @@ public final class RouteSegment {
     public List<TransferZone> getTransferZones() {
         return transferZones;
     }
-
+    
     public List<TargetGuideOpening> getTargetGuideOpenings() {
         return Collections.unmodifiableList(targetGuideOpenings);
     }

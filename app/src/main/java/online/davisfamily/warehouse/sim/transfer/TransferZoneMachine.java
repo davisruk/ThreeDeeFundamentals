@@ -23,22 +23,25 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	
 	private final String id;
 	private String approachSensorId;
+	private String windowSensorId;
 	private TransferZoneState state = TransferZoneState.IDLE;
 	private String reservedToteId;
 	private TransferDirection activeDirection;
 	private double timeInStateSeconds;
 	
-	public TransferZoneMachine(String id, String sensorId) {
+	public TransferZoneMachine(String id, String approachSensorId, String windowSensorId) {
 		super();
 		this.id = id;
-		this.approachSensorId = sensorId;
+		this.approachSensorId = approachSensorId;
+		this.windowSensorId = windowSensorId;
 	}
 	
+
 	@Override
 	public String toString() {
-		return "TransferZoneMachine [id=" + id + ", approachSensorId=" + approachSensorId + ", state=" + state
-				+ ", reservedToteId=" + reservedToteId + ", activeDirection=" + activeDirection
-				+ ", timeInStateSeconds=" + timeInStateSeconds + "]";
+		return "TransferZoneMachine [id=" + id + ", approachSensorId=" + approachSensorId + ", windowSensorId="
+				+ windowSensorId + ", state=" + state + ", reservedToteId=" + reservedToteId + ", activeDirection="
+				+ activeDirection + ", timeInStateSeconds=" + timeInStateSeconds + "]";
 	}
 
 	@Override
@@ -81,6 +84,10 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 
 	public String getApproachSensorId() {
 		return approachSensorId;
+	}
+
+	public String getWindowSensorId() {
+		return windowSensorId;
 	}
 
 	public void setReservedToteId(String reservedToteId) {

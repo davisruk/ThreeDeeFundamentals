@@ -23,7 +23,7 @@ public class DetectionEvent implements SimulationEvent {
 	}
 
 	public enum DetectionType {
-		ENTER, EXIT, PRESENT 
+		ENTER, EXIT, PRESENT, NOT_PRESENT 
 	}
 	
 	public void set(String sourceId, double simulationTimeSeconds, String sensorId, String objectId, DetectionType type) {
@@ -59,6 +59,10 @@ public class DetectionEvent implements SimulationEvent {
 	public DetectionType getType() {
 		return type;
 	}
-	
 
+	@Override
+	public String toString() {
+		return "DetectionEvent [sourceId=" + sourceId + ", simulationTimeSeconds=" + simulationTimeSeconds
+				+ ", sensorId=" + sensorId + ", objectId=" + objectId + ", type=" + type + "]";
+	}
 }
