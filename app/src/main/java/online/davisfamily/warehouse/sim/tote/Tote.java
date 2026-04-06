@@ -60,7 +60,7 @@ public class Tote implements TrackableObject {
 	}
 	
 	public void reserveForTransfer(TransferZoneMachine machine) {
-		if (reservedByMachineId == null) reservedByMachineId = machine.getId();
+		if (machine != null) reservedByMachineId = machine.getId();
 	}
 	
 	public ToteMotionState getInteractionMode() {

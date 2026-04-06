@@ -11,7 +11,6 @@ import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensor;
 import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensorAreaImpl;
 import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
-import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>{
@@ -19,6 +18,7 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	public enum TransferZoneState {
 		IDLE,
 		RESERVED,
+		ACTIVE,
 		READY_LEFT,
 		READY_RIGHT,
 		TRANSFERRING,
