@@ -301,15 +301,16 @@ public class RenderableObject {
 		this.selectionTarget = selectionTarget;
 	}
 	
-	public static List<RenderableObject> traverseAndExtractAllWithIdStartsWith(RenderableObject start, String id, List<RenderableObject> result) {
+	// utility class to find all the children of an object starting with the the given string 
+	public static List<RenderableObject> traverseAndExtractAllWithIdStartingWith(RenderableObject start, String idStart, List<RenderableObject> result) {
 	    
-        if (start.id.startsWith(id)) result.add(start);
+        if (start.id.startsWith(idStart)) result.add(start);
         
         if (start.children == null || start.children.size() == 0)
         	return result;
         
         for (RenderableObject ro : start.children) {
-        	traverseAndExtractAllWithIdStartsWith(ro, id, result);
+        	traverseAndExtractAllWithIdStartingWith(ro, idStart, result);
         }
 
         return result;
