@@ -1,15 +1,18 @@
 package online.davisfamily.warehouse.sim.transfer;
 
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
+import online.davisfamily.threedee.sim.framework.events.SimulationEvent;
 import online.davisfamily.threedee.sim.framework.events.SimulationEventListener;
+import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
-public class TransferZoneController implements SimulationController, SimulationEventListener<DetectionEvent>{
+public class TransferZoneController implements SimulationController{
 	private final TransferZoneMachine machine;
 	private final TransferDecisionStrategy decisionStrategy;
 	
@@ -19,21 +22,36 @@ public class TransferZoneController implements SimulationController, SimulationE
 		this.decisionStrategy = decisionStrategy;
 	}
 	
-	@Override
-	public void handleEvent(DetectionEvent event, SimulationContext context) {
+    public SimulationEventListener<DetectionEvent> detectionHandler() {
+        return (event, context) -> handleDetection(event, context);
+    }
+
+    public SimulationEventListener<TransferCompletedEvent> completionHandler() {
+        return (event, context) -> handleTransferCompleted(event, context);
+    }
+	
+	public void handleDetection(DetectionEvent  event, SimulationContext context) {
 		if (machine.getApproachSensorId().equals(event.getSensorId())) handleApproachSensor(event, context);
 		if (machine.getWindowSensorId().equals(event.getSensorId())) handleWindowSensor(event, context);
-
+	}
+	
+	public void handleTransferCompleted(TransferCompletedEvent  event, SimulationContext context) {
+		if (!machine.getId().equals(event.sourceId)) return;
+		
+		if (!event.toteId.equals(machine.getReservedToteId())) return;
+		machine.setReservedToteId(null);
+		machine.setActiveDirection(null);
+		machine.transitionTo(TransferZoneState.IDLE);
 	}
 	
 	private void handleApproachSensor(DetectionEvent event, SimulationContext context) {
-		DetectionType d = event.getType();
+		DetectionType d = event.getDetectionType();
 		Tote t = (Tote) context.getTrackedObjects().stream()
 				.filter(to -> to.getId().equals(event.getObjectId()))
 				.findAny()
 				.orElse(null);
 
-		if (event.getType() != DetectionType.ENTER) return;
+		if (event.getDetectionType() != DetectionType.ENTER) return;
 		if (machine.getState() != TransferZoneState.IDLE) return;
 		// could check the detected object is a Tote here but not worth it yet
 		
@@ -44,29 +62,26 @@ public class TransferZoneController implements SimulationController, SimulationE
 		machine.setActiveDirection(decision.get());
 		machine.transitionTo(TransferZoneState.RESERVED);
 		t.reserveForTransfer(machine);
-		System.out.println("[Approach Window Detection] " + machine);
-		System.out.println("[Approach Window Detection] " + t);
-		System.out.println("[Approach Window Detection] " + event);
 	}
 	private void handleWindowSensor(DetectionEvent event, SimulationContext context) {
-		DetectionType d = event.getType();
+
 		Tote t = (Tote) context.getTrackedObjects().stream()
 				.filter(to -> to.getId().equals(event.getObjectId()))
 				.findAny()
 				.orElse(null);
 
-		if (d == DetectionType.EXIT) {
-			machine.clearActiveTransfer();
-			t.reserveForTransfer(null);
-		} else {
-			if (event.getType() != DetectionType.ENTER) return;
-			if (machine.getState() != TransferZoneState.RESERVED) return;
-			machine.transitionTo(TransferZoneState.ACTIVE);
+		if (machine.getState() == TransferZoneState.RESERVED && t.getId().equals(machine.getReservedToteId())) {
+			machine.transitionTo(TransferZoneState.TRANSFERRING);
+			RouteSegment targetSegment = machine.getTransferZone().getTargetSegment();
+			float targetDistance = 0f;
+			t.beginTransfer(machine.getId(), targetSegment, targetDistance, 0.35);
 		}
 		
-		System.out.println("[Window Detection] " + machine);
-		System.out.println("[Window Detection] " + t);
-		System.out.println("[Window Detection] " + event);
+		DetectionType d = event.getDetectionType();
+
+		if (event.getDetectionType() != DetectionType.ENTER) return;
+		if (machine.getState() != TransferZoneState.RESERVED) return;
+		machine.transitionTo(TransferZoneState.ACTIVE);
 	}
 
 	@Override

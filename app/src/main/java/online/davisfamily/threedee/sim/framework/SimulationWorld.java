@@ -1,6 +1,7 @@
 package online.davisfamily.threedee.sim.framework;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,6 @@ public class SimulationWorld {
 	private final List<SimulationController> controllers = new ArrayList<>();
 	// Map holds a list of event listeners keyed on the event class 
 	private final Map<Class<? extends SimulationEvent>, List<SimulationEventListener<? extends SimulationEvent>>> listeners = new HashMap<>();
-
 	public void update(double dtSeconds) {
 		context.addToSimulationTimeSeconds(dtSeconds);
 		updateSimObjects(dtSeconds);

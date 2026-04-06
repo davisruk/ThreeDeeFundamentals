@@ -1,7 +1,8 @@
 package online.davisfamily.threedee.sim.framework.events;
 
 public class DetectionEvent implements SimulationEvent {
-    private String sourceId;
+
+	private String sourceId;
     private double simulationTimeSeconds;
     private String sensorId;
     private String objectId;
@@ -56,8 +57,13 @@ public class DetectionEvent implements SimulationEvent {
 		return objectId;
 	}
 
-	public DetectionType getType() {
+	public DetectionType getDetectionType() {
 		return type;
+	}
+
+    @Override
+	public String getType() {
+		return "DetectionEvent";
 	}
 
 	@Override

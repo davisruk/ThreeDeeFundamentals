@@ -18,14 +18,14 @@ public class MembershipSensorController implements SimulationController, Simulat
 	public void handleEvent(DetectionEvent event, SimulationContext context) {
 
         String secs = String.format("%.3f", event.getSimulationTimeSeconds());
-    	if (event.getType() == DetectionType.ENTER) {
+    	if (event.getDetectionType() == DetectionType.ENTER) {
         	System.out.println("MembershipSensorController (" + event.getSourceId() + "): Object: " + event.getObjectId() + " entered at " + secs);
         }
 
-        if (event.getType() == DetectionType.EXIT) {
+        if (event.getDetectionType() == DetectionType.EXIT) {
         	System.out.println("MembershipSensorController (" + event.getSourceId() + "): Object: " + event.getObjectId() + " left at " + secs);
         }
-        if (event.getType() == DetectionType.PRESENT) {
+        if (event.getDetectionType() == DetectionType.PRESENT) {
         	//System.out.println("MembershipSensorController (" + evt.sourceId() + "): Object: " + evt.objectId() + " still present at " + secs);
 	        
 	    }		

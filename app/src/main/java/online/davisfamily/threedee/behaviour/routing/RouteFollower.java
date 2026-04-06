@@ -69,7 +69,7 @@ public class RouteFollower {
         return candidates.get(0);
     }
     
-	private RouteFollowerSnapshot buildSnapshot() {
+	public RouteFollowerSnapshot buildSnapshot() {
 		PathSegment3 geometry = currentSegment.getGeometry(); 
 		var pos = geometry.sampleByDistance(distanceAlongSegment);
 		var forward = geometry.sampleOrientationDirectionByDistance(distanceAlongSegment);
