@@ -18,15 +18,19 @@ public class Tote implements TrackableObject {
 	private final String id;
 	private final RouteFollower routeFollower;
 	private RouteFollowerSnapshot lastRouteSnapshot;
+	private final Vec3 offsets;
+	private Vec3 cachedPos;
 	private final ObjectTransformation transformation;
 	private ToteMotionState interactionMode = ToteMotionState.MOVING;
 	private String reservedByMachineId;
 	
-	public Tote(String id, RouteFollower routeFollower, ObjectTransformation transformation) {
+	public Tote(String id, RouteFollower routeFollower, ObjectTransformation transformation, Vec3 offsets) {
 		super();
 		this.id = id;
 		this.routeFollower = routeFollower;
 		this.transformation = transformation;
+		this.offsets = offsets;
+		this.cachedPos = new Vec3();
 	}
 
 	public ObjectTransformation getTransformation() {
@@ -49,7 +53,8 @@ public class Tote implements TrackableObject {
 	}
 	
 	private void applySnapshot(RouteFollowerSnapshot snapshot) {
-		transformation.setTranslation(snapshot.position());
+		cachedPos.set(snapshot.position()); 
+		transformation.setTranslation(cachedPos.add(offsets));
 	    transformation.setAxisRotation(Axis.Y, Vec3.yawFromDirection(snapshot.forward())); // yaw
 		//transformation.setAxisRotation(Axis.X, snapshot.up().x); //pitch
 	}
