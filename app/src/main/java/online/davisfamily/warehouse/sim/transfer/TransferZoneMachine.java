@@ -27,9 +27,9 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 		BLOCKED
 	}
 	
-	public enum TransferDirection {
-		LEFT,
-		RIGHT
+	public enum TransferDecision {
+		BRANCH,
+		CONTINUE
 	}
 	
 	private final String id;
@@ -37,7 +37,7 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	private String windowSensorId;
 	private TransferZoneState state = TransferZoneState.IDLE;
 	private String reservedToteId;
-	private TransferDirection activeDirection;
+	private TransferDecision activeDirection;
 	private double timeInStateSeconds;
 	private final TransferZone transferZone;
 	
@@ -94,11 +94,11 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 		this.reservedToteId = reservedToteId;
 	}
 
-	public TransferDirection getActiveDirection() {
+	public TransferDecision getActiveDirection() {
 		return activeDirection;
 	}
 
-	public void setActiveDirection(TransferDirection activeDirection) {
+	public void setActiveDirection(TransferDecision activeDirection) {
 		this.activeDirection = activeDirection;
 	}
 

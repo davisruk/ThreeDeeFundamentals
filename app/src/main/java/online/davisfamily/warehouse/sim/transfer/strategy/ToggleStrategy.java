@@ -4,7 +4,7 @@ import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
-import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDirection;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDecision;
 
 public class ToggleStrategy implements TransferDecisionStrategy {
 	private boolean transfer = true;
@@ -16,8 +16,8 @@ public class ToggleStrategy implements TransferDecisionStrategy {
 	}
 
 	@Override
-	public Optional<TransferDirection> decide(Tote tote, TransferZoneMachine machine) {
-		Optional<TransferDirection> ret = transfer ? Optional.of(TransferDirection.LEFT):Optional.of(TransferDirection.RIGHT);
+	public Optional<TransferDecision> decide(Tote tote, TransferZoneMachine machine) {
+		Optional<TransferDecision> ret = transfer ? Optional.of(TransferDecision.BRANCH):Optional.of(TransferDecision.CONTINUE);
 		transfer = !transfer;
 		return ret;
 	}

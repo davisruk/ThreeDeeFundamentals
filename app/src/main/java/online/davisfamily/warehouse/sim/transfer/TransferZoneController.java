@@ -9,6 +9,7 @@ import online.davisfamily.threedee.sim.framework.events.SimulationEvent;
 import online.davisfamily.threedee.sim.framework.events.SimulationEventListener;
 import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDecision;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
@@ -60,9 +61,12 @@ public class TransferZoneController implements SimulationController{
 		
 		machine.setReservedToteId(t.getId());
 		machine.setActiveDirection(decision.get());
-		machine.transitionTo(TransferZoneState.RESERVED);
-		t.reserveForTransfer(machine);
+		if (machine.getActiveDirection().equals(TransferDecision.BRANCH)) {
+			machine.transitionTo(TransferZoneState.RESERVED);
+			t.reserveForTransfer(machine);
+		}
 	}
+	
 	private void handleWindowSensor(DetectionEvent event, SimulationContext context) {
 
 		Tote t = (Tote) context.getTrackedObjects().stream()

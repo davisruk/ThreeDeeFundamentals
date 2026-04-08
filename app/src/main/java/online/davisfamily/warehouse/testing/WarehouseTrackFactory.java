@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.testing;
 
 import java.util.List;
 
+import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -9,8 +10,8 @@ import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
 import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
-import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
+import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.cylinder.CylinderFactory;
 import online.davisfamily.threedee.path.BezierSegment3;
@@ -20,18 +21,12 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
-import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
-import online.davisfamily.threedee.sim.framework.objects.sensors.Sensor;
-import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensor;
-import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensorAreaImpl;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
-import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
 import online.davisfamily.warehouse.sim.tote.Tote;
-import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
@@ -216,6 +211,15 @@ public class WarehouseTrackFactory {
 	            true,
 	            topConnectionClearance
 	    );
+	    
+	    PathSegment3 geometry = bottom.getGeometry(); 
+	    System.out.println(String.format("Bottom Length: %.3f", bottom.length()));
+	    System.out.println(String.format("Bottom Sample 0: %s", geometry.sampleByDistance(0f)));
+
+	    for (RouteConnection rc: bottom.getPreviousConnections()) {
+		    System.out.println(String.format("Bottom Entry Distance %s : %s", rc.getSegment().getLabel(), rc.getSegment().getGeometry().sampleByDistance(0f)));
+	    }
+	    
 	    
 	    OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
 	    OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);

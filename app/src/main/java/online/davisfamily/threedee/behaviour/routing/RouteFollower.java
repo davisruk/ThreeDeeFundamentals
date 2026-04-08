@@ -48,8 +48,12 @@ public class RouteFollower {
 			if (next == null) {
 				break;
 			}
+
+			// special case for linking segments
+			// set the distance to the point of entry and stop looping 
 			currentSegment = next.getSegment();
-			distanceAlongSegment = 0f;
+			distanceAlongSegment = next.getEntryDistance();
+			break;
 		}
 	}
 	
