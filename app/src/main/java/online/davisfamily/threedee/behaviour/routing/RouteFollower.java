@@ -35,6 +35,7 @@ public class RouteFollower {
 	private void advanceDistance(double dtSeconds) {
 		double distanceToMove = speedUnitsPerSecond * dtSeconds;
 		float segmentLength = currentSegment.length();
+
 		while (distanceToMove > 0 && currentSegment != null) {
 			double remaining = segmentLength - distanceAlongSegment;
 			if (distanceToMove < remaining) {

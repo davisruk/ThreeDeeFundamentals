@@ -99,7 +99,8 @@ public class WarehouseTrackFactory {
 
 	    RouteSegment top = builder.segment("top", new LinearSegment3(
 	            new Vec3(leftX, 0f, topZ),
-	            new Vec3(rightX, 0f, topZ)
+	            new Vec3(rightX, 0f, topZ),
+	            false
 	    ));
 
 	    RouteSegment rightReturn = builder.segment("rightReturn", new BezierSegment3(
@@ -111,7 +112,8 @@ public class WarehouseTrackFactory {
 
 	    RouteSegment bottom = builder.segment("bottom", new LinearSegment3(
 	            new Vec3(rightX, 0f, bottomZ),
-	            new Vec3(leftX, 0f, bottomZ)
+	            new Vec3(leftX, 0f, bottomZ),
+	            false
 	    ));
 
 	    RouteSegment leftReturn = builder.segment("leftReturn", new BezierSegment3(
@@ -126,12 +128,14 @@ public class WarehouseTrackFactory {
 
 	    RouteSegment link1 = builder.segment("link1", new LinearSegment3(
 	            new Vec3(link1X, 0f, topZ - topLinkClearance),
-	            new Vec3(link1X, 0f, bottomZ + bottomLinkClearance)
+	            new Vec3(link1X, 0f, bottomZ + bottomLinkClearance),
+	            true
 	    ));
 
 	    RouteSegment link2 = builder.segment("link2", new LinearSegment3(
 	            new Vec3(link2X, 0f, topZ - topLinkClearance),
-	            new Vec3(link2X, 0f, bottomZ + bottomLinkClearance)
+	            new Vec3(link2X, 0f, bottomZ + bottomLinkClearance),
+	            true
 	    ));
 
 	    // Visual trim on the link segments themselves
@@ -241,7 +245,7 @@ public class WarehouseTrackFactory {
 	    float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight + 0.02f : 0f;
 	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
-	    Tote st = new Tote(rTote.id, rtf, rTote.transformation, toteRenderOffsets);
+	    Tote st = new Tote(rTote.id, rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
 	    
 	    float member_start = 1f;
 	    for (TransferZone tz: top.getTransferZones()) {
@@ -303,13 +307,15 @@ public class WarehouseTrackFactory {
 		// Upper track: +X
 		PathSegment3 upperGeometry = new LinearSegment3(
 		    new Vec3(leftX, 0f, upperZ),
-		    new Vec3(rightX, 0f, upperZ)
+		    new Vec3(rightX, 0f, upperZ),
+		    false
 		);
 
 		// Lower track: -X (reverse direction)
 		PathSegment3 lowerGeometry = new LinearSegment3(
 		    new Vec3(rightX, 0f, lowerZ),
-		    new Vec3(leftX, 0f, lowerZ)
+		    new Vec3(leftX, 0f, lowerZ),
+		    false
 		);		
 		RouteSceneBuilder builder = new RouteSceneBuilder();
 		RouteSegment upper = builder.segment("upper", upperGeometry);
@@ -391,7 +397,7 @@ public class WarehouseTrackFactory {
 */	
 	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
-	    Tote st = new Tote("tote1", rtf, rTote.transformation, toteRenderOffsets);
+	    Tote st = new Tote("tote1", rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
 		
 		for (RenderableObject track : tracks) {
 		    objects.add(track);
