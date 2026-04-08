@@ -4,30 +4,62 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Vec3;
 
 public class TransferMotionState {
+	
+	public enum TransferMotionPhase {
+		WAITING_FOR_ALIGNMENT,
+		LATERAL_TRANSFER
+	}
 	private final String machineId;
-	private final Vec3 startPosition;
-	private final Vec3 endPosition;
+	private final RouteSegment sourceSegment;
 	private final RouteSegment targetSegment;
+	private final float sourceTransferCentreDistance;
 	private final float targetDistanceAlongSegment;
-	
-	private double elapsedSeconds;
+	private Vec3 startPosition;
+	private Vec3 endPosition;
+	private final float preservedYawRadians;
 	private final double durationSeconds;
+	private double elapsedSeconds;
+	private TransferMotionPhase phase = TransferMotionPhase.WAITING_FOR_ALIGNMENT;
 	
-	public TransferMotionState(String machineId, Vec3 startPosition, Vec3 endPosition, RouteSegment routeSegment,
-			float targetDistanceAlongSegment, double durationSeconds) {
+	public TransferMotionState(String machineId, RouteSegment sourceSegment, RouteSegment targetSegment,
+			float sourceTransferCentreDistance, float targetDistanceAlongSegment, Vec3 startPosition, Vec3 endPosition,
+			float preservedYawRadians, double durationSeconds) {
 		super();
 		this.machineId = machineId;
+		this.sourceSegment = sourceSegment;
+		this.targetSegment = targetSegment;
+		this.sourceTransferCentreDistance = sourceTransferCentreDistance;
+		this.targetDistanceAlongSegment = targetDistanceAlongSegment;
 		this.startPosition = startPosition;
 		this.endPosition = endPosition;
-		this.targetSegment = routeSegment;
-		this.targetDistanceAlongSegment = targetDistanceAlongSegment;
+		this.preservedYawRadians = preservedYawRadians;
 		this.durationSeconds = durationSeconds;
 	}
-	
-	public void update(double dtSeconds) {
+
+	public void updateElapsed(double dtSeconds) {
 		elapsedSeconds+=dtSeconds;
 	}
 	
+	public TransferMotionPhase getPhase() {
+		return phase;
+	}
+
+	public void setPhase(TransferMotionPhase phase) {
+		this.phase = phase;
+	}
+
+	public RouteSegment getSourceSegment() {
+		return sourceSegment;
+	}
+
+	public float getSourceTransferCentreDistance() {
+		return sourceTransferCentreDistance;
+	}
+
+	public float getPreservedYawRadians() {
+		return preservedYawRadians;
+	}
+
 	public float getProgress() {
 		return (float) Math.min(1.0, elapsedSeconds / durationSeconds);
 	}
@@ -62,6 +94,14 @@ public class TransferMotionState {
 
 	public double getDurationSeconds() {
 		return durationSeconds;
+	}
+
+	public void setStartPosition(Vec3 startPosition) {
+		this.startPosition = startPosition;
+	}
+
+	public void setEndPosition(Vec3 endPosition) {
+		this.endPosition = endPosition;
 	}
 	
 }

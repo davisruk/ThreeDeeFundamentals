@@ -208,7 +208,7 @@ public class WarehouseTrackFactory {
 	            linkOpeningLength,
 	            GuideSide.RIGHT,
 	            GuideSide.LEFT,
-	            true,
+	            false,
 	            topConnectionClearance
 	    );
 	    
@@ -245,7 +245,7 @@ public class WarehouseTrackFactory {
 	    
 	    float member_start = 1f;
 	    for (TransferZone tz: top.getTransferZones()) {
-	    	TransferZoneMachine.createTransferZoneMachine(sim, top, member_start, tz, new ToggleStrategy(false));
+	    	TransferZoneMachine.createTransferZoneMachine(sim, top, member_start, tz, new ToggleStrategy(true));
     	    // hack as we know there are only 2 tzs
     	    member_start = tz.getEndDistance();
         }

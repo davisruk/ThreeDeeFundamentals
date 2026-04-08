@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.transfer;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
+import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
@@ -73,18 +74,20 @@ public class TransferZoneController implements SimulationController{
 				.filter(to -> to.getId().equals(event.getObjectId()))
 				.findAny()
 				.orElse(null);
+		if (event.getDetectionType() != DetectionType.ENTER) return;
+		if (machine.getState() != TransferZoneState.RESERVED) return;
 
 		if (machine.getState() == TransferZoneState.RESERVED && t.getId().equals(machine.getReservedToteId())) {
 			machine.transitionTo(TransferZoneState.TRANSFERRING);
-			RouteSegment targetSegment = machine.getTransferZone().getTargetSegment();
-			float targetDistance = 0f;
-			t.beginTransfer(machine.getId(), targetSegment, targetDistance, 0.35);
+			TransferZone tz = machine.getTransferZone();
+			t.beginTransfer(machine.getId(),
+					tz.getTargetSegment(),
+					tz.getSourceSegment(),
+					tz.getCentrePoint(),
+					tz.getTargetStartDistance(),
+					0.35);
 		}
 		
-		DetectionType d = event.getDetectionType();
-
-		if (event.getDetectionType() != DetectionType.ENTER) return;
-		if (machine.getState() != TransferZoneState.RESERVED) return;
 		machine.transitionTo(TransferZoneState.ACTIVE);
 	}
 

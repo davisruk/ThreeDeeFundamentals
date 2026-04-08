@@ -12,6 +12,7 @@ import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
 import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionState;
+import online.davisfamily.warehouse.sim.transfer.TransferMotionState.TransferMotionPhase;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 
 public class Tote implements TrackableObject {
@@ -62,20 +63,44 @@ public class Tote implements TrackableObject {
 	}
 	
 	private void updateTransferMotion(SimulationContext context, double dtSeconds) {
-		transferMotionState.update(dtSeconds);
-		float t = smoothstep(transferMotionState.getProgress());
-		Vec3 start = transferMotionState.getStartPosition();
-		Vec3 end = transferMotionState.getEndPosition();
-		lerpPos.lerp(start, end, t);
-		transformation.setTranslation(lerpPos);
-		applyTransferOrientation();
-		if (transferMotionState.isComplete()) {
-			completeTransfer(context);
+		if (transferMotionState.getPhase() == TransferMotionPhase.WAITING_FOR_ALIGNMENT) {
+			updateAlignmentPhase(context, dtSeconds);
+		}
+		
+		if (transferMotionState.getPhase() == TransferMotionPhase.LATERAL_TRANSFER) {
+			updateLateralTransferPhase(context, dtSeconds);
 		}
 	}
 	
-	private void applyTransferOrientation() {
-		// do nothing, keep current orientation
+	public void updateAlignmentPhase(SimulationContext context, double dtSeconds) {
+		
+		lastRouteSnapshot = routeFollower.advance(dtSeconds, false);
+		applySnapshot(lastRouteSnapshot);
+		
+		// assume tote is centred in calculations if not implement below 
+		//float toteCentreDistance = getToteCentreDistanceAlongSegment(snapshot);
+		float toteCentreDistance = lastRouteSnapshot.distanceAlongSegment();
+		if (toteCentreDistance >= transferMotionState.getSourceTransferCentreDistance()) {
+			cachedPos.setXYZ(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
+	        transferMotionState.setStartPosition(cachedPos);
+			cachedPos = transferMotionState.getTargetSegment().getGeometry().sampleByDistance(transferMotionState.getTargetDistanceAlongSegment());
+	        transferMotionState.setEndPosition(cachedPos);
+	        transferMotionState.setPhase(TransferMotionPhase.LATERAL_TRANSFER);
+		}
+	}
+	
+	public void updateLateralTransferPhase(SimulationContext context, double dtSeconds) {
+		transferMotionState.updateElapsed(dtSeconds);
+		float t = smoothstep(transferMotionState.getProgress());
+		Vec3 start = transferMotionState.getStartPosition();
+		Vec3 end = transferMotionState.getEndPosition();
+		start.lerp(start, end, t);
+		transformation.setTranslation(start);
+		// preserve yaw
+		transformation.setAxisRotation(Axis.Y, transferMotionState.getPreservedYawRadians());
+		if (transferMotionState.isComplete()) {
+			completeTransfer(context);
+		}
 	}
 	
 	private void completeTransfer(SimulationContext context) {
@@ -88,9 +113,6 @@ public class Tote implements TrackableObject {
 		controllingMachineId = null;
 		interactionMode = ToteMotionState.MOVING;
 		transferMotionState = null;
-		RouteFollowerSnapshot snapshot = routeFollower.buildSnapshot();
-		lastRouteSnapshot = snapshot;
-		applySnapshot(snapshot);
 		context.publish(new TransferCompletedEvent(machineId, context.getSimulationTimeSeconds(),id));
 	}
 	
@@ -137,22 +159,27 @@ public class Tote implements TrackableObject {
 				+ reservedByMachineId + "]";
 	}
 	
-	public void beginTransfer(String machineId, RouteSegment targetSegment, float targetDistanceAlongSegment, double durationSeconds) {
+	public void beginTransfer(String machineId, RouteSegment targetSegment, RouteSegment sourceSegment, float sourceTransferCenterDistance, float targetDistanceAlongSegment, double durationSeconds) {
 		if (!machineId.equals(reservedByMachineId)) return;
 		
 		RouteFollowerSnapshot snap = lastRouteSnapshot;
 		if (snap == null) return;
-		Vec3 start = snap.position();
-		Vec3 end = targetSegment.getGeometry().sampleByDistance(targetDistanceAlongSegment);
+
+		//cachedPos.setXYZ(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
+		Vec3 startPosition = new Vec3(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
+		Vec3 targetPosition = targetSegment.getGeometry().sampleByDistance(targetDistanceAlongSegment);
 		this.controllingMachineId = machineId;
 		this.interactionMode = ToteMotionState.TRANSFERRING;
-		this.transferMotionState = new TransferMotionState(
-				machineId,
-				Vec3.copy(start),
-				Vec3.copy(end),
-				targetSegment,
-				targetDistanceAlongSegment,
-				durationSeconds
-		);
+	    this.transferMotionState = new TransferMotionState(
+	            machineId,
+	            sourceSegment,
+	            targetSegment,
+	            sourceTransferCenterDistance,
+	            targetDistanceAlongSegment,
+	            startPosition,
+	            targetPosition,
+	            transformation.angleY,
+	            durationSeconds
+	    );
 	}
 }

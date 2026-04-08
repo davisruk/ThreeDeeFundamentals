@@ -15,7 +15,8 @@ public class TransferZone {
     private final TransferDecisionStrategy decisionStrategy;
     private final GuideSide sourceOpenSide;
     private final GuideSide targetOpenSide;
-
+    private final float centrePoint;
+    
     public TransferZone(
             String id,
     		float startDistance,
@@ -51,9 +52,13 @@ public class TransferZone {
         this.sourceOpenSide = sourceOpenSide;
         this.targetOpenSide = targetOpenSide;
         this.decisionStrategy = decisionStrategy;
+        this.centrePoint = startDistance + length * 0.5f;
     }
 
     
+    public float getCentrePoint() {
+    	return centrePoint;
+    }
     public String getId() {
 		return id;
 	}

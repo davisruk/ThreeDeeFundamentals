@@ -7,7 +7,7 @@ import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDecision;
 
 public class ToggleStrategy implements TransferDecisionStrategy {
-	private boolean transfer = true;
+	private boolean transfer = false;
 
 	
 	public ToggleStrategy(boolean initialState) {
