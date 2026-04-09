@@ -37,7 +37,7 @@
   - Renderable scene node with mesh, transform, child objects, and optional visual behaviours.
 - `RouteSegment`
   - Represents a path segment with geometry and graph connections.
-  - Also currently carries transfer-zone and warehouse rendering metadata.
+  - Owns only generic routing topology and path geometry.
 - `RouteConnection`
   - Connects one segment to another with a target entry distance.
 - `RouteFollower`
@@ -56,9 +56,6 @@
   - Detects tracked objects entering/present/exiting a configured route-distance window.
 - `WindowSensor`
   - Detects tracked objects inside the transfer window itself.
-- `RouteSceneBuilder`
-  - Builder for route segments and their warehouse-specific track/transfer metadata.
-  - Despite package location, this is not purely generic.
 - `RouteTrackFactory` / warehouse track rendering classes
   - Build conveyor/track render meshes from route definitions plus warehouse `TrackSpec`.
 
@@ -163,9 +160,13 @@
 
 ### Current Boundary Tension In Code
 
-- `RouteSegment` currently includes warehouse rendering/guide metadata, not just generic routing concerns.
-- `RouteSceneBuilder` lives under `threedee.behaviour.routing` but depends heavily on warehouse track and transfer concepts.
-- `TransferZone` is located under `threedee` but depends on warehouse-specific strategy and guide concepts.
+- The core generic/warehouse ownership split is substantially cleaner than earlier sessions:
+  - generic route topology lives under `threedee.behaviour.routing`
+  - warehouse transfer topology/runtime lives under `warehouse.sim.transfer`
+  - warehouse track rendering lives under `warehouse.rendering.model.tracks`
+- The main remaining top-level coupling is the runnable example entry point:
+  - `SoftwareRenderer` in `threedee` directly boots the warehouse `TestScene`
+  - this is acceptable for the current single-example application, but it is still application-level coupling rather than a framework/plugin boundary
 
 ## Important Constraints and Assumptions
 
@@ -211,4 +212,5 @@
 - `TransferZone` now lives under `warehouse.sim.transfer`; the warehouse transfer domain owns its topology/config object.
 - `RouteTrackFactory` now lives under `warehouse.rendering.model.tracks`; warehouse track rendering owns the renderable track factory and `SpecAndSegment`.
 - Remaining generic/warehouse boundary work still identified:
-  - none currently called out in the generic/warehouse ownership split
+  - no major ownership leaks are currently called out inside the route/transfer/rendering code
+  - the current application entry point still directly selects the warehouse example scene
