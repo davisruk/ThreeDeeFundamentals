@@ -184,12 +184,12 @@
 ## Known Complexities or Risks
 
 - Transfer timing is fragile:
-  - lateral transfer consumes time, but downstream route progress is not continuously accumulated during the transfer
-  - this likely contributes to the visible hesitation after transfer completion
-- Tote yaw/orientation handling is fragile:
-  - normal updates recompute yaw from route direction
-  - transfer-specific yaw preservation is implemented with ad hoc override logic
-  - transitions from link segments back to non-link segments are especially easy to get wrong
+  - the lateral transfer handoff is improved, but the visual transition from transfer zone onto a link still appears to speed up
+  - that transition likely still needs smoothing rather than a simple snap between alignment and link-follow motion
+- Tote yaw/orientation handling has been reworked:
+  - tote facing is now modelled separately from route travel direction
+  - opposite-running target tracks and link traversal preserve world-facing correctly in the tested scenarios
+  - additional runtime testing may still reveal edge cases in more complex transfer layouts
 - `RouteFollower` connection choice is simplistic:
   - multiple candidates are currently resolved by taking the first one
 - Warehouse concerns bleed into generic routing classes, making future engine/framework separation harder.
@@ -211,6 +211,10 @@
 - `TargetGuideOpening` was removed after verification; it was unused in the current codebase.
 - `TransferZone` now lives under `warehouse.sim.transfer`; the warehouse transfer domain owns its topology/config object.
 - `RouteTrackFactory` now lives under `warehouse.rendering.model.tracks`; warehouse track rendering owns the renderable track factory and `SpecAndSegment`.
+- Tote motion now separates route `TravelDirection` from tote-facing orientation.
+- Transfer onto link segments now preserves world yaw through the link and resolves back to route-relative facing on exit.
 - Remaining generic/warehouse boundary work still identified:
   - no major ownership leaks are currently called out inside the route/transfer/rendering code
   - the current application entry point still directly selects the warehouse example scene
+- Recommended next step for a future session:
+  - investigate and smooth the transition from transfer zone into the link segment, which currently appears to speed up visually

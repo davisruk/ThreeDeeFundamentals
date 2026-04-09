@@ -17,6 +17,11 @@ import online.davisfamily.warehouse.sim.transfer.TransferMotionState.TransferMot
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 
 public class Tote implements TrackableObject {
+
+	public enum FacingDirection {
+		WITH_TRAVEL,
+		AGAINST_TRAVEL
+	}
 	
 	public enum ToteMotionState {
 		MOVING, HELD, BLOCKED, TRANSFERRING
@@ -31,12 +36,12 @@ public class Tote implements TrackableObject {
 	private Vec3 cachedPos;
 	private final ObjectTransformation transformation;
 	private ToteMotionState interactionMode = ToteMotionState.MOVING;
+	private FacingDirection facingDirection = FacingDirection.WITH_TRAVEL;
+	private boolean fixedFacingYawActive = false;
+	private float fixedFacingYawRadians;
 	private String reservedByMachineId;
 	private TransferMotionState transferMotionState;
-	private boolean yawOverrideActive = false;
-	private float overriddenYawRadians;
 	private final float yawOffsetRadians;
-	private boolean reverseYawOnNextNonLinkSnapshot = false;
 	
 	public Tote(String id, RouteFollower routeFollower, ObjectTransformation transformation, Vec3 offsets, float yawOffsetRadians) {
 		super();
@@ -46,24 +51,6 @@ public class Tote implements TrackableObject {
 		this.offsets = offsets;
 		this.cachedPos = new Vec3();
 		this.yawOffsetRadians = yawOffsetRadians;
-	}
-
-	public void enableYawOverride(float yawRadians) {
-		yawOverrideActive = true;
-		overriddenYawRadians = yawRadians;
-	}
-	
-	public void disableYawOverride() {
-		yawOverrideActive = false;
-	}
-
-	
-	public boolean isYawOverrideActive() {
-		return yawOverrideActive;
-	}
-
-	public float getOverriddenYawRadians() {
-		return overriddenYawRadians;
 	}
 
 	public ObjectTransformation getTransformation() {
@@ -82,11 +69,12 @@ public class Tote implements TrackableObject {
 		}
 		RouteFollowerSnapshot prev = lastRouteSnapshot;
 		lastRouteSnapshot = routeFollower.advance(dtSeconds, isMotionBlocked());
-		if (prev != null && 
-			prev.currentSegment().getGeometry().isLinkSegment() &&
-			!lastRouteSnapshot.currentSegment().getGeometry().isLinkSegment()) {
-			reverseYawOnNextNonLinkSnapshot = true;
-			disableYawOverride();
+		if (fixedFacingYawActive
+				&& prev != null
+				&& prev.currentSegment().getGeometry().isLinkSegment()
+				&& !lastRouteSnapshot.currentSegment().getGeometry().isLinkSegment()) {
+			facingDirection = determineFacingDirectionForWorldYaw(lastRouteSnapshot, fixedFacingYawRadians);
+			fixedFacingYawActive = false;
 		}
 		applySnapshot(lastRouteSnapshot);
 	}
@@ -112,7 +100,7 @@ public class Tote implements TrackableObject {
 		if (toteCentreDistance >= transferMotionState.getSourceTransferCentreDistance()) {
 			cachedPos.setXYZ(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
 	        transferMotionState.setStartPosition(cachedPos);
-			cachedPos = transferMotionState.getTargetSegment().getGeometry().sampleByDistance(transferMotionState.getTargetDistanceAlongSegment());
+			cachedPos = transferMotionState.getTargetSegment().getGeometry().sampleByDistance(transferMotionState.getCurrentTargetDistanceAlongSegment());
 	        transferMotionState.setEndPosition(cachedPos);
 	        transferMotionState.setPhase(TransferMotionPhase.LATERAL_TRANSFER);
 		}
@@ -125,13 +113,17 @@ public class Tote implements TrackableObject {
 
 		double timeUsed = Math.min(dtSeconds, remainingTransferTime);
 
+		transferMotionState.advanceTargetDistance(routeFollower.getSpeedUnitsPerSecond(), timeUsed);
+		transferMotionState.setEndPosition(
+				transferMotionState.getTargetSegment().getGeometry()
+						.sampleByDistance(transferMotionState.getCurrentTargetDistanceAlongSegment()));
 		transferMotionState.updateElapsed(timeUsed);
 
 		float t = smoothstep(transferMotionState.getProgress());
 		Vec3 start = transferMotionState.getStartPosition();
 		Vec3 end = transferMotionState.getEndPosition();
-		start.lerp(start, end, t);
-		transformation.setTranslation(start);
+		cachedPos.lerp(start, end, t);
+		transformation.setTranslation(cachedPos);
 
 		if (transferMotionState.isComplete()) {
 		    completeTransfer(context);
@@ -150,10 +142,16 @@ public class Tote implements TrackableObject {
 	
 	private void completeTransfer(SimulationContext context) {
 		RouteSegment targetSegment = transferMotionState.getTargetSegment();
-		float targetDistance = transferMotionState.getTargetDistanceAlongSegment();
+		float targetDistance = transferMotionState.getCurrentTargetDistanceAlongSegment();
 		String machineId = transferMotionState.getMachineId();
 		routeFollower.setCurrentSegment(targetSegment);
 		routeFollower.setDistanceAlongSegment(targetDistance);
+		routeFollower.setTravelDirection(transferMotionState.getTargetTravelDirection());
+		facingDirection = transferMotionState.getTargetFacingDirection();
+		fixedFacingYawActive = transferMotionState.isTargetFixedFacingYawActive();
+		fixedFacingYawRadians = transferMotionState.getTargetFixedFacingYawRadians();
+		lastRouteSnapshot = routeFollower.buildSnapshot();
+		applySnapshot(lastRouteSnapshot);
 		reservedByMachineId = null;
 		interactionMode = ToteMotionState.MOVING;
 		transferMotionState = null;
@@ -172,26 +170,7 @@ public class Tote implements TrackableObject {
 	private void applySnapshot(RouteFollowerSnapshot snapshot) {
 		cachedPos.set(snapshot.position()); 
 		transformation.setTranslation(cachedPos.add(offsets));
-/*
-		if (yawOverrideActive)
-		    transformation.setAxisRotation(Axis.Y, overriddenYawRadians);
-		else
-		    transformation.setAxisRotation(Axis.Y, Vec3.yawFromDirection(snapshot.forward()) + yawOffsetRadians); 
-		//transformation.setAxisRotation(Axis.X, snapshot.up().x); //pitch
-*/		
-		float yaw;
-		if (yawOverrideActive) {
-		    yaw = overriddenYawRadians;
-		} else {
-		    yaw = Vec3.yawFromDirection(snapshot.forward()) + yawOffsetRadians;
-
-		    if (reverseYawOnNextNonLinkSnapshot) {
-		        yaw += (float)Math.PI;
-		        reverseYawOnNextNonLinkSnapshot = false;
-		    }
-		}
-
-		transformation.setAxisRotation(Axis.Y, yaw);		
+		transformation.setAxisRotation(Axis.Y, computeRenderedYaw(snapshot));		
 	}
 	
 	public void reserveForTransfer(TransferZoneMachine machine) {
@@ -227,11 +206,14 @@ public class Tote implements TrackableObject {
 		RouteFollowerSnapshot snap = lastRouteSnapshot;
 		if (snap == null) return;
 
-		//cachedPos.setXYZ(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
 		Vec3 startPosition = new Vec3(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
 		Vec3 targetPosition = targetSegment.getGeometry().sampleByDistance(targetDistanceAlongSegment);
-		if (targetSegment.getGeometry().isLinkSegment())
-			enableYawOverride(transformation.angleY);
+		TravelDirection targetTravelDirection = routeFollower.getTravelDirection();
+		FacingDirection targetFacingDirection = determineTargetFacingDirection(
+				snap,
+				targetSegment,
+				targetDistanceAlongSegment,
+				targetTravelDirection);
 		this.interactionMode = ToteMotionState.TRANSFERRING;
 	    this.transferMotionState = new TransferMotionState(
 	            machineId,
@@ -239,10 +221,65 @@ public class Tote implements TrackableObject {
 	            targetSegment,
 	            sourceTransferCenterDistance,
 	            targetDistanceAlongSegment,
+	            targetTravelDirection,
+	            targetFacingDirection,
+	            targetSegment.getGeometry().isLinkSegment(),
+	            transformation.angleY,
 	            startPosition,
 	            targetPosition,
-	            transformation.angleY,
 	            durationSeconds
 	    );
+	}
+
+	private float computeRenderedYaw(RouteFollowerSnapshot snapshot) {
+		if (fixedFacingYawActive) {
+			return fixedFacingYawRadians;
+		}
+		Vec3 facing = getFacingVector(snapshot, facingDirection);
+		return Vec3.yawFromDirection(facing) + yawOffsetRadians;
+	}
+
+	private FacingDirection determineTargetFacingDirection(
+			RouteFollowerSnapshot currentSnapshot,
+			RouteSegment targetSegment,
+			float targetDistanceAlongSegment,
+			TravelDirection targetTravelDirection) {
+
+		Vec3 preservedFacing = getFacingVector(currentSnapshot, facingDirection);
+		Vec3 targetTravelVector = sampleTravelVector(targetSegment, targetDistanceAlongSegment, targetTravelDirection);
+		return preservedFacing.dot(targetTravelVector) >= 0f
+				? FacingDirection.WITH_TRAVEL
+				: FacingDirection.AGAINST_TRAVEL;
+	}
+
+	private Vec3 getFacingVector(RouteFollowerSnapshot snapshot, FacingDirection direction) {
+		Vec3 travelVector = snapshot.forward();
+		if (direction == FacingDirection.AGAINST_TRAVEL) {
+			return travelVector.scale(-1f);
+		}
+		return travelVector;
+	}
+
+	private Vec3 sampleTravelVector(RouteSegment segment, float distanceAlongSegment, TravelDirection direction) {
+		Vec3 travelVector = segment.getGeometry().sampleOrientationDirectionByDistance(distanceAlongSegment);
+		if (direction == TravelDirection.REVERSE) {
+			travelVector = travelVector.scale(-1f);
+		}
+		return travelVector;
+	}
+
+	private FacingDirection determineFacingDirectionForWorldYaw(RouteFollowerSnapshot snapshot, float worldYawRadians) {
+		Vec3 preservedFacing = directionFromYaw(worldYawRadians - yawOffsetRadians);
+		return preservedFacing.dot(snapshot.forward()) >= 0f
+				? FacingDirection.WITH_TRAVEL
+				: FacingDirection.AGAINST_TRAVEL;
+	}
+
+	private Vec3 directionFromYaw(float yawRadians) {
+		return new Vec3(
+				(float) Math.sin(yawRadians),
+				0f,
+				(float) Math.cos(yawRadians)
+		);
 	}
 }
