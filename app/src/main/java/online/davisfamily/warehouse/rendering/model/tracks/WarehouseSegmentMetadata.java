@@ -10,7 +10,6 @@ import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 
 public class WarehouseSegmentMetadata {
     private final List<TransferZone> transferZones = new ArrayList<>();
-    private final List<TargetGuideOpening> targetGuideOpenings = new ArrayList<>();
     private final List<GuideOpening> guideOpenings = new ArrayList<>();
     private final List<ConnectionClearance> connectionClearances = new ArrayList<>();
 
@@ -21,30 +20,12 @@ public class WarehouseSegmentMetadata {
         return Collections.unmodifiableList(transferZones);
     }
 
-    public List<TargetGuideOpening> getTargetGuideOpenings() {
-        return Collections.unmodifiableList(targetGuideOpenings);
-    }
-
     public List<GuideOpening> getGuideOpenings() {
         return Collections.unmodifiableList(guideOpenings);
     }
 
     public List<ConnectionClearance> getConnectionClearances() {
         return Collections.unmodifiableList(connectionClearances);
-    }
-
-    public void addTargetGuideOpening(RouteSegment owner, TargetGuideOpening opening) {
-        if (opening == null) {
-            throw new IllegalArgumentException("opening must not be null");
-        }
-
-        float total = owner.getGeometry().getTotalLength();
-        float centre = opening.getCentreDistance();
-        if (centre < 0f || centre > total) {
-            throw new IllegalArgumentException("target guide opening out of range for segment " + owner.getLabel());
-        }
-
-        targetGuideOpenings.add(opening);
     }
 
     public void addTransferZone(RouteSegment owner, TransferZone zone) {
