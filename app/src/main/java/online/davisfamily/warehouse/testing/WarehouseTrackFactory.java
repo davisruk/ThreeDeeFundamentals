@@ -142,11 +142,11 @@ public class WarehouseTrackFactory {
 	    float linkTrimStart = 0.0f;
 	    float linkTrimEnd = 0.195f;
 
-	    link1.setRenderTrimStartDistance(linkTrimStart);
-	    link1.setRenderTrimEndDistance(linkTrimEnd);
+	    builder.getMetadata(link1).setRenderTrimStartDistance(linkTrimStart);
+	    builder.getMetadata(link1).setRenderTrimEndDistance(linkTrimEnd);
 
-	    link2.setRenderTrimStartDistance(linkTrimStart);
-	    link2.setRenderTrimEndDistance(linkTrimEnd);
+	    builder.getMetadata(link2).setRenderTrimStartDistance(linkTrimStart);
+	    builder.getMetadata(link2).setRenderTrimEndDistance(linkTrimEnd);
 
 	    // Connection clearances on neighbouring segments.
 	    // These are now explicit rather than implicit.
@@ -248,7 +248,7 @@ public class WarehouseTrackFactory {
 	    Tote st = new Tote(rTote.id, rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
 	    
 	    float member_start = 1f;
-	    for (TransferZone tz: top.getTransferZones()) {
+	    for (TransferZone tz: builder.getMetadata(top).getTransferZones()) {
 	    	TransferZoneMachine.createTransferZoneMachine(sim, top, member_start, tz, new ToggleStrategy(true));
     	    // hack as we know there are only 2 tzs
     	    member_start = tz.getEndDistance();

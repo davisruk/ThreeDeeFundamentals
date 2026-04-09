@@ -7,26 +7,28 @@ import java.util.List;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.warehouse.rendering.model.tracks.RenderableTrackFactory;
-import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackLayoutFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
+import online.davisfamily.warehouse.rendering.model.tracks.WarehouseSegmentMetadata;
 
 public final class RouteTrackFactory {
 
     public static class SpecAndSegment {
     	TrackSpec spec;
     	RouteSegment segment;
+        WarehouseSegmentMetadata metadata;
     	
     	
-    	public SpecAndSegment(TrackSpec spec, RouteSegment segment) {
+    	public SpecAndSegment(TrackSpec spec, RouteSegment segment, WarehouseSegmentMetadata metadata) {
 			super();
 			this.spec = spec;
 			this.segment = segment;
+            this.metadata = metadata;
 		}
 
 
-		public static SpecAndSegment createSpecAndSegment(TrackSpec ts, RouteSegment rs) {
-    		return new SpecAndSegment(ts, rs);
+		public static SpecAndSegment createSpecAndSegment(TrackSpec ts, RouteSegment rs, WarehouseSegmentMetadata metadata) {
+    		return new SpecAndSegment(ts, rs, metadata);
     	}
     }
     
@@ -41,6 +43,7 @@ public final class RouteTrackFactory {
             result.add(RenderableTrackFactory.createRenderableTrack(
                     tr,
                     rs,
+                    new WarehouseSegmentMetadata(),
                     spec,
                     appearance));
         }
@@ -57,6 +60,7 @@ public final class RouteTrackFactory {
             result.add(RenderableTrackFactory.createRenderableTrack(
                     tr,
                     ss.segment,
+                    ss.metadata,
                     ss.spec,
                     appearance));
         }
