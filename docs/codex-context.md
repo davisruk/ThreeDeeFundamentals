@@ -208,6 +208,6 @@
   - warehouse track and transfer construction now lives in `WarehouseRouteBuilder`
 - `RouteSceneBuilder` has been removed.
 - `TargetGuideOpening` was removed after verification; it was unused in the current codebase.
+- `TransferZone` now lives under `warehouse.sim.transfer`; the warehouse transfer domain owns its topology/config object.
 - Remaining generic/warehouse boundary work still identified:
-  - `TransferZone` is still located under `threedee` but depends on warehouse concepts
   - `RouteTrackFactory` still lives under `threedee.behaviour.routing` but depends on warehouse rendering types

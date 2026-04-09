@@ -2,7 +2,6 @@ package online.davisfamily.threedee.sim.framework.objects.sensors;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
-import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
