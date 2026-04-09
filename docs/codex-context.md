@@ -198,3 +198,16 @@
   - it transitions to `TRANSFERRING` and then immediately to `ACTIVE` after starting a transfer
 - The current document reflects observed code structure and runtime behaviour.
   - It is not a design proposal and does not describe unimplemented intended architecture.
+
+## Latest Session Update
+
+- `RouteSegment` has been cleaned back to generic routing concerns only.
+- Warehouse-specific per-segment data now lives in `WarehouseSegmentMetadata`.
+- Builder ownership has been split:
+  - generic graph construction now lives in `RouteBuilder`
+  - warehouse track and transfer construction now lives in `WarehouseRouteBuilder`
+- `RouteSceneBuilder` has been removed.
+- `TargetGuideOpening` was removed after verification; it was unused in the current codebase.
+- Remaining generic/warehouse boundary work still identified:
+  - `TransferZone` is still located under `threedee` but depends on warehouse concepts
+  - `RouteTrackFactory` still lives under `threedee.behaviour.routing` but depends on warehouse rendering types
