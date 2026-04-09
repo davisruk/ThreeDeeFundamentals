@@ -20,10 +20,11 @@ public final class RenderableTrackFactory {
     public static RenderableObject createRenderableTrack(
             TriangleRenderer tr,
             RouteSegment routeSegment,
+            WarehouseSegmentMetadata metadata,
             TrackSpec spec,
             TrackAppearance appearance) {
 
-        RouteTrackLayout layout = RouteTrackLayoutFactory.create(routeSegment);
+        RouteTrackLayout layout = RouteTrackLayoutFactory.create(routeSegment, metadata);
         ObjectTransformation identity =
                 new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4());
 

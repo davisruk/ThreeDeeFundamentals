@@ -9,18 +9,23 @@ import online.davisfamily.threedee.path.PathSegment3;
 
 public final class RouteTrackLayout {
     private final RouteSegment routeSegment;
+    private final WarehouseSegmentMetadata metadata;
     private final List<TrackInterval> intervals;
     private final float renderStartDistance;
     private final float renderEndDistance;
 
     public RouteTrackLayout(
             RouteSegment routeSegment,
+            WarehouseSegmentMetadata metadata,
             List<TrackInterval> intervals,
             float renderStartDistance,
             float renderEndDistance) {
 
         if (routeSegment == null) {
             throw new IllegalArgumentException("routeSegment must not be null");
+        }
+        if (metadata == null) {
+            throw new IllegalArgumentException("metadata must not be null");
         }
         if (intervals == null) {
             throw new IllegalArgumentException("intervals must not be null");
@@ -33,6 +38,7 @@ public final class RouteTrackLayout {
         }
 
         this.routeSegment = routeSegment;
+        this.metadata = metadata;
         this.intervals = Collections.unmodifiableList(new ArrayList<>(intervals));
         this.renderStartDistance = renderStartDistance;
         this.renderEndDistance = renderEndDistance;
@@ -44,6 +50,10 @@ public final class RouteTrackLayout {
 
     public PathSegment3 getGeometry() {
         return routeSegment.getGeometry();
+    }
+
+    public WarehouseSegmentMetadata getMetadata() {
+        return metadata;
     }
 
     public List<TrackInterval> getIntervals() {
