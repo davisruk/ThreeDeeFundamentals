@@ -4,7 +4,6 @@ import java.util.List;
 
 import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
-import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
 import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
@@ -26,6 +25,7 @@ import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
+import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
@@ -95,7 +95,7 @@ public class WarehouseTrackFactory {
 	    float topZ = 0f;
 	    float bottomZ = -3f;
 
-	    RouteSceneBuilder builder = new RouteSceneBuilder();
+	    WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
 
 	    RouteSegment top = builder.segment("top", new LinearSegment3(
 	            new Vec3(leftX, 0f, topZ),
@@ -317,7 +317,7 @@ public class WarehouseTrackFactory {
 		    new Vec3(leftX, 0f, lowerZ),
 		    false
 		);		
-		RouteSceneBuilder builder = new RouteSceneBuilder();
+		WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
 		RouteSegment upper = builder.segment("upper", upperGeometry);
 		RouteSegment lower = builder.segment("lower", lowerGeometry);
 
