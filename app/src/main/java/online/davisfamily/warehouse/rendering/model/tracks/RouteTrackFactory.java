@@ -1,15 +1,12 @@
-package online.davisfamily.threedee.behaviour.routing;
+package online.davisfamily.warehouse.rendering.model.tracks;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
-import online.davisfamily.warehouse.rendering.model.tracks.RenderableTrackFactory;
-import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
-import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
-import online.davisfamily.warehouse.rendering.model.tracks.WarehouseSegmentMetadata;
 
 public final class RouteTrackFactory {
 

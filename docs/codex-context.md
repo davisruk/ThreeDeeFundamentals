@@ -209,5 +209,6 @@
 - `RouteSceneBuilder` has been removed.
 - `TargetGuideOpening` was removed after verification; it was unused in the current codebase.
 - `TransferZone` now lives under `warehouse.sim.transfer`; the warehouse transfer domain owns its topology/config object.
+- `RouteTrackFactory` now lives under `warehouse.rendering.model.tracks`; warehouse track rendering owns the renderable track factory and `SpecAndSegment`.
 - Remaining generic/warehouse boundary work still identified:
-  - `RouteTrackFactory` still lives under `threedee.behaviour.routing` but depends on warehouse rendering types
+  - none currently called out in the generic/warehouse ownership split

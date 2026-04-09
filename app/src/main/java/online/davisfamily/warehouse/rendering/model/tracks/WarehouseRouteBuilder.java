@@ -8,8 +8,8 @@ import java.util.Map;
 
 import online.davisfamily.threedee.behaviour.routing.RouteBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory.SpecAndSegment;
 import online.davisfamily.threedee.path.PathSegment3;
+import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory.SpecAndSegment;
 import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
