@@ -6,14 +6,23 @@ public class LinearSegment3 implements PathSegment3 {
 
 	private final Vec3 start, end, tangent;
 	private final float length;
+	private final boolean linkSegment;
 	
-	public LinearSegment3 (Vec3 start, Vec3 end) {
+	public LinearSegment3 (Vec3 start, Vec3 end, boolean linkSegment) {
 		this.start = start;
 		this.end = end;
 		this.length = start.distanceTo(end);
 		this.tangent = this.end.subtract(this.start).normalize();
+		this.linkSegment = linkSegment;
 	}
 	
+	
+	@Override
+	public boolean isLinkSegment() {
+		return linkSegment;
+	}
+
+
 	@Override
 	public float getTotalLength() {
 		return length;

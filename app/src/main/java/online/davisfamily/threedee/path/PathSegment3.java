@@ -9,6 +9,10 @@ public interface PathSegment3 {
 	Vec3 getStartPoint();
 	Vec3 getEndPoint();
 	
+	default boolean isLinkSegment() {
+		return false;
+	}
+	
 	default Vec3 getStartTangent() {
 		return sampleTangentByDistance(0f);
 	}

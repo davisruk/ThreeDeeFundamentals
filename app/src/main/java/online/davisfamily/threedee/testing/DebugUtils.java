@@ -4,11 +4,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.util.List;
 
-import online.davisfamily.threedee.behaviour.Behaviour;
-import online.davisfamily.threedee.behaviour.routing.GraphFollowerBehaviour;
-import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.deprecated.Path3;
 import online.davisfamily.threedee.deprecated.PathFollowerBehaviour;
@@ -17,8 +13,6 @@ import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
-import online.davisfamily.threedee.path.PathSegment3;
-import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities.ClippedLine;
@@ -298,7 +292,7 @@ public class DebugUtils {
  *  - Path3 should be removed and all references should be to PathSegment3
  *  - drawPath would render all paths, no need for an instanceof check
  */
-
+/*
 	public void drawPathForObject(RenderableObject ro, Mat4 view, Mat4 projection) {
 	    for (Behaviour b: ro.behaviours) {
 	    	if (b instanceof PathFollowerBehaviour) drawPath((PathFollowerBehaviour)b, view, projection);
@@ -326,7 +320,7 @@ public class DebugUtils {
     	    }
         }
 	}
-
+*/
 	
 	private void drawPath(PathFollowerBehaviour pb, Mat4 view, Mat4 projection) {
 	    Path3 path = pb.getPath();

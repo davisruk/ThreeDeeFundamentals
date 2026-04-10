@@ -300,5 +300,21 @@ public class RenderableObject {
 	public void setSelectionTarget(RenderableObject selectionTarget) {
 		this.selectionTarget = selectionTarget;
 	}
+	
+	// utility class to find all the children of an object starting with the the given string 
+	public static List<RenderableObject> traverseAndExtractAllWithIdStartingWith(RenderableObject start, String idStart, List<RenderableObject> result) {
+	    
+        if (start.id.startsWith(idStart)) result.add(start);
+        
+        if (start.children == null || start.children.size() == 0)
+        	return result;
+        
+        for (RenderableObject ro : start.children) {
+        	traverseAndExtractAllWithIdStartingWith(ro, idStart, result);
+        }
+
+        return result;
+    }	
+
 
 }

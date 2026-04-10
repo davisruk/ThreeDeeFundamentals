@@ -1,0 +1,524 @@
+package online.davisfamily.warehouse.rendering.model.tracks;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+
+import online.davisfamily.threedee.behaviour.routing.RouteBuilder;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
+import online.davisfamily.threedee.path.PathSegment3;
+import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory.SpecAndSegment;
+import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
+import online.davisfamily.warehouse.sim.transfer.TransferZone;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
+import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
+
+public class WarehouseRouteBuilder {
+    private static final TransferMotionConfig LINK_TRANSFER_MOTION_DEFAULTS =
+            new TransferMotionConfig(0.35, 0.10f, 0.80f);
+    private static final TransferMotionConfig DIRECT_TRANSFER_MOTION_DEFAULTS =
+            new TransferMotionConfig(0.35, 0.05f, 0.60f);
+
+    private final RouteBuilder routeBuilder = new RouteBuilder();
+    private final List<SpecAndSegment> specsAndSegments = new ArrayList<>();
+    private final Map<RouteSegment, TrackSpec> specBySegment = new IdentityHashMap<>();
+    private final Map<RouteSegment, WarehouseSegmentMetadata> metadataBySegment = new IdentityHashMap<>();
+    private final List<TransferZoneController> transferZoneControllers = new ArrayList<>();
+
+    public RouteSegment segment(String label, PathSegment3 geometry) {
+        return routeBuilder.segment(label, geometry);
+    }
+
+    public WarehouseRouteBuilder renderWith(RouteSegment segment, TrackSpec spec) {
+        specsAndSegments.add(new SpecAndSegment(spec, segment, metadata(segment)));
+        specBySegment.put(segment, spec);
+        return this;
+    }
+
+    public WarehouseRouteBuilder connectLoop(RouteSegment from, RouteSegment to) {
+        routeBuilder.connect(from, to);
+        return this;
+    }
+
+    public WarehouseRouteBuilder connectLoop(RouteSegment from, RouteSegment to, float targetEntryDistance) {
+        routeBuilder.connect(from, to, targetEntryDistance);
+        return this;
+    }
+
+    public WarehouseRouteBuilder connectLinkInto(
+            RouteSegment linkSegment,
+            RouteSegment destinationSegment,
+            float targetEntryDistance,
+            GuideSide targetOpenSide,
+            float openingLength) {
+
+        return connectLinkInto(
+                linkSegment,
+                destinationSegment,
+                targetEntryDistance,
+                targetOpenSide,
+                openingLength,
+                metadata(linkSegment).getRenderTrimEndDistance());
+    }
+
+    public WarehouseRouteBuilder connectLinkInto(
+            RouteSegment linkSegment,
+            RouteSegment destinationSegment,
+            float targetEntryDistance,
+            GuideSide targetOpenSide) {
+
+        TrackSpec linkSpec = requireSpec(linkSegment);
+        return connectLinkInto(
+                linkSegment,
+                destinationSegment,
+                targetEntryDistance,
+                targetOpenSide,
+                linkSpec.getGuideJoinOpeningLength(),
+                metadata(linkSegment).getRenderTrimEndDistance());
+    }
+
+    public WarehouseRouteBuilder connectLinkInto(
+            RouteSegment linkSegment,
+            RouteSegment destinationSegment,
+            float targetEntryDistance,
+            GuideSide targetOpenSide,
+            float openingLength,
+            float targetConnectionClearanceLength) {
+        routeBuilder.connect(linkSegment, destinationSegment, targetEntryDistance);
+
+        addCentredGuideOpening(
+                destinationSegment,
+                targetEntryDistance,
+                openingLength,
+                targetOpenSide,
+                GuideOpening.GuideOpeningType.CONNECTION_TARGET);
+
+        addCentredConnectionClearance(
+                destinationSegment,
+                targetEntryDistance,
+                targetConnectionClearanceLength,
+                targetOpenSide,
+                ConnectionClearance.ConnectionClearanceType.CONNECTION_TARGET);
+
+        return this;
+    }
+
+    public WarehouseRouteBuilder addTransferToLink(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState) {
+
+        TrackSpec linkSpec = requireSpec(linkSegment);
+        return addTransferToLink(
+                transferId,
+                sourceSegment,
+                linkSegment,
+                transferCentreDistance,
+                transferLength,
+                linkSpec.getGuideJoinOpeningLength(),
+                sourceOpenSide,
+                linkOpenSide,
+                initialToggleState,
+                metadata(linkSegment).getRenderTrimStartDistance(),
+                LINK_TRANSFER_MOTION_DEFAULTS);
+    }
+
+    public WarehouseRouteBuilder addTransferToLink(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            float sourceOpeningLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState) {
+
+        return addTransferToLink(
+                transferId,
+                sourceSegment,
+                linkSegment,
+                transferCentreDistance,
+                transferLength,
+                sourceOpeningLength,
+                sourceOpenSide,
+                linkOpenSide,
+                initialToggleState,
+                metadata(linkSegment).getRenderTrimStartDistance(),
+                LINK_TRANSFER_MOTION_DEFAULTS);
+    }
+
+    public WarehouseRouteBuilder addTransferToLink(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState,
+            TransferMotionConfig motionConfig) {
+
+        TrackSpec linkSpec = requireSpec(linkSegment);
+        return addTransferToLink(
+                transferId,
+                sourceSegment,
+                linkSegment,
+                transferCentreDistance,
+                transferLength,
+                linkSpec.getGuideJoinOpeningLength(),
+                sourceOpenSide,
+                linkOpenSide,
+                initialToggleState,
+                metadata(linkSegment).getRenderTrimStartDistance(),
+                motionConfig);
+    }
+
+    public WarehouseRouteBuilder addTransferToLink(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            float sourceOpeningLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState,
+            TransferMotionConfig motionConfig) {
+
+        return addTransferToLink(
+                transferId,
+                sourceSegment,
+                linkSegment,
+                transferCentreDistance,
+                transferLength,
+                sourceOpeningLength,
+                sourceOpenSide,
+                linkOpenSide,
+                initialToggleState,
+                metadata(linkSegment).getRenderTrimStartDistance(),
+                motionConfig);
+    }
+
+    public WarehouseRouteBuilder addTransferToLink(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            float sourceOpeningLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState,
+            float sourceConnectionClearanceLength) {
+
+        return addTransferToLink(
+                transferId,
+                sourceSegment,
+                linkSegment,
+                transferCentreDistance,
+                transferLength,
+                sourceOpeningLength,
+                sourceOpenSide,
+                linkOpenSide,
+                initialToggleState,
+                sourceConnectionClearanceLength,
+                LINK_TRANSFER_MOTION_DEFAULTS);
+    }
+
+    public WarehouseRouteBuilder addTransferToLink(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment linkSegment,
+            float transferCentreDistance,
+            float transferLength,
+            float sourceOpeningLength,
+            GuideSide sourceOpenSide,
+            GuideSide linkOpenSide,
+            boolean initialToggleState,
+            float sourceConnectionClearanceLength,
+            TransferMotionConfig motionConfig) {
+
+        float transferStart = transferCentreDistance - (transferLength * 0.5f);
+        ToggleStrategy strategy = new ToggleStrategy(initialToggleState);
+        TransferZone zone = new TransferZone(
+                transferId,
+                transferStart,
+                transferLength,
+                sourceSegment,
+                linkSegment,
+                0f,
+                sourceOpenSide,
+                linkOpenSide,
+                strategy,
+                motionConfig
+        );
+
+        metadata(sourceSegment).addTransferZone(sourceSegment, zone);
+
+        addCentredGuideOpening(
+                sourceSegment,
+                transferCentreDistance,
+                sourceOpeningLength,
+                sourceOpenSide,
+                GuideOpening.GuideOpeningType.TRANSFER_SOURCE);
+
+        addCentredConnectionClearance(
+                sourceSegment,
+                transferCentreDistance,
+                sourceConnectionClearanceLength,
+                sourceOpenSide,
+                ConnectionClearance.ConnectionClearanceType.TRANSFER_SOURCE);
+
+        return this;
+    }
+
+    public WarehouseRouteBuilder addDirectTransfer(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment targetSegment,
+            float sourceTransferCentreDistance,
+            float openingLength,
+            float targetEntryDistance,
+            GuideSide sourceOpenSide,
+            GuideSide targetOpenSide,
+            TransferDecisionStrategy transferStrategy) {
+
+        return addDirectTransfer(
+                transferId,
+                sourceSegment,
+                targetSegment,
+                sourceTransferCentreDistance,
+                openingLength,
+                targetEntryDistance,
+                sourceOpenSide,
+                targetOpenSide,
+                transferStrategy,
+                0f,
+                0f,
+                DIRECT_TRANSFER_MOTION_DEFAULTS);
+    }
+
+    public WarehouseRouteBuilder addDirectTransfer(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment targetSegment,
+            float sourceTransferCentreDistance,
+            float openingLength,
+            float targetEntryDistance,
+            GuideSide sourceOpenSide,
+            GuideSide targetOpenSide,
+            TransferDecisionStrategy transferStrategy,
+            float sourceConnectionClearanceLength,
+            float targetConnectionClearanceLength) {
+
+        return addDirectTransfer(
+                transferId,
+                sourceSegment,
+                targetSegment,
+                sourceTransferCentreDistance,
+                openingLength,
+                targetEntryDistance,
+                sourceOpenSide,
+                targetOpenSide,
+                transferStrategy,
+                sourceConnectionClearanceLength,
+                targetConnectionClearanceLength,
+                DIRECT_TRANSFER_MOTION_DEFAULTS);
+    }
+
+    public WarehouseRouteBuilder addDirectTransfer(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment targetSegment,
+            float sourceTransferCentreDistance,
+            float openingLength,
+            float targetEntryDistance,
+            GuideSide sourceOpenSide,
+            GuideSide targetOpenSide,
+            TransferDecisionStrategy transferStrategy,
+            TransferMotionConfig motionConfig) {
+
+        return addDirectTransfer(
+                transferId,
+                sourceSegment,
+                targetSegment,
+                sourceTransferCentreDistance,
+                openingLength,
+                targetEntryDistance,
+                sourceOpenSide,
+                targetOpenSide,
+                transferStrategy,
+                0f,
+                0f,
+                motionConfig);
+    }
+
+    public WarehouseRouteBuilder addDirectTransfer(
+            String transferId,
+            RouteSegment sourceSegment,
+            RouteSegment targetSegment,
+            float sourceTransferCentreDistance,
+            float openingLength,
+            float targetEntryDistance,
+            GuideSide sourceOpenSide,
+            GuideSide targetOpenSide,
+            TransferDecisionStrategy transferStrategy,
+            float sourceConnectionClearanceLength,
+            float targetConnectionClearanceLength,
+            TransferMotionConfig motionConfig) {
+
+        if (sourceSegment == null) {
+            throw new IllegalArgumentException("sourceSegment must not be null");
+        }
+        if (targetSegment == null) {
+            throw new IllegalArgumentException("targetSegment must not be null");
+        }
+        if (sourceOpenSide == null) {
+            throw new IllegalArgumentException("sourceOpenSide must not be null");
+        }
+        if (targetOpenSide == null) {
+            throw new IllegalArgumentException("targetOpenSide must not be null");
+        }
+        if (openingLength <= 0f) {
+            throw new IllegalArgumentException("openingLength must be > 0");
+        }
+        if (motionConfig == null) {
+            throw new IllegalArgumentException("motionConfig must not be null");
+        }
+
+        float sourceStart = sourceTransferCentreDistance - (openingLength * 0.5f);
+
+        TransferZone zone = new TransferZone(
+                transferId,
+                sourceStart,
+                openingLength,
+                sourceSegment,
+                targetSegment,
+                targetEntryDistance,
+                sourceOpenSide,
+                targetOpenSide,
+                transferStrategy,
+                motionConfig
+        );
+
+        metadata(sourceSegment).addTransferZone(sourceSegment, zone);
+
+        addCentredGuideOpening(
+                sourceSegment,
+                sourceTransferCentreDistance,
+                openingLength,
+                sourceOpenSide,
+                GuideOpening.GuideOpeningType.TRANSFER_SOURCE);
+
+        addCentredGuideOpening(
+                targetSegment,
+                targetEntryDistance,
+                openingLength,
+                targetOpenSide,
+                GuideOpening.GuideOpeningType.CONNECTION_TARGET);
+
+        addCentredConnectionClearance(
+                sourceSegment,
+                sourceTransferCentreDistance,
+                sourceConnectionClearanceLength,
+                sourceOpenSide,
+                ConnectionClearance.ConnectionClearanceType.TRANSFER_SOURCE);
+
+        addCentredConnectionClearance(
+                targetSegment,
+                targetEntryDistance,
+                targetConnectionClearanceLength,
+                targetOpenSide,
+                ConnectionClearance.ConnectionClearanceType.CONNECTION_TARGET);
+
+        return this;
+    }
+
+    public List<RouteSegment> getSegments() {
+        return routeBuilder.getSegments();
+    }
+
+    public List<SpecAndSegment> getSpecsAndSegments() {
+        return Collections.unmodifiableList(specsAndSegments);
+    }
+
+    public List<TransferZoneController> getTransferZoneControllers() {
+        return transferZoneControllers;
+    }
+
+    public WarehouseSegmentMetadata getMetadata(RouteSegment segment) {
+        return metadata(segment);
+    }
+
+    private TrackSpec requireSpec(RouteSegment segment) {
+        TrackSpec spec = specBySegment.get(segment);
+        if (spec == null) {
+            throw new IllegalStateException(
+                    "No TrackSpec registered for segment " + segment.getLabel() + ". Call renderWith(segment, spec) before creating derived guide joins.");
+        }
+        return spec;
+    }
+
+    private void addCentredGuideOpening(
+            RouteSegment segment,
+            float centreDistance,
+            float openingLength,
+            GuideSide side,
+            GuideOpening.GuideOpeningType type) {
+
+        if (openingLength <= 0f || side == null) {
+            return;
+        }
+
+        float total = segment.getGeometry().getTotalLength();
+        float halfOpening = openingLength * 0.5f;
+        float openingStart = clamp(centreDistance - halfOpening, 0f, total);
+        float openingEnd = clamp(centreDistance + halfOpening, 0f, total);
+
+        metadata(segment).addGuideOpening(segment, new GuideOpening(
+                openingStart,
+                openingEnd,
+                side,
+                type));
+    }
+
+    private void addCentredConnectionClearance(
+            RouteSegment segment,
+            float centreDistance,
+            float clearanceLength,
+            GuideSide side,
+            ConnectionClearance.ConnectionClearanceType type) {
+
+        if (clearanceLength <= 0f || side == null) {
+            return;
+        }
+
+        float total = segment.getGeometry().getTotalLength();
+        float halfClearance = clearanceLength * 0.5f;
+        float clearanceStart = clamp(centreDistance - halfClearance, 0f, total);
+        float clearanceEnd = clamp(centreDistance + halfClearance, 0f, total);
+
+        metadata(segment).addConnectionClearance(segment, new ConnectionClearance(
+                clearanceStart,
+                clearanceEnd,
+                side,
+                type));
+    }
+
+    private WarehouseSegmentMetadata metadata(RouteSegment segment) {
+        return metadataBySegment.computeIfAbsent(segment, key -> new WarehouseSegmentMetadata());
+    }
+
+    private static float clamp(float v, float min, float max) {
+        return Math.max(min, Math.min(max, v));
+    }
+}

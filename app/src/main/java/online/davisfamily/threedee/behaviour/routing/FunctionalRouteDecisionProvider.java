@@ -3,6 +3,7 @@ package online.davisfamily.threedee.behaviour.routing;
 import java.util.List;
 import java.util.function.BiFunction;
 
+import online.davisfamily.threedee.behaviour.routing.RouteFollower.TravelDirection;
 import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class FunctionalRouteDecisionProvider implements RouteDecisionProvider {
@@ -18,8 +19,7 @@ public class FunctionalRouteDecisionProvider implements RouteDecisionProvider {
     public RouteSegment chooseNext(
             RenderableObject object,
             RouteSegment current,
-            List<RouteSegment> options,
-            GraphFollowerBehaviour.TravelDirection travelDirection) {
+            List<RouteSegment> options, TravelDirection direction) {
 
         if (options == null || options.isEmpty()) {
             return null;

@@ -26,6 +26,7 @@ import online.davisfamily.threedee.rendering.selection.ScenePicker;
 import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.rendering.utilities.lines.CohenSutherlandLineClipper;
+import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.threedee.testing.DebugUtils;
 
 // provides a good starting point for a Scene
@@ -61,6 +62,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	protected final ScenePicker scenePicker = new ScenePicker();
 	protected final float pickerFovYRadians = (float) Math.toRadians(60);
 	protected List<RenderableObject> objects;
+	protected final SimulationWorld sim = new SimulationWorld();
 	
 	public BaseScene (JRootPane pane, ViewDimensions dimensions, CameraPosition camPos) {
 		root = pane;
@@ -139,9 +141,11 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	}
 
 	protected void drawObject(List<RenderableObject> objects, double dtSeconds, DirectionalLight lightDirection) {
-		if (!inputState.isSet(Mode.PAUSE_TRANSFORMS))
+		if (!inputState.isSet(Mode.PAUSE_TRANSFORMS)) {
+			sim.update(dtSeconds);
 			for (RenderableObject ro: objects)
 				ro.update(dtSeconds);
+		}
 		for (RenderableObject ro: objects)
 			ro.draw(camera, perspective, zBuffer, lightDirection, null, selectionManager);
 	}
