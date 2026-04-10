@@ -2,6 +2,15 @@ package online.davisfamily.threedee.sim.framework.events;
 
 public class DetectionEvent implements SimulationEvent {
 
+	// Detection events currently identify the tracked object by id only.
+	// This keeps the event payload small, but it means listeners that need the
+	// actual object must perform a secondary lookup against SimulationContext.
+	//
+	// That lookup is still a known source of fragility because it relies on id
+	// consistency across the publishing object, the tracked object, and any
+	// attached renderable object. A broader event-model review is still pending:
+	// the likely future choice is either object references for in-process events
+	// or immutable boundary-safe payloads if simulation/rendering are split.
 	private String sourceId;
     private double simulationTimeSeconds;
     private String sensorId;

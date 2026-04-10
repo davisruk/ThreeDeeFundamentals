@@ -46,6 +46,11 @@ public class TransferZoneController implements SimulationController{
 	}
 	
 	private void handleApproachSensor(DetectionEvent event, SimulationContext context) {
+		// This controller still resolves the Tote by event object id rather than
+		// receiving the object reference directly from the event. That keeps the
+		// current event bus simple, but it leaves warehouse transfer startup
+		// dependent on id consistency between the tracked sim object and whatever
+		// upstream component published the snapshot/event identity.
 		DetectionType d = event.getDetectionType();
 		Tote t = (Tote) context.getTrackedObjects().stream()
 				.filter(to -> to.getId().equals(event.getObjectId()))
@@ -69,6 +74,9 @@ public class TransferZoneController implements SimulationController{
 	
 	private void handleWindowSensor(DetectionEvent event, SimulationContext context) {
 
+		// Same lookup fragility as handleApproachSensor(...). This remains
+		// intentionally unchanged until the wider event identity/threading
+		// direction is decided.
 		Tote t = (Tote) context.getTrackedObjects().stream()
 				.filter(to -> to.getId().equals(event.getObjectId()))
 				.findAny()

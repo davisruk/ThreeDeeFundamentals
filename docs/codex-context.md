@@ -46,6 +46,7 @@
 - `Tote`
   - Warehouse-specific moving simulation object.
   - Owns route following, writes directly into the tote render transform, and manages transfer state.
+  - Now owns a direct reference to its `RenderableObject` and caches that renderable's `ObjectTransformation`.
 - `TransferZone`
   - Defines a source window on a segment and the target segment/entry point for a transfer.
   - Owns transfer-motion tuning via `TransferMotionConfig`.
@@ -183,6 +184,12 @@
   - sim objects move first
   - sensors observe after movement
   - event handlers react in the same frame
+- Detection/transfer events still use object ids rather than object references:
+  - this keeps the current event model simple and low-allocation
+  - listeners/controllers that need the concrete object still perform a secondary lookup through `SimulationContext`
+- Event identity/thread-boundary policy is still intentionally unresolved:
+  - using object references in events would remove current id fragility for in-process listeners
+  - keeping compact event payloads may be preferable if simulation and rendering are later split across threads
 - Tote position is path-derived, not physics-simulated.
 - Tote orientation is currently mostly derived from path direction each update, with temporary override logic during some transfer cases.
 - Link segments are marked via `PathSegment3.isLinkSegment()` and are treated specially by tote yaw logic.
@@ -202,9 +209,16 @@
   - additional runtime testing may still reveal edge cases in more complex transfer layouts
 - `RouteFollower` connection choice is simplistic:
   - multiple candidates are currently resolved by taking the first one
-- Warehouse concerns bleed into generic routing classes, making future engine/framework separation harder.
+- Generic/warehouse separation around routing is materially improved:
+  - generic route topology now appears to be largely back behind the intended boundary
+  - the main remaining coupling concerns are the application entry point and the id-based event/controller path rather than warehouse logic living inside generic routing classes
+- Sim/render linkage has been improved for totes, but id-based coupling still exists in the event path:
+  - `Tote` now owns its `RenderableObject` directly, so render transform updates no longer depend on matching ids
+  - transfer sensor/controller flow still resolves the tote via `DetectionEvent.objectId`
+  - that remaining fragility is documented but intentionally deferred until a broader event/threading decision is made
 - Sensors reuse mutable cached event instances before publishing them into the event queue.
-  - This is safe only if no later mutation can affect already-queued events; the current approach is risky.
+  - this is acceptable only under the current single-threaded in-process dispatch assumptions
+  - a future threading/performance review should revisit whether published events remain mutable and id-based or become a stronger boundary type
 - `TransferZoneController` state transitions are hard to reason about:
   - it transitions to `TRANSFERRING` and then immediately to `ACTIVE` after starting a transfer
 - The current document reflects observed code structure and runtime behaviour.
@@ -230,8 +244,15 @@
   - on completion, the `RouteFollower` is restored at the precomputed merge distance on the target segment
 - `WarehouseRouteBuilder` now provides default `TransferMotionConfig` values by transfer type and overloads for per-transfer overrides.
 - `WarehouseTrackFactory` includes an explicit per-transfer `TransferMotionConfig` example for one top-to-link transfer, while other transfers still use builder defaults.
+- `setupParallelTracks` has been brought up to parity with `setupOvalTrack` for simulation wiring:
+  - the tote is registered as a tracked sim object
+  - transfer-zone machines are created for both parallel segments
+  - direct transfers can be configured to cross straight over rather than merge diagonally
+- `Tote` now owns a direct `RenderableObject` reference and caches its `ObjectTransformation`.
+- The remaining tote identity fragility has been narrowed to the event/controller path rather than the sim/render linkage itself.
 - Remaining generic/warehouse boundary work still identified:
   - no major ownership leaks are currently called out inside the route/transfer/rendering code
   - the current application entry point still directly selects the warehouse example scene
 - Recommended next step for a future session:
   - runtime-tune `TransferMotionConfig` values for different transfer layouts and decide whether the merge-search policy should become more geometry-aware
+  - perform a broader architecture review before changing the event model, especially if simulation/render threading or allocation reduction becomes a priority

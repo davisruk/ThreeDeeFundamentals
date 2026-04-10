@@ -9,6 +9,7 @@ import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnaps
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
 import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
@@ -32,6 +33,7 @@ public class Tote implements TrackableObject {
 	
 	private final String id;
 	private final RouteFollower routeFollower;
+	private final RenderableObject renderable;
 	private RouteFollowerSnapshot lastRouteSnapshot;
 	private final Vec3 offsets;
 	private Vec3 cachedPos;
@@ -44,11 +46,18 @@ public class Tote implements TrackableObject {
 	private TransferMotionState transferMotionState;
 	private final float yawOffsetRadians;
 	
-	public Tote(String id, RouteFollower routeFollower, ObjectTransformation transformation, Vec3 offsets, float yawOffsetRadians) {
+	public Tote(String id, RouteFollower routeFollower, RenderableObject renderable, Vec3 offsets, float yawOffsetRadians) {
 		super();
+		if (renderable == null) {
+			throw new IllegalArgumentException("renderable must not be null");
+		}
+		if (renderable.transformation == null) {
+			throw new IllegalArgumentException("renderable transformation must not be null");
+		}
 		this.id = id;
 		this.routeFollower = routeFollower;
-		this.transformation = transformation;
+		this.renderable = renderable;
+		this.transformation = renderable.transformation;
 		this.offsets = offsets;
 		this.cachedPos = new Vec3();
 		this.yawOffsetRadians = yawOffsetRadians;
@@ -56,6 +65,10 @@ public class Tote implements TrackableObject {
 
 	public ObjectTransformation getTransformation() {
 		return transformation;
+	}
+
+	public RenderableObject getRenderable() {
+		return renderable;
 	}
 
 	@Override

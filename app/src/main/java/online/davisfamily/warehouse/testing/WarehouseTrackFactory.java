@@ -248,7 +248,7 @@ public class WarehouseTrackFactory {
 	    float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight + 0.02f : 0f;
 	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
-	    Tote st = new Tote(rTote.id, rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
+	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
 	    
 	    float member_start = 1f;
 	    for (TransferZone tz: builder.getMetadata(top).getTransferZones()) {
@@ -389,7 +389,7 @@ public class WarehouseTrackFactory {
 	
 	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset + 0.02f, 0f); 
-	    Tote st = new Tote(rTote.id, rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
+	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
 
 	    for (TransferZone tz : builder.getMetadata(upper).getTransferZones()) {
 	    	TransferZoneMachine.createTransferZoneMachine(sim, upper, 0f, tz, tz.getDecisionStrategy());
