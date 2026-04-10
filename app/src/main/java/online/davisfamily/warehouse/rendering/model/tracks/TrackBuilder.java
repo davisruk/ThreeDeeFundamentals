@@ -14,7 +14,7 @@ public class TrackBuilder {
 	private static final Vec3 WORLD_UP = new Vec3(0f,1f,0f);
  
 	public static TrackBuildResult build (PathSegment3 path, TrackSpec spec) {
-		return build(path, spec, 0f, path.getTotalLength(), spec.includeGuides, spec.includeRollers);
+		return build(path, spec, 0f, path.getTotalLength(), spec.includeGuides, spec.hasRollerDrive());
 	}
 
 	public static TrackBuildResult build(PathSegment3 path,
@@ -69,11 +69,25 @@ public class TrackBuilder {
 	}
 	
 	private static Mesh buildDeck(TrackSpec spec, List<SampleFrame> frames) {
-		TrackMeshBuilder mb = new TrackMeshBuilder();
+		return buildBed("Deck", frames, spec.getRunningWidth() * 0.5f, spec.deckTopY, spec.deckTopY - spec.deckThickness);
+	}
 
-		float half = spec.getRunningWidth() * 0.5f;
-		float topY = spec.deckTopY;
-		float bottomY = spec.deckTopY - spec.deckThickness;
+	public static Mesh buildConveyorBeltSurface(PathSegment3 path, TrackSpec spec, float startDistance, float endDistance) {
+		if (!spec.hasConveyorDrive()) {
+			return null;
+		}
+		List<SampleFrame> frames = sampleFrames(path, startDistance, endDistance, spec.sampleStep);
+		if (frames.size() < 2) {
+			return null;
+		}
+		float halfWidth = (spec.getRunningWidth() - (2f * spec.conveyorWidthInset)) * 0.5f;
+		float topY = spec.getLoadSurfaceY();
+		float bottomY = topY - spec.conveyorBeltThickness;
+		return buildBed("ConveyorBelt", frames, halfWidth, topY, bottomY);
+	}
+
+	private static Mesh buildBed(String name, List<SampleFrame> frames, float halfWidth, float topY, float bottomY) {
+		TrackMeshBuilder mb = new TrackMeshBuilder();
 
 		int[] tl = new int[frames.size()];
 		int[] tr = new int[frames.size()];
@@ -82,8 +96,8 @@ public class TrackBuilder {
 
 		for (int i = 0; i < frames.size(); i++) {
 			SampleFrame f = frames.get(i);
-			Vec3 left = f.centre.subtract(f.side.scale(half));
-			Vec3 right = f.centre.add(f.side.scale(half));
+			Vec3 left = f.centre.subtract(f.side.scale(halfWidth));
+			Vec3 right = f.centre.add(f.side.scale(halfWidth));
 			tl[i] = mb.addVertex(left.x, topY, left.z);
 			tr[i] = mb.addVertex(right.x, topY, right.z);
 			bl[i] = mb.addVertex(left.x, bottomY, left.z);
@@ -111,7 +125,7 @@ public class TrackBuilder {
 		int last = frames.size() - 1;
 		mb.addQuad(tl[last], bl[last], br[last], tr[last]);
 
-		return mb.build("Deck");
+		return mb.build(name);
 	}
 	
 	public static Mesh buildGuide(
@@ -191,7 +205,7 @@ public class TrackBuilder {
 				&& spec.suppressRollersInTransferZones;
 
 		List<ObjectTransformation> rollers = List.of();
-		if (spec.includeRollers && !suppressRollers) {
+		if (spec.hasRollerDrive() && !suppressRollers) {
 			rollers = buildRollers(path, spec, start, end);
 		}
 

@@ -85,6 +85,27 @@ public class WarehouseTrackFactory {
 	            0.080f
 	    );
 
+	    TrackSpec conveyorWidthWise = TrackSpec.conveyor(
+	            widthToteEnvelope,
+	            0.030f,
+	            0.040f,
+	            0.000f,
+	            true,
+	            0.050f,
+	            0.010f,
+	            0.005f,
+	            0.5f,
+	            0.5f,
+	            0.012f,
+	            0.025f,
+	            0.090f,
+	            0.250f,
+	            0.050f,
+	            0.004f,
+	            false,
+	            0.080f
+	    );
+
 	    float toteLength = tote.getOuterBottomDepth();
 	    float linkOpeningLength = specToteLengthWise.getGuideJoinOpeningLength();
 
@@ -161,7 +182,7 @@ public class WarehouseTrackFactory {
 	    // Rendering specs per segment
 	    builder.renderWith(top, specToteWidthWise)
 	           .renderWith(rightReturn, specToteWidthWise)
-	           .renderWith(bottom, specToteWidthWise)
+	           .renderWith(bottom, conveyorWidthWise)
 	           .renderWith(leftReturn, specToteWidthWise)
 	           .renderWith(link1, specToteLengthWise)
 	           .renderWith(link2, specToteLengthWise);
@@ -231,10 +252,14 @@ public class WarehouseTrackFactory {
 	    OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
 	    OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);
 	    OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF);
+	    OneColourStrategyImpl beltColour = new OneColourStrategyImpl(0xFF2F2F2F);
+	    OneColourStrategyImpl beltMarkerColour = new OneColourStrategyImpl(0xFFB8B8B8);
 
 	    TrackAppearance appearance = new TrackAppearance(
 	            deckColour,
 	            rollersColour,
+	            beltColour,
+	            beltMarkerColour,
 	            guidesColour,
 	            new OneColourStrategyImpl(0xFFFF8800)
 	    );
@@ -245,7 +270,7 @@ public class WarehouseTrackFactory {
 	            appearance
 	    );
 
-	    float rollerYOffset = specToteLengthWise.includeRollers ? specToteLengthWise.rollerHeight + 0.02f : 0f;
+	    float rollerYOffset = specToteWidthWise.getLoadSurfaceHeight() + 0.02f;
 	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
 	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
@@ -272,7 +297,7 @@ public class WarehouseTrackFactory {
 		        tote.getOuterHeight()
 		);
 
-		TrackSpec spec = new TrackSpec(
+		TrackSpec rollerSpec = new TrackSpec(
 				toteEnvelope,
 		        0.030f,
 		        0.040f,
@@ -290,6 +315,26 @@ public class WarehouseTrackFactory {
 		        0.018f,
 		        0.080f
 		);		
+		TrackSpec conveyorSpec = TrackSpec.conveyor(
+				toteEnvelope,
+		        0.030f,
+		        0.040f,
+		        0.000f,
+		        true,
+		        0.050f,
+		        0.010f,
+		        0.000f,
+		        0.5f,
+		        1.0f,
+		        0.012f,
+		        0.025f,
+		        0.090f,
+		        0.250f,
+		        0.050f,
+		        0.004f,
+		        false,
+		        0.080f
+		);		
 		float toteLength = tote.getOuterBottomDepth();
 		// =====================
 		// Parallel track layout
@@ -299,7 +344,7 @@ public class WarehouseTrackFactory {
 		float rightX = 8f;
 
 		float epsilon = 0.01f;
-		float trackSpacing = spec.getOverallWidth() + epsilon;
+		float trackSpacing = rollerSpec.getOverallWidth() + epsilon;
 
 		// upper track at Z = 0 (travels +X)
 		float upperZ = 0f;
@@ -365,16 +410,20 @@ public class WarehouseTrackFactory {
 		        straightAcrossTransfer
 		);
 	
-		builder.renderWith(upper, spec)
-	       .renderWith(lower, spec);
+		builder.renderWith(upper, conveyorSpec)
+	       .renderWith(lower, rollerSpec);
 		
 		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
 		OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);
 		OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF);
+		OneColourStrategyImpl beltColour = new OneColourStrategyImpl(0xFF2F2F2F);
+		OneColourStrategyImpl beltMarkerColour = new OneColourStrategyImpl(0xFFB8B8B8);
 
 		TrackAppearance appearance = new TrackAppearance(
 		        deckColour,
 		        rollersColour,
+		        beltColour,
+		        beltMarkerColour,
 		        guidesColour,
 		        new OneColourStrategyImpl(0xFFFF8800)
 		);
@@ -385,7 +434,7 @@ public class WarehouseTrackFactory {
 		        appearance
 		);
 
-		float rollerYOffset = spec.includeRollers ? spec.rollerHeight : 0f;
+		float rollerYOffset = rollerSpec.getLoadSurfaceHeight();
 	
 	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset + 0.02f, 0f); 

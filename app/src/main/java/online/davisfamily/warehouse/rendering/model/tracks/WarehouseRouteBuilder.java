@@ -459,6 +459,10 @@ public class WarehouseRouteBuilder {
         return metadata(segment);
     }
 
+    public TrackSpec getTrackSpec(RouteSegment segment) {
+        return requireSpec(segment);
+    }
+
     private TrackSpec requireSpec(RouteSegment segment) {
         TrackSpec spec = specBySegment.get(segment);
         if (spec == null) {
