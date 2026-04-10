@@ -406,7 +406,7 @@ public class WarehouseTrackFactory {
 		}		
 	}
 	
-	private void setupCylinder(TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects) {
+	public static void setupCylinder(TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects) {
 		Mesh m = CylinderFactory.buildCylinder(1f, 3f, 360, true);
 		ObjectTransformation ot = new ObjectTransformation(
 				0.0f,0.0f,0f, // rotation xyz
