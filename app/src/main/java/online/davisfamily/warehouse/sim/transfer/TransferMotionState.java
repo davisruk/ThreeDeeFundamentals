@@ -1,7 +1,9 @@
 package online.davisfamily.warehouse.sim.transfer;
 
+import online.davisfamily.threedee.behaviour.routing.RouteFollower.TravelDirection;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.warehouse.sim.tote.Tote.FacingDirection;
 
 public class TransferMotionState {
 	
@@ -13,31 +15,48 @@ public class TransferMotionState {
 	private final RouteSegment sourceSegment;
 	private final RouteSegment targetSegment;
 	private final float sourceTransferCentreDistance;
-	private final float targetDistanceAlongSegment;
+	private final TravelDirection targetTravelDirection;
+	private final FacingDirection targetFacingDirection;
+	private final boolean targetFixedFacingYawActive;
+	private final float targetFixedFacingYawRadians;
 	private Vec3 startPosition;
 	private Vec3 endPosition;
-	private final float preservedYawRadians;
-	private final double durationSeconds;
-	private double elapsedSeconds;
+	private final float targetMergeDistanceAlongSegment;
+	private float transferLengthWorld;
+	private float distanceTravelledWorld;
 	private TransferMotionPhase phase = TransferMotionPhase.WAITING_FOR_ALIGNMENT;
 	
-	public TransferMotionState(String machineId, RouteSegment sourceSegment, RouteSegment targetSegment,
-			float sourceTransferCentreDistance, float targetDistanceAlongSegment, Vec3 startPosition, Vec3 endPosition,
-			float preservedYawRadians, double durationSeconds) {
+	public TransferMotionState(
+			String machineId,
+			RouteSegment sourceSegment,
+			RouteSegment targetSegment,
+			float sourceTransferCentreDistance,
+			TravelDirection targetTravelDirection,
+			FacingDirection targetFacingDirection,
+			boolean targetFixedFacingYawActive,
+			float targetFixedFacingYawRadians,
+			float targetMergeDistanceAlongSegment,
+			Vec3 startPosition,
+			Vec3 endPosition,
+			float transferLengthWorld) {
 		super();
 		this.machineId = machineId;
 		this.sourceSegment = sourceSegment;
 		this.targetSegment = targetSegment;
 		this.sourceTransferCentreDistance = sourceTransferCentreDistance;
-		this.targetDistanceAlongSegment = targetDistanceAlongSegment;
+		this.targetTravelDirection = targetTravelDirection;
+		this.targetFacingDirection = targetFacingDirection;
+		this.targetFixedFacingYawActive = targetFixedFacingYawActive;
+		this.targetFixedFacingYawRadians = targetFixedFacingYawRadians;
+		this.targetMergeDistanceAlongSegment = targetMergeDistanceAlongSegment;
 		this.startPosition = startPosition;
 		this.endPosition = endPosition;
-		this.preservedYawRadians = preservedYawRadians;
-		this.durationSeconds = durationSeconds;
+		this.transferLengthWorld = transferLengthWorld;
 	}
 
-	public void updateElapsed(double dtSeconds) {
-		elapsedSeconds+=dtSeconds;
+	public void advanceWorldDistance(double speedUnitsPerSecond, double dtSeconds) {
+		float delta = (float) (speedUnitsPerSecond * dtSeconds);
+		distanceTravelledWorld = clamp(distanceTravelledWorld + delta, 0f, transferLengthWorld);
 	}
 	
 	public TransferMotionPhase getPhase() {
@@ -56,16 +75,8 @@ public class TransferMotionState {
 		return sourceTransferCentreDistance;
 	}
 
-	public float getPreservedYawRadians() {
-		return preservedYawRadians;
-	}
-
-	public float getProgress() {
-		return (float) Math.min(1.0, elapsedSeconds / durationSeconds);
-	}
-	
 	public boolean isComplete() {
-		return getProgress() >= 1.0f;
+		return distanceTravelledWorld >= transferLengthWorld;
 	}
 
 	public String getMachineId() {
@@ -84,16 +95,32 @@ public class TransferMotionState {
 		return targetSegment;
 	}
 
-	public float getTargetDistanceAlongSegment() {
-		return targetDistanceAlongSegment;
+	public float getTargetMergeDistanceAlongSegment() {
+		return targetMergeDistanceAlongSegment;
 	}
 
-	public double getElapsedSeconds() {
-		return elapsedSeconds;
+	public TravelDirection getTargetTravelDirection() {
+		return targetTravelDirection;
 	}
 
-	public double getDurationSeconds() {
-		return durationSeconds;
+	public FacingDirection getTargetFacingDirection() {
+		return targetFacingDirection;
+	}
+
+	public boolean isTargetFixedFacingYawActive() {
+		return targetFixedFacingYawActive;
+	}
+
+	public float getTargetFixedFacingYawRadians() {
+		return targetFixedFacingYawRadians;
+	}
+
+	public float getTransferLengthWorld() {
+		return transferLengthWorld;
+	}
+
+	public float getDistanceTravelledWorld() {
+		return distanceTravelledWorld;
 	}
 
 	public void setStartPosition(Vec3 startPosition) {
@@ -102,6 +129,27 @@ public class TransferMotionState {
 
 	public void setEndPosition(Vec3 endPosition) {
 		this.endPosition = endPosition;
+	}
+
+	public void recalculateTransferLengthWorld() {
+		if (startPosition == null || endPosition == null) {
+			transferLengthWorld = 0f;
+			distanceTravelledWorld = 0f;
+			return;
+		}
+		transferLengthWorld = startPosition.distanceTo(endPosition);
+		distanceTravelledWorld = clamp(distanceTravelledWorld, 0f, transferLengthWorld);
+	}
+
+	public float getTransferAlpha() {
+		if (transferLengthWorld <= 0f) {
+			return 1f;
+		}
+		return distanceTravelledWorld / transferLengthWorld;
+	}
+
+	private static float clamp(float value, float min, float max) {
+		return Math.max(min, Math.min(max, value));
 	}
 	
 }

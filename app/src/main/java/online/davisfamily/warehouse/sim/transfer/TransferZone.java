@@ -15,6 +15,7 @@ public class TransferZone {
     private final GuideSide sourceOpenSide;
     private final GuideSide targetOpenSide;
     private final float centrePoint;
+    private final TransferMotionConfig motionConfig;
 
     public TransferZone(
             String id,
@@ -25,7 +26,8 @@ public class TransferZone {
             float targetStartDistance,
             GuideSide sourceOpenSide,
             GuideSide targetOpenSide,
-            TransferDecisionStrategy decisionStrategy) {
+            TransferDecisionStrategy decisionStrategy,
+            TransferMotionConfig motionConfig) {
 
         if (length <= 0f) {
             throw new IllegalArgumentException("length must be > 0");
@@ -42,6 +44,9 @@ public class TransferZone {
         if (targetOpenSide == null) {
             throw new IllegalArgumentException("targetOpenSide must not be null");
         }
+        if (motionConfig == null) {
+            throw new IllegalArgumentException("motionConfig must not be null");
+        }
         this.id = id;
         this.startDistance = startDistance;
         this.length = length;
@@ -52,6 +57,7 @@ public class TransferZone {
         this.targetOpenSide = targetOpenSide;
         this.decisionStrategy = decisionStrategy;
         this.centrePoint = startDistance + length * 0.5f;
+        this.motionConfig = motionConfig;
     }
 
     public float getCentrePoint() {
@@ -88,6 +94,10 @@ public class TransferZone {
 
     public TransferDecisionStrategy getDecisionStrategy() {
         return decisionStrategy;
+    }
+
+    public TransferMotionConfig getMotionConfig() {
+        return motionConfig;
     }
 
     public boolean contains(float distanceOnSegment) {

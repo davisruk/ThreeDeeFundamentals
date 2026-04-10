@@ -84,7 +84,7 @@ public class TransferZoneController implements SimulationController{
 					tz.getSourceSegment(),
 					tz.getCentrePoint(),
 					tz.getTargetStartDistance(),
-					0.35);
+					tz.getMotionConfig());
 		}
 		
 		machine.transitionTo(TransferZoneState.ACTIVE);
