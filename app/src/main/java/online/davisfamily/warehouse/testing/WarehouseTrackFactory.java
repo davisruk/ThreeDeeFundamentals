@@ -26,6 +26,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
 import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
@@ -155,6 +156,7 @@ public class WarehouseTrackFactory {
 	    // Bottom side: pull the target guides back where the trimmed links join the bottom run.
 	    float topConnectionClearance = topLinkClearance;
 	    float bottomConnectionClearance = linkTrimEnd;
+	    TransferMotionConfig tunedLinkTransfer = new TransferMotionConfig(0.35, 0.12f, 0.75f);
 
 	    // Rendering specs per segment
 	    builder.renderWith(top, specToteWidthWise)
@@ -202,7 +204,8 @@ public class WarehouseTrackFactory {
 	            GuideSide.RIGHT,
 	            GuideSide.LEFT,
 	            false,
-	            topConnectionClearance
+	            topConnectionClearance,
+	            tunedLinkTransfer
 	    ).addTransferToLink(
 	            "transfer_2",
 	    		top,

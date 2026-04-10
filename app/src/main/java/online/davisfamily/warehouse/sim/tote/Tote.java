@@ -12,6 +12,7 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
 import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
+import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionState;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionState.TransferMotionPhase;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
@@ -185,11 +186,12 @@ public class Tote implements TrackableObject {
 				+ reservedByMachineId + "]";
 	}
 	
-	public void beginTransfer(String machineId, RouteSegment targetSegment, RouteSegment sourceSegment, float sourceTransferCenterDistance, float targetDistanceAlongSegment, double durationSeconds) {
+	public void beginTransfer(String machineId, RouteSegment targetSegment, RouteSegment sourceSegment, float sourceTransferCenterDistance, float targetDistanceAlongSegment, TransferMotionConfig motionConfig) {
 		if (!machineId.equals(reservedByMachineId)) return;
 		
 		RouteFollowerSnapshot snap = lastRouteSnapshot;
 		if (snap == null) return;
+		if (motionConfig == null) return;
 
 		Vec3 startPosition = new Vec3(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
 		TravelDirection targetTravelDirection = routeFollower.getTravelDirection();
@@ -198,7 +200,7 @@ public class Tote implements TrackableObject {
 				targetSegment,
 				targetDistanceAlongSegment,
 				routeFollower.getSpeedUnitsPerSecond(),
-				durationSeconds);
+				motionConfig);
 		Vec3 targetPosition = targetSegment.getGeometry().sampleByDistance(targetMergeDistanceAlongSegment);
 		FacingDirection targetFacingDirection = determineTargetFacingDirection(
 				snap,
@@ -228,10 +230,10 @@ public class Tote implements TrackableObject {
 			RouteSegment targetSegment,
 			float targetEntryDistanceAlongSegment,
 			double speedUnitsPerSecond,
-			double preferredDurationSeconds) {
-		float preferredTravel = (float) (speedUnitsPerSecond * preferredDurationSeconds);
-		float minMergeDistance = minMergeDistanceFor(targetSegment, targetEntryDistanceAlongSegment);
-		float maxMergeDistance = maxMergeDistanceFor(targetSegment, targetEntryDistanceAlongSegment);
+			TransferMotionConfig motionConfig) {
+		float preferredTravel = (float) (speedUnitsPerSecond * motionConfig.getPreferredDurationSeconds());
+		float minMergeDistance = minMergeDistanceFor(targetSegment, targetEntryDistanceAlongSegment, motionConfig);
+		float maxMergeDistance = maxMergeDistanceFor(targetSegment, targetEntryDistanceAlongSegment, motionConfig);
 		float bestDistance = minMergeDistance;
 		float bestError = Float.MAX_VALUE;
 
@@ -250,12 +252,18 @@ public class Tote implements TrackableObject {
 		return bestDistance;
 	}
 
-	private float minMergeDistanceFor(RouteSegment targetSegment, float targetEntryDistanceAlongSegment) {
-		return clamp(targetEntryDistanceAlongSegment + 0.10f, 0f, targetSegment.length());
+	private float minMergeDistanceFor(RouteSegment targetSegment, float targetEntryDistanceAlongSegment, TransferMotionConfig motionConfig) {
+		return clamp(
+				targetEntryDistanceAlongSegment + motionConfig.getMinMergeOffsetFromEntryDistance(),
+				0f,
+				targetSegment.length());
 	}
 
-	private float maxMergeDistanceFor(RouteSegment targetSegment, float targetEntryDistanceAlongSegment) {
-		return clamp(targetEntryDistanceAlongSegment + 0.80f, 0f, targetSegment.length());
+	private float maxMergeDistanceFor(RouteSegment targetSegment, float targetEntryDistanceAlongSegment, TransferMotionConfig motionConfig) {
+		return clamp(
+				targetEntryDistanceAlongSegment + motionConfig.getMaxMergeOffsetFromEntryDistance(),
+				0f,
+				targetSegment.length());
 	}
 
 	private float clamp(float value, float min, float max) {
