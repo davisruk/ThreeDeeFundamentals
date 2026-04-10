@@ -98,28 +98,27 @@ public class Tote implements TrackableObject {
 		//float toteCentreDistance = getToteCentreDistanceAlongSegment(snapshot);
 		float toteCentreDistance = lastRouteSnapshot.distanceAlongSegment();
 		if (toteCentreDistance >= transferMotionState.getSourceTransferCentreDistance()) {
-			cachedPos.setXYZ(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
-	        transferMotionState.setStartPosition(cachedPos);
-			cachedPos = transferMotionState.getTargetSegment().getGeometry().sampleByDistance(transferMotionState.getCurrentTargetDistanceAlongSegment());
-	        transferMotionState.setEndPosition(cachedPos);
+			Vec3 startPosition = new Vec3(
+					transformation.xTranslation,
+					transformation.yTranslation,
+					transformation.zTranslation);
+	        transferMotionState.setStartPosition(startPosition);
+			Vec3 endPosition = transferMotionState.getTargetSegment().getGeometry()
+					.sampleByDistance(transferMotionState.getTargetMergeDistanceAlongSegment());
+	        transferMotionState.setEndPosition(endPosition);
+	        transferMotionState.recalculateTransferLengthWorld();
+	        if (transferMotionState.getTransferLengthWorld() <= 0.0001f) {
+	        	completeTransfer(context);
+	        	return;
+	        }
 	        transferMotionState.setPhase(TransferMotionPhase.LATERAL_TRANSFER);
 		}
 	}
 	
 	public void updateLateralTransferPhase(SimulationContext context, double dtSeconds) {
-		double remainingTransferTime =
-		        transferMotionState.getDurationSeconds()
-		        - transferMotionState.getElapsedSeconds();
+		transferMotionState.advanceWorldDistance(routeFollower.getSpeedUnitsPerSecond(), dtSeconds);
 
-		double timeUsed = Math.min(dtSeconds, remainingTransferTime);
-
-		transferMotionState.advanceTargetDistance(routeFollower.getSpeedUnitsPerSecond(), timeUsed);
-		transferMotionState.setEndPosition(
-				transferMotionState.getTargetSegment().getGeometry()
-						.sampleByDistance(transferMotionState.getCurrentTargetDistanceAlongSegment()));
-		transferMotionState.updateElapsed(timeUsed);
-
-		float t = smoothstep(transferMotionState.getProgress());
+		float t = transferMotionState.getTransferAlpha();
 		Vec3 start = transferMotionState.getStartPosition();
 		Vec3 end = transferMotionState.getEndPosition();
 		cachedPos.lerp(start, end, t);
@@ -127,22 +126,12 @@ public class Tote implements TrackableObject {
 
 		if (transferMotionState.isComplete()) {
 		    completeTransfer(context);
-
-		    double leftoverDt = dtSeconds - timeUsed;
-
-		    if (leftoverDt > 0) {
-		        RouteFollowerSnapshot snapshot =
-		                routeFollower.advance(leftoverDt, false);
-
-		        lastRouteSnapshot = snapshot;
-		        applySnapshot(snapshot);
-		    }
 		}		
 	}
 	
 	private void completeTransfer(SimulationContext context) {
 		RouteSegment targetSegment = transferMotionState.getTargetSegment();
-		float targetDistance = transferMotionState.getCurrentTargetDistanceAlongSegment();
+		float targetDistance = transferMotionState.getTargetMergeDistanceAlongSegment();
 		String machineId = transferMotionState.getMachineId();
 		routeFollower.setCurrentSegment(targetSegment);
 		routeFollower.setDistanceAlongSegment(targetDistance);
@@ -156,10 +145,6 @@ public class Tote implements TrackableObject {
 		interactionMode = ToteMotionState.MOVING;
 		transferMotionState = null;
 		context.publish(new TransferCompletedEvent(machineId, context.getSimulationTimeSeconds(),id));		
-	}
-	
-	private float smoothstep(float t) {
-	    return t * t * (3f - 2f * t);
 	}
 	
 	private boolean isMotionBlocked() {
@@ -207,28 +192,74 @@ public class Tote implements TrackableObject {
 		if (snap == null) return;
 
 		Vec3 startPosition = new Vec3(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
-		Vec3 targetPosition = targetSegment.getGeometry().sampleByDistance(targetDistanceAlongSegment);
 		TravelDirection targetTravelDirection = routeFollower.getTravelDirection();
+		float targetMergeDistanceAlongSegment = calculateMergeDistance(
+				startPosition,
+				targetSegment,
+				targetDistanceAlongSegment,
+				routeFollower.getSpeedUnitsPerSecond(),
+				durationSeconds);
+		Vec3 targetPosition = targetSegment.getGeometry().sampleByDistance(targetMergeDistanceAlongSegment);
 		FacingDirection targetFacingDirection = determineTargetFacingDirection(
 				snap,
 				targetSegment,
-				targetDistanceAlongSegment,
+				targetMergeDistanceAlongSegment,
 				targetTravelDirection);
+		float transferLengthWorld = startPosition.distanceTo(targetPosition);
 		this.interactionMode = ToteMotionState.TRANSFERRING;
 	    this.transferMotionState = new TransferMotionState(
 	            machineId,
 	            sourceSegment,
 	            targetSegment,
 	            sourceTransferCenterDistance,
-	            targetDistanceAlongSegment,
 	            targetTravelDirection,
 	            targetFacingDirection,
 	            targetSegment.getGeometry().isLinkSegment(),
 	            transformation.angleY,
+	            targetMergeDistanceAlongSegment,
 	            startPosition,
 	            targetPosition,
-	            durationSeconds
+	            transferLengthWorld
 	    );
+	}
+
+	private float calculateMergeDistance(
+			Vec3 startWorld,
+			RouteSegment targetSegment,
+			float targetEntryDistanceAlongSegment,
+			double speedUnitsPerSecond,
+			double preferredDurationSeconds) {
+		float preferredTravel = (float) (speedUnitsPerSecond * preferredDurationSeconds);
+		float minMergeDistance = minMergeDistanceFor(targetSegment, targetEntryDistanceAlongSegment);
+		float maxMergeDistance = maxMergeDistanceFor(targetSegment, targetEntryDistanceAlongSegment);
+		float bestDistance = minMergeDistance;
+		float bestError = Float.MAX_VALUE;
+
+		float step = 0.01f;
+		for (float candidateDistance = minMergeDistance; candidateDistance <= maxMergeDistance + 0.0001f; candidateDistance += step) {
+			float clampedCandidate = clamp(candidateDistance, minMergeDistance, maxMergeDistance);
+			Vec3 candidatePosition = targetSegment.getGeometry().sampleByDistance(clampedCandidate);
+			float candidateTravel = startWorld.distanceTo(candidatePosition);
+			float error = Math.abs(candidateTravel - preferredTravel);
+			if (error < bestError) {
+				bestError = error;
+				bestDistance = clampedCandidate;
+			}
+		}
+
+		return bestDistance;
+	}
+
+	private float minMergeDistanceFor(RouteSegment targetSegment, float targetEntryDistanceAlongSegment) {
+		return clamp(targetEntryDistanceAlongSegment + 0.10f, 0f, targetSegment.length());
+	}
+
+	private float maxMergeDistanceFor(RouteSegment targetSegment, float targetEntryDistanceAlongSegment) {
+		return clamp(targetEntryDistanceAlongSegment + 0.80f, 0f, targetSegment.length());
+	}
+
+	private float clamp(float value, float min, float max) {
+		return Math.max(min, Math.min(max, value));
 	}
 
 	private float computeRenderedYaw(RouteFollowerSnapshot snapshot) {

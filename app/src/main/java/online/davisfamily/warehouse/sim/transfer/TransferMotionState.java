@@ -21,9 +21,9 @@ public class TransferMotionState {
 	private final float targetFixedFacingYawRadians;
 	private Vec3 startPosition;
 	private Vec3 endPosition;
-	private float currentTargetDistanceAlongSegment;
-	private final double durationSeconds;
-	private double elapsedSeconds;
+	private final float targetMergeDistanceAlongSegment;
+	private float transferLengthWorld;
+	private float distanceTravelledWorld;
 	private TransferMotionPhase phase = TransferMotionPhase.WAITING_FOR_ALIGNMENT;
 	
 	public TransferMotionState(
@@ -31,31 +31,32 @@ public class TransferMotionState {
 			RouteSegment sourceSegment,
 			RouteSegment targetSegment,
 			float sourceTransferCentreDistance,
-			float targetDistanceAlongSegment,
 			TravelDirection targetTravelDirection,
 			FacingDirection targetFacingDirection,
 			boolean targetFixedFacingYawActive,
 			float targetFixedFacingYawRadians,
+			float targetMergeDistanceAlongSegment,
 			Vec3 startPosition,
 			Vec3 endPosition,
-			double durationSeconds) {
+			float transferLengthWorld) {
 		super();
 		this.machineId = machineId;
 		this.sourceSegment = sourceSegment;
 		this.targetSegment = targetSegment;
 		this.sourceTransferCentreDistance = sourceTransferCentreDistance;
-		this.currentTargetDistanceAlongSegment = targetDistanceAlongSegment;
 		this.targetTravelDirection = targetTravelDirection;
 		this.targetFacingDirection = targetFacingDirection;
 		this.targetFixedFacingYawActive = targetFixedFacingYawActive;
 		this.targetFixedFacingYawRadians = targetFixedFacingYawRadians;
+		this.targetMergeDistanceAlongSegment = targetMergeDistanceAlongSegment;
 		this.startPosition = startPosition;
 		this.endPosition = endPosition;
-		this.durationSeconds = durationSeconds;
+		this.transferLengthWorld = transferLengthWorld;
 	}
 
-	public void updateElapsed(double dtSeconds) {
-		elapsedSeconds+=dtSeconds;
+	public void advanceWorldDistance(double speedUnitsPerSecond, double dtSeconds) {
+		float delta = (float) (speedUnitsPerSecond * dtSeconds);
+		distanceTravelledWorld = clamp(distanceTravelledWorld + delta, 0f, transferLengthWorld);
 	}
 	
 	public TransferMotionPhase getPhase() {
@@ -74,12 +75,8 @@ public class TransferMotionState {
 		return sourceTransferCentreDistance;
 	}
 
-	public float getProgress() {
-		return (float) Math.min(1.0, elapsedSeconds / durationSeconds);
-	}
-	
 	public boolean isComplete() {
-		return getProgress() >= 1.0f;
+		return distanceTravelledWorld >= transferLengthWorld;
 	}
 
 	public String getMachineId() {
@@ -98,8 +95,8 @@ public class TransferMotionState {
 		return targetSegment;
 	}
 
-	public float getCurrentTargetDistanceAlongSegment() {
-		return currentTargetDistanceAlongSegment;
+	public float getTargetMergeDistanceAlongSegment() {
+		return targetMergeDistanceAlongSegment;
 	}
 
 	public TravelDirection getTargetTravelDirection() {
@@ -118,12 +115,12 @@ public class TransferMotionState {
 		return targetFixedFacingYawRadians;
 	}
 
-	public double getElapsedSeconds() {
-		return elapsedSeconds;
+	public float getTransferLengthWorld() {
+		return transferLengthWorld;
 	}
 
-	public double getDurationSeconds() {
-		return durationSeconds;
+	public float getDistanceTravelledWorld() {
+		return distanceTravelledWorld;
 	}
 
 	public void setStartPosition(Vec3 startPosition) {
@@ -134,14 +131,21 @@ public class TransferMotionState {
 		this.endPosition = endPosition;
 	}
 
-	public void advanceTargetDistance(double speedUnitsPerSecond, double dtSeconds) {
-		float delta = (float) (speedUnitsPerSecond * dtSeconds);
-		if (targetTravelDirection == TravelDirection.REVERSE) {
-			delta = -delta;
+	public void recalculateTransferLengthWorld() {
+		if (startPosition == null || endPosition == null) {
+			transferLengthWorld = 0f;
+			distanceTravelledWorld = 0f;
+			return;
 		}
+		transferLengthWorld = startPosition.distanceTo(endPosition);
+		distanceTravelledWorld = clamp(distanceTravelledWorld, 0f, transferLengthWorld);
+	}
 
-		float maxDistance = targetSegment.length();
-		currentTargetDistanceAlongSegment = clamp(currentTargetDistanceAlongSegment + delta, 0f, maxDistance);
+	public float getTransferAlpha() {
+		if (transferLengthWorld <= 0f) {
+			return 1f;
+		}
+		return distanceTravelledWorld / transferLengthWorld;
 	}
 
 	private static float clamp(float value, float min, float max) {
