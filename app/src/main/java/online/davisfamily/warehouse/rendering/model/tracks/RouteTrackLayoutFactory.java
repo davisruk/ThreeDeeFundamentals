@@ -5,22 +5,25 @@ import java.util.Comparator;
 import java.util.List;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
+import online.davisfamily.warehouse.sim.transfer.TransferZone;
 
 public final class RouteTrackLayoutFactory {
 
     private RouteTrackLayoutFactory() {
     }
 
-    public static RouteTrackLayout create(RouteSegment segment) {
+    public static RouteTrackLayout create(RouteSegment segment, WarehouseSegmentMetadata metadata) {
         if (segment == null) {
             throw new IllegalArgumentException("segment must not be null");
+        }
+        if (metadata == null) {
+            throw new IllegalArgumentException("metadata must not be null");
         }
 
         float totalLength = segment.getGeometry().getTotalLength();
 
-        float renderStart = segment.getRenderTrimStartDistance();
-        float renderEnd = totalLength - segment.getRenderTrimEndDistance();
+        float renderStart = metadata.getRenderTrimStartDistance();
+        float renderEnd = totalLength - metadata.getRenderTrimEndDistance();
 
         renderStart = Math.max(0f, renderStart);
         renderEnd = Math.min(totalLength, renderEnd);
@@ -29,7 +32,7 @@ public final class RouteTrackLayoutFactory {
             renderEnd = renderStart;
         }
 
-        List<TransferZone> zones = new ArrayList<>(segment.getTransferZones());
+        List<TransferZone> zones = new ArrayList<>(metadata.getTransferZones());
         zones.sort(Comparator.comparing(TransferZone::getStartDistance));
 
         List<TrackInterval> intervals = new ArrayList<>();
@@ -70,7 +73,7 @@ public final class RouteTrackLayoutFactory {
                     null));
         }
 
-        return new RouteTrackLayout(segment, intervals, renderStart, renderEnd);
+        return new RouteTrackLayout(segment, metadata, intervals, renderStart, renderEnd);
     }
 
     public static List<TrackSpan> createGuideSpans(RouteTrackLayout layout, TrackSpec spec, GuideSide side) {
@@ -93,7 +96,7 @@ public final class RouteTrackLayoutFactory {
 
         List<TrackSpan> blockedSpans = new ArrayList<>();
 
-        for (GuideOpening opening : layout.getRouteSegment().getGuideOpenings()) {
+        for (GuideOpening opening : layout.getMetadata().getGuideOpenings()) {
             if (opening.getSide() == side) {
                 blockedSpans.add(new TrackSpan(
                         opening.getStartDistance(),
@@ -101,7 +104,7 @@ public final class RouteTrackLayoutFactory {
             }
         }
 
-        for (ConnectionClearance clearance : layout.getRouteSegment().getConnectionClearances()) {
+        for (ConnectionClearance clearance : layout.getMetadata().getConnectionClearances()) {
             if (clearance.getSide() == side) {
                 blockedSpans.add(new TrackSpan(
                         clearance.getStartDistance(),

@@ -4,32 +4,14 @@ import java.util.List;
 
 import javax.swing.JRootPane;
 
-import online.davisfamily.threedee.behaviour.routing.RouteFollower;
-import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
-import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
-import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.camera.CameraPosition;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
-import online.davisfamily.threedee.matrices.Mat4;
-import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
-import online.davisfamily.threedee.model.Mesh;
-import online.davisfamily.threedee.model.cylinder.CylinderFactory;
-import online.davisfamily.threedee.path.LinearSegment3;
-import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
-import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.scene.BaseScene;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
-import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
-import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
-import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
-import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
-import online.davisfamily.warehouse.sim.tote.Tote;
-import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 
 public class TestScene extends BaseScene{	
 

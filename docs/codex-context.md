@@ -37,7 +37,7 @@
   - Renderable scene node with mesh, transform, child objects, and optional visual behaviours.
 - `RouteSegment`
   - Represents a path segment with geometry and graph connections.
-  - Also currently carries transfer-zone and warehouse rendering metadata.
+  - Owns only generic routing topology and path geometry.
 - `RouteConnection`
   - Connects one segment to another with a target entry distance.
 - `RouteFollower`
@@ -48,6 +48,7 @@
   - Owns route following, writes directly into the tote render transform, and manages transfer state.
 - `TransferZone`
   - Defines a source window on a segment and the target segment/entry point for a transfer.
+  - Owns transfer-motion tuning via `TransferMotionConfig`.
 - `TransferZoneMachine`
   - Warehouse controller state machine for reserving and triggering transfers.
 - `TransferZoneController`
@@ -56,9 +57,6 @@
   - Detects tracked objects entering/present/exiting a configured route-distance window.
 - `WindowSensor`
   - Detects tracked objects inside the transfer window itself.
-- `RouteSceneBuilder`
-  - Builder for route segments and their warehouse-specific track/transfer metadata.
-  - Despite package location, this is not purely generic.
 - `RouteTrackFactory` / warehouse track rendering classes
   - Build conveyor/track render meshes from route definitions plus warehouse `TrackSpec`.
 
@@ -116,9 +114,15 @@
   - when the tote enters the window sensor region, the controller calls `tote.beginTransfer(...)`
 - Transfer in `Tote` currently has two phases:
   - `WAITING_FOR_ALIGNMENT`: keep following the source route until the tote reaches the transfer centre distance
-  - `LATERAL_TRANSFER`: interpolate from current position to the target segment entry position
+  - `LATERAL_TRANSFER`: move along a fixed straight transfer segment from the aligned source pose to a calculated merge point on the target segment
+- Transfer merge-point selection is now geometry-driven:
+  - the tote calculates a fixed merge distance on the target segment using current route speed plus the zone's `TransferMotionConfig`
+  - the merge search is clamped between per-zone minimum and maximum offsets from the target entry distance
+- Transfer motion config is warehouse-owned:
+  - `TransferMotionConfig` lives under `warehouse.sim.transfer`
+  - `WarehouseRouteBuilder` supplies defaults by transfer type and also exposes overloads so individual transfer sites can provide explicit configs
 - On completion:
-  - the tote updates its `RouteFollower` to the target segment and target distance
+  - the tote updates its `RouteFollower` to the target segment and the precomputed merge distance
   - a `TransferCompletedEvent` is published
   - the machine clears its active transfer state
 
@@ -134,9 +138,9 @@
 - During transfer, `TransferMotionState` tracks:
   - source and target segments
   - source transfer centre
-  - target entry distance
+  - target merge distance
   - start/end positions
-  - elapsed time and duration
+  - transfer world length and distance travelled
   - transfer phase
 - `RenderableObject` behaviours are a separate visual/transform update mechanism.
 - In the current warehouse path, tote locomotion is not driven by a `RenderableObject` behaviour.
@@ -163,9 +167,13 @@
 
 ### Current Boundary Tension In Code
 
-- `RouteSegment` currently includes warehouse rendering/guide metadata, not just generic routing concerns.
-- `RouteSceneBuilder` lives under `threedee.behaviour.routing` but depends heavily on warehouse track and transfer concepts.
-- `TransferZone` is located under `threedee` but depends on warehouse-specific strategy and guide concepts.
+- The core generic/warehouse ownership split is substantially cleaner than earlier sessions:
+  - generic route topology lives under `threedee.behaviour.routing`
+  - warehouse transfer topology/runtime lives under `warehouse.sim.transfer`
+  - warehouse track rendering lives under `warehouse.rendering.model.tracks`
+- The main remaining top-level coupling is the runnable example entry point:
+  - `SoftwareRenderer` in `threedee` directly boots the warehouse `TestScene`
+  - this is acceptable for the current single-example application, but it is still application-level coupling rather than a framework/plugin boundary
 
 ## Important Constraints and Assumptions
 
@@ -182,13 +190,16 @@
 
 ## Known Complexities or Risks
 
-- Transfer timing is fragile:
-  - lateral transfer consumes time, but downstream route progress is not continuously accumulated during the transfer
-  - this likely contributes to the visible hesitation after transfer completion
-- Tote yaw/orientation handling is fragile:
-  - normal updates recompute yaw from route direction
-  - transfer-specific yaw preservation is implemented with ad hoc override logic
-  - transitions from link segments back to non-link segments are especially easy to get wrong
+- Transfer timing has been materially improved:
+  - the tote no longer chases a moving target point during lateral transfer
+  - current transfer smoothness now depends mainly on per-zone `TransferMotionConfig` tuning rather than on correcting the transfer kinematics themselves
+- Transfer tuning is currently static configuration:
+  - merge search uses fixed sampled steps and per-zone min/max merge offsets
+  - additional runtime testing may still show cases where layout-specific tuning should be exposed more explicitly or derived from more geometry
+- Tote yaw/orientation handling has been reworked:
+  - tote facing is now modelled separately from route travel direction
+  - opposite-running target tracks and link traversal preserve world-facing correctly in the tested scenarios
+  - additional runtime testing may still reveal edge cases in more complex transfer layouts
 - `RouteFollower` connection choice is simplistic:
   - multiple candidates are currently resolved by taking the first one
 - Warehouse concerns bleed into generic routing classes, making future engine/framework separation harder.
@@ -198,3 +209,29 @@
   - it transitions to `TRANSFERRING` and then immediately to `ACTIVE` after starting a transfer
 - The current document reflects observed code structure and runtime behaviour.
   - It is not a design proposal and does not describe unimplemented intended architecture.
+
+## Latest Session Update
+
+- `RouteSegment` has been cleaned back to generic routing concerns only.
+- Warehouse-specific per-segment data now lives in `WarehouseSegmentMetadata`.
+- Builder ownership has been split:
+  - generic graph construction now lives in `RouteBuilder`
+  - warehouse track and transfer construction now lives in `WarehouseRouteBuilder`
+- `RouteSceneBuilder` has been removed.
+- `TargetGuideOpening` was removed after verification; it was unused in the current codebase.
+- `TransferZone` now lives under `warehouse.sim.transfer`; the warehouse transfer domain owns its topology/config object.
+- `TransferMotionConfig` now lives under `warehouse.sim.transfer`; transfer-motion tuning is zone-owned rather than hard-coded in `Tote`.
+- `RouteTrackFactory` now lives under `warehouse.rendering.model.tracks`; warehouse track rendering owns the renderable track factory and `SpecAndSegment`.
+- Tote motion now separates route `TravelDirection` from tote-facing orientation.
+- Transfer onto link segments now preserves world yaw through the link and resolves back to route-relative facing on exit.
+- Transfer motion now uses a fixed merge-point straight-line model:
+  - `WAITING_FOR_ALIGNMENT` still follows the source route until the transfer centre
+  - `LATERAL_TRANSFER` now advances along a fixed world-space segment at route speed
+  - on completion, the `RouteFollower` is restored at the precomputed merge distance on the target segment
+- `WarehouseRouteBuilder` now provides default `TransferMotionConfig` values by transfer type and overloads for per-transfer overrides.
+- `WarehouseTrackFactory` includes an explicit per-transfer `TransferMotionConfig` example for one top-to-link transfer, while other transfers still use builder defaults.
+- Remaining generic/warehouse boundary work still identified:
+  - no major ownership leaks are currently called out inside the route/transfer/rendering code
+  - the current application entry point still directly selects the warehouse example scene
+- Recommended next step for a future session:
+  - runtime-tune `TransferMotionConfig` values for different transfer layouts and decide whether the merge-search policy should become more geometry-aware

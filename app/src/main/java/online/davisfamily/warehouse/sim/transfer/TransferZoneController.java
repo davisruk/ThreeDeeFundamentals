@@ -1,7 +1,6 @@
 package online.davisfamily.warehouse.sim.transfer;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
@@ -85,7 +84,7 @@ public class TransferZoneController implements SimulationController{
 					tz.getSourceSegment(),
 					tz.getCentrePoint(),
 					tz.getTargetStartDistance(),
-					0.35);
+					tz.getMotionConfig());
 		}
 		
 		machine.transitionTo(TransferZoneState.ACTIVE);

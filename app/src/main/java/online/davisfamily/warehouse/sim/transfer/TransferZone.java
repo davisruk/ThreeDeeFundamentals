@@ -1,13 +1,12 @@
-package online.davisfamily.threedee.behaviour.routing.transfer;
+package online.davisfamily.warehouse.sim.transfer;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensorArea;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class TransferZone {
     private String id;
-	private final float startDistance;
+    private final float startDistance;
     private final float length;
     private final RouteSegment sourceSegment;
     private final RouteSegment targetSegment;
@@ -16,17 +15,19 @@ public class TransferZone {
     private final GuideSide sourceOpenSide;
     private final GuideSide targetOpenSide;
     private final float centrePoint;
-    
+    private final TransferMotionConfig motionConfig;
+
     public TransferZone(
             String id,
-    		float startDistance,
+            float startDistance,
             float length,
             RouteSegment sourceSegment,
             RouteSegment targetSegment,
             float targetStartDistance,
             GuideSide sourceOpenSide,
             GuideSide targetOpenSide,
-            TransferDecisionStrategy decisionStrategy) {
+            TransferDecisionStrategy decisionStrategy,
+            TransferMotionConfig motionConfig) {
 
         if (length <= 0f) {
             throw new IllegalArgumentException("length must be > 0");
@@ -43,6 +44,9 @@ public class TransferZone {
         if (targetOpenSide == null) {
             throw new IllegalArgumentException("targetOpenSide must not be null");
         }
+        if (motionConfig == null) {
+            throw new IllegalArgumentException("motionConfig must not be null");
+        }
         this.id = id;
         this.startDistance = startDistance;
         this.length = length;
@@ -53,18 +57,18 @@ public class TransferZone {
         this.targetOpenSide = targetOpenSide;
         this.decisionStrategy = decisionStrategy;
         this.centrePoint = startDistance + length * 0.5f;
+        this.motionConfig = motionConfig;
     }
 
-    
     public float getCentrePoint() {
-    	return centrePoint;
+        return centrePoint;
     }
+
     public String getId() {
-		return id;
-	}
+        return id;
+    }
 
-
-	public float getStartDistance() {
+    public float getStartDistance() {
         return startDistance;
     }
 
@@ -79,12 +83,12 @@ public class TransferZone {
     public RouteSegment getTargetSegment() {
         return targetSegment;
     }
-    
-    public RouteSegment getSourceSegment() {
-		return sourceSegment;
-	}
 
-	public float getTargetStartDistance() {
+    public RouteSegment getSourceSegment() {
+        return sourceSegment;
+    }
+
+    public float getTargetStartDistance() {
         return targetStartDistance;
     }
 
@@ -92,10 +96,14 @@ public class TransferZone {
         return decisionStrategy;
     }
 
+    public TransferMotionConfig getMotionConfig() {
+        return motionConfig;
+    }
+
     public boolean contains(float distanceOnSegment) {
         return distanceOnSegment >= startDistance && distanceOnSegment <= getEndDistance();
     }
-    
+
     public GuideSide getSourceOpenSide() {
         return sourceOpenSide;
     }
@@ -103,8 +111,8 @@ public class TransferZone {
     public GuideSide getTargetOpenSide() {
         return targetOpenSide;
     }
-    
-	public RouteSegment getRouteSegment() {
-		return sourceSegment;
-	}
+
+    public RouteSegment getRouteSegment() {
+        return sourceSegment;
+    }
 }

@@ -4,10 +4,7 @@ import java.util.List;
 
 import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
-import online.davisfamily.threedee.behaviour.routing.RouteSceneBuilder;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
-import online.davisfamily.threedee.behaviour.routing.RouteTrackFactory;
-import online.davisfamily.threedee.behaviour.routing.transfer.TransferZone;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
@@ -24,9 +21,13 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
+import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
+import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
+import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
@@ -95,7 +96,7 @@ public class WarehouseTrackFactory {
 	    float topZ = 0f;
 	    float bottomZ = -3f;
 
-	    RouteSceneBuilder builder = new RouteSceneBuilder();
+	    WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
 
 	    RouteSegment top = builder.segment("top", new LinearSegment3(
 	            new Vec3(leftX, 0f, topZ),
@@ -142,11 +143,11 @@ public class WarehouseTrackFactory {
 	    float linkTrimStart = 0.0f;
 	    float linkTrimEnd = 0.195f;
 
-	    link1.setRenderTrimStartDistance(linkTrimStart);
-	    link1.setRenderTrimEndDistance(linkTrimEnd);
+	    builder.getMetadata(link1).setRenderTrimStartDistance(linkTrimStart);
+	    builder.getMetadata(link1).setRenderTrimEndDistance(linkTrimEnd);
 
-	    link2.setRenderTrimStartDistance(linkTrimStart);
-	    link2.setRenderTrimEndDistance(linkTrimEnd);
+	    builder.getMetadata(link2).setRenderTrimStartDistance(linkTrimStart);
+	    builder.getMetadata(link2).setRenderTrimEndDistance(linkTrimEnd);
 
 	    // Connection clearances on neighbouring segments.
 	    // These are now explicit rather than implicit.
@@ -155,6 +156,7 @@ public class WarehouseTrackFactory {
 	    // Bottom side: pull the target guides back where the trimmed links join the bottom run.
 	    float topConnectionClearance = topLinkClearance;
 	    float bottomConnectionClearance = linkTrimEnd;
+	    TransferMotionConfig tunedLinkTransfer = new TransferMotionConfig(0.35, 0.12f, 0.75f);
 
 	    // Rendering specs per segment
 	    builder.renderWith(top, specToteWidthWise)
@@ -202,7 +204,8 @@ public class WarehouseTrackFactory {
 	            GuideSide.RIGHT,
 	            GuideSide.LEFT,
 	            false,
-	            topConnectionClearance
+	            topConnectionClearance,
+	            tunedLinkTransfer
 	    ).addTransferToLink(
 	            "transfer_2",
 	    		top,
@@ -248,7 +251,7 @@ public class WarehouseTrackFactory {
 	    Tote st = new Tote(rTote.id, rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
 	    
 	    float member_start = 1f;
-	    for (TransferZone tz: top.getTransferZones()) {
+	    for (TransferZone tz: builder.getMetadata(top).getTransferZones()) {
 	    	TransferZoneMachine.createTransferZoneMachine(sim, top, member_start, tz, new ToggleStrategy(true));
     	    // hack as we know there are only 2 tzs
     	    member_start = tz.getEndDistance();
@@ -317,7 +320,7 @@ public class WarehouseTrackFactory {
 		    new Vec3(leftX, 0f, lowerZ),
 		    false
 		);		
-		RouteSceneBuilder builder = new RouteSceneBuilder();
+		WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
 		RouteSegment upper = builder.segment("upper", upperGeometry);
 		RouteSegment lower = builder.segment("lower", lowerGeometry);
 
