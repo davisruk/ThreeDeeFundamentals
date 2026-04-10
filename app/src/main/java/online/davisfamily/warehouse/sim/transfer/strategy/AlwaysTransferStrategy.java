@@ -10,8 +10,7 @@ public class AlwaysTransferStrategy implements TransferDecisionStrategy {
 
 	@Override
 	public Optional<TransferDecision> decide(Tote tote, TransferZoneMachine machine) {
-		// TODO Auto-generated method stub
-		return Optional.of(TransferDecision.CONTINUE);
+		return Optional.of(TransferDecision.BRANCH);
 	}
 
 }

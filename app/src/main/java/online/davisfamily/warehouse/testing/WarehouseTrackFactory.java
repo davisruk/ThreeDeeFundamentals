@@ -264,7 +264,7 @@ public class WarehouseTrackFactory {
 	    }
 	}
 	
-	private void setupParallelTracks(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects){
+	public static void setupParallelTracks(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects){
 		
 		ToteEnvelope toteEnvelope = new ToteEnvelope(
 		        tote.getOuterBottomWidth(),
@@ -291,7 +291,6 @@ public class WarehouseTrackFactory {
 		        0.080f
 		);		
 		float toteLength = tote.getOuterBottomDepth();
-		float openingLength = spec.getOverallWidth();
 		// =====================
 		// Parallel track layout
 		// =====================
@@ -329,6 +328,7 @@ public class WarehouseTrackFactory {
 
 		// land near the start of the lower track
 		float targetEntry = 0.5f;
+		TransferMotionConfig straightAcrossTransfer = new TransferMotionConfig(0.35, 0f, 0f);
 
 		AlwaysTransferStrategy always = new AlwaysTransferStrategy();
 		builder.addDirectTransfer(
@@ -340,7 +340,8 @@ public class WarehouseTrackFactory {
 		        targetEntry,
 		        GuideSide.RIGHT,   // open lower-facing rail on upper
 		        GuideSide.RIGHT,    // open upper-facing rail on lower
-		        always
+		        always,
+		        straightAcrossTransfer
 		);
 
 
@@ -360,7 +361,8 @@ public class WarehouseTrackFactory {
 		        upperEntryDistance,
 		        GuideSide.RIGHT,
 		        GuideSide.RIGHT,
-		        always
+		        always,
+		        straightAcrossTransfer
 		);
 	
 		builder.renderWith(upper, spec)
@@ -384,23 +386,20 @@ public class WarehouseTrackFactory {
 		);
 
 		float rollerYOffset = spec.includeRollers ? spec.rollerHeight : 0f;
-/*
-		GraphFollowerBehaviour follower = new GraphFollowerBehaviour(
-			    upper,         					// startSegment
-			    null,        					// defaultDecisionProvider
-			    2.0f,        					// unitsPerSecond
-			    WrapMode.PING_PONG,  				// wrapMode
-			    EnumSet.of(OrientationMode.YAW),// orientationModes
-			    0f,        						// yawOffsetRadians
-			    rollerYOffset,					// yOffset - raise object on track above the rollers
-			    0f,         					// startDistanceAlongSegment,
-			    TravelDirection.FORWARD,  		// startDirection
-			    tote.getOuterBottomDepth()
-			);		
-*/	
+	
 	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
-	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
-	    Tote st = new Tote("tote1", rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
+	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset + 0.02f, 0f); 
+	    Tote st = new Tote(rTote.id, rtf, rTote.transformation, toteRenderOffsets, rTote.yawOffsetRadians);
+
+	    for (TransferZone tz : builder.getMetadata(upper).getTransferZones()) {
+	    	TransferZoneMachine.createTransferZoneMachine(sim, upper, 0f, tz, tz.getDecisionStrategy());
+	    }
+
+	    for (TransferZone tz : builder.getMetadata(lower).getTransferZones()) {
+	    	TransferZoneMachine.createTransferZoneMachine(sim, lower, 0f, tz, tz.getDecisionStrategy());
+	    }
+
+	    sim.addTrackableObject(st);
 		
 		for (RenderableObject track : tracks) {
 		    objects.add(track);
