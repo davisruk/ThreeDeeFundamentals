@@ -3,7 +3,7 @@
 ## System Overview
 
 - Plain Java simulation and software-rendered 3D engine built as a Gradle project.
-- The current runnable example is a warehouse-style scene with a tote moving around a routed track network.
+- The current runnable example is temporarily a straight conveyor proof scene used to validate reusable conveyor visuals in isolation.
 - The codebase mixes a generic engine layer (`threedee`) with a warehouse-specific example layer (`warehouse`).
 - Main concepts visible in code:
   - route-based movement over connected path segments
@@ -50,16 +50,24 @@
 - `TransferZone`
   - Defines a source window on a segment and the target segment/entry point for a transfer.
   - Owns transfer-motion tuning via `TransferMotionConfig`.
+  - Now also owns zero or more mounted transfer mechanisms (`TransferZoneMechanism`).
 - `TransferZoneMachine`
   - Warehouse controller state machine for reserving and triggering transfers.
 - `TransferZoneController`
   - Reacts to sensor events and tells a tote when to begin transfer.
+  - Now also commands and updates mounted transfer mechanisms and gates branch transfer startup on mechanism readiness.
 - `MembershipSensor`
   - Detects tracked objects entering/present/exiting a configured route-distance window.
 - `WindowSensor`
   - Detects tracked objects inside the transfer window itself.
 - `RouteTrackFactory` / warehouse track rendering classes
   - Build conveyor/track render meshes from route definitions plus warehouse `TrackSpec`.
+- `StraightConveyorFactory`
+  - Builds a fixed straight conveyor assembly in local space with top run, bottom return, end wraps, end rollers, and looping markers.
+- `StraightConveyorMarkerBehaviour`
+  - Drives belt markers around the fixed straight conveyor assembly in local space rather than deriving motion from route geometry.
+- `SteeringConveyorMechanism`
+  - First concrete transfer-zone mechanism implementation; owns one governing state and can drive one-or-more renderable parts together.
 
 ## Core Execution Flow
 
@@ -111,8 +119,9 @@
   - the tote moves normally on its current segment
   - the approach sensor detects entry before the transfer window
   - the transfer decision strategy decides whether to branch or continue
+  - the controller commands any transfer-zone-mounted mechanisms toward the decided outcome
   - if branching, the machine reserves the tote
-  - when the tote enters the window sensor region, the controller calls `tote.beginTransfer(...)`
+  - when the tote enters the window sensor region, branch transfer begins only after the required mechanisms report ready
 - Transfer in `Tote` currently has two phases:
   - `WAITING_FOR_ALIGNMENT`: keep following the source route until the tote reaches the transfer centre distance
   - `LATERAL_TRANSFER`: move along a fixed straight transfer segment from the aligned source pose to a calculated merge point on the target segment
@@ -147,6 +156,10 @@
 - In the current warehouse path, tote locomotion is not driven by a `RenderableObject` behaviour.
   - The `Tote` sim object directly mutates the renderable tote’s transform.
   - Child tote lid motion is handled by render behaviours (`PingPongRotationBehaviour`).
+- Transfer-zone-mounted mechanisms currently follow the same general update order as other warehouse systems:
+  - the controller updates attached mechanisms every frame
+  - branch startup is delayed until the reserved tote is in the window and mechanisms are ready
+  - continue decisions currently command the mechanism state but do not reserve the tote or change route-follow motion
 
 ## Architectural Boundary
 
@@ -163,6 +176,7 @@
 - totes
 - conveyor/track layout rules
 - transfer zones and transfer machines
+- transfer-zone-mounted mechanisms
 - guide openings and clearances
 - warehouse track rendering specs and mesh generation
 
@@ -220,7 +234,15 @@
   - this is acceptable only under the current single-threaded in-process dispatch assumptions
   - a future threading/performance review should revisit whether published events remain mutable and id-based or become a stronger boundary type
 - `TransferZoneController` state transitions are hard to reason about:
-  - it transitions to `TRANSFERRING` and then immediately to `ACTIVE` after starting a transfer
+  - the old immediate `TRANSFERRING` to `ACTIVE` path has been removed, but the controller is still becoming the owner of more responsibilities (decision handling, mechanism commands, readiness gating)
+  - if mechanism types diversify further, it may be worth separating mechanism orchestration from tote-transfer startup
+- The first path-derived conveyor visual approach hit believable rendering limits:
+  - route-driven conveyor markers around end rollers flashed and visually overshot the rollers
+  - this is the main reason the work pivoted toward a fixed straight conveyor assembly rather than continuing to derive conveyor visuals from route spans
+- The current straight conveyor proof is intentionally visual-first:
+  - it is now much closer to the intended conveyor look than the procedural route-derived attempt
+  - there is still a very minor marker disappearance right at the belt/roller tangent in some frames, likely a tiny depth/coplanar or culling edge case
+  - that issue is considered minor and intentionally deferred for now
 - The current document reflects observed code structure and runtime behaviour.
   - It is not a design proposal and does not describe unimplemented intended architecture.
 
@@ -253,6 +275,47 @@
 - Remaining generic/warehouse boundary work still identified:
   - no major ownership leaks are currently called out inside the route/transfer/rendering code
   - the current application entry point still directly selects the warehouse example scene
-- Recommended next step for a future session:
-  - runtime-tune `TransferMotionConfig` values for different transfer layouts and decide whether the merge-search policy should become more geometry-aware
-  - perform a broader architecture review before changing the event model, especially if simulation/render threading or allocation reduction becomes a priority
+- Conveyor work was explored on the `conveyer` branch rather than on `master`.
+- A first transfer-zone mechanism layer has been added:
+  - `TransferOutcome` was introduced as a warehouse-level continue/branch outcome enum
+  - `TransferZoneMechanism` and `MechanismMotionState` were added under `warehouse.sim.transfer.mechanism`
+  - `SteeringConveyorMechanism` was added as the first concrete mechanism implementation
+  - `TransferZone` can now own zero or more mounted mechanisms
+  - `TransferZoneController` now commands and updates mechanisms and gates branch startup on mechanism readiness
+  - `TransferZoneMachine` now tracks which reserved tote is currently in the transfer window
+- The earlier idea of modelling conveyors mainly as path-derived route/track spans was reconsidered:
+  - tracks still need procedural generation
+  - conveyors do not appear to need general procedural generation for the intended use cases
+  - curved conveyors are not currently a target requirement; real curved conveyors would be treated as different equipment rather than as bent straight belts
+- A reusable fixed straight conveyor proof was added:
+  - `StraightConveyorFactory` now builds a local-space straight conveyor assembly with a top belt, bottom return, end wraps, end rollers, and looping markers
+  - `StraightConveyorMarkerBehaviour` drives those markers in local space around the straight conveyor assembly
+  - this proof scene is now the active `TestScene` wiring via `WarehouseTrackFactory.setupStraightConveyorTest(...)`
+  - the proof visually validates the preferred direction: fixed conveyor assemblies rather than route-derived conveyor geometry
+- The current straight conveyor proof has these known characteristics:
+  - the belt is thinner and tangentially aligned to the roller/wrap geometry
+  - two markers are phase-shifted so one should normally be visible on the top run and one on the bottom run
+  - the marker spans across the width of the belt by design
+
+## Next Session Guidance
+
+- Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
+- Treat the current straight conveyor proof as the canonical direction for conveyor visuals.
+  - Reuse the single straight conveyor assembly model for transfer-focused machines.
+  - Do not continue investing in route-derived/procedural conveyor-span rendering for transfer devices.
+- The intended modelling direction now appears to be:
+  - tracks remain procedural warehouse infrastructure
+  - conveyors are reusable straight assemblies
+  - transfer-zone mechanisms arrange and animate one or more child conveyor assemblies under a parent mechanism/envelope transform
+- The next practical step should be to adapt transfer mechanisms to use the straight conveyor assembly:
+  - replace the current ad hoc steering conveyor visuals in `WarehouseTrackFactory` with child instances of the reusable straight conveyor model
+  - keep one governing mechanism state with one-or-more child conveyor renderables
+  - for popup-style devices, treat the work as procedural placement of standard conveyor modules across a parent envelope, not procedural generation of each conveyor’s belt geometry
+- Suggested sequence for the next session:
+  - keep the standalone straight conveyor test available while reusing its geometry/animation pieces
+  - refactor the straight conveyor proof into a reusable assembly API suitable for both standalone tests and transfer-zone mechanisms
+  - switch the steering mechanism to mount one or more of those straight conveyor assemblies
+  - once that works, use `setupParallelTracks(...)` as the best place to test transfer-focused machine visuals and decision-driven steering behaviour again
+- The current active runnable scene is intentionally no longer the tote/oval route demo:
+  - `TestScene` is currently wired to the straight conveyor proof scene so conveyor visual work can be assessed in isolation
+  - a future session can switch back to route/transfer-focused tests once the reusable conveyor assembly is being consumed by the transfer mechanisms

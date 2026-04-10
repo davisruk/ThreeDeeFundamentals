@@ -113,6 +113,8 @@ public final class StraightConveyorFactory {
         float wrapLength = (float) (Math.PI * wrapRadius);
         float loopLength = innerTopLength + wrapLength + innerTopLength + wrapLength;
 
+        float markerSurfaceClearance = 0.0015f;
+
         children.add(createMarker(
                 id + "_marker_a",
                 tr,
@@ -121,8 +123,8 @@ public final class StraightConveyorFactory {
                 spec,
                 innerTopLength,
                 wrapRadius,
-                topY + (spec.beltThickness() * 0.5f) + (spec.markerThickness() * 0.5f) + 0.0015f,
-                bottomY - (spec.beltThickness() * 0.5f) - (spec.markerThickness() * 0.5f) - 0.0015f,
+                topY + (spec.beltThickness() * 0.5f) + (spec.markerThickness() * 0.5f) + markerSurfaceClearance,
+                bottomY - (spec.beltThickness() * 0.5f) - (spec.markerThickness() * 0.5f) - markerSurfaceClearance,
                 startRollerX,
                 endRollerX,
                 0f));
@@ -135,8 +137,8 @@ public final class StraightConveyorFactory {
                 spec,
                 innerTopLength,
                 wrapRadius,
-                topY + (spec.beltThickness() * 0.5f) + (spec.markerThickness() * 0.5f) + 0.0015f,
-                bottomY - (spec.beltThickness() * 0.5f) - (spec.markerThickness() * 0.5f) - 0.0015f,
+                topY + (spec.beltThickness() * 0.5f) + (spec.markerThickness() * 0.5f) + markerSurfaceClearance,
+                bottomY - (spec.beltThickness() * 0.5f) - (spec.markerThickness() * 0.5f) - markerSurfaceClearance,
                 startRollerX,
                 endRollerX,
                 loopLength * 0.5f));
