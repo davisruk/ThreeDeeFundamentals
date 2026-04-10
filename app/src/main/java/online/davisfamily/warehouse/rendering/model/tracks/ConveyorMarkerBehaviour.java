@@ -9,6 +9,7 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 
 public class ConveyorMarkerBehaviour implements Behaviour {
     private static final Vec3 WORLD_UP = new Vec3(0f, 1f, 0f);
+    private static final float MARKER_SURFACE_CLEARANCE = 0.006f;
 
     private final RouteSegment segment;
     private final float startDistance;
@@ -38,12 +39,15 @@ public class ConveyorMarkerBehaviour implements Behaviour {
     public void update(RenderableObject object, double dtSeconds) {
         float topLength = Math.max(0.001f, endDistance - startDistance);
         float wrapRadius = ConveyorMeshFactory.getWrapRadius(spec);
-        float wrapLength = (float) (Math.PI * wrapRadius);
+        float markerWrapRadius = wrapRadius + (spec.conveyorBeltThickness * 0.5f)
+                + (spec.conveyorMarkerThickness * 0.5f)
+                + MARKER_SURFACE_CLEARANCE;
+        float wrapLength = (float) (Math.PI * markerWrapRadius);
 
         Vec3 startTop = sampleTopPosition(startDistance);
         Vec3 endTop = sampleTopPosition(endDistance);
-        Vec3 startUnder = startTop.add(new Vec3(0f, -2f * wrapRadius, 0f));
-        Vec3 endUnder = endTop.add(new Vec3(0f, -2f * wrapRadius, 0f));
+        Vec3 startUnder = sampleBottomPosition(startDistance);
+        Vec3 endUnder = sampleBottomPosition(endDistance);
         Vec3 underDirection = startUnder.subtract(endUnder);
         float returnLength = Math.max(0.001f, underDirection.length());
         underDirection.mutableNormalize();
@@ -65,11 +69,12 @@ public class ConveyorMarkerBehaviour implements Behaviour {
         s -= topLength;
         Vec3 endForward = segment.getGeometry().sampleOrientationDirectionByDistance(endDistance).normalize();
         if (s < wrapLength) {
-            float angle = s / wrapRadius;
+            float angle = s / markerWrapRadius;
+            Vec3 endCentre = sampleRollerCentre(endDistance);
             Vec3 pos = endTop
-                    .add(WORLD_UP.scale(-wrapRadius))
-                    .add(WORLD_UP.scale((float) Math.cos(angle) * wrapRadius))
-                    .add(endForward.scale((float) Math.sin(angle) * wrapRadius));
+                    .set(endCentre)
+                    .add(WORLD_UP.scale((float) Math.cos(angle) * markerWrapRadius))
+                    .add(endForward.scale((float) Math.sin(angle) * markerWrapRadius));
             applyTransform(t, pos, endForward, -angle);
             return;
         }
@@ -83,11 +88,11 @@ public class ConveyorMarkerBehaviour implements Behaviour {
 
         s -= returnLength;
         Vec3 startForward = segment.getGeometry().sampleOrientationDirectionByDistance(startDistance).normalize();
-        float angle = s / wrapRadius;
-        Vec3 pos = startTop
-                .add(WORLD_UP.scale(-wrapRadius))
-                .add(WORLD_UP.scale(-(float) Math.cos(angle) * wrapRadius))
-                .add(startForward.scale(-(float) Math.sin(angle) * wrapRadius));
+        float angle = s / markerWrapRadius;
+        Vec3 startCentre = sampleRollerCentre(startDistance);
+        Vec3 pos = new Vec3().set(startCentre)
+                .add(WORLD_UP.scale(-(float) Math.cos(angle) * markerWrapRadius))
+                .add(startForward.scale(-(float) Math.sin(angle) * markerWrapRadius));
         applyTransform(t, pos, startForward.scale(-1f), (float) Math.PI - angle);
     }
 
@@ -95,7 +100,24 @@ public class ConveyorMarkerBehaviour implements Behaviour {
         Vec3 sampled = segment.getGeometry().sampleByDistance(distance);
         return new Vec3(
                 sampled.x,
-                spec.deckTopY + (spec.conveyorBeltThickness + spec.conveyorMarkerThickness) * 0.5f,
+                spec.deckTopY + spec.conveyorBeltThickness + (spec.conveyorMarkerThickness * 0.5f) + MARKER_SURFACE_CLEARANCE,
+                sampled.z);
+    }
+
+    private Vec3 sampleBottomPosition(float distance) {
+        Vec3 sampled = segment.getGeometry().sampleByDistance(distance);
+        return new Vec3(
+                sampled.x,
+                spec.deckTopY - spec.conveyorReturnDepth - (spec.conveyorBeltThickness * 0.5f)
+                        - (spec.conveyorMarkerThickness * 0.5f) - MARKER_SURFACE_CLEARANCE,
+                sampled.z);
+    }
+
+    private Vec3 sampleRollerCentre(float distance) {
+        Vec3 sampled = segment.getGeometry().sampleByDistance(distance);
+        return new Vec3(
+                sampled.x,
+                spec.deckTopY - spec.conveyorReturnDepth + ConveyorMeshFactory.getWrapRadius(spec),
                 sampled.z);
     }
 

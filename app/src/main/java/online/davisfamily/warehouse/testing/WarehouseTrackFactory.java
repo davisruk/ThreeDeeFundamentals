@@ -4,10 +4,12 @@ import java.util.List;
 
 import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
+import online.davisfamily.threedee.behaviour.transformation.LoopTranslationBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
+import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.cylinder.CylinderFactory;
@@ -21,7 +23,10 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
+import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory;
+import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory;
+import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.StraightConveyorSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
@@ -29,6 +34,7 @@ import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
 import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
+import online.davisfamily.warehouse.sim.transfer.mechanism.SteeringConveyorMechanism;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
 
@@ -100,8 +106,8 @@ public class WarehouseTrackFactory {
 	            0.025f,
 	            0.090f,
 	            0.250f,
-	            0.050f,
-	            0.004f,
+	            0.010f,
+	            0.002f,
 	            false,
 	            0.080f
 	    );
@@ -277,6 +283,7 @@ public class WarehouseTrackFactory {
 	    
 	    float member_start = 1f;
 	    for (TransferZone tz: builder.getMetadata(top).getTransferZones()) {
+	    	attachSteeringMechanismForZone(tz, tr, objects, 0xFF444444, 0xFFB8B8B8);
 	    	TransferZoneMachine.createTransferZoneMachine(sim, top, member_start, tz, new ToggleStrategy(true));
     	    // hack as we know there are only 2 tzs
     	    member_start = tz.getEndDistance();
@@ -330,8 +337,8 @@ public class WarehouseTrackFactory {
 		        0.025f,
 		        0.090f,
 		        0.250f,
-		        0.050f,
-		        0.004f,
+		        0.010f,
+		        0.002f,
 		        false,
 		        0.080f
 		);		
@@ -441,10 +448,12 @@ public class WarehouseTrackFactory {
 	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
 
 	    for (TransferZone tz : builder.getMetadata(upper).getTransferZones()) {
+	    	attachSteeringMechanismForZone(tz, tr, objects, 0xFF444444, 0xFFB8B8B8);
 	    	TransferZoneMachine.createTransferZoneMachine(sim, upper, 0f, tz, tz.getDecisionStrategy());
 	    }
 
 	    for (TransferZone tz : builder.getMetadata(lower).getTransferZones()) {
+	    	attachSteeringMechanismForZone(tz, tr, objects, 0xFF444444, 0xFFB8B8B8);
 	    	TransferZoneMachine.createTransferZoneMachine(sim, lower, 0f, tz, tz.getDecisionStrategy());
 	    }
 
@@ -473,5 +482,130 @@ public class WarehouseTrackFactory {
 				new SpinBehaviour(0f,0f,0f)
 			);
 		objects.add(rc);
-	}	
+	}
+
+	public static void setupStraightConveyorTest(TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects) {
+		TrackAppearance appearance = new TrackAppearance(
+				new OneColourStrategyImpl(0xFF4E5A46),
+				new OneColourStrategyImpl(0xFF2A2A2A),
+				new OneColourStrategyImpl(0xFF2F2F2F),
+				new OneColourStrategyImpl(0xFFB8B8B8),
+				new OneColourStrategyImpl(0xFF4E5A46),
+				new OneColourStrategyImpl(0xFF4E5A46)
+		);
+
+		RenderableObject conveyor = StraightConveyorFactory.create(
+				"straight_conveyor_test",
+				tr,
+				new StraightConveyorSpec(
+						6.0f,
+						0.72f,
+						0.18f,
+						0.028f,
+						0.42f,
+						0.06f,
+						0.006f,
+						1.2d),
+				appearance);
+		conveyor.transformation.xTranslation = 0f;
+		conveyor.transformation.yTranslation = 0.1f;
+		conveyor.transformation.zTranslation = -2.5f;
+		objects.add(conveyor);
+	}
+
+	private static void attachSteeringMechanismForZone(
+			TransferZone zone,
+			TriangleRenderer tr,
+			List<RenderableObject> objects,
+			int bodyColourArgb,
+			int markerColourArgb) {
+		RenderableObject root = createSteeringMechanismRenderable(zone, tr, bodyColourArgb, markerColourArgb);
+		float continueYaw = localXYawFromDirection(
+				zone.getSourceSegment().getGeometry().sampleOrientationDirectionByDistance(zone.getCentrePoint()));
+		Vec3 sourcePosition = zone.getSourceSegment().getGeometry().sampleByDistance(zone.getCentrePoint());
+		Vec3 targetPosition = zone.getTargetSegment().getGeometry().sampleByDistance(zone.getTargetStartDistance());
+		Vec3 branchVector = targetPosition.subtract(sourcePosition);
+		float branchYaw = localXYawFromDirection(new Vec3(branchVector.x, 0f, branchVector.z));
+		SteeringConveyorMechanism mechanism = new SteeringConveyorMechanism(
+				zone.getId() + "_steering",
+				List.of(root),
+				continueYaw,
+				branchYaw,
+				2.8f,
+				0.04f);
+		zone.addMechanism(mechanism);
+		objects.addAll(mechanism.getRenderables());
+	}
+
+	private static RenderableObject createSteeringMechanismRenderable(
+			TransferZone zone,
+			TriangleRenderer tr,
+			int bodyColourArgb,
+			int markerColourArgb) {
+		float centreDistance = zone.getCentrePoint();
+		Vec3 centre = zone.getSourceSegment().getGeometry().sampleByDistance(centreDistance);
+		float widthAcross = 0.16f;
+		float bodyHeight = 0.020f;
+		float bodyLength = Math.max(0.18f, zone.getLength() * 0.28f);
+		float markerTravel = bodyLength * 0.28f;
+		float y = 0.055f;
+		float rollerInset = bodyLength * 0.38f;
+		float rollerRadius = bodyHeight * 0.55f;
+		float markerWidthAcross = Math.max(widthAcross * 0.10f, 0.010f);
+		float markerLengthAlongPath = Math.max(bodyLength * 0.22f, 0.018f);
+		float markerHeight = Math.max(bodyHeight * 0.05f, 0.0015f);
+
+		Mesh bodyMesh = RollerMeshFactory.createBoxRollerMesh(bodyLength, bodyHeight, widthAcross);
+		Mesh markerMesh = RollerMeshFactory.createBoxRollerMesh(markerLengthAlongPath, markerHeight, markerWidthAcross);
+		Mesh rollerMesh = CylinderFactory.buildCylinder(rollerRadius, widthAcross * 0.92f, 10, true);
+		ObjectTransformation rootTransform = new ObjectTransformation(
+				0f, 0f, 0f,
+				centre.x, y, centre.z,
+				new Mat4());
+		RenderableObject root = RenderableObject.create(
+				zone.getId() + "_steering_root",
+				tr,
+				bodyMesh,
+				rootTransform,
+				new OneColourStrategyImpl(bodyColourArgb),
+				false);
+
+		RenderableObject startRoller = RenderableObject.createWithBehaviours(
+				zone.getId() + "_steering_start_roller",
+				tr,
+				rollerMesh,
+				new ObjectTransformation(0f, 0f, 0f, -rollerInset, 0.001f, 0f, new Mat4()),
+				new OneColourStrategyImpl(0xFF2A2A2A),
+				false,
+				new SpinBehaviour(0f, 0f, 4f));
+		RenderableObject endRoller = RenderableObject.createWithBehaviours(
+				zone.getId() + "_steering_end_roller",
+				tr,
+				rollerMesh,
+				new ObjectTransformation(0f, 0f, 0f, rollerInset, 0.001f, 0f, new Mat4()),
+				new OneColourStrategyImpl(0xFF2A2A2A),
+				false,
+				new SpinBehaviour(0f, 0f, 4f));
+		RenderableObject marker = RenderableObject.createWithBehaviours(
+				zone.getId() + "_steering_marker",
+				tr,
+				markerMesh,
+				new ObjectTransformation(0f, 0f, 0f, -markerTravel, 0.012f, 0f, new Mat4()),
+				new OneColourStrategyImpl(markerColourArgb),
+				false,
+				new LoopTranslationBehaviour(Axis.X, -markerTravel, markerTravel, 0.22f));
+		root.addChild(startRoller);
+		root.addChild(endRoller);
+		root.addChild(marker);
+		return root;
+	}
+
+	private static float localXYawFromDirection(Vec3 direction) {
+		Vec3 horizontal = new Vec3(direction.x, 0f, direction.z);
+		if (horizontal.lengthSquared() == 0f) {
+			return 0f;
+		}
+		horizontal.mutableNormalize();
+		return Vec3.yawFromDirection(horizontal) - (float) (Math.PI / 2.0);
+	}
 }

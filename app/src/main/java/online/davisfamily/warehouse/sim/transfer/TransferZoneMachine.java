@@ -36,6 +36,7 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	private String windowSensorId;
 	private TransferZoneState state = TransferZoneState.IDLE;
 	private String reservedToteId;
+	private String toteInWindowId;
 	private TransferDecision activeDirection;
 	private double timeInStateSeconds;
 	private final TransferZone transferZone;
@@ -127,11 +128,21 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 
 	public void clearActiveTransfer() {
 		reservedToteId = null;
+		toteInWindowId = null;
+		activeDirection = null;
 		state = TransferZoneState.IDLE; 
 	}
 
 	public TransferZone getTransferZone() {
 		return transferZone;
+	}
+
+	public String getToteInWindowId() {
+		return toteInWindowId;
+	}
+
+	public void setToteInWindowId(String toteInWindowId) {
+		this.toteInWindowId = toteInWindowId;
 	}
 
 
