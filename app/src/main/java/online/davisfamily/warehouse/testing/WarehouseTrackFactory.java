@@ -33,6 +33,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
+import online.davisfamily.warehouse.sim.transfer.TransferOutcome;
 import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.mechanism.SteeringConveyorMechanism;
@@ -592,13 +593,18 @@ public class WarehouseTrackFactory {
 		Vec3 targetPosition = zone.getTargetSegment().getGeometry().sampleByDistance(zone.getTargetStartDistance());
 		Vec3 branchVector = targetPosition.subtract(sourcePosition);
 		float branchYaw = localXYawFromDirection(new Vec3(branchVector.x, 0f, branchVector.z));
+		TransferOutcome initialOutcome =
+				zone.getDecisionStrategy() instanceof AlwaysTransferStrategy
+						? TransferOutcome.BRANCH
+						: TransferOutcome.CONTINUE;
 		SteeringConveyorMechanism mechanism = new SteeringConveyorMechanism(
 				zone.getId() + "_steering",
 				List.of(root),
 				continueYaw,
 				branchYaw,
 				2.8f,
-				0.04f);
+				0.04f,
+				initialOutcome);
 		zone.addMechanism(mechanism);
 		objects.addAll(mechanism.getRenderables());
 	}

@@ -27,6 +27,24 @@ public class SteeringConveyorMechanism implements TransferZoneMechanism {
             float branchYawRadians,
             float angularSpeedRadiansPerSecond,
             float readyToleranceRadians) {
+        this(
+                id,
+                renderables,
+                continueYawRadians,
+                branchYawRadians,
+                angularSpeedRadiansPerSecond,
+                readyToleranceRadians,
+                TransferOutcome.CONTINUE);
+    }
+
+    public SteeringConveyorMechanism(
+            String id,
+            List<RenderableObject> renderables,
+            float continueYawRadians,
+            float branchYawRadians,
+            float angularSpeedRadiansPerSecond,
+            float readyToleranceRadians,
+            TransferOutcome initialOutcome) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("id must not be blank");
         }
@@ -39,6 +57,9 @@ public class SteeringConveyorMechanism implements TransferZoneMechanism {
         if (readyToleranceRadians < 0f) {
             throw new IllegalArgumentException("readyToleranceRadians must be >= 0");
         }
+        if (initialOutcome == null) {
+            throw new IllegalArgumentException("initialOutcome must not be null");
+        }
 
         this.id = id;
         this.renderables = Collections.unmodifiableList(new ArrayList<>(renderables));
@@ -46,9 +67,10 @@ public class SteeringConveyorMechanism implements TransferZoneMechanism {
         this.branchYawRadians = normalizeAngle(branchYawRadians);
         this.angularSpeedRadiansPerSecond = angularSpeedRadiansPerSecond;
         this.readyToleranceRadians = readyToleranceRadians;
-        this.currentYawRadians = this.continueYawRadians;
+        this.commandedOutcome = initialOutcome;
+        this.currentYawRadians = targetYawFor(initialOutcome);
         applyYawToRenderables();
-        this.motionState = MechanismMotionState.READY_CONTINUE;
+        this.motionState = readyStateFor(initialOutcome);
     }
 
     @Override
