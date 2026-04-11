@@ -4,13 +4,12 @@ import java.util.List;
 
 import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
-import online.davisfamily.threedee.behaviour.transformation.LoopTranslationBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
-import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.cylinder.CylinderFactory;
 import online.davisfamily.threedee.path.BezierSegment3;
@@ -322,26 +321,6 @@ public class WarehouseTrackFactory {
 		        0.018f,
 		        0.080f
 		);		
-		TrackSpec conveyorSpec = TrackSpec.conveyor(
-				toteEnvelope,
-		        0.030f,
-		        0.040f,
-		        0.000f,
-		        true,
-		        0.050f,
-		        0.010f,
-		        0.000f,
-		        0.5f,
-		        1.0f,
-		        0.012f,
-		        0.025f,
-		        0.090f,
-		        0.250f,
-		        0.010f,
-		        0.002f,
-		        false,
-		        0.080f
-		);		
 		float toteLength = tote.getOuterBottomDepth();
 		// =====================
 		// Parallel track layout
@@ -417,7 +396,7 @@ public class WarehouseTrackFactory {
 		        straightAcrossTransfer
 		);
 	
-		builder.renderWith(upper, conveyorSpec)
+		builder.renderWith(upper, rollerSpec)
 	       .renderWith(lower, rollerSpec);
 		
 		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
@@ -581,20 +560,23 @@ public class WarehouseTrackFactory {
 			int markerColourArgb) {
 		float centreDistance = zone.getCentrePoint();
 		Vec3 centre = zone.getSourceSegment().getGeometry().sampleByDistance(centreDistance);
-		float widthAcross = 0.16f;
-		float bodyHeight = 0.020f;
-		float bodyLength = Math.max(0.18f, zone.getLength() * 0.28f);
-		float markerTravel = bodyLength * 0.28f;
-		float y = 0.055f;
-		float rollerInset = bodyLength * 0.38f;
-		float rollerRadius = bodyHeight * 0.55f;
-		float markerWidthAcross = Math.max(widthAcross * 0.10f, 0.010f);
-		float markerLengthAlongPath = Math.max(bodyLength * 0.22f, 0.018f);
-		float markerHeight = Math.max(bodyHeight * 0.05f, 0.0015f);
+		float y = 0.01f;
+		float mechanismWidth = 0.32f;
+		float conveyorLength = Math.max(0.14f, Math.min(0.18f, zone.getLength() * 0.36f));
+		float conveyorWidth = Math.min(conveyorLength * 0.4f, mechanismWidth * 0.28f);
+		float gap = (mechanismWidth - (2f * conveyorWidth)) / 3f;
+		float conveyorOffset = (conveyorWidth + gap) * 0.5f;
+		float rollerRadius = 0.018f;
+		float scale = conveyorLength / 0.18f;
+		TrackAppearance appearance = new TrackAppearance(
+				new OneColourStrategyImpl(bodyColourArgb),
+				new OneColourStrategyImpl(0xFF2A2A2A),
+				new OneColourStrategyImpl(0xFF2F2F2F),
+				new OneColourStrategyImpl(markerColourArgb),
+				new OneColourStrategyImpl(bodyColourArgb),
+				new OneColourStrategyImpl(bodyColourArgb)
+		);
 
-		Mesh bodyMesh = RollerMeshFactory.createBoxRollerMesh(bodyLength, bodyHeight, widthAcross);
-		Mesh markerMesh = RollerMeshFactory.createBoxRollerMesh(markerLengthAlongPath, markerHeight, markerWidthAcross);
-		Mesh rollerMesh = CylinderFactory.buildCylinder(rollerRadius, widthAcross * 0.92f, 10, true);
 		ObjectTransformation rootTransform = new ObjectTransformation(
 				0f, 0f, 0f,
 				centre.x, y, centre.z,
@@ -602,39 +584,55 @@ public class WarehouseTrackFactory {
 		RenderableObject root = RenderableObject.create(
 				zone.getId() + "_steering_root",
 				tr,
-				bodyMesh,
+				createInvisibleAnchorMesh(),
 				rootTransform,
-				new OneColourStrategyImpl(bodyColourArgb),
+				triangleIndex -> 0,
 				false);
 
-		RenderableObject startRoller = RenderableObject.createWithBehaviours(
-				zone.getId() + "_steering_start_roller",
+		RenderableObject leftConveyor = StraightConveyorFactory.create(
+				zone.getId() + "_steering_left_conveyor",
 				tr,
-				rollerMesh,
-				new ObjectTransformation(0f, 0f, 0f, -rollerInset, 0.001f, 0f, new Mat4()),
-				new OneColourStrategyImpl(0xFF2A2A2A),
-				false,
-				new SpinBehaviour(0f, 0f, 4f));
-		RenderableObject endRoller = RenderableObject.createWithBehaviours(
-				zone.getId() + "_steering_end_roller",
+				new StraightConveyorSpec(
+						conveyorLength,
+						conveyorWidth,
+						rollerRadius,
+						0.0028f * scale,
+						0.042f * scale,
+						0.006f * scale,
+						0.0006f * scale,
+						0.12d),
+				appearance);
+		leftConveyor.transformation.zTranslation = -conveyorOffset;
+
+		RenderableObject rightConveyor = StraightConveyorFactory.create(
+				zone.getId() + "_steering_right_conveyor",
 				tr,
-				rollerMesh,
-				new ObjectTransformation(0f, 0f, 0f, rollerInset, 0.001f, 0f, new Mat4()),
-				new OneColourStrategyImpl(0xFF2A2A2A),
-				false,
-				new SpinBehaviour(0f, 0f, 4f));
-		RenderableObject marker = RenderableObject.createWithBehaviours(
-				zone.getId() + "_steering_marker",
-				tr,
-				markerMesh,
-				new ObjectTransformation(0f, 0f, 0f, -markerTravel, 0.012f, 0f, new Mat4()),
-				new OneColourStrategyImpl(markerColourArgb),
-				false,
-				new LoopTranslationBehaviour(Axis.X, -markerTravel, markerTravel, 0.22f));
-		root.addChild(startRoller);
-		root.addChild(endRoller);
-		root.addChild(marker);
+				new StraightConveyorSpec(
+						conveyorLength,
+						conveyorWidth,
+						rollerRadius,
+						0.0028f * scale,
+						0.042f * scale,
+						0.006f * scale,
+						0.0006f * scale,
+						0.12d),
+				appearance);
+		rightConveyor.transformation.zTranslation = conveyorOffset;
+
+		root.addChild(leftConveyor);
+		root.addChild(rightConveyor);
 		return root;
+	}
+
+	private static Mesh createInvisibleAnchorMesh() {
+		return new Mesh(
+				new Vec4[] {
+						new Vec4(0f, 0f, 0f, 1f),
+						new Vec4(0f, 0f, 0f, 1f),
+						new Vec4(0f, 0f, 0f, 1f)
+				},
+				new int[][] { {0, 1, 2} },
+				"anchor");
 	}
 
 	private static float localXYawFromDirection(Vec3 direction) {

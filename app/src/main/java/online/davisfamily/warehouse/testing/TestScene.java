@@ -22,10 +22,10 @@ public class TestScene extends BaseScene{
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions,	CameraPosition.aboveLeft());
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
-		WarehouseTrackFactory.setupStraightConveyorTest(tr, sim, objects);
-		//ToteGeometry t = setupTote();
+		//WarehouseTrackFactory.setupStraightConveyorTest(tr, sim, objects);
+		ToteGeometry t = setupTote();
 		//WarehouseTrackFactory.setupOvalTrack(t, rTote, tr, sim, objects);
-		//WarehouseTrackFactory.setupParallelTracks(t, rTote, tr, sim, objects);
+		WarehouseTrackFactory.setupParallelTracks(t, rTote, tr, sim, objects);
 		//WarehouseTrackFactory.setupCylinder(tr, sim, objects);
 	}
 		
