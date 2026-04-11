@@ -42,6 +42,7 @@ public final class StraightConveyorFactory {
         float bottomY = rollerCentreY - spec.rollerRadius();
         float startRollerX = -innerTopLength * 0.5f;
         float endRollerX = innerTopLength * 0.5f;
+        float rollerWidth = spec.width() * 0.92f;
 
         RenderableObject root = RenderableObject.create(
                 id,
@@ -56,7 +57,7 @@ public final class StraightConveyorFactory {
         Mesh topBeltMesh = RollerMeshFactory.createBoxRollerMesh(innerTopLength, spec.beltThickness(), spec.width());
         Mesh bottomBeltMesh = RollerMeshFactory.createBoxRollerMesh(innerTopLength, spec.beltThickness(), spec.width());
         Mesh wrapMesh = CylinderFactory.buildCylinder(wrapRadius, spec.width(), 20, true);
-        Mesh rollerMesh = CylinderFactory.buildCylinder(spec.rollerRadius(), spec.width() * 0.92f, 20, true);
+        Mesh rollerMesh = CylinderFactory.buildCylinder(spec.rollerRadius(), rollerWidth, 20, true);
         Mesh markerMesh = RollerMeshFactory.createBoxRollerMesh(spec.markerLength(), spec.markerThickness(), spec.width() * 0.96f);
 
         children.add(RenderableObject.create(
@@ -91,24 +92,25 @@ public final class StraightConveyorFactory {
                 appearance.conveyorBeltColour,
                 false));
 
-        Behaviour rollerSpin = new SpinBehaviour(0f, 0f, 4f);
-        children.add(RenderableObject.createWithBehaviours(
+        children.add(createRollerAssembly(
                 id + "_start_roller",
                 tr,
                 rollerMesh,
-                new ObjectTransformation(0f, 0f, 0f, startRollerX, rollerCentreY, 0f, new Mat4()),
-                appearance.rollerColour,
-                false,
-                rollerSpin));
+                appearance,
+                spec.rollerRadius(),
+                spec.width(),
+                startRollerX,
+                rollerCentreY));
 
-        children.add(RenderableObject.createWithBehaviours(
+        children.add(createRollerAssembly(
                 id + "_end_roller",
                 tr,
                 rollerMesh,
-                new ObjectTransformation(0f, 0f, 0f, endRollerX, rollerCentreY, 0f, new Mat4()),
-                appearance.rollerColour,
-                false,
-                rollerSpin));
+                appearance,
+                spec.rollerRadius(),
+                spec.width(),
+                endRollerX,
+                rollerCentreY));
 
         float wrapLength = (float) (Math.PI * wrapRadius);
         float loopLength = innerTopLength + wrapLength + innerTopLength + wrapLength;
@@ -177,6 +179,81 @@ public final class StraightConveyorFactory {
                         endRollerX,
                         spec.beltSpeedUnitsPerSecond(),
                         phaseOffset));
+    }
+
+    private static RenderableObject createRollerAssembly(
+            String id,
+            TriangleRenderer tr,
+            Mesh rollerMesh,
+            TrackAppearance appearance,
+            float rollerRadius,
+            float rollerWidth,
+            float x,
+            float y) {
+        RenderableObject rollerRoot = RenderableObject.createWithBehaviours(
+                id,
+                tr,
+                createInvisibleAnchorMesh(),
+                new ObjectTransformation(0f, 0f, 0f, x, y, 0f, new Mat4()),
+                triangleIndex -> 0,
+                false,
+                new SpinBehaviour(0f, 0f, -4f));
+
+        rollerRoot.addChild(RenderableObject.create(
+                id + "_body",
+                tr,
+                rollerMesh,
+                new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
+                appearance.rollerColour,
+                false));
+
+        addPlateMarkers(rollerRoot, id, tr, appearance.conveyorMarkerColour, rollerRadius, rollerWidth);
+        return rollerRoot;
+    }
+
+    private static void addPlateMarkers(
+            RenderableObject rollerRoot,
+            String id,
+            TriangleRenderer tr,
+            ColourPickerStrategy colour,
+            float rollerRadius,
+            float rollerWidth) {
+        float markerGap = Math.max(rollerRadius * 0.22f, 0.004f);
+        float markerLength = Math.max(0.0025f, rollerRadius - (2f * markerGap));
+        float markerWidth = Math.max(rollerRadius * 0.12f, 0.0025f);
+        float markerThickness = Math.max(rollerRadius * 0.05f, 0.001f);
+        float markerRadius = markerGap + (markerLength * 0.5f);
+        float plateSurfaceClearance = 0.0015f;
+        float halfRollerWidth = rollerWidth * 0.5f;
+        Mesh plateMarkerMesh = RollerMeshFactory.createBoxRollerMesh(markerLength, markerWidth, markerThickness);
+
+        for (int plate = 0; plate < 2; plate++) {
+            float z = plate == 0
+                    ? -(halfRollerWidth + (markerThickness * 0.5f) + plateSurfaceClearance)
+                    : halfRollerWidth + (markerThickness * 0.5f) + plateSurfaceClearance;
+            String plateId = plate == 0 ? "near" : "far";
+
+            for (int i = 0; i < 4; i++) {
+                float angle = i * ((float) Math.PI * 0.5f);
+                float markerX = (float) Math.cos(angle) * markerRadius;
+                float markerY = (float) Math.sin(angle) * markerRadius;
+
+                rollerRoot.addChild(RenderableObject.create(
+                        id + "_" + plateId + "_plate_marker_" + i,
+                        tr,
+                        plateMarkerMesh,
+                        new ObjectTransformation(
+                                0f,
+                                0f,
+                                angle,
+                                markerX,
+                                markerY,
+                                z,
+                                new Mat4()),
+                        colour,
+                        false));
+            }
+        }
     }
 
     private static Mesh createInvisibleAnchorMesh() {

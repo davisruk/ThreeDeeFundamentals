@@ -511,6 +511,43 @@ public class WarehouseTrackFactory {
 		conveyor.transformation.yTranslation = 0.1f;
 		conveyor.transformation.zTranslation = -2.5f;
 		objects.add(conveyor);
+
+		float smallScale = 0.03f / 0.18f;
+		RenderableObject smallConveyor = StraightConveyorFactory.create(
+				"straight_conveyor_small_test",
+				tr,
+				new StraightConveyorSpec(
+						6.0f * smallScale,
+						0.72f * smallScale,
+						0.03f,
+						0.028f * smallScale,
+						0.42f * smallScale,
+						0.06f * smallScale,
+						0.006f * smallScale,
+						1.2d * smallScale),
+				appearance);
+		smallConveyor.transformation.xTranslation = 0f;
+		smallConveyor.transformation.yTranslation = 0.1f;
+		smallConveyor.transformation.zTranslation = -1.6f;
+		objects.add(smallConveyor);
+
+		RenderableObject compactTransferConveyor = StraightConveyorFactory.create(
+				"straight_conveyor_transfer_test",
+				tr,
+				new StraightConveyorSpec(
+						0.18f,
+						0.072f,
+						0.018f,
+						0.0028f,
+						0.042f,
+						0.006f,
+						0.0006f,
+						0.12d),
+				appearance);
+		compactTransferConveyor.transformation.xTranslation = 0f;
+		compactTransferConveyor.transformation.yTranslation = 0.1f;
+		compactTransferConveyor.transformation.zTranslation = -0.9f;
+		objects.add(compactTransferConveyor);
 	}
 
 	private static void attachSteeringMechanismForZone(
