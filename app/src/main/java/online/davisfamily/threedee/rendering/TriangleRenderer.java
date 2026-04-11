@@ -64,10 +64,10 @@ public class TriangleRenderer {
 	
 	private class ScreenCoord {
 		public ScreenCoord() {}
-		public ScreenCoord(int x, int y, float z) {
+		public ScreenCoord(float x, float y, float z) {
 			this.x = x; this.y = y; this.z = z;
 		}
-		int x, y;
+		float x, y;
 		float z;
 	}
 
@@ -77,25 +77,25 @@ public class TriangleRenderer {
 	public void fillTriangle(ScreenCoord p1, ScreenCoord p2, ScreenCoord p3, int colour, float[] zBuff, boolean selected) {
 		ScreenCoord[] coords = new ScreenCoord[] {p1,p2,p3};
 		// Sort coords into y order ascending
-		Arrays.sort(coords, Comparator.comparingInt(i -> i.y));
+		Arrays.sort(coords, Comparator.comparingDouble(i -> i.y));
 		// Array is now effectively in y order ascending for each edge
 		// find the x & z increment for each edge on a scanline (slope)
-		int abdx = coords[B].x - coords[A].x; // delta x
-		int abdy = coords[B].y - coords[A].y; // delta y
+		float abdx = coords[B].x - coords[A].x; // delta x
+		float abdy = coords[B].y - coords[A].y; // delta y
 		float abdz = coords[B].z - coords[A].z; // delta z
-		float abXinc = (abdy != 0) ? (float)abdx / (float)abdy : 0f; // ABx slope
+		float abXinc = (abdy != 0f) ? abdx / abdy : 0f; // ABx slope
 		float abZinc = (abdy != 0) ? abdz / abdy : 0f; // ABz slope 
 		
-		int acdx = coords[C].x - coords[A].x;
-		int acdy = coords[C].y - coords[A].y;
+		float acdx = coords[C].x - coords[A].x;
+		float acdy = coords[C].y - coords[A].y;
 		float acdz = coords[C].z - coords[A].z;
-		float acXinc = (acdy != 0) ? (float)acdx / (float)acdy : 0f;
+		float acXinc = (acdy != 0f) ? acdx / acdy : 0f;
 		float acZinc = (acdy != 0) ? acdz / acdy : 0f;
 		
-		int bcdx = coords[C].x - coords[B].x;
-		int bcdy = coords[C].y - coords[B].y;
+		float bcdx = coords[C].x - coords[B].x;
+		float bcdy = coords[C].y - coords[B].y;
 		float bcdz = coords[C].z - coords[B].z;
-		float bcXinc = (bcdy != 0) ? (float)bcdx / (float)bcdy : 0f;
+		float bcXinc = (bcdy != 0f) ? bcdx / bcdy : 0f;
 		float bcZinc = (bcdy != 0) ? bcdz / bcdy : 0f;
 		
 		// fill top half of triangle (edges AC AB)
@@ -117,7 +117,7 @@ public class TriangleRenderer {
 		float edge1xIntersection = abdy * acXinc + coords[A].x;
 		float edge1zIntersection = abdy * acZinc + coords[A].z;
 		ScreenCoord acbyIntersection = new ScreenCoord(
-				Math.round(edge1xIntersection), // ACx intersection at By
+				edge1xIntersection, // ACx intersection at By
 				coords[B].y, // By 
 				edge1zIntersection // ACz intersection at By
 		);
@@ -141,12 +141,12 @@ public class TriangleRenderer {
 	private void fillHalfTriangle(ScreenCoord p1, float e1xInc, float e1zInc, ScreenCoord p2, float e2xInc,
 			float e2zInc, int colour, float[] zBuff, boolean selected) {
 
-		int startY = Math.max(p1.y, minY);
-		int endY = Math.min(p2.y, maxY + 1);
+		int startY = Math.max((int)Math.ceil(p1.y), minY);
+		int endY = Math.min((int)Math.ceil(p2.y), maxY + 1);
 		if (startY >= endY)
 			return;
 
-		int ySkip = startY - p1.y;
+		float ySkip = startY - p1.y;
 		float p2ySkip = p2.y - startY;
 
 		float edge1xIntersection = ySkip * e1xInc + p1.x;
@@ -156,12 +156,12 @@ public class TriangleRenderer {
 
 		float leftz = edge1zIntersection;
 		float rightz = edge2zIntersection;
-		int leftx = Math.round(edge1xIntersection);
-		int rightx = Math.round(edge2xIntersection);
+		float leftx = edge1xIntersection;
+		float rightx = edge2xIntersection;
 
 		for (int y = startY; y < endY; y++) {
 			if (rightx < leftx) {
-				int t = leftx;
+				float t = leftx;
 				leftx = rightx;
 				rightx = t;
 
@@ -170,20 +170,22 @@ public class TriangleRenderer {
 				rightz = tz;
 			}
 
-			int unclippedLeftx = leftx;
+			float unclippedLeftx = leftx;
 			float dlx = rightx - leftx;
 			float zInc = (dlx != 0) ? (rightz - leftz) / dlx : 0f;
+			int rasterLeftX = (int)Math.ceil(leftx);
+			int rasterRightX = (int)Math.floor(rightx);
 
-			if (!(rightx < minX || leftx > maxX)) {
-				if (leftx < minX)
-					leftx = minX;
-				if (rightx > maxX)
-					rightx = maxX;
+			if (!(rasterRightX < minX || rasterLeftX > maxX)) {
+				if (rasterLeftX < minX)
+					rasterLeftX = minX;
+				if (rasterRightX > maxX)
+					rasterRightX = maxX;
 
-				float z = leftz + (leftx - unclippedLeftx) * zInc;
+				float z = leftz + (rasterLeftX - unclippedLeftx) * zInc;
 				int row = y * pw;
 
-				for (int x = leftx; x <= rightx; x++) {
+				for (int x = rasterLeftX; x <= rasterRightX; x++) {
 					int idx = row + x;
 
 					if (z > zBuff[idx]) {
@@ -206,8 +208,8 @@ edge1zIntersection += e1zInc;
 edge2xIntersection += e2xInc;
 edge2zIntersection += e2zInc;
 
-leftx = Math.round(edge1xIntersection);
-rightx = Math.round(edge2xIntersection);
+leftx = edge1xIntersection;
+rightx = edge2xIntersection;
 leftz = edge1zIntersection;
 rightz = edge2zIntersection;
 }
@@ -239,29 +241,38 @@ rightz = edge2zIntersection;
 		float ndcCx = clipC.x * screenC.z;
 		float ndcCy = clipC.y * screenC.z;
 
-		screenA.x = Math.round((ndcAx * 0.5f + 0.5f) * (pw - 1));
-		screenA.y = Math.round((-ndcAy * 0.5f + 0.5f) * (ph - 1));
-		screenB.x = Math.round((ndcBx * 0.5f + 0.5f) * (pw - 1));
-		screenB.y = Math.round((-ndcBy * 0.5f + 0.5f) * (ph - 1));
-		screenC.x = Math.round((ndcCx * 0.5f + 0.5f) * (pw - 1));
-		screenC.y = Math.round((-ndcCy * 0.5f + 0.5f) * (ph - 1));
-
-		long abx = (long) (screenB.x - screenA.x), aby = (long) (screenB.y - screenA.y);
-		long acx = (long) (screenC.x - screenA.x), acy = (long)(screenC.y - screenA.y);
-	
-		long cross = abx * acy - aby * acx;
-		
-		if (cross >=0 ) return;
+		screenA.x = (ndcAx * 0.5f + 0.5f) * (pw - 1);
+		screenA.y = (-ndcAy * 0.5f + 0.5f) * (ph - 1);
+		screenB.x = (ndcBx * 0.5f + 0.5f) * (pw - 1);
+		screenB.y = (-ndcBy * 0.5f + 0.5f) * (ph - 1);
+		screenC.x = (ndcCx * 0.5f + 0.5f) * (pw - 1);
+		screenC.y = (-ndcCy * 0.5f + 0.5f) * (ph - 1);
 		if (is.isSet(Mode.FILL_MODEL)) {
 			fillTriangle(screenA, screenB, screenC, colour, zBuff,selected);
 		}
 		
 		if (is.isSet(Mode.SHOW_WIREFRAME)) {
-		    bl.drawLineUnsafeClipped(screenA.x, screenA.y, screenB.x, screenB.y, 0xFFFFFFFF);
-		    bl.drawLineUnsafeClipped(screenB.x, screenB.y, screenC.x, screenC.y, 0xFFFFFFFF);
-		    bl.drawLineUnsafeClipped(screenC.x, screenC.y, screenA.x, screenA.y, 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(Math.round(screenA.x), Math.round(screenA.y), Math.round(screenB.x), Math.round(screenB.y), 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(Math.round(screenB.x), Math.round(screenB.y), Math.round(screenC.x), Math.round(screenC.y), 0xFFFFFFFF);
+		    bl.drawLineUnsafeClipped(Math.round(screenC.x), Math.round(screenC.y), Math.round(screenA.x), Math.round(screenA.y), 0xFFFFFFFF);
 		}
 
+	}
+
+	private Vec3 cullAb = new Vec3();
+	private Vec3 cullAc = new Vec3();
+	private boolean isFrontFacingViewSpace(Vertex[] tri) {
+		cullAb.setXYZ(
+				tri[1].x - tri[0].x,
+				tri[1].y - tri[0].y,
+				tri[1].z - tri[0].z);
+		cullAc.setXYZ(
+				tri[2].x - tri[0].x,
+				tri[2].y - tri[0].y,
+				tri[2].z - tri[0].z);
+		cullAb.mutableCross(cullAc);
+		float facing = cullAb.x * tri[0].x + cullAb.y * tri[0].y + cullAb.z * tri[0].z;
+		return facing < 0f;
 	}
 	
 	public void drawMesh(RenderableObject ro, Camera cam, Mat4 projection, float[] zBuff, DirectionalLight light, Mat4 worldModel, boolean selected) {
@@ -284,8 +295,12 @@ rightz = edge2zIntersection;
 			litColour = applyFlatLighting(v0, v1, v2, litColour, light);
 			Vertex.ClippedTriangles ct =  Vertex.clipTriangleNear(v0,v1,v2,0.1f);
 
-			if (ct.t1 != null) drawProjectedTriangle(projection, ct.t1, litColour, zBuff, selected);
-			if (ct.t2 != null) drawProjectedTriangle(projection, ct.t2, litColour, zBuff, selected);
+			if (ct.t1 != null && isFrontFacingViewSpace(ct.t1)) {
+				drawProjectedTriangle(projection, ct.t1, litColour, zBuff, selected);
+			}
+			if (ct.t2 != null && isFrontFacingViewSpace(ct.t2)) {
+				drawProjectedTriangle(projection, ct.t2, litColour, zBuff, selected);
+			}
 		}
 	}
 	
