@@ -241,8 +241,15 @@
   - this is the main reason the work pivoted toward a fixed straight conveyor assembly rather than continuing to derive conveyor visuals from route spans
 - The current straight conveyor proof is intentionally visual-first:
   - it is now much closer to the intended conveyor look than the procedural route-derived attempt
-  - there is still a very minor marker disappearance right at the belt/roller tangent in some frames, likely a tiny depth/coplanar or culling edge case
+  - there is still a very minor marker disappearance right at the belt/roller tangent in some frames, likely a tiny depth/coplanar edge case
   - that issue is considered minor and intentionally deferred for now
+- A renderer bug affecting clipped conveyor faces was diagnosed and fixed:
+  - the main issue was not mesh winding in the straight conveyor geometry
+  - the real fault was near-plane triangle clipping rebuilding clipped triangles without preserving vertex order
+  - that could flip winding on clipped output triangles and trigger incorrect backface culling, especially on the straight conveyor proof
+  - `Vertex.clipTriangleNear(...)` now reconstructs clipped triangles by walking original triangle edges in order
+  - backface culling is also now performed in view space rather than from projected integer screen-space winding
+  - projected screen coordinates are now carried as floats deeper into rasterisation, which also improved stability slightly
 - The current document reflects observed code structure and runtime behaviour.
   - It is not a design proposal and does not describe unimplemented intended architecture.
 
@@ -296,6 +303,12 @@
   - the belt is thinner and tangentially aligned to the roller/wrap geometry
   - two markers are phase-shifted so one should normally be visible on the top run and one on the bottom run
   - the marker spans across the width of the belt by design
+- A clipping/culling investigation was completed:
+  - disappearing belt faces in the straight conveyor proof were initially suspected to be a winding problem
+  - runtime testing and screenshots showed the more important symptom was clipped triangles being rebuilt with incorrect winding
+  - `Vertex.clipTriangleNear(...)` was fixed to preserve edge order when reconstructing clipped triangles
+  - `TriangleRenderer` now culls in view space instead of using projected integer screen-space winding
+  - the straight conveyor proof, oval scene, and parallel scene all appeared materially more stable after the fix
 
 ## Next Session Guidance
 
