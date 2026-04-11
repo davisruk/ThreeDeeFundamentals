@@ -25,6 +25,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory;
+import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.ConveyorVisualSpeed;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.StraightConveyorSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackDriveType;
@@ -314,7 +315,7 @@ public class WarehouseTrackFactory {
 	                    0.042f,
 	                    0.060f,
 	                    0.002f,
-	                    toteSpeedUnitsPerSecond),
+	                    ConveyorVisualSpeed.matchTransport(toteSpeedUnitsPerSecond)),
 	            appearance);
 	    Vec3 bottomCentre = bottom.getGeometry().sampleByDistance(bottom.length() * 0.5f);
 	    bottomConveyor.transformation.xTranslation = bottomCentre.x;
@@ -533,7 +534,7 @@ public class WarehouseTrackFactory {
 						0.42f,
 						0.06f,
 						0.006f,
-						1.2d),
+						ConveyorVisualSpeed.fixed(1.2d)),
 				appearance);
 		conveyor.transformation.xTranslation = 0f;
 		conveyor.transformation.yTranslation = 0.1f;
@@ -552,7 +553,7 @@ public class WarehouseTrackFactory {
 						0.42f * smallScale,
 						0.06f * smallScale,
 						0.006f * smallScale,
-						1.2d * smallScale),
+						ConveyorVisualSpeed.fixed(1.2d * smallScale)),
 				appearance);
 		smallConveyor.transformation.xTranslation = 0f;
 		smallConveyor.transformation.yTranslation = 0.1f;
@@ -570,7 +571,7 @@ public class WarehouseTrackFactory {
 						0.042f,
 						0.006f,
 						0.0006f,
-						0.12d),
+						ConveyorVisualSpeed.fixed(0.12d)),
 				appearance);
 		compactTransferConveyor.transformation.xTranslation = 0f;
 		compactTransferConveyor.transformation.yTranslation = 0.1f;
@@ -660,7 +661,7 @@ public class WarehouseTrackFactory {
 						0.042f * scale,
 						0.006f * scale,
 						0.0006f * scale,
-						0.12d),
+						ConveyorVisualSpeed.fixed(0.12d)),
 				appearance);
 		leftConveyor.transformation.zTranslation = -conveyorOffset;
 
@@ -675,7 +676,7 @@ public class WarehouseTrackFactory {
 						0.042f * scale,
 						0.006f * scale,
 						0.0006f * scale,
-						0.12d),
+						ConveyorVisualSpeed.fixed(0.12d)),
 				appearance);
 		rightConveyor.transformation.zTranslation = conveyorOffset;
 

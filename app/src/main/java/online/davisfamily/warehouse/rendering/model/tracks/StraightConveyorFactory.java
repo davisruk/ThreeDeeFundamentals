@@ -15,6 +15,55 @@ import online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy;
 
 public final class StraightConveyorFactory {
 
+    public enum ConveyorVisualSpeedMode {
+        FIXED,
+        MATCH_TRANSPORT,
+        SCALE_TRANSPORT
+    }
+
+    public record ConveyorVisualSpeed(
+            ConveyorVisualSpeedMode mode,
+            double fixedUnitsPerSecond,
+            double transportUnitsPerSecond,
+            double transportScale) {
+
+        public ConveyorVisualSpeed {
+            if (mode == null) {
+                throw new IllegalArgumentException("mode must not be null");
+            }
+        }
+
+        public static ConveyorVisualSpeed fixed(double unitsPerSecond) {
+            return new ConveyorVisualSpeed(ConveyorVisualSpeedMode.FIXED, unitsPerSecond, 0d, 1d);
+        }
+
+        public static ConveyorVisualSpeed matchTransport(double transportUnitsPerSecond) {
+            return new ConveyorVisualSpeed(
+                    ConveyorVisualSpeedMode.MATCH_TRANSPORT,
+                    0d,
+                    transportUnitsPerSecond,
+                    1d);
+        }
+
+        public static ConveyorVisualSpeed scaledFromTransport(
+                double transportUnitsPerSecond,
+                double transportScale) {
+            return new ConveyorVisualSpeed(
+                    ConveyorVisualSpeedMode.SCALE_TRANSPORT,
+                    0d,
+                    transportUnitsPerSecond,
+                    transportScale);
+        }
+
+        public double resolveUnitsPerSecond() {
+            return switch (mode) {
+                case FIXED -> fixedUnitsPerSecond;
+                case MATCH_TRANSPORT -> transportUnitsPerSecond;
+                case SCALE_TRANSPORT -> transportUnitsPerSecond * transportScale;
+            };
+        }
+    }
+
     public record StraightConveyorSpec(
             float length,
             float width,
@@ -23,7 +72,7 @@ public final class StraightConveyorFactory {
             float returnDrop,
             float markerLength,
             float markerThickness,
-            double beltSpeedUnitsPerSecond) {
+            ConveyorVisualSpeed visualSpeed) {
     }
 
     private StraightConveyorFactory() {
@@ -177,7 +226,7 @@ public final class StraightConveyorFactory {
                         bottomY,
                         startRollerX,
                         endRollerX,
-                        spec.beltSpeedUnitsPerSecond(),
+                        spec.visualSpeed().resolveUnitsPerSecond(),
                         phaseOffset));
     }
 
