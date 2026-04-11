@@ -27,6 +27,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.StraightConveyorSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
+import online.davisfamily.warehouse.rendering.model.tracks.TrackDriveType;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
 import online.davisfamily.warehouse.sim.tote.Tote;
@@ -110,8 +111,35 @@ public class WarehouseTrackFactory {
 	            false,
 	            0.080f
 	    );
+	    TrackSpec bottomSupportSpec = new TrackSpec(
+	            widthToteEnvelope,
+	            conveyorWidthWise.sideClearance,
+	            conveyorWidthWise.deckThickness,
+	            conveyorWidthWise.deckTopY,
+	            conveyorWidthWise.includeGuides,
+	            conveyorWidthWise.guideHeight,
+	            conveyorWidthWise.guideThickness,
+	            conveyorWidthWise.guideGap,
+	            conveyorWidthWise.connectionGuideCutback,
+	            conveyorWidthWise.targetGuideOpeningLength,
+	            TrackDriveType.NONE,
+	            false,
+	            conveyorWidthWise.rollerPitch,
+	            conveyorWidthWise.rollerWidthInset,
+	            conveyorWidthWise.rollerHeight,
+	            conveyorWidthWise.rollerDepthAlongPath,
+	            conveyorWidthWise.conveyorWidthInset,
+	            conveyorWidthWise.conveyorBeltThickness,
+	            conveyorWidthWise.conveyorReturnDepth,
+	            conveyorWidthWise.conveyorMarkerPitch,
+	            conveyorWidthWise.conveyorMarkerLength,
+	            conveyorWidthWise.conveyorMarkerThickness,
+	            conveyorWidthWise.suppressRollersInTransferZones,
+	            conveyorWidthWise.suppressGuidesInTransferZones,
+	            conveyorWidthWise.sampleStep);
 
 	    float toteLength = tote.getOuterBottomDepth();
+	    float toteSpeedUnitsPerSecond = 2.0f;
 	    float linkOpeningLength = specToteLengthWise.getGuideJoinOpeningLength();
 
 	    // Path geometry
@@ -187,7 +215,7 @@ public class WarehouseTrackFactory {
 	    // Rendering specs per segment
 	    builder.renderWith(top, specToteWidthWise)
 	           .renderWith(rightReturn, specToteWidthWise)
-	           .renderWith(bottom, conveyorWidthWise)
+	           .renderWith(bottom, bottomSupportSpec)
 	           .renderWith(leftReturn, specToteWidthWise)
 	           .renderWith(link1, specToteLengthWise)
 	           .renderWith(link2, specToteLengthWise);
@@ -274,9 +302,29 @@ public class WarehouseTrackFactory {
 	            builder.getSpecsAndSegments(),
 	            appearance
 	    );
+	    float bottomConveyorWidth = conveyorWidthWise.getRunningWidth() - (2f * conveyorWidthWise.conveyorWidthInset);
+	    RenderableObject bottomConveyor = StraightConveyorFactory.create(
+	            "bottom_straight_conveyor",
+	            tr,
+	            new StraightConveyorSpec(
+	                    bottom.length(),
+	                    bottomConveyorWidth,
+	                    0.018f,
+	                    0.012f,
+	                    0.042f,
+	                    0.060f,
+	                    0.002f,
+	                    toteSpeedUnitsPerSecond),
+	            appearance);
+	    Vec3 bottomCentre = bottom.getGeometry().sampleByDistance(bottom.length() * 0.5f);
+	    bottomConveyor.transformation.xTranslation = bottomCentre.x;
+	    bottomConveyor.transformation.yTranslation = 0f;
+	    bottomConveyor.transformation.zTranslation = bottomCentre.z;
+	    bottomConveyor.transformation.angleY = localXYawFromDirection(
+	            bottom.getGeometry().sampleOrientationDirectionByDistance(bottom.length() * 0.5f));
 
 	    float rollerYOffset = specToteWidthWise.getLoadSurfaceHeight() + 0.02f;
-	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, 2.0f);
+	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, toteSpeedUnitsPerSecond);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
 	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
 	    
@@ -293,6 +341,7 @@ public class WarehouseTrackFactory {
 	    for (RenderableObject track : tracks) {
 	        objects.add(track);
 	    }
+	    objects.add(bottomConveyor);
 	}
 	
 	public static void setupParallelTracks(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects){
