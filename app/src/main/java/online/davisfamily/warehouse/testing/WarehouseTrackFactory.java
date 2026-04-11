@@ -566,6 +566,9 @@ public class WarehouseTrackFactory {
 		float conveyorWidth = Math.min(conveyorLength * 0.4f, mechanismWidth * 0.28f);
 		float gap = (mechanismWidth - (2f * conveyorWidth)) / 3f;
 		float conveyorOffset = (conveyorWidth + gap) * 0.5f;
+		float baseLength = conveyorLength + 0.024f;
+		float baseWidth = (2f * conveyorWidth) + gap + 0.028f;
+		float baseThickness = 0.004f;
 		float rollerRadius = 0.018f;
 		float scale = conveyorLength / 0.18f;
 		TrackAppearance appearance = new TrackAppearance(
@@ -587,6 +590,14 @@ public class WarehouseTrackFactory {
 				createInvisibleAnchorMesh(),
 				rootTransform,
 				triangleIndex -> 0,
+				false);
+		Mesh baseMesh = RollerMeshFactory.createBoxRollerMesh(baseLength, baseThickness, baseWidth);
+		RenderableObject base = RenderableObject.create(
+				zone.getId() + "_steering_base",
+				tr,
+				baseMesh,
+				new ObjectTransformation(0f, 0f, 0f, 0f, -0.006f, 0f, new Mat4()),
+				new OneColourStrategyImpl(markerColourArgb),
 				false);
 
 		RenderableObject leftConveyor = StraightConveyorFactory.create(
@@ -619,6 +630,7 @@ public class WarehouseTrackFactory {
 				appearance);
 		rightConveyor.transformation.zTranslation = conveyorOffset;
 
+		root.addChild(base);
 		root.addChild(leftConveyor);
 		root.addChild(rightConveyor);
 		return root;
