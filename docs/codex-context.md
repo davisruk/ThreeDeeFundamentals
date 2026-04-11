@@ -3,7 +3,7 @@
 ## System Overview
 
 - Plain Java simulation and software-rendered 3D engine built as a Gradle project.
-- The current runnable example is temporarily a straight conveyor proof scene used to validate reusable conveyor visuals in isolation.
+- The current runnable example is back to the oval warehouse route setup so reusable conveyor visuals can be assessed in route/transfer context.
 - The codebase mixes a generic engine layer (`threedee`) with a warehouse-specific example layer (`warehouse`).
 - Main concepts visible in code:
   - route-based movement over connected path segments
@@ -63,11 +63,13 @@
 - `RouteTrackFactory` / warehouse track rendering classes
   - Build conveyor/track render meshes from route definitions plus warehouse `TrackSpec`.
 - `StraightConveyorFactory`
-  - Builds a fixed straight conveyor assembly in local space with top run, bottom return, end wraps, end rollers, and looping markers.
+  - Builds a fixed straight conveyor assembly in local space with top run, bottom return, end wraps, end rollers, looping belt markers, and roller end-cap markers.
+  - Conveyor visual speed is now explicit via `ConveyorVisualSpeed` rather than always being a single raw speed value.
 - `StraightConveyorMarkerBehaviour`
   - Drives belt markers around the fixed straight conveyor assembly in local space rather than deriving motion from route geometry.
 - `SteeringConveyorMechanism`
   - First concrete transfer-zone mechanism implementation; owns one governing state and can drive one-or-more renderable parts together.
+  - Can now be built with an explicit initial outcome/pose so always-branch/fixed steering cases do not need a separate mechanism type.
 
 ## Core Execution Flow
 
@@ -299,6 +301,30 @@
   - `StraightConveyorMarkerBehaviour` drives those markers in local space around the straight conveyor assembly
   - this proof scene is now the active `TestScene` wiring via `WarehouseTrackFactory.setupStraightConveyorTest(...)`
   - the proof visually validates the preferred direction: fixed conveyor assemblies rather than route-derived conveyor geometry
+- Straight conveyor reuse and detail were pushed further:
+  - roller end-cap marker strips were added so roller rotation is readable as the conveyor runs
+  - the straight conveyor assembly was tested at much smaller scales and still reads acceptably for compact transfer-machine use
+  - `StraightConveyorFactory` is now the practical reusable assembly API for both standalone tests and transfer-zone-mounted machines
+- The steering transfer mechanism now uses the reusable conveyor assembly rather than ad hoc local meshes:
+  - `WarehouseTrackFactory` mounts two compact straight conveyor child assemblies side by side under the steering mechanism root
+  - those child conveyors sit on a thin shared base that rotates with the mechanism
+  - spacing, height, and footprint were tuned against the current transfer-zone visuals in the parallel track scene
+- The oval bottom conveyor has been switched away from the old route-derived conveyor visual path:
+  - the bottom run now renders plain support/guides plus a mounted `StraightConveyorFactory` assembly aligned to the segment
+  - this keeps the preferred fixed-conveyor direction in the main oval route scene rather than only in the standalone proof scene
+- Conveyor visual speed is now explicitly modelled separately from transport speed:
+  - `StraightConveyorFactory` now takes a `ConveyorVisualSpeed` configuration rather than a single raw speed
+  - the oval bottom conveyor is currently configured to match tote/transport speed
+  - the compact steering conveyors keep an independent fixed visual speed because matching tote speed looked visually wrong at that scale
+- Steering mechanism initial pose can now be specified:
+  - `SteeringConveyorMechanism` accepts an explicit initial outcome/pose
+  - always-transfer/fixed-steering cases can now reuse the same mechanism type rather than introducing a specialised duplicate
+  - the current parallel-track setup uses this by starting always-transfer steering mechanisms already in branch pose
+- A wireframe-debug rendering issue was diagnosed and fixed:
+  - filled triangles were largely correct, but wireframe mode showed long stray edge spans on clipped geometry
+  - the wireframe path was drawing triangle edges after only near-plane clipping, without full frustum clipping in clip space
+  - `TriangleRenderer` now clips wireframe edges against the full homogeneous view frustum before projecting to screen space
+  - this made the wireframe debug view materially more trustworthy for long conveyor spans and other clipped geometry
 - The current straight conveyor proof has these known characteristics:
   - the belt is thinner and tangentially aligned to the roller/wrap geometry
   - two markers are phase-shifted so one should normally be visible on the top run and one on the bottom run
@@ -313,22 +339,21 @@
 ## Next Session Guidance
 
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
-- Treat the current straight conveyor proof as the canonical direction for conveyor visuals.
-  - Reuse the single straight conveyor assembly model for transfer-focused machines.
+- Treat the straight conveyor assembly as the canonical direction for conveyor visuals.
+  - Reuse the single straight conveyor assembly model for transfer-focused machines and fixed conveyor-backed runs.
   - Do not continue investing in route-derived/procedural conveyor-span rendering for transfer devices.
 - The intended modelling direction now appears to be:
   - tracks remain procedural warehouse infrastructure
   - conveyors are reusable straight assemblies
   - transfer-zone mechanisms arrange and animate one or more child conveyor assemblies under a parent mechanism/envelope transform
-- The next practical step should be to adapt transfer mechanisms to use the straight conveyor assembly:
-  - replace the current ad hoc steering conveyor visuals in `WarehouseTrackFactory` with child instances of the reusable straight conveyor model
-  - keep one governing mechanism state with one-or-more child conveyor renderables
-  - for popup-style devices, treat the work as procedural placement of standard conveyor modules across a parent envelope, not procedural generation of each conveyor’s belt geometry
+- The next practical step should be to continue propagating the reusable conveyor assembly into the remaining conveyor-backed scenes and machine types:
+  - keep replacing any remaining route-derived or ad hoc conveyor visuals with mounted `StraightConveyorFactory` assemblies where appropriate
+  - continue treating popup/steering devices as procedural placement of standard conveyor modules across a parent envelope, not procedural generation of each conveyor's belt geometry
 - Suggested sequence for the next session:
-  - keep the standalone straight conveyor test available while reusing its geometry/animation pieces
-  - refactor the straight conveyor proof into a reusable assembly API suitable for both standalone tests and transfer-zone mechanisms
-  - switch the steering mechanism to mount one or more of those straight conveyor assemblies
-  - once that works, use `setupParallelTracks(...)` as the best place to test transfer-focused machine visuals and decision-driven steering behaviour again
-- The current active runnable scene is intentionally no longer the tote/oval route demo:
-  - `TestScene` is currently wired to the straight conveyor proof scene so conveyor visual work can be assessed in isolation
-  - a future session can switch back to route/transfer-focused tests once the reusable conveyor assembly is being consumed by the transfer mechanisms
+  - keep the standalone straight conveyor test available as a sizing/debug reference, but continue validating real usage in the oval and parallel route scenes
+  - review whether any remaining conveyor-backed track visuals should now become mounted fixed assemblies rather than route-derived spans
+  - decide whether additional transfer-machine variants can be expressed as `SteeringConveyorMechanism` plus initial-outcome/strategy configuration rather than new mechanism classes
+  - perform hot path analysis on the render loop and identify opportunities to reduce immutable-object creation / transient allocation inside per-frame rendering code
+- The current active runnable scene is intentionally no longer the straight conveyor proof:
+  - `TestScene` is currently wired to the tote/oval route demo so the reusable conveyor assembly can be assessed in-context
+  - `setupParallelTracks(...)` remains the best focused scene for transfer-machine visual/steering checks
