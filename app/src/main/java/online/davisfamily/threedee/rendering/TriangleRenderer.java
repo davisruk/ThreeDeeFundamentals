@@ -218,6 +218,8 @@ rightz = edge2zIntersection;
 	Vec4 clipA = new Vec4();
 	Vec4 clipB = new Vec4();
 	Vec4 clipC = new Vec4();
+	Vec4 wireClipA = new Vec4();
+	Vec4 wireClipB = new Vec4();
 	ScreenCoord screenA = new ScreenCoord();
 	ScreenCoord screenB = new ScreenCoord();
 	ScreenCoord screenC = new ScreenCoord();
@@ -252,11 +254,85 @@ rightz = edge2zIntersection;
 		}
 		
 		if (is.isSet(Mode.SHOW_WIREFRAME)) {
-		    bl.drawLineUnsafeClipped(Math.round(screenA.x), Math.round(screenA.y), Math.round(screenB.x), Math.round(screenB.y), 0xFFFFFFFF);
-		    bl.drawLineUnsafeClipped(Math.round(screenB.x), Math.round(screenB.y), Math.round(screenC.x), Math.round(screenC.y), 0xFFFFFFFF);
-		    bl.drawLineUnsafeClipped(Math.round(screenC.x), Math.round(screenC.y), Math.round(screenA.x), Math.round(screenA.y), 0xFFFFFFFF);
+			drawClippedWireframeEdge(clipA, clipB);
+			drawClippedWireframeEdge(clipB, clipC);
+			drawClippedWireframeEdge(clipC, clipA);
 		}
 
+	}
+
+	private void drawClippedWireframeEdge(Vec4 a, Vec4 b) {
+		if (!clipLineToHomogeneousFrustum(a, b, wireClipA, wireClipB)) {
+			return;
+		}
+
+		float ndcAx = wireClipA.x / wireClipA.w;
+		float ndcAy = wireClipA.y / wireClipA.w;
+		float ndcBx = wireClipB.x / wireClipB.w;
+		float ndcBy = wireClipB.y / wireClipB.w;
+
+		if (!Float.isFinite(ndcAx) || !Float.isFinite(ndcAy) ||
+				!Float.isFinite(ndcBx) || !Float.isFinite(ndcBy)) {
+			return;
+		}
+
+		int sx0 = Math.round((ndcAx * 0.5f + 0.5f) * (pw - 1));
+		int sy0 = Math.round((-ndcAy * 0.5f + 0.5f) * (ph - 1));
+		int sx1 = Math.round((ndcBx * 0.5f + 0.5f) * (pw - 1));
+		int sy1 = Math.round((-ndcBy * 0.5f + 0.5f) * (ph - 1));
+
+		bl.drawLineUnsafeClipped(sx0, sy0, sx1, sy1, 0xFFFFFFFF);
+	}
+
+	private float clipT0;
+	private float clipT1;
+
+	private boolean clipLineToHomogeneousFrustum(Vec4 a, Vec4 b, Vec4 outA, Vec4 outB) {
+		float dx = b.x - a.x;
+		float dy = b.y - a.y;
+		float dz = b.z - a.z;
+		float dw = b.w - a.w;
+
+		clipT0 = 0f;
+		clipT1 = 1f;
+
+		if (!clipLinePlane(a.x + a.w, dx + dw)) return false; // x >= -w
+		if (!clipLinePlane(a.w - a.x, dw - dx)) return false; // x <= w
+		if (!clipLinePlane(a.y + a.w, dy + dw)) return false; // y >= -w
+		if (!clipLinePlane(a.w - a.y, dw - dy)) return false; // y <= w
+		if (!clipLinePlane(a.z + a.w, dz + dw)) return false; // z >= -w
+		if (!clipLinePlane(a.w - a.z, dw - dz)) return false; // z <= w
+
+		outA.x = a.x + dx * clipT0;
+		outA.y = a.y + dy * clipT0;
+		outA.z = a.z + dz * clipT0;
+		outA.w = a.w + dw * clipT0;
+
+		outB.x = a.x + dx * clipT1;
+		outB.y = a.y + dy * clipT1;
+		outB.z = a.z + dz * clipT1;
+		outB.w = a.w + dw * clipT1;
+
+		return true;
+	}
+
+	private boolean clipLinePlane(float f0, float fd) {
+		if (fd == 0f) {
+			return f0 >= 0f;
+		}
+
+		float t = -f0 / fd;
+		if (fd > 0f) {
+			if (t > clipT0) {
+				clipT0 = t;
+			}
+		} else {
+			if (t < clipT1) {
+				clipT1 = t;
+			}
+		}
+
+		return clipT0 <= clipT1;
 	}
 
 	private Vec3 cullAb = new Vec3();
