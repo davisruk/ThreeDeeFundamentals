@@ -41,11 +41,11 @@ The system should be modelled at three levels:
 - Controller / orchestration logic
 
 Physical layout and transport topology
-The physical layout should use the existing route / segment model where appropriate:
-- PDC, each PRL, and PCR are all conveyor spans with route-backed movement
-- transfer points should be explicit and controller-owned
-- initial PDC to PRL diversion can be modelled as an instantaneous redirect at the bumper point
-- PRL to PCR delivery remains a physical conveyor transfer rather than a logical teleport because grouped visible movement is part of the core behaviour
+The physical layout should use conveyor-local transport rather than the broader route / segment model:
+- PDC, each PRL, and PCR are modelled as local linear conveyor spans with 1D pack positions along the belt
+- transfer points remain explicit and controller-owned
+- initial PDC to PRL diversion can begin as a dedicated pack-diversion abstraction rather than as route-follow movement
+- PRL to PCR delivery should remain a physical conveyor transfer rather than a logical teleport because grouped visible movement is part of the core behaviour
 
 Conveyor modelling note
 Future conveyor procedural generation should not inherit the same guide / opening complexity used for track transfers.
@@ -60,7 +60,7 @@ Packs should be modelled as first-class moving simulation objects rather than as
 - each pack is a small box with dimensions
 - visual size can be represented by render scaling
 - packs should carry routing / grouping metadata such as correlation id
-- packs will likely need route-following behaviour because they visibly move across multiple conveyors
+- packs should carry conveyor-local movement state because they visibly move across multiple conveyors inside this subsystem
 
 Machine internals do not need to be physics-based.
 - tipping machine should be a timed/stateful producer that emits packs from a tote manifest
@@ -135,7 +135,7 @@ Recommended implementation order
    - PRL assignment state
    - conveyor occupancy and minimum-gap rules
    - release-decision interfaces
-2. Build a minimal logical / route-backed pack flow:
+2. Build a minimal logical / conveyor-local pack flow:
    - tipper emits packs
    - sorter meters packs
    - packs flow along PDC
@@ -156,6 +156,126 @@ Key explicit decisions made so far
 - Pack dimensions matter from the beginning because PCR fit / release logic depends on them
 - PCR should be architected now as a shared, capacity-aware downstream conveyor
 - Conveyor occupancy should be modelled as 1D length along the conveyor
+
+Implemented so far
+
+Completed domain and control model
+The tote-to-bag domain and first control/state-machine slice now exist in code.
+- tote load planning is represented by `ToteLoadPlan`
+- pack planning and pack runtime objects exist
+- PRL assignment, lifecycle, and release decisions exist
+- PCR occupancy and release-fit checks exist
+- machine states for tipping, sorting, and bagging exist
+- bagging output is now modelled as a fixed-size configurable bag via `BagSpec`
+
+Completed logical flow
+A minimal end-to-end logical tote-to-bag flow now works and is covered by a test.
+- tipper emits packs from a tote load plan
+- sorter meters packs into single-file flow
+- packs are assigned to PRLs by correlation id
+- PRLs accumulate and then release when PCR capacity allows
+- PCR delivers groups to the bagging machine
+- the bagging machine consumes one group into one bag
+- a JUnit smoke test currently verifies this thin-slice flow
+
+Completed in-app debug harness
+A runnable tote-to-bag debug harness now exists in the active scene wiring.
+- machines, conveyors, packs, and completed bags are visible in-app
+- selection inspection is wired into the debug panel for the tote-to-bag rig objects
+- the harness currently uses simple block visuals for machines, packs, and bags
+- the harness has been sufficient to prove the current state-machine and controller shape
+
+Completed conveyor visual direction
+The temporary placeholder conveyor boxes have been replaced in the harness.
+- PDC, PRLs, and PCR now use reusable `StraightConveyorFactory` assemblies
+- the tote-to-bag direction is now aligned with the broader conveyor direction already established elsewhere in the codebase
+- this confirms the preferred modelling direction: reusable straight conveyor assemblies rather than transfer-track-style procedural conveyor generation
+
+Completed stop / start conveyor visuals
+The harness now has runtime-controlled conveyor visuals.
+- a conveyor runtime state layer now allows visual start / stop control
+- PDC currently runs continuously
+- PRLs visually run when they hold packs or are ready to release
+- PCR visually runs when it contains or is delivering work
+- this proves the stop / start visual mechanism needed for later fuller implementation
+
+Completed initial PDC transfer capability
+The harness now has a first controller-owned PDC diversion stage.
+- sorter output no longer jumps directly into a PRL
+- packs now spend time in a PDC transfer stage before arriving at the target PRL
+- a bumper renderable is mounted per PRL on the PDC
+- the active bumper is driven from live transfer state
+- this currently proves controller ownership and visual routing intent, not final physical fidelity
+
+Completed geometry refinement for the harness
+The tote-to-bag harness geometry has been tightened enough to validate direction.
+- conveyors are now much narrower and read more like single-pack conveyors
+- PDC bumpers have been moved to the opposite side of the conveyor to better match the intended real arrangement
+- PDC transfer motion now reads as travel along the conveyor followed by a side diversion into the target PRL rather than a single rough diagonal drift
+- PRL and PCR pack placement is now closer to conveyor centerlines rather than broad placeholder offsets
+
+Completed conveyor-local pack transport slice
+The harness is no longer relying only on grouped placeholder positioning for PRLs and PCR.
+- `LinearConveyorLane` and `LinearLaneEntrySnapshot` now model 1D pack positions along a conveyor span inside `warehouse.sim.totebag`
+- PRLs now own lane-backed pack positions rather than only a pack list plus indexed-distance bookkeeping
+- PCR now receives groups incrementally as packs arrive from a releasing PRL rather than only by whole-group timer completion
+- the debug harness now renders PRL and PCR pack positions from simulation lane state rather than broad grouped offsets
+- a focused JUnit flow test still passes after the movement changes
+
+Completed PRL control refinement
+PRL behaviour now more closely matches the intended warehouse sequencing.
+- on partial fill, a PRL indexes forward by a fixed distance and then stops
+- once a PRL has all assigned packs, it stages the grouped packs toward the PCR end and then stops in a waiting state
+- PRLs no longer auto-release just because they are full
+- the controller now allows only one PRL release at a time and does not start a new release while PCR or the bagger still has work in flight
+
+Completed harness timing refinement
+The tote-to-bag debug harness has been retuned to make the movement behaviour easier to inspect.
+- PDC transfer timing is now derived from a fixed transfer speed so all PRL destinations read at a more uniform apparent speed
+- the demo tote pack order has been mixed so PRL destinations are less obviously sequential in the visual test
+- PRL belt speed is now intentionally much faster than PDC and PCR to better match the intended indexing behaviour
+- fallback PDC ghost-pack placement was removed from the harness after verification that it was a render bug rather than the intended flow
+
+Current status
+The current tote-to-bag implementation should be treated as a proved thin slice rather than as finished production behaviour.
+- controller/state-machine direction is now materially validated
+- conveyor visual direction is also materially validated
+- the current scene is still a debug harness and not yet the final warehouse subsystem implementation
+- pack motion is now materially closer to the intended conveyor-local model on PRLs and PCR, but transfers are still partly harness-level approximations
+
+What remains
+
+Pack movement fidelity
+- replace the remaining harness-style movement on the PDC side with the same conveyor-local transport direction now used for PRLs and PCR
+- keep improving transfer motion so packs stay simulation-owned throughout handoff rather than dropping between staged visual states
+- only consider generalising the linear transport model after a second real use case appears outside tote-to-bag
+
+Transfer fidelity
+- make PDC to PRL transfer read more like a true side-push/divert mechanism rather than the current simplified staged interpolation
+- add an explicit visible PRL to PCR handoff rather than the current disappear/reappear transfer at release time
+- decide whether PDC to PRL and PRL to PCR should share a common warehouse transfer abstraction or remain distinct mechanism types
+- add the real transfer-device runtime state and controller boundary rather than just the current bumper visual actuation
+
+Conveyor ownership and behaviour
+- move the remaining runtime ownership on the PDC side out of the harness and into the tote-to-bag subsystem/controller layer
+- keep tightening PCR release/startup rules now that one-PRL-at-a-time gating is in place
+- decide whether PCR should remain continuously running in the intended behaviour or become more explicitly command-driven
+
+Machine fidelity
+- tipping, sorting, and bagging remain block-like placeholders visually
+- if improved visuals are needed later they should be added after behaviour ownership is stable
+- machine internals should continue to be timed/stateful abstractions rather than physics simulations
+
+Integration work
+- decide how the tote-to-bag subsystem should live alongside or inside the broader warehouse scene setup
+- decide whether the tote-to-bag flow becomes a dedicated example scene, a reusable warehouse module, or a subsection embedded in a larger layout
+- propagate inspection support to any new tote-to-bag runtime objects introduced in later phases
+
+Current recommended next step
+- continue from the proved harness toward actual subsystem integration by finishing the transfer side of the movement model:
+  - give PRL to PCR an explicit visible handoff / transfer state rather than the current implicit release jump
+  - move PDC-side movement ownership further into the conveyor-local transport layer so packs remain simulation-owned from sorter output through PRL arrival
+  - keep machine cosmetics secondary until the remaining transport ownership and handoff behaviours are stable
 
 Branching strategy
 This work is expected to span multiple sessions and should not be forced into a single long-running unstructured branch.

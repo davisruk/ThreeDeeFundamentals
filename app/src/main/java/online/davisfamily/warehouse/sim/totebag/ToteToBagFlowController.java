@@ -1,7 +1,9 @@
 package online.davisfamily.warehouse.sim.totebag;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,7 +22,9 @@ public class ToteToBagFlowController implements SimulationController {
     private final ToteToBagAssignmentPlanner assignmentPlanner;
     private final Map<String, PrlConveyor> prlsById = new LinkedHashMap<>();
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
+    private final List<PdcTransfer> activePdcTransfers = new ArrayList<>();
     private final Queue<ReleasedPackGroup> releasedGroups = new ArrayDeque<>();
+    private final PdcTransferDurationProvider pdcTransferDurationProvider;
     private boolean initialized;
     private boolean toteLoaded;
 
@@ -32,6 +36,46 @@ public class ToteToBagFlowController implements SimulationController {
             BaggingMachine baggingMachine,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors) {
+        this(
+                toteLoadPlan,
+                tippingMachine,
+                sortingMachine,
+                pcrConveyor,
+                baggingMachine,
+                assignmentPlanner,
+                prlConveyors,
+                ignored -> 0.45d);
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PcrConveyor pcrConveyor,
+            BaggingMachine baggingMachine,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            double pdcTransferDurationSeconds) {
+        this(
+                toteLoadPlan,
+                tippingMachine,
+                sortingMachine,
+                pcrConveyor,
+                baggingMachine,
+                assignmentPlanner,
+                prlConveyors,
+                ignored -> pdcTransferDurationSeconds);
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PcrConveyor pcrConveyor,
+            BaggingMachine baggingMachine,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            PdcTransferDurationProvider pdcTransferDurationProvider) {
         if (toteLoadPlan == null
                 || tippingMachine == null
                 || sortingMachine == null
@@ -39,7 +83,8 @@ public class ToteToBagFlowController implements SimulationController {
                 || baggingMachine == null
                 || assignmentPlanner == null
                 || prlConveyors == null
-                || prlConveyors.isEmpty()) {
+                || prlConveyors.isEmpty()
+                || pdcTransferDurationProvider == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null or empty");
         }
         this.toteLoadPlan = toteLoadPlan;
@@ -48,6 +93,7 @@ public class ToteToBagFlowController implements SimulationController {
         this.pcrConveyor = pcrConveyor;
         this.baggingMachine = baggingMachine;
         this.assignmentPlanner = assignmentPlanner;
+        this.pdcTransferDurationProvider = pdcTransferDurationProvider;
         for (PrlConveyor prlConveyor : prlConveyors) {
             prlsById.put(prlConveyor.getId(), prlConveyor);
         }
@@ -59,7 +105,10 @@ public class ToteToBagFlowController implements SimulationController {
         loadToteIfNeeded();
         drainTippingMachine();
         drainSortingMachine();
+        updatePdcTransfers(dtSeconds);
+        updatePrls(dtSeconds);
         attemptPrlRelease();
+        transferReleasedPrlPacksToPcr();
         attemptBaggingStart();
     }
 
@@ -73,6 +122,10 @@ public class ToteToBagFlowController implements SimulationController {
 
     public List<Pack> getObservedPacks() {
         return observedPacksById.values().stream().toList();
+    }
+
+    public List<PdcTransfer> getActivePdcTransfers() {
+        return List.copyOf(activePdcTransfers);
     }
 
     private void initializeIfNeeded() {
@@ -106,11 +159,44 @@ public class ToteToBagFlowController implements SimulationController {
             Pack pack = sortingMachine.pollReleasedPack();
             PrlConveyor prl = findPrlForCorrelation(pack.getCorrelationId())
                     .orElseThrow(() -> new IllegalStateException("No PRL assignment for correlation " + pack.getCorrelationId()));
-            prl.acceptPack(pack);
+            pack.setState(Pack.PackMotionState.DIVERTING);
+            activePdcTransfers.add(new PdcTransfer(pack, prl.getId(), pdcTransferDurationProvider.durationSecondsFor(prl.getId())));
+        }
+    }
+
+    private void updatePdcTransfers(double dtSeconds) {
+        Iterator<PdcTransfer> iterator = activePdcTransfers.iterator();
+        while (iterator.hasNext()) {
+            PdcTransfer transfer = iterator.next();
+            transfer.advance(dtSeconds);
+            if (!transfer.isComplete()) {
+                continue;
+            }
+            PrlConveyor prl = prlsById.get(transfer.getTargetPrlId());
+            if (prl == null) {
+                throw new IllegalStateException("Unknown PRL id " + transfer.getTargetPrlId());
+            }
+            if (!prl.accepts(transfer.getPack())) {
+                continue;
+            }
+            prl.acceptPack(transfer.getPack());
+            iterator.remove();
+        }
+    }
+
+    private void updatePrls(double dtSeconds) {
+        for (PrlConveyor prl : prlsById.values()) {
+            prl.update(dtSeconds);
         }
     }
 
     private void attemptPrlRelease() {
+        boolean prlAlreadyReleasing = prlsById.values().stream()
+                .anyMatch(prl -> prl.getAssignment().getState() == PrlState.RELEASING);
+        if (prlAlreadyReleasing || pcrConveyor.hasWorkInFlight() || baggingMachine.getCurrentGroup() != null) {
+            return;
+        }
+
         Optional<PrlConveyor> readyPrl = prlsById.values().stream()
                 .filter(PrlConveyor::isReadyToRelease)
                 .min(Comparator.comparing(PrlConveyor::getId));
@@ -124,8 +210,25 @@ public class ToteToBagFlowController implements SimulationController {
             return;
         }
         ReleasedPackGroup releasedGroup = readyPrl.get().releaseGroup();
-        pcrConveyor.accept(releasedGroup);
+        pcrConveyor.startReceivingGroup(releasedGroup);
         releasedGroups.add(releasedGroup);
+    }
+
+    private void transferReleasedPrlPacksToPcr() {
+        for (PrlConveyor prl : prlsById.values()) {
+            while (true) {
+                Optional<Pack> outfeedPack = prl.peekPackAtOutfeed();
+                if (outfeedPack.isEmpty()) {
+                    break;
+                }
+                if (!pcrConveyor.canAcceptIncomingPack(outfeedPack.get())) {
+                    break;
+                }
+                pcrConveyor.acceptIncomingPack(prl.pollPackAtOutfeed()
+                        .orElseThrow(() -> new IllegalStateException("Expected PRL pack at outfeed")));
+            }
+            prl.completeReleaseIfEmpty();
+        }
     }
 
     private void attemptBaggingStart() {

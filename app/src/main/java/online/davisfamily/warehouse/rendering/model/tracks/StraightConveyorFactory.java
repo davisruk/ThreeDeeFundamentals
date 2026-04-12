@@ -3,8 +3,6 @@ package online.davisfamily.warehouse.rendering.model.tracks;
 import java.util.ArrayList;
 import java.util.List;
 
-import online.davisfamily.threedee.behaviour.Behaviour;
-import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.model.Mesh;
@@ -83,6 +81,15 @@ public final class StraightConveyorFactory {
             TriangleRenderer tr,
             StraightConveyorSpec spec,
             TrackAppearance appearance) {
+        return create(id, tr, spec, null, appearance);
+    }
+
+    public static RenderableObject create(
+            String id,
+            TriangleRenderer tr,
+            StraightConveyorSpec spec,
+            ConveyorRuntimeState runtimeState,
+            TrackAppearance appearance) {
 
         float innerTopLength = Math.max(0.05f, spec.length() - (2f * spec.rollerRadius()));
         float rollerCentreY = spec.rollerRadius();
@@ -146,6 +153,7 @@ public final class StraightConveyorFactory {
                 tr,
                 rollerMesh,
                 appearance,
+                runtimeState,
                 spec.rollerRadius(),
                 spec.width(),
                 startRollerX,
@@ -156,6 +164,7 @@ public final class StraightConveyorFactory {
                 tr,
                 rollerMesh,
                 appearance,
+                runtimeState,
                 spec.rollerRadius(),
                 spec.width(),
                 endRollerX,
@@ -178,7 +187,8 @@ public final class StraightConveyorFactory {
                 bottomY - (spec.beltThickness() * 0.5f) - (spec.markerThickness() * 0.5f) - markerSurfaceClearance,
                 startRollerX,
                 endRollerX,
-                0f));
+                0f,
+                runtimeState));
 
         children.add(createMarker(
                 id + "_marker_b",
@@ -192,7 +202,8 @@ public final class StraightConveyorFactory {
                 bottomY - (spec.beltThickness() * 0.5f) - (spec.markerThickness() * 0.5f) - markerSurfaceClearance,
                 startRollerX,
                 endRollerX,
-                loopLength * 0.5f));
+                loopLength * 0.5f,
+                runtimeState));
 
         root.addAllChildren(children);
         return root;
@@ -210,7 +221,8 @@ public final class StraightConveyorFactory {
             float bottomY,
             float startRollerX,
             float endRollerX,
-            float phaseOffset) {
+            float phaseOffset,
+            ConveyorRuntimeState runtimeState) {
         return RenderableObject.createWithBehaviours(
                 id,
                 tr,
@@ -227,7 +239,8 @@ public final class StraightConveyorFactory {
                         startRollerX,
                         endRollerX,
                         spec.visualSpeed().resolveUnitsPerSecond(),
-                        phaseOffset));
+                        phaseOffset,
+                        runtimeState));
     }
 
     private static RenderableObject createRollerAssembly(
@@ -235,6 +248,7 @@ public final class StraightConveyorFactory {
             TriangleRenderer tr,
             Mesh rollerMesh,
             TrackAppearance appearance,
+            ConveyorRuntimeState runtimeState,
             float rollerRadius,
             float rollerWidth,
             float x,
@@ -246,7 +260,7 @@ public final class StraightConveyorFactory {
                 new ObjectTransformation(0f, 0f, 0f, x, y, 0f, new Mat4()),
                 triangleIndex -> 0,
                 false,
-                new SpinBehaviour(0f, 0f, -4f));
+                new ConveyorRollerSpinBehaviour(0f, 0f, -4f, runtimeState));
 
         rollerRoot.addChild(RenderableObject.create(
                 id + "_body",

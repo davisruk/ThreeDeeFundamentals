@@ -15,6 +15,7 @@ public class StraightConveyorMarkerBehaviour implements Behaviour {
     private final float endRollerX;
     private final double speedUnitsPerSecond;
     private final float phaseOffset;
+    private final ConveyorRuntimeState runtimeState;
 
     private double travelledDistance;
 
@@ -27,7 +28,8 @@ public class StraightConveyorMarkerBehaviour implements Behaviour {
             float startRollerX,
             float endRollerX,
             double speedUnitsPerSecond,
-            float phaseOffset) {
+            float phaseOffset,
+            ConveyorRuntimeState runtimeState) {
         this.topLength = topLength;
         this.bottomLength = bottomLength;
         this.wrapRadius = wrapRadius;
@@ -37,13 +39,17 @@ public class StraightConveyorMarkerBehaviour implements Behaviour {
         this.endRollerX = endRollerX;
         this.speedUnitsPerSecond = speedUnitsPerSecond;
         this.phaseOffset = phaseOffset;
+        this.runtimeState = runtimeState;
     }
 
     @Override
     public void update(RenderableObject object, double dtSeconds) {
         float wrapLength = (float) (Math.PI * wrapRadius);
         float loopLength = topLength + wrapLength + bottomLength + wrapLength;
-        travelledDistance = (travelledDistance + (speedUnitsPerSecond * dtSeconds)) % loopLength;
+        double resolvedSpeed = runtimeState != null
+                ? runtimeState.resolveSpeed(speedUnitsPerSecond)
+                : speedUnitsPerSecond;
+        travelledDistance = (travelledDistance + (resolvedSpeed * dtSeconds)) % loopLength;
 
         float s = (float) ((travelledDistance + phaseOffset) % loopLength);
         ObjectTransformation t = object.transformation;
