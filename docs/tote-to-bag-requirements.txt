@@ -1,0 +1,215 @@
+Requirements
+In the warehouse there is a section that takes the contents of a tote and transfers them into bags. The tote contains packs for several different bags. The operation is conducted through several conveyers and machines.
+
+Layout:
+At the beginning is a tipping machine
+A sorting machine is next to the tipping machines outflow area
+Next to the sorting machine is a single span conveyer, let's call it pack delivery conveyer or PDC for short.
+Perpendicular to the PDC are several single span conveyers, let's call them pack receiver links (PRL)
+At the end of the PRLs is another single span conveyer (so aligned with the PDC with same dimensions), let's call it pack receiver conveyer (PCR)
+At the end of the PCR is a bagging machine
+
+Operations:
+A tote arrives at the tipping machine
+The tipping machine tips the tote
+Packs fall from the tote into the sorting machine's receiver
+The sorting machine channels the packs into single file and channels them onto the PDC
+The PDC belt continually moves and carries the small packs.
+On the PDC are small bumpers aligned with the PRLs
+If the controller detects that a pack is destined for a PRL it instructs the bumper to push the pack onto the PRL
+The PRL belt is static until told to move
+The controller instructs the PRL to move forward slightly so it may receive another pack
+The controller knows how many packs each PRL should contain
+Once a PRL contains the correct number of packs the controller advances the belt until the first pack is near the end of the belt (close to the PCR) and then stops the belt.
+The packs on each PRL are effectively now grouped and need to be delivered to the bagging machine
+When the controller detects / knows the bagging machine is free it releases a PRL
+The PRL belt moves and delivers all the packs it contains to the PCR and then stops again
+The PCR belt is continually moving in the opposite direction to the PDC belt
+The boxes travel along the PCR belt and are delivered to the bagging machine
+The bagging machine drops the packs into a bag
+Once all the packs are in a bag the bag is sealed and delivered to another conveyer (out of scope for now)
+
+
+Analysis / Agreed Approach
+
+General shape
+This is a coordinated warehouse subsystem rather than a single machine. The primary complexity is simulation state, control flow, pack grouping, and downstream release decisions rather than rendering.
+
+The system should be modelled at three levels:
+- Physical layout and transport topology
+- Warehouse simulation objects and machine state
+- Controller / orchestration logic
+
+Physical layout and transport topology
+The physical layout should use the existing route / segment model where appropriate:
+- PDC, each PRL, and PCR are all conveyor spans with route-backed movement
+- transfer points should be explicit and controller-owned
+- initial PDC to PRL diversion can be modelled as an instantaneous redirect at the bumper point
+- PRL to PCR delivery remains a physical conveyor transfer rather than a logical teleport because grouped visible movement is part of the core behaviour
+
+Conveyor modelling note
+Future conveyor procedural generation should not inherit the same guide / opening complexity used for track transfers.
+- track procedural generation currently has significant complexity around guides and openings to support transfer behaviour
+- this is not required for conveyors in this tote-to-bag area
+- if guides are represented for conveyors they should be treated more like simple side rails
+- the conveyor should sit proud of those rails rather than being modelled as a guide-opening system
+- conveyor visual / procedural work should therefore prefer simpler reusable conveyor assemblies over transfer-track-style guide logic
+
+Warehouse simulation objects and machine state
+Packs should be modelled as first-class moving simulation objects rather than as queue-only logical entities.
+- each pack is a small box with dimensions
+- visual size can be represented by render scaling
+- packs should carry routing / grouping metadata such as correlation id
+- packs will likely need route-following behaviour because they visibly move across multiple conveyors
+
+Machine internals do not need to be physics-based.
+- tipping machine should be a timed/stateful producer that emits packs from a tote manifest
+- sorting machine should initially be treated as a funnel / metering stage that produces a single-file pack stream onto the PDC
+- bagging machine should be a timed consumer with occupancy / free-busy state
+
+Data model direction
+The tote should carry metadata describing its contents.
+- a tote manifest should define the packs expected from the tote
+- each pack entry should include a correlation id linking it to a bag / PRL assignment
+- order and correlation data are predetermined upstream and do not need to be inferred in the warehouse simulation
+
+Suggested early model objects:
+- ToteLoadPlan
+- PackPlan
+- Pack
+- PrlAssignment
+
+PRL assignment and lifecycle
+Each PRL handles one bag at a time.
+- packs for a correlation id are accumulated onto the assigned PRL
+- the sorting machine does not guarantee pack order beyond single-file delivery onto the PDC
+- PRL behaviour should therefore be explicit and stateful
+
+Suggested PRL lifecycle:
+- IDLE
+- ASSIGNED
+- ACCUMULATING
+- READY_TO_RELEASE
+- RELEASING
+- IDLE
+
+Pack motion and spacing
+Packs should maintain a minimum gap on conveyors.
+- the first implementation should prevent unrealistic overlap
+- spacing should be treated as conveyor-flow behaviour rather than a rendering-only concern
+- this behaviour is warehouse-specific and should not be forced into tote semantics
+
+PRL indexing
+On PRLs, the "move forward slightly so it may receive another pack" behaviour can initially be modelled as a fixed indexing distance rather than as sensor-driven dynamic gap control.
+
+PCR strategy
+PCR should be designed from the start as a shared downstream resource rather than as a single-bag-only conveyor.
+- multiple bag groups may eventually coexist on PCR
+- this implies capacity-aware release decisions
+- packs therefore need dimensions and minimum-gap rules from the beginning
+- conveyor occupancy should be treated as one-dimensional length along the belt, not as a 2D packing problem
+
+Implementation guidance:
+- model PCR now as stop/start capable and capacity-aware
+- keep the first runtime scheduling policy conservative
+- the first implementation may still release only one PRL at a time
+- however, the controller and occupancy abstractions should already support downstream fit / release checks
+
+Conveyor occupancy and release decisions
+Release of a PRL onto PCR should be permissioned by controller logic rather than unconditional.
+- occupancy should be based on pack lengths plus minimum gaps and safety margin
+- the controller should be able to ask how much usable free downstream length exists
+- release should occur only when the grouped PRL contents fit safely on PCR
+
+Architectural direction
+The design should be control-first, not geometry-first.
+- define domain objects, state machines, and release rules before investing in detailed machine visuals
+- use timed/stateful machine models instead of physics simulation inside enclosed equipment
+- keep routing metadata and correlation decisions in controllers, not in sensors
+- sensors should answer where packs are, not what the system should do with them
+
+Recommended implementation order
+1. Define the warehouse domain and control model:
+   - pack dimensions
+   - tote manifest / pack plan metadata
+   - PRL assignment state
+   - conveyor occupancy and minimum-gap rules
+   - release-decision interfaces
+2. Build a minimal logical / route-backed pack flow:
+   - tipper emits packs
+   - sorter meters packs
+   - packs flow along PDC
+   - packs are redirected to assigned PRLs
+   - PRLs accumulate and index
+   - PRLs release to PCR
+   - bagging machine consumes released groups
+3. Add conservative PCR gating using occupancy and fit checks
+4. Add machine-specific mechanism behaviour and richer visuals
+
+Key explicit decisions made so far
+- Packs are real moving simulation objects, not queue-only placeholders
+- Packs will carry predetermined correlation metadata derived from tote contents
+- Each PRL serves exactly one bag at a time
+- PDC to PRL diversion is initially instantaneous at the bumper point
+- PRL indexing is initially fixed-distance
+- Packs maintain a minimum gap on conveyors
+- Pack dimensions matter from the beginning because PCR fit / release logic depends on them
+- PCR should be architected now as a shared, capacity-aware downstream conveyor
+- Conveyor occupancy should be modelled as 1D length along the conveyor
+
+Branching strategy
+This work is expected to span multiple sessions and should not be forced into a single long-running unstructured branch.
+
+Recommended branch shape
+- keep `master` as the stable integration branch
+- treat `conveyer` as the current long-lived parent branch for ongoing conveyor / warehouse transport direction work
+- create short-lived child branches from `conveyer` for tote-to-bag increments
+- merge completed tote-to-bag child branches back into `conveyer`
+- only merge to `master` when the tote-to-bag work reaches a coherent, demonstrable milestone
+
+Why this fits the current repo
+- current active development is already on `conveyer`
+- tote-to-bag depends on conveyor modelling choices and should stay close to that evolving work
+- isolating each increment in a child branch keeps partial work reviewable and reduces session-to-session risk
+- `master` should not absorb half-finished warehouse flow mechanics
+
+Recommended naming
+Use focused branches for individual slices of work, for example:
+- `feature/tote-to-bag-domain-model`
+- `feature/tote-to-bag-pack-flow`
+- `feature/tote-to-bag-prl-control`
+- `feature/tote-to-bag-pcr-gating`
+- `feature/tote-to-bag-machines`
+
+Recommended increment boundaries
+Prefer branches that land one coherent vertical slice at a time:
+- domain model and pack metadata
+- pack object plus basic route-backed movement
+- PRL assignment / indexing / accumulation
+- PCR occupancy and conservative release gating
+- machine-specific behaviour and visuals
+
+Working rule for future sessions
+- start each session from the latest `conveyer`
+- create a fresh tote-to-bag feature branch for the specific slice being worked on
+- avoid mixing unrelated conveyor refactors into the same tote-to-bag branch unless they are required prerequisites
+- if prerequisite conveyor refactor work is needed, land that separately into `conveyer` first and then rebase or branch again for tote-to-bag work
+
+Merge policy
+- merge feature branches into `conveyer` only when they compile and leave the simulation in a runnable state
+- prefer several small merges over one very large branch covering the whole tote-to-bag area
+- defer merge to `master` until the subsystem has at least a stable end-to-end thin slice
+
+
+Proposal
+Phased approach
+Phase 0: Create general architecture shape, identify machines, controllers, sensors and transfer mechanism (e.g. reuse of transfer zones)
+Phase 1: Implement transfer zones for conveyers (may require procedurally generated conveyer)
+Phase 2: Stop / Start mechanism for conveyers
+Phase 3: Implement bumper mechanism
+Phase 4: Tipping machine implementation
+Phase 5: Sorting machine implementation
+Phase 6: Bagging machine implementation 
+
+
+

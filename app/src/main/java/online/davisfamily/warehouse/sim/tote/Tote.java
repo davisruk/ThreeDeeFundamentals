@@ -180,6 +180,10 @@ public class Tote implements TrackableObject {
 		return interactionMode;
 	}
 
+	public String getReservedByMachineId() {
+		return reservedByMachineId;
+	}
+
 	public void setInteractionMode(ToteMotionState interactionMode) {
 		this.interactionMode = interactionMode;
 	}

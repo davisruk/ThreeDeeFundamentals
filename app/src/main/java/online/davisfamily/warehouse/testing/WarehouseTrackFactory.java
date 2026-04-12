@@ -6,6 +6,7 @@ import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
+import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
 import online.davisfamily.threedee.matrices.Vec3;
@@ -41,7 +42,7 @@ import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
 
 public class WarehouseTrackFactory {
-	public static void setupOvalTrack(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects) {
+	public static void setupOvalTrack(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects, SelectionInspectionRegistry inspectionRegistry) {
 
 	    ToteEnvelope widthToteEnvelope = new ToteEnvelope(
 	            tote.getOuterBottomWidth(),
@@ -329,10 +330,19 @@ public class WarehouseTrackFactory {
 	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, toteSpeedUnitsPerSecond);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
 	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
+	    inspectionRegistry.register(rTote, () -> List.of(
+	    		"Type: Tote",
+	    		"Id: " + st.getId(),
+	    		"Motion: " + st.getInteractionMode(),
+	    		"Reserved by: " + String.valueOf(st.getReservedByMachineId()),
+	    		"Segment: " + (st.getLastSnapshot() == null ? "None" : st.getLastSnapshot().currentSegment().getLabel()),
+	    		"Distance: " + formatDistance(st),
+	    		"Travel dir: " + st.getRouteFollower().getTravelDirection()
+	    ));
 	    
 	    float member_start = 1f;
 	    for (TransferZone tz: builder.getMetadata(top).getTransferZones()) {
-	    	attachSteeringMechanismForZone(tz, tr, objects, 0xFF444444, 0xFFB8B8B8);
+	    	attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
 	    	TransferZoneMachine.createTransferZoneMachine(sim, top, member_start, tz, new ToggleStrategy(true));
     	    // hack as we know there are only 2 tzs
     	    member_start = tz.getEndDistance();
@@ -346,7 +356,7 @@ public class WarehouseTrackFactory {
 	    objects.add(bottomConveyor);
 	}
 	
-	public static void setupParallelTracks(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects){
+	public static void setupParallelTracks(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects, SelectionInspectionRegistry inspectionRegistry){
 		
 		ToteEnvelope toteEnvelope = new ToteEnvelope(
 		        tote.getOuterBottomWidth(),
@@ -476,14 +486,22 @@ public class WarehouseTrackFactory {
 	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
 	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset + 0.02f, 0f); 
 	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
+	    inspectionRegistry.register(rTote, () -> List.of(
+	    		"Type: Tote",
+	    		"Id: " + st.getId(),
+	    		"Motion: " + st.getInteractionMode(),
+	    		"Segment: " + (st.getLastSnapshot() == null ? "None" : st.getLastSnapshot().currentSegment().getLabel()),
+	    		"Distance: " + formatDistance(st),
+	    		"Travel dir: " + st.getRouteFollower().getTravelDirection()
+	    ));
 
 	    for (TransferZone tz : builder.getMetadata(upper).getTransferZones()) {
-	    	attachSteeringMechanismForZone(tz, tr, objects, 0xFF444444, 0xFFB8B8B8);
+	    	attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
 	    	TransferZoneMachine.createTransferZoneMachine(sim, upper, 0f, tz, tz.getDecisionStrategy());
 	    }
 
 	    for (TransferZone tz : builder.getMetadata(lower).getTransferZones()) {
-	    	attachSteeringMechanismForZone(tz, tr, objects, 0xFF444444, 0xFFB8B8B8);
+	    	attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
 	    	TransferZoneMachine.createTransferZoneMachine(sim, lower, 0f, tz, tz.getDecisionStrategy());
 	    }
 
@@ -584,6 +602,7 @@ public class WarehouseTrackFactory {
 			TransferZone zone,
 			TriangleRenderer tr,
 			List<RenderableObject> objects,
+			SelectionInspectionRegistry inspectionRegistry,
 			int bodyColourArgb,
 			int markerColourArgb) {
 		RenderableObject root = createSteeringMechanismRenderable(zone, tr, bodyColourArgb, markerColourArgb);
@@ -606,6 +625,7 @@ public class WarehouseTrackFactory {
 				0.04f,
 				initialOutcome);
 		zone.addMechanism(mechanism);
+		registerTransferZoneInspection(inspectionRegistry, root, zone, mechanism);
 		objects.addAll(mechanism.getRenderables());
 	}
 
@@ -654,7 +674,8 @@ public class WarehouseTrackFactory {
 				baseMesh,
 				new ObjectTransformation(0f, 0f, 0f, 0f, -0.006f, 0f, new Mat4()),
 				new OneColourStrategyImpl(markerColourArgb),
-				false);
+				true);
+		base.setSelectionTarget(root);
 
 		RenderableObject leftConveyor = StraightConveyorFactory.create(
 				zone.getId() + "_steering_left_conveyor",
@@ -711,4 +732,30 @@ public class WarehouseTrackFactory {
 		horizontal.mutableNormalize();
 		return Vec3.yawFromDirection(horizontal) - (float) (Math.PI / 2.0);
 	}
+
+	private static void registerTransferZoneInspection(
+			SelectionInspectionRegistry inspectionRegistry,
+			RenderableObject renderable,
+			TransferZone zone,
+			SteeringConveyorMechanism mechanism) {
+		inspectionRegistry.register(renderable, () -> List.of(
+				"Type: Steering transfer",
+				"Id: " + zone.getId(),
+				"Source segment: " + zone.getSourceSegment().getLabel(),
+				"Target segment: " + zone.getTargetSegment().getLabel(),
+				"Start distance: " + String.format("%.3f", zone.getStartDistance()),
+				"End distance: " + String.format("%.3f", zone.getEndDistance()),
+				"Decision strategy: " + zone.getDecisionStrategy().getClass().getSimpleName(),
+				"Mechanism state: " + mechanism.getMotionState(),
+				"Mechanism ready CONTINUE: " + mechanism.isReadyFor(TransferOutcome.CONTINUE),
+				"Mechanism ready BRANCH: " + mechanism.isReadyFor(TransferOutcome.BRANCH)
+		));
+	}
+
+	private static String formatDistance(Tote tote) {
+		return tote.getLastSnapshot() == null
+				? "None"
+				: String.format("%.3f", tote.getLastSnapshot().distanceAlongSegment());
+	}
+
 }
