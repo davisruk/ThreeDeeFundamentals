@@ -79,12 +79,20 @@ public class PcrConveyor implements SimObject {
     }
 
     public void acceptIncomingPack(Pack pack) {
-        if (!lane.canAcceptAtInfeed(pack)) {
-            throw new IllegalStateException("PCR infeed does not have space for pack " + pack.getId());
+        acceptIncomingPackAtDistance(pack, pack.getDimensions().length());
+    }
+
+    public boolean canAcceptIncomingPackAtDistance(Pack pack, float frontDistance) {
+        return lane.canAcceptAtFrontDistance(pack, frontDistance);
+    }
+
+    public void acceptIncomingPackAtDistance(Pack pack, float frontDistance) {
+        if (!lane.canAcceptAtFrontDistance(pack, frontDistance)) {
+            throw new IllegalStateException("PCR entry does not have space for pack " + pack.getId());
         }
         ActiveGroup activeGroup = findTravellingGroupForPack(pack)
                 .orElseThrow(() -> new IllegalStateException("No active PCR group for pack " + pack.getId()));
-        lane.acceptAtInfeed(pack);
+        lane.acceptAtFrontDistance(pack, frontDistance);
         pack.setState(Pack.PackMotionState.MOVING);
         activeGroup.acceptedPackCount++;
     }

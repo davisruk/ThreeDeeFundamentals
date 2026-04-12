@@ -115,19 +115,52 @@ public class LinearConveyorLane {
         if (pack == null) {
             return false;
         }
-        float candidateFrontDistance = pack.getDimensions().length();
-        if (entries.isEmpty()) {
-            return candidateFrontDistance <= usableLength;
+        return canAcceptAtFrontDistance(pack, pack.getDimensions().length());
+    }
+
+    public boolean canAcceptAtFrontDistance(Pack pack, float candidateFrontDistance) {
+        if (pack == null) {
+            return false;
         }
-        LaneEntry trailing = entries.getLast();
-        return candidateFrontDistance <= trailing.rearDistance() - minimumGap + pack.getDimensions().length();
+        if (candidateFrontDistance < pack.getDimensions().length() || candidateFrontDistance > usableLength) {
+            return false;
+        }
+        LaneEntry ahead = null;
+        LaneEntry behind = null;
+        for (LaneEntry entry : entries) {
+            if (entry.frontDistance > candidateFrontDistance) {
+                ahead = entry;
+                continue;
+            }
+            behind = entry;
+            break;
+        }
+
+        if (ahead != null) {
+            float maxFrontDistance = ahead.rearDistance() - minimumGap + pack.getDimensions().length();
+            if (candidateFrontDistance > maxFrontDistance) {
+                return false;
+            }
+        }
+
+        if (behind != null) {
+            float minFrontDistance = behind.frontDistance + minimumGap + pack.getDimensions().length();
+            if (candidateFrontDistance < minFrontDistance) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public void acceptAtInfeed(Pack pack) {
-        if (!canAcceptAtInfeed(pack)) {
+        acceptAtFrontDistance(pack, pack.getDimensions().length());
+    }
+
+    public void acceptAtFrontDistance(Pack pack, float frontDistance) {
+        if (!canAcceptAtFrontDistance(pack, frontDistance)) {
             throw new IllegalStateException("Lane infeed does not have space for pack " + pack.getId());
         }
-        entries.add(new LaneEntry(pack, pack.getDimensions().length()));
+        entries.add(new LaneEntry(pack, frontDistance));
         sortEntries();
     }
 

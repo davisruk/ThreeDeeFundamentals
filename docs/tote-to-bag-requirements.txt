@@ -1,4 +1,4 @@
-Requirements
+.Requirements
 In the warehouse there is a section that takes the contents of a tote and transfers them into bags. The tote contains packs for several different bags. The operation is conducted through several conveyers and machines.
 
 Layout:
@@ -219,6 +219,8 @@ The harness is no longer relying only on grouped placeholder positioning for PRL
 - `LinearConveyorLane` and `LinearLaneEntrySnapshot` now model 1D pack positions along a conveyor span inside `warehouse.sim.totebag`
 - PRLs now own lane-backed pack positions rather than only a pack list plus indexed-distance bookkeeping
 - PCR now receives groups incrementally as packs arrive from a releasing PRL rather than only by whole-group timer completion
+- PCR entry is now no longer forced back to the start of the PCR span:
+  released PRL packs can join the PCR at a PRL-specific entry distance and continue downstream toward the bagger from that join point
 - the debug harness now renders PRL and PCR pack positions from simulation lane state rather than broad grouped offsets
 - a focused JUnit flow test still passes after the movement changes
 
@@ -236,12 +238,23 @@ The tote-to-bag debug harness has been retuned to make the movement behaviour ea
 - PRL belt speed is now intentionally much faster than PDC and PCR to better match the intended indexing behaviour
 - fallback PDC ghost-pack placement was removed from the harness after verification that it was a render bug rather than the intended flow
 
+Completed explicit PRL to PCR handoff slice
+The release side is now materially closer to the intended conveyor effect.
+- PRL to PCR transfer is now an explicit simulation-owned handoff state rather than an implicit immediate boundary hop
+- the debug harness now renders the PRL to PCR handoff path explicitly
+- transferred packs now join the PCR at the correct downstream join point for their PRL rather than being inserted at the PCR start
+- the earlier per-PRL handoff throttling was removed after validation because it introduced an unwanted pause between packs
+- the harness PCR speed is now aligned with PRL release speed so grouped release reads as continuous rather than stop-start
+- the current result is much closer to the intended visible effect even though the handoff path itself is still harness-owned geometry
+
 Current status
 The current tote-to-bag implementation should be treated as a proved thin slice rather than as finished production behaviour.
 - controller/state-machine direction is now materially validated
 - conveyor visual direction is also materially validated
 - the current scene is still a debug harness and not yet the final warehouse subsystem implementation
-- pack motion is now materially closer to the intended conveyor-local model on PRLs and PCR, but transfers are still partly harness-level approximations
+- pack motion is now materially closer to the intended conveyor-local model on PRLs and PCR
+- PRL to PCR release now has the intended continuous downstream effect in the harness
+- the main remaining transport approximation is now on the PDC side rather than on the PRL release side
 
 What remains
 
@@ -252,13 +265,12 @@ Pack movement fidelity
 
 Transfer fidelity
 - make PDC to PRL transfer read more like a true side-push/divert mechanism rather than the current simplified staged interpolation
-- add an explicit visible PRL to PCR handoff rather than the current disappear/reappear transfer at release time
-- decide whether PDC to PRL and PRL to PCR should share a common warehouse transfer abstraction or remain distinct mechanism types
+- treat PDC to PRL and PRL to PCR as distinct mechanism shapes unless a later second use case proves a shared abstraction is worthwhile
 - add the real transfer-device runtime state and controller boundary rather than just the current bumper visual actuation
 
 Conveyor ownership and behaviour
 - move the remaining runtime ownership on the PDC side out of the harness and into the tote-to-bag subsystem/controller layer
-- keep tightening PCR release/startup rules now that one-PRL-at-a-time gating is in place
+- only revisit PCR release/startup timing if later scheduling work shows a real downstream-control need; the current continuous release effect is now the preferred visual behaviour
 - decide whether PCR should remain continuously running in the intended behaviour or become more explicitly command-driven
 
 Machine fidelity
@@ -272,9 +284,10 @@ Integration work
 - propagate inspection support to any new tote-to-bag runtime objects introduced in later phases
 
 Current recommended next step
-- continue from the proved harness toward actual subsystem integration by finishing the transfer side of the movement model:
-  - give PRL to PCR an explicit visible handoff / transfer state rather than the current implicit release jump
+- continue from the proved harness toward actual subsystem integration by finishing the PDC side of the movement model:
   - move PDC-side movement ownership further into the conveyor-local transport layer so packs remain simulation-owned from sorter output through PRL arrival
+  - replace the current timed PDC diversion approximation with a more explicit side-push / divert handoff model owned by the subsystem rather than by harness-only path math
+  - keep the current PRL to PCR behaviour direction unless later scheduling or layout work reveals a concrete problem with the continuous release effect
   - keep machine cosmetics secondary until the remaining transport ownership and handoff behaviours are stable
 
 Branching strategy
@@ -330,6 +343,5 @@ Phase 3: Implement bumper mechanism
 Phase 4: Tipping machine implementation
 Phase 5: Sorting machine implementation
 Phase 6: Bagging machine implementation 
-
 
 

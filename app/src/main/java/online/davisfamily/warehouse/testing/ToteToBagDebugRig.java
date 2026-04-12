@@ -28,6 +28,7 @@ import online.davisfamily.warehouse.sim.totebag.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.PcrConveyor;
 import online.davisfamily.warehouse.sim.totebag.PrlConveyor;
+import online.davisfamily.warehouse.sim.totebag.PrlToPcrTransfer;
 import online.davisfamily.warehouse.sim.totebag.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.TippingMachine;
 import online.davisfamily.warehouse.sim.totebag.ToteLoadPlan;
@@ -38,7 +39,6 @@ public class ToteToBagDebugRig {
     private static final float PRL_BELT_SPEED = 1.80f;
     private static final float PRL_INDEX_DISTANCE = 0.34f;
     private static final double SORTER_RELEASE_INTERVAL_SECONDS = 0.95d;
-    private static final double PCR_TRAVEL_DURATION_SECONDS = 4.5d;
     private static final float PDC_TRANSFER_SPEED = 1.55f;
     private static final float PDC_Z = 0.2f;
     private static final float PCR_Z = -2.9f;
@@ -48,8 +48,10 @@ public class ToteToBagDebugRig {
     private static final float SINGLE_PACK_CONVEYOR_WIDTH = 0.18f;
     private static final float PRL_LENGTH = 2.4f;
     private static final float MAIN_CONVEYOR_LENGTH = 4.6f;
+    private static final double PCR_TRAVEL_DURATION_SECONDS = MAIN_CONVEYOR_LENGTH / PRL_BELT_SPEED;
     private static final float BUMPER_REST_Z = 0.13f;
     private static final float BUMPER_ACTIVE_Z = 0.04f;
+    private static final float PRL_TO_PCR_TRANSFER_SPEED = MAIN_CONVEYOR_LENGTH / (float) PCR_TRAVEL_DURATION_SECONDS;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -111,7 +113,9 @@ public class ToteToBagDebugRig {
                 baggingMachine,
                 new ToteToBagAssignmentPlanner(),
                 prls,
-                this::pdcTransferDurationFor);
+                this::pdcTransferDurationFor,
+                this::prlToPcrTransferDurationFor,
+                this::prlToPcrEntryFrontDistanceFor);
 
         sim.addSimObject(tippingMachine);
         sim.addSimObject(sortingMachine);
@@ -187,6 +191,10 @@ public class ToteToBagDebugRig {
 
         for (PdcTransfer transfer : flowController.getActivePdcTransfers()) {
             positionActivePdcTransfer(transfer);
+        }
+
+        for (PrlToPcrTransfer transfer : flowController.getActivePrlToPcrTransfers()) {
+            positionActivePrlToPcrTransfer(transfer);
         }
 
         for (Pack pack : flowController.getObservedPacks()) {
@@ -285,7 +293,8 @@ public class ToteToBagDebugRig {
                         pcrConveyor.getOccupiedLength(),
                         pcrConveyor.getUsableLength()),
                 "Travelling groups: " + pcrConveyor.getTravellingGroups().size(),
-                "Ready groups: " + pcrConveyor.getReadyGroups().size()));
+                "Ready groups: " + pcrConveyor.getReadyGroups().size(),
+                "Incoming transfers: " + flowController.getActivePrlToPcrTransfers().size()));
 
         inspectionRegistry.register(baggerRenderable, () -> List.of(
                 "Type: Bagging machine",
@@ -469,6 +478,18 @@ public class ToteToBagDebugRig {
         positionPack(transfer.getPack(), x, y, z);
     }
 
+    private void positionActivePrlToPcrTransfer(PrlToPcrTransfer transfer) {
+        double progress = transfer.getProgress();
+        int prlIndex = indexOfPrl(transfer.getSourcePrlId());
+        float prlX = prlCenterX(prlIndex);
+        float joinX = pdcStartX() + transfer.getTargetPcrFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
+        float startZ = PRL_START_Z - 1.8f + (transfer.getPack().getDimensions().length() * 0.5f);
+
+        float x = (float) (prlX + ((joinX - prlX) * progress));
+        float z = (float) (startZ + ((PCR_Z - startZ) * progress));
+        positionPack(transfer.getPack(), x, PACK_Y, z);
+    }
+
     private void syncBumperVisuals() {
         for (PrlConveyor prl : prls) {
             RenderableObject bumper = pdcBumperRenderablesByPrlId.get(prl.getId());
@@ -546,5 +567,23 @@ public class ToteToBagDebugRig {
         float alongLength = Math.max(0f, bumperX - pdcStartX());
         float lateralLength = Math.abs(PRL_START_Z - PDC_Z);
         return (alongLength + lateralLength) / PDC_TRANSFER_SPEED;
+    }
+
+    private double prlToPcrTransferDurationFor(String prlId) {
+        int prlIndex = indexOfPrl(prlId);
+        float prlX = prlCenterX(prlIndex);
+        float joinX = pdcStartX() + prlToPcrEntryFrontDistanceFor(prlId, new Pack("probe", "probe", new PackDimensions(0.18f, 0.1f, 0.1f)))
+                - (0.18f * 0.5f);
+        float startZ = PRL_START_Z - 1.8f + (0.18f * 0.5f);
+        float dx = joinX - prlX;
+        float dz = PCR_Z - startZ;
+        float travelLength = (float) Math.sqrt((dx * dx) + (dz * dz));
+        return travelLength / PRL_TO_PCR_TRANSFER_SPEED;
+    }
+
+    private float prlToPcrEntryFrontDistanceFor(String prlId, Pack pack) {
+        int prlIndex = indexOfPrl(prlId);
+        float joinX = prlCenterX(prlIndex);
+        return (joinX - pdcStartX()) + (pack.getDimensions().length() * 0.5f);
     }
 }
