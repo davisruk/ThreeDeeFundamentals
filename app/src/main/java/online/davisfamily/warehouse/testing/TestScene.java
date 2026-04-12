@@ -17,15 +17,17 @@ public class TestScene extends BaseScene{
 
 	private RenderableObject rTote;
 	private DirectionalLight lightDirection;
+	private ToteToBagDebugRig toteToBagDebugRig;
 
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions,	CameraPosition.aboveLeft());
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
+		toteToBagDebugRig = new ToteToBagDebugRig(tr, sim, objects, inspectionRegistry);
 		//WarehouseTrackFactory.setupStraightConveyorTest(tr, sim, objects);
-		ToteGeometry t = setupTote();
-		WarehouseTrackFactory.setupOvalTrack(t, rTote, tr, sim, objects, inspectionRegistry);
-		//WarehouseTrackFactory.setupParallelTracks(t, rTote, tr, sim, objects);
+		//ToteGeometry t = setupTote();
+		//WarehouseTrackFactory.setupOvalTrack(t, rTote, tr, sim, objects, inspectionRegistry);
+		//WarehouseTrackFactory.setupParallelTracks(t, rTote, tr, sim, objects, inspectionRegistry);
 		//WarehouseTrackFactory.setupCylinder(tr, sim, objects);
 	}
 		
@@ -33,6 +35,7 @@ public class TestScene extends BaseScene{
 	public void executeChildRenderOperations(double dtSeconds) {
 //		if (inputState.isSet(Mode.SHOW_PATH))
 //			debug.drawPathForObject(rTote, camera.getView(), projection);
+		toteToBagDebugRig.syncVisuals();
 		drawObject(objects, dtSeconds, lightDirection);
 	}
 	
