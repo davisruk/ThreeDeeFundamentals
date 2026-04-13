@@ -276,6 +276,20 @@ The tote-to-bag simulation package is no longer a single flat directory.
 - current subpackages include `plan`, `pack`, `machine`, `conveyor`, `transfer`, `device`, `assignment`, `control`, `layout`, and `assembly`
 - this is intended as an intermediate cleanup step before any later wider warehouse-root refactor
 
+Completed isolated tote-track tipper rig slice
+An isolated tote-track-mounted tipper and sorter harness now exists outside the main tote-to-bag core harness.
+- current branch for this slice is `feature/tote-track-tipper-rig`
+- `TestScene` is currently wired to the isolated tipper rig rather than the tote-to-bag core harness
+- the rig uses a short straight tote route with infeed, rotating tipper section, and exit span rather than the broader warehouse scene
+- tote stop/capture currently uses a controller-owned route-distance check on the dedicated tipper segment rather than sensor wiring
+- the rotating tipper now reads as a separate roller-track section with an attached slide rather than as a simple block machine
+- the tipper section rollers now have runtime-controlled stop/start visuals
+- sorter intake and outfeed are placed below and to the side of the tipper, with the slide aligned toward that intake
+- pack discharge from tote to sorter is still non-physics, but now reads as a timed falling/rotating stream
+- sorter outfeed uses a short visible conveyor-local lane-backed conveyor stub rather than only an output point
+- the tote now tips visually in sync with the tipper through a temporary render tilt override rather than via renderable reparenting
+- this rig is intentionally isolated so tote-track machine behaviour can be proved before reintegration into the wider tote-to-bag harness
+
 Current status
 The current tote-to-bag implementation should be treated as a proved thin slice rather than as finished production behaviour.
 - controller/state-machine direction is now materially validated
@@ -285,6 +299,10 @@ The current tote-to-bag implementation should be treated as a proved thin slice 
 - PDC diversion now has an explicit controller/device/runtime boundary rather than a harness-owned visual approximation
 - the current active scene is still primarily a debug/integration harness rather than a final warehouse-scene integration
 - peripheral machines are still simple timed/stateful placeholders even though the core cell assembly is now more reusable
+- there are now effectively two relevant harnesses:
+  the proved tote-to-bag core-cell harness and the newer isolated tote-track tipper rig
+- the isolated tipper rig has materially improved confidence in the intended boundary between tote-route machine interaction and conveyor-local pack transport
+- the isolated tipper rig should still be treated as an intermediate proving harness rather than as the final tote-to-bag entry arrangement
 
 What remains
 
@@ -313,12 +331,26 @@ Machine fidelity
 - if improved visuals are needed later they should be added after behaviour ownership is stable
 - machine internals should continue to be timed/stateful abstractions rather than physics simulations
 
+Remaining work for the isolated tote-track tipper slice
+- decide whether tote capture/startup should stay controller-distance-based for now or be moved to a tipper-zone/sensor-style boundary before wider reuse
+- refine tote placement on the tipper during visual tilt so the tote appears to sit exactly on the pivoting track section through the whole motion
+- decide whether the sorter outfeed stub should remain local to the isolated rig or be reshaped to line up more directly with later PDC integration
+- add any missing inspection/debug output specific to the tipper rig if machine-state debugging becomes awkward
+- keep the rig isolated until the tote stop/tip/discharge/sorter handoff feels stable enough to merge back into a broader tote-to-bag scene
+
 Current recommended next step
 - continue from the proved harness toward actual subsystem integration by pushing the new core builder/attachment boundary further into scene-level usage:
   - treat the PDC/PRL/PCR transport cell as the canonical tote-to-bag core
   - keep peripheral machine placement attachment-driven rather than hard-coded into the core layout
   - refine the subsystem integration API so a scene can mount the tote-to-bag module programmatically with less harness-specific wiring
   - keep machine cosmetics secondary until the subsystem integration boundary and attachment model feel stable
+
+Current recommended next step for the isolated tipper slice
+- keep the isolated rig separate a little longer and finish any last local motion/placement refinements there first:
+  - treat the route-mounted tipper as the canonical entry-machine direction for tote arrival
+  - keep tote capture on the tote/route side and pack discharge/sorter flow on the tote-to-bag side
+  - avoid folding the isolated rig back into the core tote-to-bag harness until the entry-machine ownership boundary feels settled
+  - once stable, decide whether to integrate the rig into the tote-to-bag harness as a reusable entry module rather than as ad hoc scene wiring
 
 Branching strategy
 This work is expected to span multiple sessions and should not be forced into a single long-running unstructured branch.
@@ -343,6 +375,7 @@ Use focused branches for individual slices of work, for example:
 - `feature/tote-to-bag-prl-control`
 - `feature/tote-to-bag-pcr-gating`
 - `feature/tote-to-bag-machines`
+- `feature/tote-track-tipper-rig`
 
 Recommended increment boundaries
 Prefer branches that land one coherent vertical slice at a time:
@@ -435,5 +468,12 @@ Phase H: subsystem integration and later machine fidelity
 - improve machine visuals only after transport ownership and controller boundaries are stable
 - propagate inspection support to any newly introduced runtime objects
 - status: pending
+
+Phase I: isolated tote-track tipper proving slice
+- add a dedicated isolated rig for the tote-mounted tipper and sorter entry side
+- model the tipper as a rotating track section rather than only as a block machine
+- prove tote stop/capture, timed tipping, non-physics pack discharge, sorter metering, and short outfeed flow without requiring full warehouse integration
+- keep tote visual tilt simple and synchronised rather than introducing renderable attachment/detachment
+- status: completed as an isolated proving harness, not yet integrated into the wider tote-to-bag module
 
 
