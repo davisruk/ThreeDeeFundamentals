@@ -247,29 +247,64 @@ The release side is now materially closer to the intended conveyor effect.
 - the harness PCR speed is now aligned with PRL release speed so grouped release reads as continuous rather than stop-start
 - the current result is much closer to the intended visible effect even though the handoff path itself is still harness-owned geometry
 
+Completed PDC-side conveyor-local transport slice
+The remaining major PDC transport approximation has now been removed.
+- `PdcConveyor` now owns lane-backed pack transport on the PDC
+- sorter output now enters the PDC lane rather than jumping straight into a timed whole-journey transfer
+- packs remain simulation-owned on the PDC until they reach their PRL diversion point
+- `PdcTransfer` now represents the explicit side-divert handoff phase rather than the whole PDC journey
+- the harness now renders packs on the PDC from subsystem lane state rather than inventing the full motion itself
+
+Completed PDC diversion-device runtime slice
+The PDC bumper/device boundary is now subsystem-owned rather than harness-owned.
+- a `PdcDiversionDevice` now exists per PRL with explicit runtime state
+- the controller now requests diversion from the appropriate device and starts side-transfer from device actuation
+- bumper visuals in the harness are now driven from device state rather than inferred from transfer presence
+- this materially completes the intended controller/device ownership boundary for PDC diversion
+
+Completed core subsystem builder and layout slice
+The tote-to-bag core transport cell can now be assembled programmatically.
+- the fixed PDC/PRL/PCR cell is now described by a dedicated core layout spec
+- a core layout object now owns derived geometry such as PRL centres, diversion distances, join distances, and attachment anchors
+- a tote-to-bag subsystem builder now creates the core conveyors, diversion devices, runtime states, and core renderables together
+- peripheral machine renderables can now be attached against explicit subsystem attachment points rather than being baked into the core geometry
+- the debug rig now builds the core through this builder rather than assembling the cell inline
+
+Completed tote-to-bag package structure refinement
+The tote-to-bag simulation package is no longer a single flat directory.
+- the code is now split into role-based subpackages under `warehouse.sim.totebag`
+- current subpackages include `plan`, `pack`, `machine`, `conveyor`, `transfer`, `device`, `assignment`, `control`, `layout`, and `assembly`
+- this is intended as an intermediate cleanup step before any later wider warehouse-root refactor
+
 Current status
 The current tote-to-bag implementation should be treated as a proved thin slice rather than as finished production behaviour.
 - controller/state-machine direction is now materially validated
 - conveyor visual direction is also materially validated
-- the current scene is still a debug harness and not yet the final warehouse subsystem implementation
-- pack motion is now materially closer to the intended conveyor-local model on PRLs and PCR
-- PRL to PCR release now has the intended continuous downstream effect in the harness
-- the main remaining transport approximation is now on the PDC side rather than on the PRL release side
+- the tote-to-bag core cell can now be created programmatically rather than only by one-off harness setup
+- PDC, PRL, and PCR transport ownership is now materially aligned with the intended conveyor-local model
+- PDC diversion now has an explicit controller/device/runtime boundary rather than a harness-owned visual approximation
+- the current active scene is still primarily a debug/integration harness rather than a final warehouse-scene integration
+- peripheral machines are still simple timed/stateful placeholders even though the core cell assembly is now more reusable
 
 What remains
 
-Pack movement fidelity
-- replace the remaining harness-style movement on the PDC side with the same conveyor-local transport direction now used for PRLs and PCR
-- keep improving transfer motion so packs stay simulation-owned throughout handoff rather than dropping between staged visual states
+Subsystem integration
+- decide how the tote-to-bag subsystem should live in the broader warehouse scene setup now that the core cell has a builder and attachment anchors
+- decide whether the tote-to-bag flow should become a dedicated example scene, a reusable warehouse module, or a subsection embedded in a larger layout
+- extend the current assembly approach from debug-rig consumption toward a cleaner scene-level integration API
+- propagate inspection support to any additional runtime objects introduced as that integration is refined
+
+Peripheral attachment refinement
+- keep the PDC/PRL/PCR transport cell as the stable core geometry
+- continue treating tipper, sorter, bagger, and future upstream/downstream interfaces as peripherals attached to the core by explicit attachment points
+- refine attachment options as needed for orientation, anchor reference, and offset policy without collapsing those concerns back into the core layout
+
+Transfer and motion refinement
+- the major ownership boundaries are now in place, but transfer motion can still be refined visually if runtime use reveals a concrete problem
+- keep treating PDC to PRL and PRL to PCR as distinct mechanism shapes unless a later second use case proves a shared abstraction is worthwhile
 - only consider generalising the linear transport model after a second real use case appears outside tote-to-bag
 
-Transfer fidelity
-- make PDC to PRL transfer read more like a true side-push/divert mechanism rather than the current simplified staged interpolation
-- treat PDC to PRL and PRL to PCR as distinct mechanism shapes unless a later second use case proves a shared abstraction is worthwhile
-- add the real transfer-device runtime state and controller boundary rather than just the current bumper visual actuation
-
-Conveyor ownership and behaviour
-- move the remaining runtime ownership on the PDC side out of the harness and into the tote-to-bag subsystem/controller layer
+Conveyor behaviour policy
 - only revisit PCR release/startup timing if later scheduling work shows a real downstream-control need; the current continuous release effect is now the preferred visual behaviour
 - decide whether PCR should remain continuously running in the intended behaviour or become more explicitly command-driven
 
@@ -278,17 +313,12 @@ Machine fidelity
 - if improved visuals are needed later they should be added after behaviour ownership is stable
 - machine internals should continue to be timed/stateful abstractions rather than physics simulations
 
-Integration work
-- decide how the tote-to-bag subsystem should live alongside or inside the broader warehouse scene setup
-- decide whether the tote-to-bag flow becomes a dedicated example scene, a reusable warehouse module, or a subsection embedded in a larger layout
-- propagate inspection support to any new tote-to-bag runtime objects introduced in later phases
-
 Current recommended next step
-- continue from the proved harness toward actual subsystem integration by finishing the PDC side of the movement model:
-  - move PDC-side movement ownership further into the conveyor-local transport layer so packs remain simulation-owned from sorter output through PRL arrival
-  - replace the current timed PDC diversion approximation with a more explicit side-push / divert handoff model owned by the subsystem rather than by harness-only path math
-  - keep the current PRL to PCR behaviour direction unless later scheduling or layout work reveals a concrete problem with the continuous release effect
-  - keep machine cosmetics secondary until the remaining transport ownership and handoff behaviours are stable
+- continue from the proved harness toward actual subsystem integration by pushing the new core builder/attachment boundary further into scene-level usage:
+  - treat the PDC/PRL/PCR transport cell as the canonical tote-to-bag core
+  - keep peripheral machine placement attachment-driven rather than hard-coded into the core layout
+  - refine the subsystem integration API so a scene can mount the tote-to-bag module programmatically with less harness-specific wiring
+  - keep machine cosmetics secondary until the subsystem integration boundary and attachment model feel stable
 
 Branching strategy
 This work is expected to span multiple sessions and should not be forced into a single long-running unstructured branch.
@@ -401,6 +431,7 @@ Phase G: transfer-device and controller fidelity
 
 Phase H: subsystem integration and later machine fidelity
 - decide how tote-to-bag should live in the wider warehouse scene structure
+- continue turning the current core builder and attachment model into a cleaner scene-level integration path
 - improve machine visuals only after transport ownership and controller boundaries are stable
 - propagate inspection support to any newly introduced runtime objects
 - status: pending
