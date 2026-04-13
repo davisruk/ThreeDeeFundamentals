@@ -24,6 +24,16 @@ public final class RenderableTrackFactory {
             WarehouseSegmentMetadata metadata,
             TrackSpec spec,
             TrackAppearance appearance) {
+        return createRenderableTrack(tr, routeSegment, metadata, spec, appearance, null);
+    }
+
+    public static RenderableObject createRenderableTrack(
+            TriangleRenderer tr,
+            RouteSegment routeSegment,
+            WarehouseSegmentMetadata metadata,
+            TrackSpec spec,
+            TrackAppearance appearance,
+            ConveyorRuntimeState rollerRuntimeState) {
 
         RouteTrackLayout layout = RouteTrackLayoutFactory.create(routeSegment, metadata);
         ObjectTransformation identity =
@@ -56,7 +66,13 @@ public final class RenderableTrackFactory {
                     isTransfer);
 
             if (spec.hasRollerDrive() && sharedRollerMesh != null && built.rollerTransforms != null) {
-                addRollers(tr, deckObject, sharedRollerMesh, built.rollerTransforms, appearance.rollerColour);
+                addRollers(
+                        tr,
+                        deckObject,
+                        sharedRollerMesh,
+                        built.rollerTransforms,
+                        appearance.rollerColour,
+                        rollerRuntimeState);
             }
 
             parts.add(deckObject);
@@ -222,8 +238,11 @@ public final class RenderableTrackFactory {
             RenderableObject parent,
             Mesh rollerMesh,
             List<ObjectTransformation> rollerTransforms,
-            online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy colour) {
-    	Behaviour spin = new SpinBehaviour(0f,0f,1f);
+            online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy colour,
+            ConveyorRuntimeState rollerRuntimeState) {
+    	Behaviour spin = rollerRuntimeState == null
+    			? new SpinBehaviour(0f,0f,1f)
+    			: new ConveyorRollerSpinBehaviour(0f,0f,1f, rollerRuntimeState);
         List<RenderableObject> rollers = new ArrayList<>();
         int i=0;
         for (ObjectTransformation t : rollerTransforms) {

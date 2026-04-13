@@ -77,6 +77,14 @@ public class PdcConveyor {
         return lane.getEntrySnapshots();
     }
 
+    public Optional<Pack> peekLeadingPackAtOutfeed() {
+        return lane.peekLeadingPackAtOutfeed();
+    }
+
+    public Optional<Pack> pollLeadingPackAtOutfeed() {
+        return lane.pollLeadingPackAtOutfeed();
+    }
+
     public float getUsableLength() {
         return lane.getUsableLength();
     }

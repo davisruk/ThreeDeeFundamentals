@@ -45,6 +45,8 @@ public class Tote implements TrackableObject {
 	private String reservedByMachineId;
 	private TransferMotionState transferMotionState;
 	private final float yawOffsetRadians;
+	private boolean visualTiltActive = false;
+	private float visualTiltAngleZRadians = 0f;
 	
 	public Tote(String id, RouteFollower routeFollower, RenderableObject renderable, Vec3 offsets, float yawOffsetRadians) {
 		super();
@@ -169,7 +171,8 @@ public class Tote implements TrackableObject {
 	private void applySnapshot(RouteFollowerSnapshot snapshot) {
 		cachedPos.set(snapshot.position()); 
 		transformation.setTranslation(cachedPos.add(offsets));
-		transformation.setAxisRotation(Axis.Y, computeRenderedYaw(snapshot));		
+		transformation.setAxisRotation(Axis.Y, computeRenderedYaw(snapshot));
+		transformation.angleZ = visualTiltActive ? visualTiltAngleZRadians : 0f;
 	}
 	
 	public void reserveForTransfer(TransferZoneMachine machine) {
@@ -190,6 +193,24 @@ public class Tote implements TrackableObject {
 
 	public RouteFollower getRouteFollower() {
 		return routeFollower;
+	}
+
+	public void setVisualTiltAngleZ(float angleZRadians) {
+		visualTiltActive = true;
+		visualTiltAngleZRadians = angleZRadians;
+		transformation.angleZ = angleZRadians;
+	}
+
+	public void clearVisualTiltAngleZ() {
+		visualTiltActive = false;
+		visualTiltAngleZRadians = 0f;
+		transformation.angleZ = 0f;
+	}
+
+	public void snapToRouteDistance(float distanceAlongSegment) {
+		routeFollower.setDistanceAlongSegment(distanceAlongSegment);
+		lastRouteSnapshot = routeFollower.buildSnapshot();
+		applySnapshot(lastRouteSnapshot);
 	}
 
 	@Override
