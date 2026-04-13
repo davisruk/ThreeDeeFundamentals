@@ -47,6 +47,8 @@ public class Tote implements TrackableObject {
 	private final float yawOffsetRadians;
 	private boolean visualTiltActive = false;
 	private float visualTiltAngleZRadians = 0f;
+	private final Vec3 visualOffset = new Vec3();
+	private boolean visualOffsetActive = false;
 	
 	public Tote(String id, RouteFollower routeFollower, RenderableObject renderable, Vec3 offsets, float yawOffsetRadians) {
 		super();
@@ -169,8 +171,11 @@ public class Tote implements TrackableObject {
 	}
 	
 	private void applySnapshot(RouteFollowerSnapshot snapshot) {
-		cachedPos.set(snapshot.position()); 
-		transformation.setTranslation(cachedPos.add(offsets));
+		cachedPos.set(snapshot.position()).mutableAdd(offsets);
+		if (visualOffsetActive) {
+			cachedPos.mutableAdd(visualOffset);
+		}
+		transformation.setTranslation(cachedPos);
 		transformation.setAxisRotation(Axis.Y, computeRenderedYaw(snapshot));
 		transformation.angleZ = visualTiltActive ? visualTiltAngleZRadians : 0f;
 	}
@@ -205,6 +210,16 @@ public class Tote implements TrackableObject {
 		visualTiltActive = false;
 		visualTiltAngleZRadians = 0f;
 		transformation.angleZ = 0f;
+	}
+
+	public void setVisualOffset(float x, float y, float z) {
+		visualOffset.setXYZ(x, y, z);
+		visualOffsetActive = true;
+	}
+
+	public void clearVisualOffset() {
+		visualOffset.setXYZ(0f, 0f, 0f);
+		visualOffsetActive = false;
 	}
 
 	public void snapToRouteDistance(float distanceAlongSegment) {

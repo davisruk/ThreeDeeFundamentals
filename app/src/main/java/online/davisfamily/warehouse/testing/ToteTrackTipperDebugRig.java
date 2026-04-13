@@ -303,13 +303,7 @@ public class ToteTrackTipperDebugRig {
     }
 
     private void syncTipperVisuals() {
-        float targetAngle = switch (tippingMachine.getState()) {
-            case TIPPING -> tippedAngleRadians * 0.45f;
-            case EMITTING_PACKS -> tippedAngleRadians;
-            case RESETTING -> tippedAngleRadians * 0.18f;
-            case RECEIVING_TOTE -> tippedAngleRadians * 0.08f;
-            case IDLE -> 0f;
-        };
+        float targetAngle = tippedAngleRadians * tippingMachine.getTipProgress();
         tipperAssemblyRenderable.transformation.angleX = targetAngle;
     }
 

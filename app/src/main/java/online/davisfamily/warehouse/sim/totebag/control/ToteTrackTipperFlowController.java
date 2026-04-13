@@ -188,6 +188,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
             return;
         }
         tote.clearVisualTiltAngleZ();
+        tote.clearVisualOffset();
         tote.setInteractionMode(ToteMotionState.MOVING);
         toteReleased = true;
     }
@@ -195,18 +196,18 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private void syncToteVisualTilt() {
         if (!isToteCaptured()) {
             tote.clearVisualTiltAngleZ();
+            tote.clearVisualOffset();
             return;
         }
-        tote.setVisualTiltAngleZ(-currentTipAngle());
+        float angle = currentTipAngle();
+        float halfDepth = 0.25f;
+        float dy = -halfDepth * (float) Math.sin(angle);
+        float dz = halfDepth * ((float) Math.cos(angle) - 1f);
+        tote.setVisualTiltAngleZ(-angle);
+        tote.setVisualOffset(0f, dy, dz);
     }
 
     private float currentTipAngle() {
-        return switch (tippingMachine.getState()) {
-            case TIPPING -> tipperTippedAngleRadians * 0.45f;
-            case EMITTING_PACKS -> tipperTippedAngleRadians;
-            case RESETTING -> tipperTippedAngleRadians * 0.18f;
-            case RECEIVING_TOTE -> tipperTippedAngleRadians * 0.08f;
-            case IDLE -> 0f;
-        };
+        return tipperTippedAngleRadians * tippingMachine.getTipProgress();
     }
 }

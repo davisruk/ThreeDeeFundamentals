@@ -98,6 +98,15 @@ public class TippingMachine implements StatefulSimObject<TippingMachineState> {
         return Math.max(0, activePlan.getPackPlans().size() - nextPackIndex);
     }
 
+    public float getTipProgress() {
+        return switch (state) {
+            case IDLE, RECEIVING_TOTE -> 0f;
+            case TIPPING -> progressFromCountdown(countdownSeconds, tippingDurationSeconds);
+            case EMITTING_PACKS -> 1f;
+            case RESETTING -> 1f - progressFromCountdown(countdownSeconds, resetDurationSeconds);
+        };
+    }
+
     private void updateEmitting(double dtSeconds) {
         if (activePlan == null) {
             state = TippingMachineState.RESETTING;
@@ -133,5 +142,20 @@ public class TippingMachine implements StatefulSimObject<TippingMachineState> {
         if (countdownSeconds <= 0d) {
             transitionTo(nextState, nextCountdownSeconds);
         }
+    }
+
+    private float progressFromCountdown(double countdownSeconds, double durationSeconds) {
+        if (durationSeconds <= 0d) {
+            return 1f;
+        }
+        double elapsedSeconds = durationSeconds - Math.max(0d, countdownSeconds);
+        double progress = elapsedSeconds / durationSeconds;
+        if (progress <= 0d) {
+            return 0f;
+        }
+        if (progress >= 1d) {
+            return 1f;
+        }
+        return (float) progress;
     }
 }
