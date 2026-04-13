@@ -1,7 +1,7 @@
 package online.davisfamily.warehouse.sim.totebag.layout;
 
-import online.davisfamily.warehouse.sim.totebag.Pack;
-import online.davisfamily.warehouse.sim.totebag.PackDimensions;
+import online.davisfamily.warehouse.sim.totebag.pack.Pack;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 public class ToteToBagCoreLayout {
     private final ToteToBagCoreLayoutSpec spec;

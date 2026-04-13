@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
-import online.davisfamily.warehouse.sim.totebag.Pack;
-import online.davisfamily.warehouse.sim.totebag.PackDimensions;
+import online.davisfamily.warehouse.sim.totebag.pack.Pack;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class ToteToBagCoreLayoutTest {
 

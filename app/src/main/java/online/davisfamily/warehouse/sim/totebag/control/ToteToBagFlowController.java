@@ -1,0 +1,416 @@
+package online.davisfamily.warehouse.sim.totebag.control;
+
+import online.davisfamily.warehouse.sim.totebag.plan.*;
+import online.davisfamily.warehouse.sim.totebag.pack.*;
+import online.davisfamily.warehouse.sim.totebag.machine.*;
+import online.davisfamily.warehouse.sim.totebag.conveyor.*;
+import online.davisfamily.warehouse.sim.totebag.transfer.*;
+import online.davisfamily.warehouse.sim.totebag.device.*;
+import online.davisfamily.warehouse.sim.totebag.assignment.*;
+import online.davisfamily.warehouse.sim.totebag.control.*;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Queue;
+
+import online.davisfamily.threedee.sim.framework.SimulationContext;
+import online.davisfamily.threedee.sim.framework.SimulationController;
+
+public class ToteToBagFlowController implements SimulationController {
+    private final ToteLoadPlan toteLoadPlan;
+    private final TippingMachine tippingMachine;
+    private final SortingMachine sortingMachine;
+    private final PdcConveyor pdcConveyor;
+    private final PcrConveyor pcrConveyor;
+    private final BaggingMachine baggingMachine;
+    private final ToteToBagAssignmentPlanner assignmentPlanner;
+    private final Map<String, PrlConveyor> prlsById = new LinkedHashMap<>();
+    private final Map<String, PdcDiversionDevice> pdcDiversionDevicesByPrlId = new LinkedHashMap<>();
+    private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
+    private final List<PdcTransfer> activePdcTransfers = new ArrayList<>();
+    private final List<PrlToPcrTransfer> activePrlToPcrTransfers = new ArrayList<>();
+    private final Queue<ReleasedPackGroup> releasedGroups = new ArrayDeque<>();
+    private final PdcTransferDurationProvider pdcTransferDurationProvider;
+    private final PdcDiversionDistanceProvider pdcDiversionDistanceProvider;
+    private final PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider;
+    private final PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider;
+    private boolean initialized;
+    private boolean toteLoaded;
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            BaggingMachine baggingMachine,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors) {
+        this(
+                toteLoadPlan,
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                baggingMachine,
+                assignmentPlanner,
+                prlConveyors,
+                createDefaultDiversionDevices(prlConveyors),
+                ignored -> 0.45d,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
+                ignored -> 0.25d,
+                (ignoredPrlId, pack) -> pack.getDimensions().length());
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            BaggingMachine baggingMachine,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            double pdcTransferDurationSeconds) {
+        this(
+                toteLoadPlan,
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                baggingMachine,
+                assignmentPlanner,
+                prlConveyors,
+                createDefaultDiversionDevices(prlConveyors),
+                ignored -> pdcTransferDurationSeconds,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
+                ignored -> 0.25d,
+                (ignoredPrlId, pack) -> pack.getDimensions().length());
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            BaggingMachine baggingMachine,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            double prlToPcrTransferDurationSeconds) {
+        this(
+                toteLoadPlan,
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                baggingMachine,
+                assignmentPlanner,
+                prlConveyors,
+                pdcDiversionDevices,
+                pdcTransferDurationProvider,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
+                ignored -> prlToPcrTransferDurationSeconds,
+                (ignoredPrlId, pack) -> pack.getDimensions().length());
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            BaggingMachine baggingMachine,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
+            PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+        if (toteLoadPlan == null
+                || tippingMachine == null
+                || sortingMachine == null
+                || pdcConveyor == null
+                || pcrConveyor == null
+                || baggingMachine == null
+                || assignmentPlanner == null
+                || prlConveyors == null
+                || prlConveyors.isEmpty()
+                || pdcDiversionDevices == null
+                || pdcDiversionDevices.isEmpty()
+                || pdcTransferDurationProvider == null
+                || pdcDiversionDistanceProvider == null
+                || prlToPcrTransferDurationProvider == null
+                || prlToPcrEntryDistanceProvider == null) {
+            throw new IllegalArgumentException("Controller dependencies must not be null or empty");
+        }
+        this.toteLoadPlan = toteLoadPlan;
+        this.tippingMachine = tippingMachine;
+        this.sortingMachine = sortingMachine;
+        this.pdcConveyor = pdcConveyor;
+        this.pcrConveyor = pcrConveyor;
+        this.baggingMachine = baggingMachine;
+        this.assignmentPlanner = assignmentPlanner;
+        this.pdcTransferDurationProvider = pdcTransferDurationProvider;
+        this.pdcDiversionDistanceProvider = pdcDiversionDistanceProvider;
+        this.prlToPcrTransferDurationProvider = prlToPcrTransferDurationProvider;
+        this.prlToPcrEntryDistanceProvider = prlToPcrEntryDistanceProvider;
+        for (PrlConveyor prlConveyor : prlConveyors) {
+            prlsById.put(prlConveyor.getId(), prlConveyor);
+        }
+        for (PdcDiversionDevice pdcDiversionDevice : pdcDiversionDevices) {
+            pdcDiversionDevicesByPrlId.put(pdcDiversionDevice.getTargetPrlId(), pdcDiversionDevice);
+        }
+        if (!pdcDiversionDevicesByPrlId.keySet().containsAll(prlsById.keySet())) {
+            throw new IllegalArgumentException("Each PRL must have a matching PDC diversion device");
+        }
+    }
+
+    @Override
+    public void update(SimulationContext context, double dtSeconds) {
+        initializeIfNeeded();
+        loadToteIfNeeded();
+        drainTippingMachine();
+        drainSortingMachine();
+        updatePdcConveyor(dtSeconds);
+        requestPdcDiversions();
+        updatePdcDiversionDevices(dtSeconds);
+        startPdcTransfersFromActuatingDevices();
+        updatePdcTransfers(dtSeconds);
+        updatePrls(dtSeconds);
+        attemptPrlRelease();
+        startPrlToPcrTransfers();
+        updatePrlToPcrTransfers(dtSeconds);
+        attemptBaggingStart();
+    }
+
+    public Map<String, PrlConveyor> getPrlsById() {
+        return prlsById;
+    }
+
+    public Queue<ReleasedPackGroup> getReleasedGroups() {
+        return releasedGroups;
+    }
+
+    public List<Pack> getObservedPacks() {
+        return observedPacksById.values().stream().toList();
+    }
+
+    public List<PdcTransfer> getActivePdcTransfers() {
+        return List.copyOf(activePdcTransfers);
+    }
+
+    public List<LinearLaneEntrySnapshot> getPdcLaneEntries() {
+        return pdcConveyor.getLaneEntries();
+    }
+
+    public List<PdcDiversionDevice> getPdcDiversionDevices() {
+        return List.copyOf(pdcDiversionDevicesByPrlId.values());
+    }
+
+    public List<PrlToPcrTransfer> getActivePrlToPcrTransfers() {
+        return List.copyOf(activePrlToPcrTransfers);
+    }
+
+    private void initializeIfNeeded() {
+        if (initialized) {
+            return;
+        }
+        List<PrlAssignmentPlan> plans = assignmentPlanner.createPlans(toteLoadPlan, prlsById.keySet().stream().toList());
+        for (PrlAssignmentPlan plan : plans) {
+            prlsById.get(plan.prlId()).assign(plan);
+        }
+        initialized = true;
+    }
+
+    private void loadToteIfNeeded() {
+        if (!toteLoaded && tippingMachine.isIdle()) {
+            tippingMachine.loadTote(toteLoadPlan);
+            toteLoaded = true;
+        }
+    }
+
+    private void drainTippingMachine() {
+        while (tippingMachine.hasEmittedPack()) {
+            Pack pack = tippingMachine.pollEmittedPack();
+            observedPacksById.put(pack.getId(), pack);
+            sortingMachine.receive(pack);
+        }
+    }
+
+    private void drainSortingMachine() {
+        while (sortingMachine.hasReleasedPack()) {
+            Pack pack = sortingMachine.pollReleasedPack();
+            pdcConveyor.acceptIncomingPack(pack);
+        }
+    }
+
+    private void updatePdcConveyor(double dtSeconds) {
+        pdcConveyor.update(dtSeconds);
+    }
+
+    private void requestPdcDiversions() {
+        for (LinearLaneEntrySnapshot entry : pdcConveyor.getLaneEntries()) {
+            Pack pack = entry.pack();
+            PrlConveyor prl = findPrlForCorrelation(pack.getCorrelationId())
+                    .orElseThrow(() -> new IllegalStateException("No PRL assignment for correlation " + pack.getCorrelationId()));
+            float diversionFrontDistance = pdcDiversionDistanceProvider.frontDistanceFor(prl.getId(), pack);
+            if (entry.frontDistance() < diversionFrontDistance || !prl.accepts(pack)) {
+                continue;
+            }
+            PdcDiversionDevice device = pdcDiversionDevicesByPrlId.get(prl.getId());
+            if (device == null) {
+                throw new IllegalStateException("No PDC diversion device for PRL " + prl.getId());
+            }
+            device.requestDiversion(pack);
+        }
+    }
+
+    private void updatePdcDiversionDevices(double dtSeconds) {
+        for (PdcDiversionDevice device : pdcDiversionDevicesByPrlId.values()) {
+            device.update(dtSeconds);
+        }
+    }
+
+    private void startPdcTransfersFromActuatingDevices() {
+        for (PdcDiversionDevice device : pdcDiversionDevicesByPrlId.values()) {
+            Pack pack = device.consumeActuationStartPack().orElse(null);
+            if (pack == null) {
+                continue;
+            }
+            PrlConveyor prl = prlsById.get(device.getTargetPrlId());
+            if (prl == null) {
+                throw new IllegalStateException("Unknown PRL id " + device.getTargetPrlId());
+            }
+            float actualFrontDistance = pdcConveyor.divertPack(pack)
+                    .orElseThrow(() -> new IllegalStateException("Expected pack on PDC lane for diversion " + pack.getId()));
+            activePdcTransfers.add(new PdcTransfer(
+                    pack,
+                    prl.getId(),
+                    actualFrontDistance,
+                    pdcTransferDurationProvider.durationSecondsFor(prl.getId())));
+        }
+    }
+
+    private void updatePdcTransfers(double dtSeconds) {
+        Iterator<PdcTransfer> iterator = activePdcTransfers.iterator();
+        while (iterator.hasNext()) {
+            PdcTransfer transfer = iterator.next();
+            transfer.advance(dtSeconds);
+            if (!transfer.isComplete()) {
+                continue;
+            }
+            PrlConveyor prl = prlsById.get(transfer.getTargetPrlId());
+            if (prl == null) {
+                throw new IllegalStateException("Unknown PRL id " + transfer.getTargetPrlId());
+            }
+            if (!prl.accepts(transfer.getPack())) {
+                continue;
+            }
+            prl.acceptPack(transfer.getPack());
+            iterator.remove();
+        }
+    }
+
+    private void updatePrls(double dtSeconds) {
+        for (PrlConveyor prl : prlsById.values()) {
+            prl.update(dtSeconds);
+        }
+    }
+
+    private void attemptPrlRelease() {
+        boolean prlAlreadyReleasing = prlsById.values().stream()
+                .anyMatch(prl -> prl.getAssignment().getState() == PrlState.RELEASING);
+        if (prlAlreadyReleasing || pcrConveyor.hasWorkInFlight() || baggingMachine.getCurrentGroup() != null) {
+            return;
+        }
+
+        Optional<PrlConveyor> readyPrl = prlsById.values().stream()
+                .filter(PrlConveyor::isReadyToRelease)
+                .min(Comparator.comparing(PrlConveyor::getId));
+        if (readyPrl.isEmpty()) {
+            return;
+        }
+
+        ReleasedPackGroup candidate = readyPrl.get().peekReadyGroup();
+        PcrReleaseDecision decision = pcrConveyor.evaluateRelease(candidate);
+        if (!decision.allowed()) {
+            return;
+        }
+        ReleasedPackGroup releasedGroup = readyPrl.get().releaseGroup();
+        pcrConveyor.startReceivingGroup(releasedGroup);
+        releasedGroups.add(releasedGroup);
+    }
+
+    private void startPrlToPcrTransfers() {
+        for (PrlConveyor prl : prlsById.values()) {
+            while (true) {
+                Optional<Pack> outfeedPack = prl.peekPackAtOutfeed();
+                if (outfeedPack.isEmpty()) {
+                    break;
+                }
+                float targetFrontDistance = prlToPcrEntryDistanceProvider.frontDistanceFor(prl.getId(), outfeedPack.get());
+                Pack pack = prl.pollPackAtOutfeed()
+                        .orElseThrow(() -> new IllegalStateException("Expected PRL pack at outfeed"));
+                pack.setState(Pack.PackMotionState.DIVERTING);
+                activePrlToPcrTransfers.add(new PrlToPcrTransfer(
+                        pack,
+                        prl.getId(),
+                        targetFrontDistance,
+                        prlToPcrTransferDurationProvider.durationSecondsFor(prl.getId())));
+            }
+            prl.completeReleaseIfEmpty();
+        }
+    }
+
+    private void updatePrlToPcrTransfers(double dtSeconds) {
+        Iterator<PrlToPcrTransfer> iterator = activePrlToPcrTransfers.iterator();
+        while (iterator.hasNext()) {
+            PrlToPcrTransfer transfer = iterator.next();
+            transfer.advance(dtSeconds);
+            if (!transfer.isComplete()) {
+                continue;
+            }
+            if (!pcrConveyor.canAcceptIncomingPackAtDistance(transfer.getPack(), transfer.getTargetPcrFrontDistance())) {
+                continue;
+            }
+            pcrConveyor.acceptIncomingPackAtDistance(transfer.getPack(), transfer.getTargetPcrFrontDistance());
+            iterator.remove();
+        }
+    }
+
+    private void attemptBaggingStart() {
+        if (!baggingMachine.isAvailable() || !pcrConveyor.hasReadyGroup()) {
+            return;
+        }
+        baggingMachine.startBagging(pcrConveyor.pollReadyGroup());
+    }
+
+    private Optional<PrlConveyor> findPrlForCorrelation(String correlationId) {
+        return prlsById.values().stream()
+                .filter(prl -> correlationId.equals(prl.getAssignment().getCorrelationId()))
+                .findFirst();
+    }
+
+    private static List<PdcDiversionDevice> createDefaultDiversionDevices(List<PrlConveyor> prlConveyors) {
+        List<PdcDiversionDevice> devices = new ArrayList<>();
+        for (PrlConveyor prlConveyor : prlConveyors) {
+            devices.add(new PdcDiversionDevice(
+                    "pdc_diverter_" + prlConveyor.getId(),
+                    prlConveyor.getId(),
+                    0d,
+                    0.08d,
+                    0.08d));
+        }
+        return devices;
+    }
+}

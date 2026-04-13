@@ -5,10 +5,10 @@ import java.util.Map;
 
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
-import online.davisfamily.warehouse.sim.totebag.PdcConveyor;
-import online.davisfamily.warehouse.sim.totebag.PdcDiversionDevice;
-import online.davisfamily.warehouse.sim.totebag.PcrConveyor;
-import online.davisfamily.warehouse.sim.totebag.PrlConveyor;
+import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
+import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
+import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
+import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
 import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPose;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayout;
