@@ -338,6 +338,9 @@
 
 ## Next Session Guidance
 
+- Session focus:
+  - read `docs/tote-to-bag-requirements.txt` before starting tote-to-bag work so the current agreed direction, completed phases, and next slice are understood from the document rather than inferred from stale context
+  - do not make code or document changes unless the user explicitly directs that work in the current session
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
 - Treat the straight conveyor assembly as the canonical direction for conveyor visuals.
   - Reuse the single straight conveyor assembly model for transfer-focused machines and fixed conveyor-backed runs.
