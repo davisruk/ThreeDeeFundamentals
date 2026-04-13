@@ -26,6 +26,8 @@ import online.davisfamily.warehouse.sim.totebag.Pack;
 import online.davisfamily.warehouse.sim.totebag.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.PdcConveyor;
+import online.davisfamily.warehouse.sim.totebag.PdcDiversionDevice;
+import online.davisfamily.warehouse.sim.totebag.PdcDiversionDeviceState;
 import online.davisfamily.warehouse.sim.totebag.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.PcrConveyor;
 import online.davisfamily.warehouse.sim.totebag.PrlConveyor;
@@ -51,8 +53,8 @@ public class ToteToBagDebugRig {
     private static final float PRL_LENGTH = 2.4f;
     private static final float MAIN_CONVEYOR_LENGTH = 4.6f;
     private static final double PCR_TRAVEL_DURATION_SECONDS = MAIN_CONVEYOR_LENGTH / PRL_BELT_SPEED;
-    private static final float BUMPER_REST_Z = 0.13f;
-    private static final float BUMPER_ACTIVE_Z = 0.04f;
+    private static final float BUMPER_REST_Z = 0.27f;
+    private static final float BUMPER_ACTIVE_Z = 0.18f;
     private static final float PRL_TO_PCR_TRANSFER_SPEED = MAIN_CONVEYOR_LENGTH / (float) PCR_TRAVEL_DURATION_SECONDS;
 
     private final List<RenderableObject> objects;
@@ -65,6 +67,7 @@ public class ToteToBagDebugRig {
     private final PcrConveyor pcrConveyor;
     private final BaggingMachine baggingMachine;
     private final List<PrlConveyor> prls;
+    private final List<PdcDiversionDevice> pdcDiversionDevices;
     private final ToteToBagFlowController flowController;
 
     private final RenderableObject tipperRenderable;
@@ -107,6 +110,10 @@ public class ToteToBagDebugRig {
                 new PrlConveyor("prl-1", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED),
                 new PrlConveyor("prl-2", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED),
                 new PrlConveyor("prl-3", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED));
+        pdcDiversionDevices = List.of(
+                new PdcDiversionDevice("pdc_diverter_prl-1", "prl-1", 0d, 0.08d, 0.08d),
+                new PdcDiversionDevice("pdc_diverter_prl-2", "prl-2", 0d, 0.08d, 0.08d),
+                new PdcDiversionDevice("pdc_diverter_prl-3", "prl-3", 0d, 0.08d, 0.08d));
         pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(4.5f, 0.06f, 0.15f), PCR_TRAVEL_DURATION_SECONDS);
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
         flowController = new ToteToBagFlowController(
@@ -118,6 +125,7 @@ public class ToteToBagDebugRig {
                 baggingMachine,
                 new ToteToBagAssignmentPlanner(),
                 prls,
+                pdcDiversionDevices,
                 this::pdcTransferDurationFor,
                 this::pdcDiversionFrontDistanceFor,
                 this::prlToPcrTransferDurationFor,
@@ -249,12 +257,13 @@ public class ToteToBagDebugRig {
                     0.14f,
                     0.08f,
                     0xFFCC8844);
+            bumper.transformation.angleZ = (float) (Math.PI / 2.0);
             pdcBumperRenderablesByPrlId.put(prl.getId(), bumper);
             objects.add(bumper);
             inspectionRegistry.register(bumper, () -> List.of(
                     "Type: PDC bumper",
                     "Target PRL: " + prl.getId(),
-                    "Active: " + hasActiveTransferForPrl(prl.getId())));
+                    "State: " + diversionDeviceStateForPrl(prl.getId())));
         }
     }
 
@@ -490,15 +499,19 @@ public class ToteToBagDebugRig {
             if (bumper == null) {
                 continue;
             }
-            boolean active = hasActiveTransferForPrl(prl.getId());
+            boolean active = diversionDeviceStateForPrl(prl.getId()) != PdcDiversionDeviceState.IDLE;
             bumper.transformation.zTranslation = active ? BUMPER_ACTIVE_Z : BUMPER_REST_Z;
             bumper.transformation.angleY = 0f;
+            bumper.transformation.angleZ = (float) (Math.PI / 2.0);
         }
     }
 
-    private boolean hasActiveTransferForPrl(String prlId) {
-        return flowController.getActivePdcTransfers().stream()
-                .anyMatch(transfer -> prlId.equals(transfer.getTargetPrlId()));
+    private PdcDiversionDeviceState diversionDeviceStateForPrl(String prlId) {
+        return flowController.getPdcDiversionDevices().stream()
+                .filter(device -> prlId.equals(device.getTargetPrlId()))
+                .map(PdcDiversionDevice::getState)
+                .findFirst()
+                .orElse(PdcDiversionDeviceState.IDLE);
     }
 
     private int indexOfPrl(String prlId) {

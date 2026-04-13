@@ -22,6 +22,7 @@ public class ToteToBagFlowController implements SimulationController {
     private final BaggingMachine baggingMachine;
     private final ToteToBagAssignmentPlanner assignmentPlanner;
     private final Map<String, PrlConveyor> prlsById = new LinkedHashMap<>();
+    private final Map<String, PdcDiversionDevice> pdcDiversionDevicesByPrlId = new LinkedHashMap<>();
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
     private final List<PdcTransfer> activePdcTransfers = new ArrayList<>();
     private final List<PrlToPcrTransfer> activePrlToPcrTransfers = new ArrayList<>();
@@ -51,6 +52,7 @@ public class ToteToBagFlowController implements SimulationController {
                 baggingMachine,
                 assignmentPlanner,
                 prlConveyors,
+                createDefaultDiversionDevices(prlConveyors),
                 ignored -> 0.45d,
                 (ignoredPrlId, pack) -> pack.getDimensions().length(),
                 ignored -> 0.25d,
@@ -76,6 +78,7 @@ public class ToteToBagFlowController implements SimulationController {
                 baggingMachine,
                 assignmentPlanner,
                 prlConveyors,
+                createDefaultDiversionDevices(prlConveyors),
                 ignored -> pdcTransferDurationSeconds,
                 (ignoredPrlId, pack) -> pack.getDimensions().length(),
                 ignored -> 0.25d,
@@ -91,6 +94,7 @@ public class ToteToBagFlowController implements SimulationController {
             BaggingMachine baggingMachine,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
             PdcTransferDurationProvider pdcTransferDurationProvider,
             double prlToPcrTransferDurationSeconds) {
         this(
@@ -102,6 +106,7 @@ public class ToteToBagFlowController implements SimulationController {
                 baggingMachine,
                 assignmentPlanner,
                 prlConveyors,
+                pdcDiversionDevices,
                 pdcTransferDurationProvider,
                 (ignoredPrlId, pack) -> pack.getDimensions().length(),
                 ignored -> prlToPcrTransferDurationSeconds,
@@ -117,6 +122,7 @@ public class ToteToBagFlowController implements SimulationController {
             BaggingMachine baggingMachine,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
             PdcTransferDurationProvider pdcTransferDurationProvider,
             PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
             PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
@@ -130,6 +136,8 @@ public class ToteToBagFlowController implements SimulationController {
                 || assignmentPlanner == null
                 || prlConveyors == null
                 || prlConveyors.isEmpty()
+                || pdcDiversionDevices == null
+                || pdcDiversionDevices.isEmpty()
                 || pdcTransferDurationProvider == null
                 || pdcDiversionDistanceProvider == null
                 || prlToPcrTransferDurationProvider == null
@@ -150,6 +158,12 @@ public class ToteToBagFlowController implements SimulationController {
         for (PrlConveyor prlConveyor : prlConveyors) {
             prlsById.put(prlConveyor.getId(), prlConveyor);
         }
+        for (PdcDiversionDevice pdcDiversionDevice : pdcDiversionDevices) {
+            pdcDiversionDevicesByPrlId.put(pdcDiversionDevice.getTargetPrlId(), pdcDiversionDevice);
+        }
+        if (!pdcDiversionDevicesByPrlId.keySet().containsAll(prlsById.keySet())) {
+            throw new IllegalArgumentException("Each PRL must have a matching PDC diversion device");
+        }
     }
 
     @Override
@@ -159,7 +173,9 @@ public class ToteToBagFlowController implements SimulationController {
         drainTippingMachine();
         drainSortingMachine();
         updatePdcConveyor(dtSeconds);
-        startPdcDiversions();
+        requestPdcDiversions();
+        updatePdcDiversionDevices(dtSeconds);
+        startPdcTransfersFromActuatingDevices();
         updatePdcTransfers(dtSeconds);
         updatePrls(dtSeconds);
         attemptPrlRelease();
@@ -186,6 +202,10 @@ public class ToteToBagFlowController implements SimulationController {
 
     public List<LinearLaneEntrySnapshot> getPdcLaneEntries() {
         return pdcConveyor.getLaneEntries();
+    }
+
+    public List<PdcDiversionDevice> getPdcDiversionDevices() {
+        return List.copyOf(pdcDiversionDevicesByPrlId.values());
     }
 
     public List<PrlToPcrTransfer> getActivePrlToPcrTransfers() {
@@ -229,7 +249,7 @@ public class ToteToBagFlowController implements SimulationController {
         pdcConveyor.update(dtSeconds);
     }
 
-    private void startPdcDiversions() {
+    private void requestPdcDiversions() {
         for (LinearLaneEntrySnapshot entry : pdcConveyor.getLaneEntries()) {
             Pack pack = entry.pack();
             PrlConveyor prl = findPrlForCorrelation(pack.getCorrelationId())
@@ -237,6 +257,30 @@ public class ToteToBagFlowController implements SimulationController {
             float diversionFrontDistance = pdcDiversionDistanceProvider.frontDistanceFor(prl.getId(), pack);
             if (entry.frontDistance() < diversionFrontDistance || !prl.accepts(pack)) {
                 continue;
+            }
+            PdcDiversionDevice device = pdcDiversionDevicesByPrlId.get(prl.getId());
+            if (device == null) {
+                throw new IllegalStateException("No PDC diversion device for PRL " + prl.getId());
+            }
+            device.requestDiversion(pack);
+        }
+    }
+
+    private void updatePdcDiversionDevices(double dtSeconds) {
+        for (PdcDiversionDevice device : pdcDiversionDevicesByPrlId.values()) {
+            device.update(dtSeconds);
+        }
+    }
+
+    private void startPdcTransfersFromActuatingDevices() {
+        for (PdcDiversionDevice device : pdcDiversionDevicesByPrlId.values()) {
+            Pack pack = device.consumeActuationStartPack().orElse(null);
+            if (pack == null) {
+                continue;
+            }
+            PrlConveyor prl = prlsById.get(device.getTargetPrlId());
+            if (prl == null) {
+                throw new IllegalStateException("Unknown PRL id " + device.getTargetPrlId());
             }
             float actualFrontDistance = pdcConveyor.divertPack(pack)
                     .orElseThrow(() -> new IllegalStateException("Expected pack on PDC lane for diversion " + pack.getId()));
@@ -346,5 +390,18 @@ public class ToteToBagFlowController implements SimulationController {
         return prlsById.values().stream()
                 .filter(prl -> correlationId.equals(prl.getAssignment().getCorrelationId()))
                 .findFirst();
+    }
+
+    private static List<PdcDiversionDevice> createDefaultDiversionDevices(List<PrlConveyor> prlConveyors) {
+        List<PdcDiversionDevice> devices = new ArrayList<>();
+        for (PrlConveyor prlConveyor : prlConveyors) {
+            devices.add(new PdcDiversionDevice(
+                    "pdc_diverter_" + prlConveyor.getId(),
+                    prlConveyor.getId(),
+                    0d,
+                    0.08d,
+                    0.08d));
+        }
+        return devices;
     }
 }
