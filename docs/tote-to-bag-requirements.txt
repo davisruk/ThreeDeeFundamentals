@@ -345,3 +345,64 @@ Phase 5: Sorting machine implementation
 Phase 6: Bagging machine implementation 
 
 
+Agreed direction / current phases
+The proposal above is retained as the original rough cut, but it no longer reflects the current agreed implementation sequence.
+
+Current agreed direction
+- treat the tote-to-bag area as a coordinated warehouse subsystem rather than as a single-machine feature
+- keep the design control-first and simulation-first:
+  prioritise domain objects, transport ownership, state machines, and release logic ahead of detailed machine visuals
+- use conveyor-local transport on PDC, PRLs, and PCR rather than trying to force this area through the broader route/segment model
+- keep packs as first-class moving simulation objects throughout the subsystem
+- prefer reusable straight conveyor assemblies for visuals rather than transfer-track-style procedural conveyor generation
+- keep machine internals timed/stateful rather than physics-based
+
+Current phased sequence
+Phase A: domain and control model
+- define tote load planning, pack metadata, PRL assignment, occupancy, and release-decision abstractions
+- status: completed
+
+Phase B: minimal logical end-to-end flow
+- tipper emits packs
+- sorter meters packs
+- packs are assigned to PRLs
+- PRLs accumulate and release
+- PCR delivers to bagger
+- bagger consumes a group into a bag
+- status: completed
+
+Phase C: in-app harness and conveyor visual direction
+- add the tote-to-bag debug harness
+- replace placeholder conveyor boxes with reusable `StraightConveyorFactory` assemblies
+- add runtime stop/start conveyor visuals
+- status: completed
+
+Phase D: conveyor-local transport on PRLs and PCR
+- move PRLs to lane-backed pack positions
+- make PCR receive packs incrementally at PRL-specific join distances
+- refine PRL control so indexing, staging, and release better match intended behaviour
+- status: completed
+
+Phase E: explicit PRL-to-PCR handoff
+- replace implicit release completion with an explicit simulation-owned handoff path
+- keep the release effect visually continuous downstream
+- status: completed
+
+Phase F: finish the PDC-side transport model
+- move PDC-side movement ownership out of harness-only path math and into the subsystem transport layer
+- keep packs simulation-owned from sorter output through PRL arrival
+- replace the current timed diversion approximation with a more explicit side-push/divert handoff model
+- status: next slice
+
+Phase G: transfer-device and controller fidelity
+- add the real transfer-device runtime state and ownership boundary for PDC diversion
+- only generalise the diversion/handoff model if a second real use case appears
+- status: pending
+
+Phase H: subsystem integration and later machine fidelity
+- decide how tote-to-bag should live in the wider warehouse scene structure
+- improve machine visuals only after transport ownership and controller boundaries are stable
+- propagate inspection support to any newly introduced runtime objects
+- status: pending
+
+
