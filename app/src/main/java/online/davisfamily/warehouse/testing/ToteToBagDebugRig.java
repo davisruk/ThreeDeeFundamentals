@@ -25,6 +25,7 @@ import online.davisfamily.warehouse.sim.totebag.ConveyorOccupancyModel;
 import online.davisfamily.warehouse.sim.totebag.Pack;
 import online.davisfamily.warehouse.sim.totebag.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.PackPlan;
+import online.davisfamily.warehouse.sim.totebag.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.PcrConveyor;
 import online.davisfamily.warehouse.sim.totebag.PrlConveyor;
@@ -39,6 +40,7 @@ public class ToteToBagDebugRig {
     private static final float PRL_BELT_SPEED = 1.80f;
     private static final float PRL_INDEX_DISTANCE = 0.34f;
     private static final double SORTER_RELEASE_INTERVAL_SECONDS = 0.95d;
+    private static final float PDC_BELT_SPEED = 1.55f;
     private static final float PDC_TRANSFER_SPEED = 1.55f;
     private static final float PDC_Z = 0.2f;
     private static final float PCR_Z = -2.9f;
@@ -59,6 +61,7 @@ public class ToteToBagDebugRig {
 
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
+    private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
     private final BaggingMachine baggingMachine;
     private final List<PrlConveyor> prls;
@@ -99,6 +102,7 @@ public class ToteToBagDebugRig {
         ToteLoadPlan toteLoadPlan = createDemoPlan();
         tippingMachine = new TippingMachine("tipper", 0.5d, 0.2d, 0.3d);
         sortingMachine = new SortingMachine("sorter", SORTER_RELEASE_INTERVAL_SECONDS);
+        pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(MAIN_CONVEYOR_LENGTH, 0.06f, 0f), PDC_BELT_SPEED);
         prls = List.of(
                 new PrlConveyor("prl-1", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED),
                 new PrlConveyor("prl-2", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED),
@@ -109,11 +113,13 @@ public class ToteToBagDebugRig {
                 toteLoadPlan,
                 tippingMachine,
                 sortingMachine,
+                pdcConveyor,
                 pcrConveyor,
                 baggingMachine,
                 new ToteToBagAssignmentPlanner(),
                 prls,
                 this::pdcTransferDurationFor,
+                this::pdcDiversionFrontDistanceFor,
                 this::prlToPcrTransferDurationFor,
                 this::prlToPcrEntryFrontDistanceFor);
 
@@ -148,6 +154,10 @@ public class ToteToBagDebugRig {
         for (Pack pack : sortingMachine.getQueuedPacks()) {
             positionPack(pack, -3.7f + (sorterIndex * 0.18f), 0.28f, PDC_Z);
             sorterIndex++;
+        }
+
+        for (var entry : flowController.getPdcLaneEntries()) {
+            positionPackOnPdc(entry.pack(), entry.frontDistance());
         }
 
         int prlIndex = 0;
@@ -282,7 +292,7 @@ public class ToteToBagDebugRig {
         inspectionRegistry.register(pdcRenderable, () -> List.of(
                 "Type: PDC",
                 "Running: " + pdcRuntimeState.isRunning(),
-                "Flow packs observed: " + flowController.getObservedPacks().size(),
+                "Lane packs: " + flowController.getPdcLaneEntries().size(),
                 "PRLs assigned: " + prls.size(),
                 "Active transfers: " + flowController.getActivePdcTransfers().size()));
 
@@ -456,26 +466,10 @@ public class ToteToBagDebugRig {
         int prlIndex = indexOfPrl(transfer.getTargetPrlId());
         float targetX = prlCenterX(prlIndex);
         float pdcStartX = pdcStartX();
-        float pdcEndX = pdcEndX();
-        float bumperX = clamp(targetX, pdcStartX + 0.20f, pdcEndX - 0.20f);
-        float alongLength = Math.max(0f, bumperX - pdcStartX);
-        float lateralLength = Math.abs(PRL_START_Z - PDC_Z);
-        float totalLength = alongLength + lateralLength;
-        double alongShare = totalLength <= 0f ? 1d : alongLength / totalLength;
-
-        float x;
-        float z;
-        if (progress < alongShare) {
-            double along = alongShare <= 0d ? 1d : progress / alongShare;
-            x = (float) (pdcStartX + ((bumperX - pdcStartX) * along));
-            z = PDC_Z;
-        } else {
-            double lateral = alongShare >= 1d ? 1d : (progress - alongShare) / (1d - alongShare);
-            x = bumperX;
-            z = (float) (PDC_Z + ((PRL_START_Z - PDC_Z) * lateral));
-        }
-        float y = PACK_Y;
-        positionPack(transfer.getPack(), x, y, z);
+        float startX = pdcStartX + transfer.getSourcePdcFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
+        float x = (float) (startX + ((targetX - startX) * progress));
+        float z = (float) (PDC_Z + ((PRL_START_Z - PDC_Z) * progress));
+        positionPack(transfer.getPack(), x, PACK_Y, z);
     }
 
     private void positionActivePrlToPcrTransfer(PrlToPcrTransfer transfer) {
@@ -535,6 +529,11 @@ public class ToteToBagDebugRig {
         positionPack(pack, x, PACK_Y, PCR_Z);
     }
 
+    private void positionPackOnPdc(Pack pack, float frontDistance) {
+        float x = pdcStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
+        positionPack(pack, x, PACK_Y, PDC_Z);
+    }
+
     private int colourForCorrelation(String correlationId) {
         return switch (correlationId) {
             case "bag-a" -> 0xFFE67E22;
@@ -552,10 +551,6 @@ public class ToteToBagDebugRig {
         return -0.9f - (MAIN_CONVEYOR_LENGTH * 0.5f);
     }
 
-    private float pdcEndX() {
-        return -0.9f + (MAIN_CONVEYOR_LENGTH * 0.5f);
-    }
-
     private float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
@@ -563,10 +558,18 @@ public class ToteToBagDebugRig {
     private double pdcTransferDurationFor(String prlId) {
         int prlIndex = indexOfPrl(prlId);
         float targetX = prlCenterX(prlIndex);
-        float bumperX = clamp(targetX, pdcStartX() + 0.20f, pdcEndX() - 0.20f);
-        float alongLength = Math.max(0f, bumperX - pdcStartX());
+        float startX = pdcStartX() + pdcDiversionFrontDistanceFor(prlId, new Pack("probe", "probe", new PackDimensions(0.18f, 0.1f, 0.1f)))
+                - (0.18f * 0.5f);
+        float dx = targetX - startX;
         float lateralLength = Math.abs(PRL_START_Z - PDC_Z);
-        return (alongLength + lateralLength) / PDC_TRANSFER_SPEED;
+        float travelLength = (float) Math.sqrt((dx * dx) + (lateralLength * lateralLength));
+        return travelLength / PDC_TRANSFER_SPEED;
+    }
+
+    private float pdcDiversionFrontDistanceFor(String prlId, Pack pack) {
+        int prlIndex = indexOfPrl(prlId);
+        float bumperX = clamp(prlCenterX(prlIndex), pdcStartX() + 0.20f, pdcStartX() + MAIN_CONVEYOR_LENGTH - 0.20f);
+        return (bumperX - pdcStartX()) + (pack.getDimensions().length() * 0.5f);
     }
 
     private double prlToPcrTransferDurationFor(String prlId) {

@@ -17,6 +17,7 @@ public class ToteToBagFlowController implements SimulationController {
     private final ToteLoadPlan toteLoadPlan;
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
+    private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
     private final BaggingMachine baggingMachine;
     private final ToteToBagAssignmentPlanner assignmentPlanner;
@@ -26,6 +27,7 @@ public class ToteToBagFlowController implements SimulationController {
     private final List<PrlToPcrTransfer> activePrlToPcrTransfers = new ArrayList<>();
     private final Queue<ReleasedPackGroup> releasedGroups = new ArrayDeque<>();
     private final PdcTransferDurationProvider pdcTransferDurationProvider;
+    private final PdcDiversionDistanceProvider pdcDiversionDistanceProvider;
     private final PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider;
     private final PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider;
     private boolean initialized;
@@ -35,6 +37,7 @@ public class ToteToBagFlowController implements SimulationController {
             ToteLoadPlan toteLoadPlan,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
             BaggingMachine baggingMachine,
             ToteToBagAssignmentPlanner assignmentPlanner,
@@ -43,11 +46,13 @@ public class ToteToBagFlowController implements SimulationController {
                 toteLoadPlan,
                 tippingMachine,
                 sortingMachine,
+                pdcConveyor,
                 pcrConveyor,
                 baggingMachine,
                 assignmentPlanner,
                 prlConveyors,
                 ignored -> 0.45d,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
                 ignored -> 0.25d,
                 (ignoredPrlId, pack) -> pack.getDimensions().length());
     }
@@ -56,6 +61,7 @@ public class ToteToBagFlowController implements SimulationController {
             ToteLoadPlan toteLoadPlan,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
             BaggingMachine baggingMachine,
             ToteToBagAssignmentPlanner assignmentPlanner,
@@ -65,11 +71,13 @@ public class ToteToBagFlowController implements SimulationController {
                 toteLoadPlan,
                 tippingMachine,
                 sortingMachine,
+                pdcConveyor,
                 pcrConveyor,
                 baggingMachine,
                 assignmentPlanner,
                 prlConveyors,
                 ignored -> pdcTransferDurationSeconds,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
                 ignored -> 0.25d,
                 (ignoredPrlId, pack) -> pack.getDimensions().length());
     }
@@ -78,6 +86,7 @@ public class ToteToBagFlowController implements SimulationController {
             ToteLoadPlan toteLoadPlan,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
             BaggingMachine baggingMachine,
             ToteToBagAssignmentPlanner assignmentPlanner,
@@ -88,11 +97,13 @@ public class ToteToBagFlowController implements SimulationController {
                 toteLoadPlan,
                 tippingMachine,
                 sortingMachine,
+                pdcConveyor,
                 pcrConveyor,
                 baggingMachine,
                 assignmentPlanner,
                 prlConveyors,
                 pdcTransferDurationProvider,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
                 ignored -> prlToPcrTransferDurationSeconds,
                 (ignoredPrlId, pack) -> pack.getDimensions().length());
     }
@@ -101,22 +112,26 @@ public class ToteToBagFlowController implements SimulationController {
             ToteLoadPlan toteLoadPlan,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
             BaggingMachine baggingMachine,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
             PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
             PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
             PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
         if (toteLoadPlan == null
                 || tippingMachine == null
                 || sortingMachine == null
+                || pdcConveyor == null
                 || pcrConveyor == null
                 || baggingMachine == null
                 || assignmentPlanner == null
                 || prlConveyors == null
                 || prlConveyors.isEmpty()
                 || pdcTransferDurationProvider == null
+                || pdcDiversionDistanceProvider == null
                 || prlToPcrTransferDurationProvider == null
                 || prlToPcrEntryDistanceProvider == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null or empty");
@@ -124,10 +139,12 @@ public class ToteToBagFlowController implements SimulationController {
         this.toteLoadPlan = toteLoadPlan;
         this.tippingMachine = tippingMachine;
         this.sortingMachine = sortingMachine;
+        this.pdcConveyor = pdcConveyor;
         this.pcrConveyor = pcrConveyor;
         this.baggingMachine = baggingMachine;
         this.assignmentPlanner = assignmentPlanner;
         this.pdcTransferDurationProvider = pdcTransferDurationProvider;
+        this.pdcDiversionDistanceProvider = pdcDiversionDistanceProvider;
         this.prlToPcrTransferDurationProvider = prlToPcrTransferDurationProvider;
         this.prlToPcrEntryDistanceProvider = prlToPcrEntryDistanceProvider;
         for (PrlConveyor prlConveyor : prlConveyors) {
@@ -141,6 +158,8 @@ public class ToteToBagFlowController implements SimulationController {
         loadToteIfNeeded();
         drainTippingMachine();
         drainSortingMachine();
+        updatePdcConveyor(dtSeconds);
+        startPdcDiversions();
         updatePdcTransfers(dtSeconds);
         updatePrls(dtSeconds);
         attemptPrlRelease();
@@ -163,6 +182,10 @@ public class ToteToBagFlowController implements SimulationController {
 
     public List<PdcTransfer> getActivePdcTransfers() {
         return List.copyOf(activePdcTransfers);
+    }
+
+    public List<LinearLaneEntrySnapshot> getPdcLaneEntries() {
+        return pdcConveyor.getLaneEntries();
     }
 
     public List<PrlToPcrTransfer> getActivePrlToPcrTransfers() {
@@ -198,10 +221,30 @@ public class ToteToBagFlowController implements SimulationController {
     private void drainSortingMachine() {
         while (sortingMachine.hasReleasedPack()) {
             Pack pack = sortingMachine.pollReleasedPack();
+            pdcConveyor.acceptIncomingPack(pack);
+        }
+    }
+
+    private void updatePdcConveyor(double dtSeconds) {
+        pdcConveyor.update(dtSeconds);
+    }
+
+    private void startPdcDiversions() {
+        for (LinearLaneEntrySnapshot entry : pdcConveyor.getLaneEntries()) {
+            Pack pack = entry.pack();
             PrlConveyor prl = findPrlForCorrelation(pack.getCorrelationId())
                     .orElseThrow(() -> new IllegalStateException("No PRL assignment for correlation " + pack.getCorrelationId()));
-            pack.setState(Pack.PackMotionState.DIVERTING);
-            activePdcTransfers.add(new PdcTransfer(pack, prl.getId(), pdcTransferDurationProvider.durationSecondsFor(prl.getId())));
+            float diversionFrontDistance = pdcDiversionDistanceProvider.frontDistanceFor(prl.getId(), pack);
+            if (entry.frontDistance() < diversionFrontDistance || !prl.accepts(pack)) {
+                continue;
+            }
+            float actualFrontDistance = pdcConveyor.divertPack(pack)
+                    .orElseThrow(() -> new IllegalStateException("Expected pack on PDC lane for diversion " + pack.getId()));
+            activePdcTransfers.add(new PdcTransfer(
+                    pack,
+                    prl.getId(),
+                    actualFrontDistance,
+                    pdcTransferDurationProvider.durationSecondsFor(prl.getId())));
         }
     }
 

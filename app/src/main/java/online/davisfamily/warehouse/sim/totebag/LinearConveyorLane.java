@@ -111,6 +111,18 @@ public class LinearConveyorLane {
         return Optional.of(new LinearLaneEntrySnapshot(trailing.pack, trailing.frontDistance));
     }
 
+    public Optional<Float> getFrontDistanceFor(Pack pack) {
+        if (pack == null) {
+            return Optional.empty();
+        }
+        for (LaneEntry entry : entries) {
+            if (entry.pack.equals(pack)) {
+                return Optional.of(entry.frontDistance);
+            }
+        }
+        return Optional.empty();
+    }
+
     public boolean canAcceptAtInfeed(Pack pack) {
         if (pack == null) {
             return false;
@@ -222,6 +234,22 @@ public class LinearConveyorLane {
             }
         }
         sortEntries();
+    }
+
+    public boolean removePack(Pack pack) {
+        if (pack == null) {
+            return false;
+        }
+        Iterator<LaneEntry> iterator = entries.iterator();
+        while (iterator.hasNext()) {
+            LaneEntry entry = iterator.next();
+            if (entry.pack.equals(pack)) {
+                iterator.remove();
+                sortEntries();
+                return true;
+            }
+        }
+        return false;
     }
 
     private void clampSpacingFromFront() {

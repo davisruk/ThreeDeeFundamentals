@@ -25,6 +25,7 @@ class ToteToBagFlowControllerTest {
         SortingMachine sortingMachine = new SortingMachine("sorter", 0.05d);
         ConveyorOccupancyModel prlOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f);
         ConveyorOccupancyModel pcrOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f);
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.2f);
         PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, prlOccupancy);
         PrlConveyor prl2 = new PrlConveyor("prl-2", 0.15f, prlOccupancy);
         PcrConveyor pcrConveyor = new PcrConveyor("pcr", pcrOccupancy, 0.15d);
@@ -34,6 +35,7 @@ class ToteToBagFlowControllerTest {
                 toteLoadPlan,
                 tippingMachine,
                 sortingMachine,
+                pdcConveyor,
                 pcrConveyor,
                 baggingMachine,
                 new ToteToBagAssignmentPlanner(),
@@ -68,6 +70,7 @@ class ToteToBagFlowControllerTest {
         SortingMachine sortingMachine = new SortingMachine("sorter", 0.05d);
         ConveyorOccupancyModel prlOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f);
         ConveyorOccupancyModel pcrOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f);
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.2f);
         PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, prlOccupancy);
         PcrConveyor pcrConveyor = new PcrConveyor("pcr", pcrOccupancy, 0.15d);
         BaggingMachine baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.20d, 0.20d, 0.20d, 0.20d);
@@ -76,11 +79,13 @@ class ToteToBagFlowControllerTest {
                 toteLoadPlan,
                 tippingMachine,
                 sortingMachine,
+                pdcConveyor,
                 pcrConveyor,
                 baggingMachine,
                 new ToteToBagAssignmentPlanner(),
                 List.of(prl1),
                 ignored -> 0.05d,
+                (ignored, pack) -> pack.getDimensions().length(),
                 ignored -> 0.80d,
                 (ignored, pack) -> pack.getDimensions().length());
 
@@ -115,5 +120,56 @@ class ToteToBagFlowControllerTest {
         assertEquals(List.of("bag-a"), baggingMachine.getCompletedCorrelationIds());
         assertTrue(controller.getActivePrlToPcrTransfers().isEmpty());
         assertTrue(pcrConveyor.isEmpty());
+    }
+
+    @Test
+    void shouldKeepPackOnPdcUntilItsDiversionPointIsReached() {
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-1",
+                List.of(new PackPlan("pack-1", "bag-a", new PackDimensions(0.20f, 0.10f, 0.08f))));
+
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.05d, 0.05d, 0.05d);
+        SortingMachine sortingMachine = new SortingMachine("sorter", 0.05d);
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(3.0f, 0.05f, 0.0f), 1.0f);
+        PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PcrConveyor pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(3.0f, 0.05f, 0.10f), 0.25d);
+        BaggingMachine baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.20d, 0.20d, 0.20d, 0.20d);
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                toteLoadPlan,
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                baggingMachine,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl1),
+                ignored -> 0.30d,
+                (ignored, pack) -> 1.60f,
+                ignored -> 0.30d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(tippingMachine);
+        sim.addSimObject(sortingMachine);
+        sim.addSimObject(pcrConveyor);
+        sim.addSimObject(baggingMachine);
+        sim.addController(controller);
+
+        boolean sawPackOnPdcBeforeDiversion = false;
+        boolean sawActivePdcDiversion = false;
+        for (int i = 0; i < 80; i++) {
+            sim.update(0.05d);
+            if (!controller.getPdcLaneEntries().isEmpty() && controller.getActivePdcTransfers().isEmpty()) {
+                sawPackOnPdcBeforeDiversion = true;
+            }
+            if (!controller.getActivePdcTransfers().isEmpty()) {
+                sawActivePdcDiversion = true;
+                break;
+            }
+        }
+
+        assertTrue(sawPackOnPdcBeforeDiversion);
+        assertTrue(sawActivePdcDiversion);
     }
 }
