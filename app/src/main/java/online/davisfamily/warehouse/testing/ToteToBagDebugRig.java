@@ -14,14 +14,10 @@ import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
-import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory;
-import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.ConveyorVisualSpeed;
-import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.StraightConveyorSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.sim.totebag.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.CompletedBag;
-import online.davisfamily.warehouse.sim.totebag.ConveyorOccupancyModel;
 import online.davisfamily.warehouse.sim.totebag.Pack;
 import online.davisfamily.warehouse.sim.totebag.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.PackPlan;
@@ -37,29 +33,21 @@ import online.davisfamily.warehouse.sim.totebag.TippingMachine;
 import online.davisfamily.warehouse.sim.totebag.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.ToteToBagAssignmentPlanner;
 import online.davisfamily.warehouse.sim.totebag.ToteToBagFlowController;
+import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
+import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
+import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
+import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPoint;
+import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 
 public class ToteToBagDebugRig {
-    private static final float PRL_BELT_SPEED = 1.80f;
-    private static final float PRL_INDEX_DISTANCE = 0.34f;
-    private static final double SORTER_RELEASE_INTERVAL_SECONDS = 0.95d;
-    private static final float PDC_BELT_SPEED = 1.55f;
-    private static final float PDC_TRANSFER_SPEED = 1.55f;
-    private static final float PDC_Z = 0.2f;
-    private static final float PCR_Z = -2.9f;
-    private static final float CONVEYOR_Y = 0.02f;
-    private static final float PACK_Y = 0.16f;
-    private static final float PRL_START_Z = -0.42f;
-    private static final float SINGLE_PACK_CONVEYOR_WIDTH = 0.18f;
-    private static final float PRL_LENGTH = 2.4f;
-    private static final float MAIN_CONVEYOR_LENGTH = 4.6f;
-    private static final double PCR_TRAVEL_DURATION_SECONDS = MAIN_CONVEYOR_LENGTH / PRL_BELT_SPEED;
     private static final float BUMPER_REST_Z = 0.27f;
     private static final float BUMPER_ACTIVE_Z = 0.18f;
-    private static final float PRL_TO_PCR_TRANSFER_SPEED = MAIN_CONVEYOR_LENGTH / (float) PCR_TRAVEL_DURATION_SECONDS;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
     private final TriangleRenderer tr;
+    private final ToteToBagSubsystem subsystem;
+    private final ToteToBagCoreLayoutSpec layoutSpec;
 
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
@@ -79,8 +67,8 @@ public class ToteToBagDebugRig {
     private final Map<String, RenderableObject> pdcBumperRenderablesByPrlId = new LinkedHashMap<>();
     private final Map<String, RenderableObject> packRenderablesById = new LinkedHashMap<>();
     private final Map<String, RenderableObject> completedBagRenderablesById = new LinkedHashMap<>();
-    private final ConveyorRuntimeState pdcRuntimeState = new ConveyorRuntimeState();
-    private final ConveyorRuntimeState pcrRuntimeState = new ConveyorRuntimeState();
+    private ConveyorRuntimeState pdcRuntimeState;
+    private ConveyorRuntimeState pcrRuntimeState;
     private final Map<String, ConveyorRuntimeState> prlRuntimeStatesById = new LinkedHashMap<>();
     private final TrackAppearance conveyorAppearance;
 
@@ -99,22 +87,16 @@ public class ToteToBagDebugRig {
                 new OneColourStrategyImpl(0xFFB8B8B8),
                 new OneColourStrategyImpl(0xFF596A54),
                 new OneColourStrategyImpl(0xFF596A54));
-        pdcRuntimeState.setRunning(true);
-        pcrRuntimeState.setRunning(false);
+        layoutSpec = ToteToBagCoreLayoutSpec.debugDefaults();
+        subsystem = new ToteToBagSubsystemBuilder().buildCore(tr, conveyorAppearance, layoutSpec);
 
         ToteLoadPlan toteLoadPlan = createDemoPlan();
         tippingMachine = new TippingMachine("tipper", 0.5d, 0.2d, 0.3d);
-        sortingMachine = new SortingMachine("sorter", SORTER_RELEASE_INTERVAL_SECONDS);
-        pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(MAIN_CONVEYOR_LENGTH, 0.06f, 0f), PDC_BELT_SPEED);
-        prls = List.of(
-                new PrlConveyor("prl-1", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED),
-                new PrlConveyor("prl-2", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED),
-                new PrlConveyor("prl-3", PRL_INDEX_DISTANCE, new ConveyorOccupancyModel(1.8f, 0.06f, 0f), PRL_BELT_SPEED));
-        pdcDiversionDevices = List.of(
-                new PdcDiversionDevice("pdc_diverter_prl-1", "prl-1", 0d, 0.08d, 0.08d),
-                new PdcDiversionDevice("pdc_diverter_prl-2", "prl-2", 0d, 0.08d, 0.08d),
-                new PdcDiversionDevice("pdc_diverter_prl-3", "prl-3", 0d, 0.08d, 0.08d));
-        pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(4.5f, 0.06f, 0.15f), PCR_TRAVEL_DURATION_SECONDS);
+        sortingMachine = new SortingMachine("sorter", layoutSpec.sorterReleaseIntervalSeconds());
+        pdcConveyor = subsystem.getPdcConveyor();
+        prls = subsystem.getPrls();
+        pdcDiversionDevices = subsystem.getPdcDiversionDevices();
+        pcrConveyor = subsystem.getPcrConveyor();
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
         flowController = new ToteToBagFlowController(
                 toteLoadPlan,
@@ -137,20 +119,25 @@ public class ToteToBagDebugRig {
         sim.addSimObject(baggingMachine);
         sim.addController(flowController);
 
-        tipperRenderable = createBox("tipping_machine", -5.3f, 0.25f, 0.2f, 0.7f, 0.5f, 0.8f, 0xFF8A5A44);
-        sorterRenderable = createBox("sorting_machine", -3.6f, 0.18f, 0.2f, 1.0f, 0.36f, 0.9f, 0xFF5B6E7A);
-        pdcRenderable = createConveyor("pdc", -0.9f, CONVEYOR_Y, PDC_Z, MAIN_CONVEYOR_LENGTH, SINGLE_PACK_CONVEYOR_WIDTH, 0f, pdcRuntimeState);
-        pcrRenderable = createConveyor("pcr", -0.9f, CONVEYOR_Y, PCR_Z, MAIN_CONVEYOR_LENGTH, SINGLE_PACK_CONVEYOR_WIDTH, 0f, pcrRuntimeState);
-        baggerRenderable = createBox("bagging_machine", 4.0f, 0.28f, PCR_Z, 0.8f, 0.56f, 0.9f, 0xFF6F5E49);
+        tipperRenderable = createBox("tipping_machine", 0f, 0f, 0f, 0.7f, 0.5f, 0.8f, 0xFF8A5A44);
+        sorterRenderable = createBox("sorting_machine", 0f, 0f, 0f, 1.0f, 0.36f, 0.9f, 0xFF5B6E7A);
+        pdcRenderable = subsystem.getPdcRenderable();
+        pcrRenderable = subsystem.getPcrRenderable();
+        baggerRenderable = createBox("bagging_machine", 0f, 0f, 0f, 0.8f, 0.56f, 0.9f, 0xFF6F5E49);
+        subsystem.attachRenderable(tipperRenderable, new MachineAttachmentSpec(ToteToBagAttachmentPoint.PDC_INFEED, -2.1f, 0.23f, 0f, 0f));
+        subsystem.attachRenderable(sorterRenderable, new MachineAttachmentSpec(ToteToBagAttachmentPoint.PDC_INFEED, -0.4f, 0.16f, 0f, 0f));
+        subsystem.attachRenderable(baggerRenderable, new MachineAttachmentSpec(ToteToBagAttachmentPoint.PCR_OUTFEED, 2.6f, 0.26f, 0f, 0f));
 
         objects.add(tipperRenderable);
         objects.add(sorterRenderable);
-        objects.add(pdcRenderable);
-        objects.add(pcrRenderable);
         objects.add(baggerRenderable);
-
-        createPrlRenderables();
-        createPdcBumpers();
+        objects.addAll(subsystem.getCoreRenderables());
+        prlRenderablesById.putAll(subsystem.getPrlRenderablesById());
+        pdcBumperRenderablesByPrlId.putAll(subsystem.getPdcBumpersByPrlId());
+        pdcRuntimeState = subsystem.getPdcRuntimeState();
+        pcrRuntimeState = subsystem.getPcrRuntimeState();
+        prlRuntimeStatesById.putAll(subsystem.getPrlRuntimeStatesById());
+        registerBumperInspection();
         registerInspectableRoots();
     }
 
@@ -160,7 +147,7 @@ public class ToteToBagDebugRig {
 
         int sorterIndex = 0;
         for (Pack pack : sortingMachine.getQueuedPacks()) {
-            positionPack(pack, -3.7f + (sorterIndex * 0.18f), 0.28f, PDC_Z);
+            positionPack(pack, -3.7f + (sorterIndex * 0.18f), 0.28f, layoutSpec.pdcZ());
             sorterIndex++;
         }
 
@@ -170,7 +157,7 @@ public class ToteToBagDebugRig {
 
         int prlIndex = 0;
         for (PrlConveyor prl : prls) {
-            float prlX = prlCenterX(prlIndex);
+            float prlX = subsystem.getLayout().prlCenterX(prlIndex);
             for (var entry : prl.getLaneEntries()) {
                 positionPackOnPrl(entry.pack(), prlX, entry.frontDistance());
             }
@@ -184,7 +171,7 @@ public class ToteToBagDebugRig {
         if (baggingMachine.getCurrentGroup() != null) {
             int baggerPackIndex = 0;
             for (Pack pack : baggingMachine.getCurrentGroup().packs()) {
-                positionPack(pack, 4.0f + (baggerPackIndex * 0.10f), 0.48f, PCR_Z);
+                positionPack(pack, 4.0f + (baggerPackIndex * 0.10f), 0.48f, layoutSpec.pcrZ());
                 baggerPackIndex++;
             }
         }
@@ -196,7 +183,7 @@ public class ToteToBagDebugRig {
             if (bagRenderable != null) {
                 bagRenderable.transformation.xTranslation = 5.6f + (completedIndex * 0.42f);
                 bagRenderable.transformation.yTranslation = 0.16f;
-                bagRenderable.transformation.zTranslation = PCR_Z;
+                bagRenderable.transformation.zTranslation = layoutSpec.pcrZ();
             }
             completedIndex++;
         }
@@ -224,42 +211,12 @@ public class ToteToBagDebugRig {
         syncBumperVisuals();
     }
 
-    private void createPrlRenderables() {
-        for (int i = 0; i < prls.size(); i++) {
-            float x = prlCenterX(i);
-            ConveyorRuntimeState runtimeState = new ConveyorRuntimeState();
-            runtimeState.setRunning(false);
-            prlRuntimeStatesById.put(prls.get(i).getId(), runtimeState);
-            RenderableObject prlRenderable = createConveyor(
-                    prls.get(i).getId(),
-                    x,
-                    CONVEYOR_Y,
-                    -1.25f,
-                    PRL_LENGTH,
-                    SINGLE_PACK_CONVEYOR_WIDTH,
-                    (float) (Math.PI / 2.0),
-                    runtimeState);
-            prlRenderablesById.put(prls.get(i).getId(), prlRenderable);
-            objects.add(prlRenderable);
-        }
-    }
-
-    private void createPdcBumpers() {
-        for (int i = 0; i < prls.size(); i++) {
-            PrlConveyor prl = prls.get(i);
-            float x = prlCenterX(i);
-            RenderableObject bumper = createBox(
-                    "pdc_bumper_" + prl.getId(),
-                    x,
-                    0.12f,
-                    BUMPER_REST_Z,
-                    0.10f,
-                    0.14f,
-                    0.08f,
-                    0xFFCC8844);
-            bumper.transformation.angleZ = (float) (Math.PI / 2.0);
-            pdcBumperRenderablesByPrlId.put(prl.getId(), bumper);
-            objects.add(bumper);
+    private void registerBumperInspection() {
+        for (PrlConveyor prl : prls) {
+            RenderableObject bumper = pdcBumperRenderablesByPrlId.get(prl.getId());
+            if (bumper == null) {
+                continue;
+            }
             inspectionRegistry.register(bumper, () -> List.of(
                     "Type: PDC bumper",
                     "Target PRL: " + prl.getId(),
@@ -408,37 +365,6 @@ public class ToteToBagDebugRig {
                 true);
     }
 
-    private RenderableObject createConveyor(
-            String id,
-            float x,
-            float y,
-            float z,
-            float length,
-            float width,
-            float yawRadians,
-            ConveyorRuntimeState runtimeState) {
-        RenderableObject conveyor = StraightConveyorFactory.create(
-                id,
-                tr,
-                new StraightConveyorSpec(
-                        length,
-                        width,
-                        0.05f,
-                        0.01f,
-                        0.10f,
-                        0.08f,
-                        0.004f,
-                        ConveyorVisualSpeed.fixed(0.8d)),
-                runtimeState,
-                conveyorAppearance);
-        conveyor.transformation.xTranslation = x;
-        conveyor.transformation.yTranslation = y;
-        conveyor.transformation.zTranslation = z;
-        conveyor.transformation.angleY = yawRadians;
-        configureConveyorSelection(conveyor);
-        return conveyor;
-    }
-
     private void syncConveyorRuntimeStates() {
         pdcRuntimeState.setRunning(true);
         pcrRuntimeState.setRunning(pcrConveyor.isRunning() || baggingMachine.getCurrentGroup() != null);
@@ -446,16 +372,6 @@ public class ToteToBagDebugRig {
             ConveyorRuntimeState runtimeState = prlRuntimeStatesById.get(prl.getId());
             if (runtimeState != null) {
                 runtimeState.setRunning(prl.isRunning());
-            }
-        }
-    }
-
-    private void configureConveyorSelection(RenderableObject conveyorRoot) {
-        for (RenderableObject child : conveyorRoot.children) {
-            if (child.id.endsWith("_top_belt")) {
-                child.setSelectable(true);
-                child.setSelectionTarget(conveyorRoot);
-                break;
             }
         }
     }
@@ -473,24 +389,24 @@ public class ToteToBagDebugRig {
     private void positionActivePdcTransfer(PdcTransfer transfer) {
         double progress = transfer.getProgress();
         int prlIndex = indexOfPrl(transfer.getTargetPrlId());
-        float targetX = prlCenterX(prlIndex);
-        float pdcStartX = pdcStartX();
+        float targetX = subsystem.getLayout().prlCenterX(prlIndex);
+        float pdcStartX = subsystem.getLayout().pdcStartX();
         float startX = pdcStartX + transfer.getSourcePdcFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
         float x = (float) (startX + ((targetX - startX) * progress));
-        float z = (float) (PDC_Z + ((PRL_START_Z - PDC_Z) * progress));
-        positionPack(transfer.getPack(), x, PACK_Y, z);
+        float z = (float) (layoutSpec.pdcZ() + ((layoutSpec.prlStartZ() - layoutSpec.pdcZ()) * progress));
+        positionPack(transfer.getPack(), x, layoutSpec.packY(), z);
     }
 
     private void positionActivePrlToPcrTransfer(PrlToPcrTransfer transfer) {
         double progress = transfer.getProgress();
         int prlIndex = indexOfPrl(transfer.getSourcePrlId());
-        float prlX = prlCenterX(prlIndex);
-        float joinX = pdcStartX() + transfer.getTargetPcrFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
-        float startZ = PRL_START_Z - 1.8f + (transfer.getPack().getDimensions().length() * 0.5f);
+        float prlX = subsystem.getLayout().prlCenterX(prlIndex);
+        float joinX = subsystem.getLayout().pcrStartX() + transfer.getTargetPcrFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
+        float startZ = layoutSpec.prlStartZ() - 1.8f + (transfer.getPack().getDimensions().length() * 0.5f);
 
         float x = (float) (prlX + ((joinX - prlX) * progress));
-        float z = (float) (startZ + ((PCR_Z - startZ) * progress));
-        positionPack(transfer.getPack(), x, PACK_Y, z);
+        float z = (float) (startZ + ((layoutSpec.pcrZ() - startZ) * progress));
+        positionPack(transfer.getPack(), x, layoutSpec.packY(), z);
     }
 
     private void syncBumperVisuals() {
@@ -533,18 +449,18 @@ public class ToteToBagDebugRig {
     }
 
     private void positionPackOnPrl(Pack pack, float prlX, float frontDistance) {
-        float z = PRL_START_Z - frontDistance + (pack.getDimensions().length() * 0.5f);
-        positionPack(pack, prlX, PACK_Y, z);
+        float z = layoutSpec.prlStartZ() - frontDistance + (pack.getDimensions().length() * 0.5f);
+        positionPack(pack, prlX, layoutSpec.packY(), z);
     }
 
     private void positionPackOnPcr(Pack pack, float frontDistance) {
-        float x = pdcStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
-        positionPack(pack, x, PACK_Y, PCR_Z);
+        float x = subsystem.getLayout().pcrStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
+        positionPack(pack, x, layoutSpec.packY(), layoutSpec.pcrZ());
     }
 
     private void positionPackOnPdc(Pack pack, float frontDistance) {
-        float x = pdcStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
-        positionPack(pack, x, PACK_Y, PDC_Z);
+        float x = subsystem.getLayout().pdcStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
+        positionPack(pack, x, layoutSpec.packY(), layoutSpec.pdcZ());
     }
 
     private int colourForCorrelation(String correlationId) {
@@ -556,50 +472,19 @@ public class ToteToBagDebugRig {
         };
     }
 
-    private float prlCenterX(int index) {
-        return -2.2f + (index * 1.45f);
-    }
-
-    private float pdcStartX() {
-        return -0.9f - (MAIN_CONVEYOR_LENGTH * 0.5f);
-    }
-
-    private float clamp(float value, float min, float max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
     private double pdcTransferDurationFor(String prlId) {
-        int prlIndex = indexOfPrl(prlId);
-        float targetX = prlCenterX(prlIndex);
-        float startX = pdcStartX() + pdcDiversionFrontDistanceFor(prlId, new Pack("probe", "probe", new PackDimensions(0.18f, 0.1f, 0.1f)))
-                - (0.18f * 0.5f);
-        float dx = targetX - startX;
-        float lateralLength = Math.abs(PRL_START_Z - PDC_Z);
-        float travelLength = (float) Math.sqrt((dx * dx) + (lateralLength * lateralLength));
-        return travelLength / PDC_TRANSFER_SPEED;
+        return subsystem.getLayout().pdcTransferDurationFor(indexOfPrl(prlId));
     }
 
     private float pdcDiversionFrontDistanceFor(String prlId, Pack pack) {
-        int prlIndex = indexOfPrl(prlId);
-        float bumperX = clamp(prlCenterX(prlIndex), pdcStartX() + 0.20f, pdcStartX() + MAIN_CONVEYOR_LENGTH - 0.20f);
-        return (bumperX - pdcStartX()) + (pack.getDimensions().length() * 0.5f);
+        return subsystem.getLayout().pdcDiversionFrontDistanceFor(indexOfPrl(prlId), pack);
     }
 
     private double prlToPcrTransferDurationFor(String prlId) {
-        int prlIndex = indexOfPrl(prlId);
-        float prlX = prlCenterX(prlIndex);
-        float joinX = pdcStartX() + prlToPcrEntryFrontDistanceFor(prlId, new Pack("probe", "probe", new PackDimensions(0.18f, 0.1f, 0.1f)))
-                - (0.18f * 0.5f);
-        float startZ = PRL_START_Z - 1.8f + (0.18f * 0.5f);
-        float dx = joinX - prlX;
-        float dz = PCR_Z - startZ;
-        float travelLength = (float) Math.sqrt((dx * dx) + (dz * dz));
-        return travelLength / PRL_TO_PCR_TRANSFER_SPEED;
+        return subsystem.getLayout().prlToPcrTransferDurationFor(indexOfPrl(prlId));
     }
 
     private float prlToPcrEntryFrontDistanceFor(String prlId, Pack pack) {
-        int prlIndex = indexOfPrl(prlId);
-        float joinX = prlCenterX(prlIndex);
-        return (joinX - pdcStartX()) + (pack.getDimensions().length() * 0.5f);
+        return subsystem.getLayout().prlToPcrEntryFrontDistanceFor(indexOfPrl(prlId), pack);
     }
 }
