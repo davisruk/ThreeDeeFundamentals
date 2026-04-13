@@ -392,12 +392,12 @@ Phase F: finish the PDC-side transport model
 - move PDC-side movement ownership out of harness-only path math and into the subsystem transport layer
 - keep packs simulation-owned from sorter output through PRL arrival
 - replace the current timed diversion approximation with a more explicit side-push/divert handoff model
-- status: next slice
+- status: completed
 
 Phase G: transfer-device and controller fidelity
 - add the real transfer-device runtime state and ownership boundary for PDC diversion
 - only generalise the diversion/handoff model if a second real use case appears
-- status: pending
+- status: completed
 
 Phase H: subsystem integration and later machine fidelity
 - decide how tote-to-bag should live in the wider warehouse scene structure
