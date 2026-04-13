@@ -288,6 +288,8 @@ An isolated tote-track-mounted tipper and sorter harness now exists outside the 
 - pack discharge from tote to sorter is still non-physics, but now reads as a timed falling/rotating stream
 - sorter outfeed uses a short visible conveyor-local lane-backed conveyor stub rather than only an output point
 - the tote now tips visually in sync with the tipper through a temporary render tilt override rather than via renderable reparenting
+- tote visual placement on the tipper has been refined with a temporary synced offset so it now stays seated on the tipping section rather than cutting through the deck during tilt
+- tipper and tote tilt motion are now driven from continuous machine progress rather than a few coarse state-based snap angles, so the overall tipping motion reads materially smoother
 - this rig is intentionally isolated so tote-track machine behaviour can be proved before reintegration into the wider tote-to-bag harness
 
 Current status
@@ -333,7 +335,7 @@ Machine fidelity
 
 Remaining work for the isolated tote-track tipper slice
 - decide whether tote capture/startup should stay controller-distance-based for now or be moved to a tipper-zone/sensor-style boundary before wider reuse
-- refine tote placement on the tipper during visual tilt so the tote appears to sit exactly on the pivoting track section through the whole motion
+- improve the motion of packs falling from the tote and travelling down the slide so the discharge reads more naturally than the current simple timed stream
 - decide whether the sorter outfeed stub should remain local to the isolated rig or be reshaped to line up more directly with later PDC integration
 - add any missing inspection/debug output specific to the tipper rig if machine-state debugging becomes awkward
 - keep the rig isolated until the tote stop/tip/discharge/sorter handoff feels stable enough to merge back into a broader tote-to-bag scene
@@ -349,6 +351,7 @@ Current recommended next step for the isolated tipper slice
 - keep the isolated rig separate a little longer and finish any last local motion/placement refinements there first:
   - treat the route-mounted tipper as the canonical entry-machine direction for tote arrival
   - keep tote capture on the tote/route side and pack discharge/sorter flow on the tote-to-bag side
+  - focus the next local refinement on improving the motion of packs falling from the tote and travelling down the slide
   - avoid folding the isolated rig back into the core tote-to-bag harness until the entry-machine ownership boundary feels settled
   - once stable, decide whether to integrate the rig into the tote-to-bag harness as a reusable entry module rather than as ad hoc scene wiring
 
