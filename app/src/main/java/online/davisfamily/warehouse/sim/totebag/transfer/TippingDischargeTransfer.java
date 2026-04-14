@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.totebag.transfer;
 
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
+import online.davisfamily.threedee.matrices.Vec3;
 
 public class TippingDischargeTransfer {
     private final Pack pack;
@@ -8,6 +9,7 @@ public class TippingDischargeTransfer {
     private final float spinRateX;
     private final float spinRateY;
     private final float spinRateZ;
+    private Vec3 startWorldPosition;
     private double elapsedSeconds;
 
     public TippingDischargeTransfer(Pack pack, double durationSeconds) {
@@ -51,5 +53,13 @@ public class TippingDischargeTransfer {
 
     public float getSpinAngleZ() {
         return (float) (elapsedSeconds * spinRateZ);
+    }
+
+    public Vec3 getStartWorldPosition() {
+        return startWorldPosition;
+    }
+
+    public void setStartWorldPosition(Vec3 startWorldPosition) {
+        this.startWorldPosition = startWorldPosition;
     }
 }

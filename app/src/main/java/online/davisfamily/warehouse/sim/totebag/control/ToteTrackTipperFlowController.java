@@ -34,6 +34,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private final List<TippingDischargeTransfer> activeDischarges = new ArrayList<>();
     private final Queue<Pack> pendingSorterOutfeed = new ArrayDeque<>();
     private final List<Pack> completedOutputPacks = new ArrayList<>();
+    private float visualTipProgress;
     private boolean toteCaptured;
     private boolean toteReleased;
 
@@ -81,9 +82,10 @@ public class ToteTrackTipperFlowController implements SimulationController {
     @Override
     public void update(SimulationContext context, double dtSeconds) {
         captureToteIfReady();
-        syncToteVisualTilt();
         drainTippingMachine();
         updateActiveDischarges(dtSeconds);
+        updateVisualTipProgress(dtSeconds);
+        syncToteVisualTilt();
         drainSortingMachine();
         startPendingSorterOutfeed();
         updateSorterOutfeed(dtSeconds);
@@ -217,6 +219,29 @@ public class ToteTrackTipperFlowController implements SimulationController {
     }
 
     private float currentTipAngle() {
-        return tipperTippedAngleRadians * tippingMachine.getTipProgress();
+        return tipperTippedAngleRadians * visualTipProgress;
+    }
+
+    public float getVisualTipProgress() {
+        return visualTipProgress;
+    }
+
+    private void updateVisualTipProgress(double dtSeconds) {
+        if (!activeDischarges.isEmpty()) {
+            visualTipProgress = 1f;
+            return;
+        }
+        float target = tippingMachine.getTipProgress();
+        if (target >= visualTipProgress) {
+            visualTipProgress = target;
+            return;
+        }
+        double resetDurationSeconds = tippingMachine.getResetDurationSeconds();
+        if (resetDurationSeconds <= 0d) {
+            visualTipProgress = target;
+            return;
+        }
+        float maxStep = (float) (Math.max(0d, dtSeconds) / resetDurationSeconds);
+        visualTipProgress = Math.max(target, visualTipProgress - maxStep);
     }
 }

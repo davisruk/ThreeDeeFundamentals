@@ -22,10 +22,16 @@ public class Pack implements TrackableObject {
         CONSUMED
     }
 
+    public enum PackContainmentState {
+        IN_TOTE,
+        FREE
+    }
+
     private final String id;
     private final String correlationId;
     private final PackDimensions dimensions;
     private PackMotionState state = PackMotionState.STAGED;
+    private PackContainmentState containmentState = PackContainmentState.IN_TOTE;
     private RouteFollowerSnapshot lastSnapshot;
 
     public Pack(String id, String correlationId, PackDimensions dimensions) {
@@ -65,6 +71,17 @@ public class Pack implements TrackableObject {
             throw new IllegalArgumentException("state must not be null");
         }
         this.state = state;
+    }
+
+    public PackContainmentState getContainmentState() {
+        return containmentState;
+    }
+
+    public void setContainmentState(PackContainmentState containmentState) {
+        if (containmentState == null) {
+            throw new IllegalArgumentException("containmentState must not be null");
+        }
+        this.containmentState = containmentState;
     }
 
     @Override

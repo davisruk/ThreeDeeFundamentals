@@ -107,6 +107,10 @@ public class TippingMachine implements StatefulSimObject<TippingMachineState> {
         };
     }
 
+    public double getResetDurationSeconds() {
+        return resetDurationSeconds;
+    }
+
     private void updateEmitting(double dtSeconds) {
         if (activePlan == null) {
             state = TippingMachineState.RESETTING;
