@@ -202,9 +202,18 @@ public class ToteTrackTipperFlowController implements SimulationController {
         float angle = currentTipAngle();
         float halfDepth = 0.25f;
         float dy = -halfDepth * (float) Math.sin(angle);
-        float dz = halfDepth * ((float) Math.cos(angle) - 1f);
+        float lateralOffset = halfDepth * ((float) Math.cos(angle) - 1f);
+        var snapshot = tote.getLastSnapshot();
+        float dx = 0f;
+        float dz = lateralOffset;
+        if (snapshot != null) {
+            float forwardX = snapshot.forward().x;
+            float forwardZ = snapshot.forward().z;
+            dx = -forwardZ * lateralOffset;
+            dz = forwardX * lateralOffset;
+        }
         tote.setVisualTiltAngleZ(-angle);
-        tote.setVisualOffset(0f, dy, dz);
+        tote.setVisualOffset(dx, dy, dz);
     }
 
     private float currentTipAngle() {

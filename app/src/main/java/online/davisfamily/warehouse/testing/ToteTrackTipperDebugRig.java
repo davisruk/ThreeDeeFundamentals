@@ -44,6 +44,8 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfer;
 
 public class ToteTrackTipperDebugRig {
+    private static final Vec3 RIG_ORIGIN = new Vec3(0f, 0f, 0f);
+    private static final float RIG_YAW_RADIANS = 0f;
     private static final float TRACK_Z = 0f;
     private static final float TRACK_LENGTH = 6.0f;
     private static final float TIPPER_LENGTH = 1.25f;
@@ -71,6 +73,10 @@ public class ToteTrackTipperDebugRig {
     private final RenderableObject tipperSlideRenderable;
     private final RenderableObject sorterRenderable;
     private final RenderableObject sorterOutfeedRenderable;
+    private final Vec3 tipperAssemblyLocalOrigin;
+    private final Vec3 dischargeStartLocal;
+    private final Vec3 sorterIntakeLocal;
+    private final Vec3 sorterOutfeedBaseLocal;
     private final float sorterIntakeX;
     private final float sorterIntakeY;
     private final float sorterIntakeZ;
@@ -133,15 +139,19 @@ public class ToteTrackTipperDebugRig {
         );
 
         WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
+        Vec3 infeedStart = localToWorld(0f, 0f, TRACK_Z);
+        Vec3 infeedEnd = localToWorld(TIPPER_START_X, 0f, TRACK_Z);
+        Vec3 tipperEnd = localToWorld(TIPPER_START_X + TIPPER_LENGTH, 0f, TRACK_Z);
+        Vec3 exitEnd = localToWorld(TRACK_LENGTH, 0f, TRACK_Z);
         RouteSegment infeedSegment = builder.segment(
                 "tipper_infeed",
-                new LinearSegment3(new Vec3(0f, 0f, TRACK_Z), new Vec3(TIPPER_START_X, 0f, TRACK_Z), false));
+                new LinearSegment3(infeedStart, infeedEnd, false));
         RouteSegment tipperSegment = builder.segment(
                 "tipper_track",
-                new LinearSegment3(new Vec3(TIPPER_START_X, 0f, TRACK_Z), new Vec3(TIPPER_START_X + TIPPER_LENGTH, 0f, TRACK_Z), false));
+                new LinearSegment3(infeedEnd, tipperEnd, false));
         RouteSegment exitSegment = builder.segment(
                 "tipper_exit",
-                new LinearSegment3(new Vec3(TIPPER_START_X + TIPPER_LENGTH, 0f, TRACK_Z), new Vec3(TRACK_LENGTH, 0f, TRACK_Z), false));
+                new LinearSegment3(tipperEnd, exitEnd, false));
         builder.renderWith(infeedSegment, toteTrackSpec);
         builder.renderWith(exitSegment, toteTrackSpec);
         builder.connectLoop(infeedSegment, tipperSegment);
@@ -190,10 +200,16 @@ public class ToteTrackTipperDebugRig {
         tipperTrackRuntimeState = new ConveyorRuntimeState();
         tipperTrackRuntimeState.setRunning(true);
         float tipperTrackOverallWidth = tipperTrackSpec.getOverallWidth();
+        tipperAssemblyLocalOrigin = new Vec3(
+                TIPPER_STOP_DISTANCE,
+                0.02f,
+                TRACK_Z - (tipperTrackOverallWidth * 0.5f));
         tipperAssemblyRenderable = createAnchor("tipper_assembly");
-        tipperAssemblyRenderable.transformation.xTranslation = TIPPER_STOP_DISTANCE;
-        tipperAssemblyRenderable.transformation.yTranslation = 0.02f;
-        tipperAssemblyRenderable.transformation.zTranslation = TRACK_Z - (tipperTrackOverallWidth * 0.5f);
+        Vec3 tipperAssemblyWorld = localToWorld(tipperAssemblyLocalOrigin);
+        tipperAssemblyRenderable.transformation.xTranslation = tipperAssemblyWorld.x;
+        tipperAssemblyRenderable.transformation.yTranslation = tipperAssemblyWorld.y;
+        tipperAssemblyRenderable.transformation.zTranslation = tipperAssemblyWorld.z;
+        tipperAssemblyRenderable.transformation.angleY = RIG_YAW_RADIANS;
 
         tipperTrackRenderable = createLocalTipperTrack(tr, tipperTrackSpec, trackAppearance, tipperTrackRuntimeState);
         tipperTrackRenderable.transformation.zTranslation = tipperTrackOverallWidth * 0.5f;
@@ -211,14 +227,16 @@ public class ToteTrackTipperDebugRig {
         tipperAssemblyRenderable.addChild(tipperSlideRenderable);
 
         tippedAngleRadians = TIPPER_TIPPED_ANGLE_RADIANS;
-        Vec3 slideEndAtTip = rotatedWorldPoint(
-                tipperAssemblyRenderable.transformation.xTranslation,
-                tipperAssemblyRenderable.transformation.yTranslation,
-                tipperAssemblyRenderable.transformation.zTranslation,
+        dischargeStartLocal = new Vec3(
+                TIPPER_STOP_DISTANCE + 0.30f,
+                tipperAssemblyLocalOrigin.y + 0.36f,
+                -0.18f);
+        sorterIntakeLocal = tipperAssemblyPointToWorldLocal(
                 tipperSlideRenderable.transformation.xTranslation + (TIPPER_LENGTH * 0.5f),
                 tipperSlideRenderable.transformation.yTranslation,
                 tipperSlideRenderable.transformation.zTranslation - (0.42f * 0.5f),
                 tippedAngleRadians);
+        Vec3 slideEndAtTip = localToWorld(sorterIntakeLocal);
         sorterIntakeX = slideEndAtTip.x;
         sorterIntakeY = slideEndAtTip.y;
         sorterIntakeZ = slideEndAtTip.z;
@@ -229,9 +247,15 @@ public class ToteTrackTipperDebugRig {
                 0.28f,
                 0.82f,
                 0xFF5B6E7A);
-        sorterRenderable.transformation.xTranslation = sorterIntakeX + 0.22f;
-        sorterRenderable.transformation.yTranslation = sorterIntakeY - 0.24f;
-        sorterRenderable.transformation.zTranslation = sorterIntakeZ - 0.24f;
+        Vec3 sorterLocalOrigin = new Vec3(
+                sorterIntakeLocal.x + 0.22f,
+                sorterIntakeLocal.y - 0.24f,
+                sorterIntakeLocal.z - 0.24f);
+        Vec3 sorterWorldOrigin = localToWorld(sorterLocalOrigin);
+        sorterRenderable.transformation.xTranslation = sorterWorldOrigin.x;
+        sorterRenderable.transformation.yTranslation = sorterWorldOrigin.y;
+        sorterRenderable.transformation.zTranslation = sorterWorldOrigin.z;
+        sorterRenderable.transformation.angleY = RIG_YAW_RADIANS;
 
         sorterOutfeedRuntimeState = new ConveyorRuntimeState();
         sorterOutfeedRuntimeState.setRunning(true);
@@ -249,9 +273,15 @@ public class ToteTrackTipperDebugRig {
                         ConveyorVisualSpeed.fixed(0.85d)),
                 sorterOutfeedRuntimeState,
                 trackAppearance);
-        sorterOutfeedRenderable.transformation.xTranslation = sorterRenderable.transformation.xTranslation + 1.25f;
-        sorterOutfeedRenderable.transformation.yTranslation = sorterRenderable.transformation.yTranslation - 0.10f;
-        sorterOutfeedRenderable.transformation.zTranslation = OUTFEED_Z;
+        sorterOutfeedBaseLocal = new Vec3(
+                sorterLocalOrigin.x + 1.25f,
+                sorterLocalOrigin.y - 0.10f,
+                OUTFEED_Z);
+        Vec3 sorterOutfeedWorld = localToWorld(sorterOutfeedBaseLocal);
+        sorterOutfeedRenderable.transformation.xTranslation = sorterOutfeedWorld.x;
+        sorterOutfeedRenderable.transformation.yTranslation = sorterOutfeedWorld.y;
+        sorterOutfeedRenderable.transformation.zTranslation = sorterOutfeedWorld.z;
+        sorterOutfeedRenderable.transformation.angleY = RIG_YAW_RADIANS;
 
         objects.add(toteRenderable);
         objects.add(tipperAssemblyRenderable);
@@ -334,17 +364,13 @@ public class ToteTrackTipperDebugRig {
     }
 
     private void positionActiveDischarges() {
-        float startX = TIPPER_STOP_DISTANCE + 0.30f;
-        float startY = tipperAssemblyRenderable.transformation.yTranslation + 0.36f;
-        float startZ = -0.18f;
-        float endX = sorterIntakeX;
-        float endY = sorterIntakeY + 0.03f;
-        float endZ = sorterIntakeZ;
+        Vec3 start = localToWorld(dischargeStartLocal);
+        Vec3 end = localToWorld(sorterIntakeLocal.x, sorterIntakeLocal.y + 0.03f, sorterIntakeLocal.z);
         for (TippingDischargeTransfer transfer : flowController.getActiveDischarges()) {
             double progress = transfer.getProgress();
-            float x = (float) (startX + ((endX - startX) * progress));
-            float y = (float) (startY + ((endY - startY) * progress) + (Math.sin(progress * Math.PI) * 0.10f));
-            float z = (float) (startZ + ((endZ - startZ) * progress));
+            float x = (float) (start.x + ((end.x - start.x) * progress));
+            float y = (float) (start.y + ((end.y - start.y) * progress) + (Math.sin(progress * Math.PI) * 0.10f));
+            float z = (float) (start.z + ((end.z - start.z) * progress));
             RenderableObject renderable = packRenderablesById.get(transfer.getPack().getId());
             if (renderable == null) {
                 continue;
@@ -365,10 +391,14 @@ public class ToteTrackTipperDebugRig {
             if (renderable == null) {
                 continue;
             }
-            renderable.transformation.xTranslation = sorterIntakeX - (index * 0.12f);
-            renderable.transformation.yTranslation = sorterIntakeY - 0.04f;
-            renderable.transformation.zTranslation = sorterIntakeZ + 0.04f;
-            renderable.transformation.angleY = (float) (Math.PI / 2.0);
+            Vec3 queueWorld = localToWorld(
+                    sorterIntakeLocal.x - (index * 0.12f),
+                    sorterIntakeLocal.y - 0.04f,
+                    sorterIntakeLocal.z + 0.04f);
+            renderable.transformation.xTranslation = queueWorld.x;
+            renderable.transformation.yTranslation = queueWorld.y;
+            renderable.transformation.zTranslation = queueWorld.z;
+            renderable.transformation.angleY = RIG_YAW_RADIANS + (float) (Math.PI / 2.0);
             index++;
         }
     }
@@ -379,14 +409,18 @@ public class ToteTrackTipperDebugRig {
             if (renderable == null) {
                 continue;
             }
-            renderable.transformation.xTranslation = (sorterRenderable.transformation.xTranslation + 0.38f) + entry.frontDistance()
-                    - (entry.pack().getDimensions().length() * 0.5f);
-            renderable.transformation.yTranslation = sorterOutfeedRenderable.transformation.yTranslation
-                    + SORTER_OUTFEED_TOP_Y_OFFSET
-                    + (entry.pack().getDimensions().height() * 0.5f)
-                    + 0.002f;
-            renderable.transformation.zTranslation = OUTFEED_Z;
-            renderable.transformation.angleY = 0f;
+            Vec3 outfeedWorld = localToWorld(
+                    sorterOutfeedBaseLocal.x + 0.38f + entry.frontDistance()
+                            - (entry.pack().getDimensions().length() * 0.5f),
+                    sorterOutfeedBaseLocal.y
+                            + SORTER_OUTFEED_TOP_Y_OFFSET
+                            + (entry.pack().getDimensions().height() * 0.5f)
+                            + 0.002f,
+                    sorterOutfeedBaseLocal.z);
+            renderable.transformation.xTranslation = outfeedWorld.x;
+            renderable.transformation.yTranslation = outfeedWorld.y;
+            renderable.transformation.zTranslation = outfeedWorld.z;
+            renderable.transformation.angleY = RIG_YAW_RADIANS;
         }
     }
 
@@ -478,18 +512,27 @@ public class ToteTrackTipperDebugRig {
                 false);
     }
 
-    private Vec3 rotatedWorldPoint(
-            float rootX,
-            float rootY,
-            float rootZ,
+    private Vec3 localToWorld(float localX, float localY, float localZ) {
+        return localToWorld(new Vec3(localX, localY, localZ));
+    }
+
+    private Vec3 localToWorld(Vec3 localPoint) {
+        Vec3 rotated = Vec3.rotateY(localPoint, RIG_YAW_RADIANS);
+        rotated.mutableAdd(RIG_ORIGIN);
+        return rotated;
+    }
+
+    private Vec3 tipperAssemblyPointToWorldLocal(
             float localX,
             float localY,
             float localZ,
             float angleX) {
-        return new Vec3(
-                rootX + localX,
-                rootY + rotatedY(localY, localZ, angleX),
-                rootZ + rotatedZ(localY, localZ, angleX));
+        Vec3 rotated = new Vec3(
+                localX,
+                rotatedY(localY, localZ, angleX),
+                rotatedZ(localY, localZ, angleX));
+        rotated.mutableAdd(tipperAssemblyLocalOrigin);
+        return rotated;
     }
 
     private float rotatedY(float localY, float localZ, float angleX) {
