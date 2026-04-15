@@ -37,6 +37,7 @@ import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
+import online.davisfamily.warehouse.sim.totebag.layout.ContainedPackLayout;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachineState;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
@@ -65,6 +66,9 @@ public class ToteTrackTipperDebugRig {
     private static final float SLIDE_LENGTH = 1.20f;
     private static final float SLIDE_THICKNESS = 0.03f;
     private static final float SORTER_INTAKE_CLEARANCE = 0.08f;
+    private static final float CONTAINED_PACK_GAP_X = 0.012f;
+    private static final float CONTAINED_PACK_GAP_Z = 0.012f;
+    private static final float CONTAINED_PACK_GAP_Y = 0.010f;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -99,6 +103,7 @@ public class ToteTrackTipperDebugRig {
     private final float toteInteriorHalfWidth;
     private final float toteInteriorHalfDepth;
     private final float toteInteriorFloorLocalY;
+    private final Map<String, Vec3> containedPackLayoutById;
     private final Map<String, PackPlan> packPlansById = new LinkedHashMap<>();
     private final Map<String, RenderableObject> packRenderablesById = new LinkedHashMap<>();
 
@@ -199,6 +204,14 @@ public class ToteTrackTipperDebugRig {
         for (PackPlan plan : toteLoadPlan.getPackPlans()) {
             packPlansById.put(plan.packId(), plan);
         }
+        containedPackLayoutById = new ContainedPackLayout(
+                toteGeometry.getInnerBottomWidth(),
+                toteGeometry.getInnerBottomDepth(),
+                toteInteriorFloorLocalY,
+                CONTAINED_PACK_GAP_X,
+                CONTAINED_PACK_GAP_Z,
+                CONTAINED_PACK_GAP_Y)
+                        .layoutPackPlans(toteLoadPlan.getPackPlans());
         tippingMachine = new TippingMachine("tipper", 0.45d, 0.18d, 0.35d);
         sortingMachine = new SortingMachine("sorter", 0.22d);
         sorterOutfeedConveyor = new PdcConveyor(
@@ -420,7 +433,6 @@ public class ToteTrackTipperDebugRig {
     }
 
     private void positionRemainingPacksInTote(Set<String> placedPackIds) {
-        float angle = currentTipAngle();
         for (PackPlan plan : toteLoadPlan.getPackPlans()) {
             if (isObserved(plan.packId())) {
                 continue;
@@ -430,9 +442,10 @@ public class ToteTrackTipperDebugRig {
                 continue;
             }
             ensureAttachedToTote(renderable);
-            float localX = dischargeStartXFor(plan.packId());
-            float localZ = dischargeStartZFor(plan.packId());
-            Vec3 local = packInsideToteLocal(localX, localZ, plan.dimensions().height() * 0.5f, angle);
+            Vec3 local = containedPackLocalFor(plan.packId());
+            if (local == null) {
+                continue;
+            }
             renderable.transformation.xTranslation = local.x;
             renderable.transformation.yTranslation = local.y;
             renderable.transformation.zTranslation = local.z;
@@ -680,11 +693,7 @@ public class ToteTrackTipperDebugRig {
         Vec3 startPoint = startWorld != null
                 ? Vec3.copy(startWorld)
                 : addClearance(
-                        packInsideToteLocal(
-                                dischargeStartXFor(pack.getId()),
-                                dischargeStartZFor(pack.getId()),
-                                pack.getDimensions().height() * 0.5f,
-                                angle),
+                        containedPackLocalFor(pack.getId()),
                         0.008f);
         Vec3[] path = new Vec3[] {
                 startPoint,
@@ -696,18 +705,6 @@ public class ToteTrackTipperDebugRig {
                 addClearance(sorterIntakeLocal, clearance)
         };
         return samplePolyline(path, (float) progress);
-    }
-
-    private float dischargeStartXFor(String packId) {
-        int hash = Math.abs(packId.hashCode());
-        float t = (hash & 0xFF) / 255f;
-        return Vec3.lerp(-toteInteriorHalfWidth * 0.55f, toteInteriorHalfWidth * 0.55f, t);
-    }
-
-    private float dischargeStartZFor(String packId) {
-        int hash = Math.abs(packId.hashCode() >>> 8);
-        float t = (hash & 0xFF) / 255f;
-        return Vec3.lerp(toteInteriorHalfDepth * 0.18f, toteInteriorHalfDepth * 0.48f, t);
     }
 
     private Vec3 addClearance(Vec3 localPoint, float clearance) {
@@ -760,11 +757,8 @@ public class ToteTrackTipperDebugRig {
         return tippedAngleRadians * tippingMachine.getTipProgress();
     }
 
-    private Vec3 packInsideToteLocal(float localX, float localZ, float halfHeight, float angleX) {
-        return new Vec3(
-                localX,
-                toteInteriorFloorLocalY + halfHeight,
-                localZ);
+    private Vec3 containedPackLocalFor(String packId) {
+        return containedPackLayoutById.get(packId);
     }
 
     private void ensureAttachedToTote(RenderableObject renderable) {

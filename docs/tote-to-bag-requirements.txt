@@ -363,6 +363,32 @@ Current recommended next step for the isolated tipper slice
   - avoid folding the isolated rig back into the core tote-to-bag harness until the entry-machine ownership boundary feels settled
   - once stable, decide whether to integrate the rig into the tote-to-bag harness as a reusable entry module rather than as ad hoc scene wiring
 
+Follow-on slice: tote, bag, and pack rendering policy
+The rendering relationship between totes, bags, and packs should now be treated as an explicit follow-on requirement rather than as an incidental harness detail.
+
+Tote-contained pack rendering
+- packs inside a tote should remain individually renderable because the tote interior is visible in the tipper slice
+- contained-pack visuals should use a simple deterministic tote-local layout rather than overlapping in the same space
+- the first implementation should use tote inner dimensions plus pack outer dimensions to place packs in evenly spaced rows across the tote floor
+- once the current floor layer is full, additional packs should start a new layer above it
+- all contained packs may initially share the same yaw/orientation; no physics, collision solving, slope solving, or contact-angle modelling is required
+- this layout requirement is visual-placement logic only and should not be treated as a general rigid-body capability
+
+Free pack rendering
+- once a pack leaves tote containment and becomes visible in discharge or conveyor-local transport, it should continue to render as its own top-level renderable object
+- current runtime attach/detach behaviour between container-local rendering and top-level scene rendering is an acceptable direction for this subsystem
+
+Bag-contained pack rendering
+- once packs are inside a bag, the bag interior is not expected to be rendered
+- bagged packs should remain part of the simulation/domain model so bag contents, counts, and downstream logic stay correct
+- however, bagged packs do not need to remain individually visible renderables
+- it is acceptable for bagged packs to be removed from active rendering or otherwise excluded from the render pipeline while still remaining in simulation state
+
+Rendering policy summary
+- tote containment: packs are visible and laid out in tote-local space
+- transfer/conveyor motion: packs are visible as free top-level renderables
+- bag containment: packs remain simulation-owned but are not expected to remain individually visible
+
 Branching strategy
 This work is expected to span multiple sessions and should not be forced into a single long-running unstructured branch.
 
