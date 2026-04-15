@@ -257,6 +257,28 @@
 
 ## Latest Session Update
 
+- Tote-to-bag isolated tipper proving work has advanced further on `feature/tote-track-tipper-rig`.
+- `TestScene` is currently switched back to the isolated tipper rig rather than the parallel-track scene.
+- The isolated tipper rig now includes a reusable contained-pack tote layout helper:
+  - `ContainedPackLayout` lives under `warehouse.sim.totebag.layout`
+  - tote-contained packs now use deterministic tote-local layered placement rather than hash-scattered overlap
+- The isolated sorter/outfeed visual proof has been materially refined:
+  - the sorter now reads as a bridge-like machine over a straight conveyor rather than as a single block
+  - the hopper is hollow/open rather than solid
+  - the conveyor is now anchored under the sorter from a named sorter-local anchor point rather than from hand-tuned rotated offsets
+  - sorter queue visuals now read as a vertical drop path above the conveyor entry
+  - packs are now inserted onto the sorter outfeed conveyor near the under-hopper point rather than at the conveyor start
+  - sorter outfeed conveyor speed and visual speed are now intentionally kept aligned in the rig
+- Several small commits now capture the current isolated tipper progression:
+  - `e53bf5e` Add reusable tote pack layout helper
+  - `944e94f` Refine tipper rig sorter visuals
+  - `ead4a2c` Refine sorter outfeed bridge and handoff
+  - `22cff62` Refine sorter through-flow visuals
+- An architectural direction was clarified for later integration:
+  - the tipper should follow the same general integration conventions as mounted transfer machines
+  - however, it should not be forced into transfer-zone-specific semantics when its responsibilities differ
+  - the preferred direction is a broader route-mounted-machine convention, with current transfer machines as one family and the tipper as another
+  - the tote/route side should be treated as the primary integration boundary to stabilise first, because the tipper is conceptually a specialised track section that captures/holds/releases a tote before handing packs into conveyor-local transport
 - `RouteSegment` has been cleaned back to generic routing concerns only.
 - Warehouse-specific per-segment data now lives in `WarehouseSegmentMetadata`.
 - Builder ownership has been split:
@@ -341,6 +363,12 @@
 - Session focus:
   - read `docs/tote-to-bag-requirements.txt` before starting tote-to-bag work so the current agreed direction, completed phases, and next slice are understood from the document rather than inferred from stale context
   - do not make code or document changes unless the user explicitly directs that work in the current session
+- For tote-to-bag integration planning:
+  - keep the current isolated tipper rig treated as a proved but still separate route-mounted-machine proving harness
+  - use the transfer-machine pattern as the consistency reference point
+  - compare the current transfer-machine shape with the proposed tipper shape before extracting shared abstractions
+  - stabilise the upstream tote/route side before folding the tipper into the wider tote-to-bag module
+  - the next architectural extraction should likely start with spec/layout and route-mounted-machine installation conventions, not with sorter cosmetics
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
 - Treat the straight conveyor assembly as the canonical direction for conveyor visuals.
   - Reuse the single straight conveyor assembly model for transfer-focused machines and fixed conveyor-backed runs.

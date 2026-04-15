@@ -363,6 +363,55 @@ Current recommended next step for the isolated tipper slice
   - avoid folding the isolated rig back into the core tote-to-bag harness until the entry-machine ownership boundary feels settled
   - once stable, decide whether to integrate the rig into the tote-to-bag harness as a reusable entry module rather than as ad hoc scene wiring
 
+Route-mounted machine alignment note
+The current isolated tipper work has now clarified an architectural point that should guide later integration work:
+- the tipper should follow the same general integration conventions as mounted transfer machines
+- however, it should not be forced into transfer-zone-specific semantics when its responsibilities differ materially
+
+Shared convention with transfer machines
+The tipper should align with transfer machines in these ways:
+- machine placement should be spec/layout-driven rather than ad hoc scene wiring
+- the machine should be mounted against route/track infrastructure rather than treated as a free-floating scene object
+- the machine should be assembled as a package of runtime/controller pieces plus renderable assembly
+- the tote interaction boundary should be explicit and machine-owned rather than hidden inside harness-only checks
+- scene-level wiring should install/register the machine rather than constructing all internals inline
+
+Why the tipper is not identical to a transfer machine
+The tipper differs from the current steering/transfer devices in three important ways:
+- it behaves more like a specialised track section that the tote rides onto and from, not only a side-mounted branch mechanism
+- it captures, holds, visually tilts, and later releases a tote, which is a stronger interaction with route-follow movement than current transfer readiness/branching logic
+- it is the explicit boundary where tote route transport transitions into pack conveyor-local transport
+
+Agreed direction
+The preferred direction is therefore:
+- define and follow a broader route-mounted machine convention
+- treat current transfer machines as one route-mounted-machine family
+- treat the tipper as another route-mounted-machine family
+- keep shared conventions aligned even where concrete topology/runtime objects differ
+
+What should be shared
+The following should stay aligned between transfer machines and the eventual reusable tipper module:
+- spec-driven placement
+- machine assembly/builder shape
+- controller/runtime/renderable split
+- route-scene installation/registration conventions
+- explicit tote/machine interaction boundary
+- attachment-anchor exposure for downstream equipment
+
+What may remain different
+The following do not need to be forced into a single identical abstraction immediately:
+- transfer-zone topology objects
+- trigger/readiness semantics
+- mechanism interfaces
+- the exact runtime state machine for tote interaction
+
+Recommended integration sequence
+The current recommendation is:
+- stabilise the upstream tote/route side first
+- treat the tipper as the canonical specialised route-mounted machine section
+- only then fold the proved sorter/outfeed pieces back toward the wider tote-to-bag module
+- decide later whether the common route-mounted-machine convention should become an explicit shared code abstraction or remain a disciplined convention plus package structure
+
 Follow-on slice: tote, bag, and pack rendering policy
 The rendering relationship between totes, bags, and packs should now be treated as an explicit follow-on requirement rather than as an incidental harness detail.
 
