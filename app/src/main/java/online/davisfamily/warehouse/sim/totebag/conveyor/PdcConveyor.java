@@ -61,6 +61,15 @@ public class PdcConveyor {
         pack.setState(Pack.PackMotionState.MOVING);
     }
 
+    public boolean canAcceptIncomingPackAtFrontDistance(Pack pack, float frontDistance) {
+        return lane.canAcceptAtFrontDistance(pack, frontDistance);
+    }
+
+    public void acceptIncomingPackAtFrontDistance(Pack pack, float frontDistance) {
+        lane.acceptAtFrontDistance(pack, frontDistance);
+        pack.setState(Pack.PackMotionState.MOVING);
+    }
+
     public Optional<Float> divertPack(Pack pack) {
         Optional<Float> frontDistance = lane.getFrontDistanceFor(pack);
         if (frontDistance.isEmpty()) {
