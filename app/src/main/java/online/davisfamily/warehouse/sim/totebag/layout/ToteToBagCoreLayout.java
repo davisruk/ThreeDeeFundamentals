@@ -69,6 +69,7 @@ public class ToteToBagCoreLayout {
 
     public ToteToBagAttachmentPose resolveAttachmentPose(MachineAttachmentSpec spec) {
         ToteToBagAttachmentPose anchor = switch (spec.attachmentPoint()) {
+            case UPSTREAM_MODULE_ROOT -> new ToteToBagAttachmentPose(pdcStartX(), 0f, this.spec.pdcZ(), 0f);
             case PDC_INFEED -> new ToteToBagAttachmentPose(pdcStartX(), this.spec.conveyorY(), this.spec.pdcZ(), 0f);
             case PDC_OUTFEED -> new ToteToBagAttachmentPose(pdcEndX(), this.spec.conveyorY(), this.spec.pdcZ(), 0f);
             case PDC_CENTER -> new ToteToBagAttachmentPose(this.spec.pdcCenterX(), this.spec.conveyorY(), this.spec.pdcZ(), 0f);

@@ -312,17 +312,42 @@ The current tote-to-bag implementation should be treated as a proved thin slice 
 - the isolated tipper rig has materially improved confidence in the intended boundary between tote-route machine interaction and conveyor-local pack transport
 - the isolated tipper rig should still be treated as an intermediate proving harness rather than as the final tote-to-bag entry arrangement
 
+Latest integration update
+- the isolated tipper rig has now been extracted into a reusable mounted entry module:
+  - `TipperEntryModule` now owns the upstream tote-route, tipper, sorter, sorter-outfeed, and their current visual-sync behaviour
+  - `TipperEntryModuleBuilder` now provides the assembly/install entry point
+  - `TipperEntryLayoutSpec` now carries the mounted entry module root pose
+- `ToteTrackTipperDebugRig` is now only a thin wrapper around that reusable module
+- `ToteToBagDebugRig` now mounts the real tipper-entry module against the tote-to-bag core instead of using placeholder tipper/sorter boxes
+- the tote-to-bag core layout/attachment model now includes an explicit upstream module attachment point
+- sorter-outfeed now hands packs into the tote-to-bag `PdcConveyor` through a small sink boundary rather than through harness-local fake placement
+- the active scene is now back on the integrated tote-to-bag harness
+
+Latest rendering / alignment fixes
+- a discharge-path integration bug was fixed:
+  the tipper discharge path now consistently converts local tipper anchors into world space before constructing the discharge polyline
+- a route-track rendering bug was fixed in `RenderableTrackFactory`:
+  route-backed conveyor end rollers now include the sampled route point `y`
+- a deeper route-track rendering bug was fixed in `TrackBuilder`:
+  route-backed deck meshes, guide meshes, and roller transforms now all include the sampled route point `y`
+- those route-track fixes were checked against both the oval and parallel route scenes before being left in place
+- current tote-to-bag seam alignment is now materially good enough for the thin slice:
+  x/z alignment between sorter-outfeed and PDC is mount-offset driven
+  y alignment now depends on the route-backed tipper-side tracks and straight conveyor assemblies sharing the same effective mounted world height
+
 What remains
 
 Subsystem integration
-- decide how the tote-to-bag subsystem should live in the broader warehouse scene setup now that the core cell has a builder and attachment anchors
-- decide whether the tote-to-bag flow should become a dedicated example scene, a reusable warehouse module, or a subsection embedded in a larger layout
+- the first real integration slice is now in place:
+  the mounted tipper entry is in the tote-to-bag harness and should be treated as the current canonical upstream-module direction
+- the next integration work is now more about cleanup and API shape than about proving the boundary exists
+- decide how the tote-to-bag subsystem should live in the broader warehouse scene setup now that the core cell has a builder, attachment anchors, and a mounted upstream module
 - extend the current assembly approach from debug-rig consumption toward a cleaner scene-level integration API
 - propagate inspection support to any additional runtime objects introduced as that integration is refined
 
 Peripheral attachment refinement
 - keep the PDC/PRL/PCR transport cell as the stable core geometry
-- continue treating tipper, sorter, bagger, and future upstream/downstream interfaces as peripherals attached to the core by explicit attachment points
+- continue treating tipper-entry, bagger, and future upstream/downstream interfaces as peripherals attached to the core by explicit attachment points
 - refine attachment options as needed for orientation, anchor reference, and offset policy without collapsing those concerns back into the core layout
 
 Transfer and motion refinement
@@ -340,28 +365,30 @@ Machine fidelity
 - machine internals should continue to be timed/stateful abstractions rather than physics simulations
 
 Remaining work for the isolated tote-track tipper slice
-- decide whether tote capture/startup should stay controller-distance-based for now or be moved to a tipper-zone/sensor-style boundary before wider reuse
-- shorten the chute now that the wider mouth and tapered guide shape are in place
-- align the sorter body and intake more tightly under the chute exit
-- add a clearer visible sorter entry point and sorter exit point so the handoff geometry reads explicitly rather than as a general machine block
-- only then continue refining discharge and sorter-outfeed motion against that corrected chute/sorter geometry
-- add any missing inspection/debug output specific to the tipper rig if machine-state debugging becomes awkward
-- keep the rig isolated until the tote stop/tip/discharge/sorter handoff feels stable enough to merge back into a broader tote-to-bag scene
+- this is no longer the primary direction for the next slice because the module is now mounted in the tote-to-bag harness
+- the isolated wrapper may still be kept as a focused proving harness, but it should now follow the reusable `TipperEntryModule` rather than diverge from it
+- any future upstream motion/placement refinements should usually land in the reusable module first, and only secondarily be checked via the thin wrapper rig
 
 Current recommended next step
-- continue from the proved harness toward actual subsystem integration by pushing the new core builder/attachment boundary further into scene-level usage:
-  - treat the PDC/PRL/PCR transport cell as the canonical tote-to-bag core
-  - keep peripheral machine placement attachment-driven rather than hard-coded into the core layout
-  - refine the subsystem integration API so a scene can mount the tote-to-bag module programmatically with less harness-specific wiring
+- continue from the now-integrated harness toward cleanup of the new mounting boundary:
+  - keep the PDC/PRL/PCR transport cell as the canonical tote-to-bag core
+  - keep the mounted tipper entry as the canonical upstream module direction
+  - replace the remaining harness-local mount magic numbers with named layout values/spec fields
   - keep machine cosmetics secondary until the subsystem integration boundary and attachment model feel stable
 
-Current recommended next step for the isolated tipper slice
-- keep the isolated rig separate a little longer and finish any last local motion/placement refinements there first:
-  - treat the route-mounted tipper as the canonical entry-machine direction for tote arrival
-  - keep tote capture on the tote/route side and pack discharge/sorter flow on the tote-to-bag side
-  - focus the next local refinement on shortening the chute, aligning the sorter under it, and making the sorter entry/exit points visibly explicit
-  - avoid folding the isolated rig back into the core tote-to-bag harness until the entry-machine ownership boundary feels settled
-  - once stable, decide whether to integrate the rig into the tote-to-bag harness as a reusable entry module rather than as ad hoc scene wiring
+Current recommended cleanup slices
+- cleanup slice 1: replace the remaining mount magic numbers
+  - move the tuned upstream module offsets in `ToteToBagDebugRig` into named layout values/spec entries
+  - avoid leaving critical visual alignment dependent on unexplained numeric literals in the harness
+- cleanup slice 2: split `TipperEntryModule`
+  - keep the current module boundary
+  - separate assembly/building from visual-sync/helper geometry/path math so the class is easier to reason about and safer to extend
+- cleanup slice 3: clean up active scene selection
+  - stop relying on comment/uncomment switching in `TestScene`
+  - make the active example/harness selection explicit
+- cleanup slice 4: consider a named sorter-outfeed to PDC handoff type
+  - the current sink hook is acceptable for the thin slice
+  - only introduce a richer boundary type if a second mounted module or second similar handoff appears
 
 Route-mounted machine alignment note
 The current isolated tipper work has now clarified an architectural point that should guide later integration work:
@@ -408,8 +435,8 @@ The following do not need to be forced into a single identical abstraction immed
 Recommended integration sequence
 The current recommendation is:
 - stabilise the upstream tote/route side first
-- treat the tipper as the canonical specialised route-mounted machine section
-- only then fold the proved sorter/outfeed pieces back toward the wider tote-to-bag module
+- treat the tipper-entry module as the current canonical specialised route-mounted machine section
+- this folding-back step has now happened in the tote-to-bag harness for the current thin slice
 - decide later whether the common route-mounted-machine convention should become an explicit shared code abstraction or remain a disciplined convention plus package structure
 
 Follow-on slice: tote, bag, and pack rendering policy
@@ -549,17 +576,17 @@ Phase G: transfer-device and controller fidelity
 - status: completed
 
 Phase H: subsystem integration and later machine fidelity
-- decide how tote-to-bag should live in the wider warehouse scene structure
-- continue turning the current core builder and attachment model into a cleaner scene-level integration path
+- integrate the mounted tipper-entry module into the tote-to-bag harness
+- turn the current core builder and attachment model into a cleaner scene-level integration path
 - improve machine visuals only after transport ownership and controller boundaries are stable
 - propagate inspection support to any newly introduced runtime objects
-- status: pending
+- status: in progress
 
 Phase I: isolated tote-track tipper proving slice
 - add a dedicated isolated rig for the tote-mounted tipper and sorter entry side
 - model the tipper as a rotating track section rather than only as a block machine
 - prove tote stop/capture, timed tipping, non-physics pack discharge, sorter metering, and short outfeed flow without requiring full warehouse integration
 - keep tote visual tilt simple and synchronised rather than introducing renderable attachment/detachment
-- status: completed as an isolated proving harness, not yet integrated into the wider tote-to-bag module
+- status: completed and now extracted into the reusable mounted `TipperEntryModule`; the thin wrapper harness may remain as a focused proving scene but is no longer the primary integration direction
 
 

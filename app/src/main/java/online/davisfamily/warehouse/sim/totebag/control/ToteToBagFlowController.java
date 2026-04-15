@@ -45,6 +45,34 @@ public class ToteToBagFlowController implements SimulationController {
 
     public ToteToBagFlowController(
             ToteLoadPlan toteLoadPlan,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            BaggingMachine baggingMachine,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
+            PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+        this(
+                toteLoadPlan,
+                null,
+                null,
+                pdcConveyor,
+                pcrConveyor,
+                baggingMachine,
+                assignmentPlanner,
+                prlConveyors,
+                pdcDiversionDevices,
+                pdcTransferDurationProvider,
+                pdcDiversionDistanceProvider,
+                prlToPcrTransferDurationProvider,
+                prlToPcrEntryDistanceProvider);
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
             PdcConveyor pdcConveyor,
@@ -137,8 +165,6 @@ public class ToteToBagFlowController implements SimulationController {
             PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
             PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
         if (toteLoadPlan == null
-                || tippingMachine == null
-                || sortingMachine == null
                 || pdcConveyor == null
                 || pcrConveyor == null
                 || baggingMachine == null
@@ -152,6 +178,9 @@ public class ToteToBagFlowController implements SimulationController {
                 || prlToPcrTransferDurationProvider == null
                 || prlToPcrEntryDistanceProvider == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null or empty");
+        }
+        if ((tippingMachine == null) != (sortingMachine == null)) {
+            throw new IllegalArgumentException("tippingMachine and sortingMachine must either both be present or both be absent");
         }
         this.toteLoadPlan = toteLoadPlan;
         this.tippingMachine = tippingMachine;
@@ -233,6 +262,9 @@ public class ToteToBagFlowController implements SimulationController {
     }
 
     private void loadToteIfNeeded() {
+        if (tippingMachine == null) {
+            return;
+        }
         if (!toteLoaded && tippingMachine.isIdle()) {
             tippingMachine.loadTote(toteLoadPlan);
             toteLoaded = true;
@@ -240,6 +272,9 @@ public class ToteToBagFlowController implements SimulationController {
     }
 
     private void drainTippingMachine() {
+        if (tippingMachine == null || sortingMachine == null) {
+            return;
+        }
         while (tippingMachine.hasEmittedPack()) {
             Pack pack = tippingMachine.pollEmittedPack();
             observedPacksById.put(pack.getId(), pack);
@@ -248,6 +283,9 @@ public class ToteToBagFlowController implements SimulationController {
     }
 
     private void drainSortingMachine() {
+        if (sortingMachine == null) {
+            return;
+        }
         while (sortingMachine.hasReleasedPack()) {
             Pack pack = sortingMachine.pollReleasedPack();
             pdcConveyor.acceptIncomingPack(pack);
@@ -261,6 +299,7 @@ public class ToteToBagFlowController implements SimulationController {
     private void requestPdcDiversions() {
         for (LinearLaneEntrySnapshot entry : pdcConveyor.getLaneEntries()) {
             Pack pack = entry.pack();
+            observedPacksById.putIfAbsent(pack.getId(), pack);
             PrlConveyor prl = findPrlForCorrelation(pack.getCorrelationId())
                     .orElseThrow(() -> new IllegalStateException("No PRL assignment for correlation " + pack.getCorrelationId()));
             float diversionFrontDistance = pdcDiversionDistanceProvider.frontDistanceFor(prl.getId(), pack);

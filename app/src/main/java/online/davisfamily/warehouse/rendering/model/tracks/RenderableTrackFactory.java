@@ -220,14 +220,15 @@ public final class RenderableTrackFactory {
         float yaw = Vec3.yawFromDirection(
                 routeSegment.getGeometry().sampleOrientationDirectionByDistance(distanceAlongSegment))
                 + (float) (Math.PI / 2.0);
-        float rollerY = spec.deckTopY - spec.conveyorReturnDepth + ConveyorMeshFactory.getWrapRadius(spec);
+        Vec3 samplePoint = routeSegment.getGeometry().sampleByDistance(distanceAlongSegment);
+        float rollerY = samplePoint.y + spec.deckTopY - spec.conveyorReturnDepth + ConveyorMeshFactory.getWrapRadius(spec);
         ObjectTransformation transform = new ObjectTransformation(
                 0f,
                 yaw,
                 0f,
-                routeSegment.getGeometry().sampleByDistance(distanceAlongSegment).x,
+                samplePoint.x,
                 rollerY,
-                routeSegment.getGeometry().sampleByDistance(distanceAlongSegment).z,
+                samplePoint.z,
                 new Mat4());
         Behaviour spin = new SpinBehaviour(0f, 0f, 3f);
         return RenderableObject.createWithBehaviours(id, tr, rollerMesh, transform, colour, false, spin);

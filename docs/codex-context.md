@@ -3,7 +3,7 @@
 ## System Overview
 
 - Plain Java simulation and software-rendered 3D engine built as a Gradle project.
-- The current runnable example is back to the oval warehouse route setup so reusable conveyor visuals can be assessed in route/transfer context.
+- The current runnable example is back on the tote-to-bag debug harness after the upstream tipper-entry module was integrated into that harness.
 - The codebase mixes a generic engine layer (`threedee`) with a warehouse-specific example layer (`warehouse`).
 - Main concepts visible in code:
   - route-based movement over connected path segments
@@ -257,6 +257,30 @@
 
 ## Latest Session Update
 
+- The previously isolated tote-track tipper rig has now been extracted into a reusable mounted entry module:
+  - `TipperEntryModule` now lives under `warehouse.sim.totebag.assembly`
+  - `TipperEntryModuleBuilder` provides the assembly/install entry point
+  - `TipperEntryLayoutSpec` now captures the mounted entry module root pose
+- The old `ToteTrackTipperDebugRig` is now only a thin wrapper around that reusable entry module rather than owning all construction itself.
+- `ToteToBagDebugRig` now mounts the reusable tipper-entry module against the tote-to-bag core through an explicit upstream module attachment point.
+- `ToteToBagAttachmentPoint` now includes `UPSTREAM_MODULE_ROOT`.
+- `ToteToBagFlowController` can now be used in a mode where upstream tipper/sorter ownership is external and packs simply arrive onto the PDC.
+- `ToteTrackTipperFlowController` now supports an optional downstream `PackSink` so sorter-outfeed packs can be handed into the tote-to-bag PDC without collapsing controller ownership.
+- The active `TestScene` is now back on the tote-to-bag debug harness after the integration and alignment fixes.
+- Two route-track rendering bugs were fixed while integrating the mounted tipper module:
+  - `RenderableTrackFactory.createConveyorEndRoller(...)` now includes the sampled route point `y` when placing route-backed conveyor end rollers
+  - `TrackBuilder` now includes sampled route point `y` when building route-backed deck meshes, guide meshes, and roller transforms
+- Those two fixes were validated against both the oval and parallel route scenes before leaving them in place.
+- The integrated tipper-entry module discharge path now correctly converts local tipper anchors into world space before constructing the discharge polyline, fixing the earlier “flying packs to a stray point” behaviour seen after initial integration.
+- The integrated tote-to-bag seam is now visually aligned closely enough for the current thin slice:
+  - sorter-outfeed to PDC x/z alignment is attachment-driven
+  - y alignment now depends on the mounted tipper-side world height being respected consistently by both route-backed tracks and straight conveyor assemblies
+- Remaining cleanup items identified from this session:
+  - `TestScene` still acts as a manual scene switchboard and should eventually move to a cleaner explicit scene-selection approach
+  - the upstream module mount in `ToteToBagDebugRig` still uses tuned numeric offsets and should eventually become named layout values
+  - `TipperEntryModule` is still large and still mixes assembly, visual sync, and layout/math helpers
+  - the sorter-outfeed to PDC handoff is now correct but still represented as an implicit sink hook rather than a named handoff type
+
 - Tote-to-bag isolated tipper proving work has advanced further on `feature/tote-track-tipper-rig`.
 - `TestScene` is currently switched back to the isolated tipper rig rather than the parallel-track scene.
 - The isolated tipper rig now includes a reusable contained-pack tote layout helper:
@@ -363,12 +387,14 @@
 - Session focus:
   - read `docs/tote-to-bag-requirements.txt` before starting tote-to-bag work so the current agreed direction, completed phases, and next slice are understood from the document rather than inferred from stale context
   - do not make code or document changes unless the user explicitly directs that work in the current session
-- For tote-to-bag integration planning:
-  - keep the current isolated tipper rig treated as a proved but still separate route-mounted-machine proving harness
-  - use the transfer-machine pattern as the consistency reference point
-  - compare the current transfer-machine shape with the proposed tipper shape before extracting shared abstractions
-  - stabilise the upstream tote/route side before folding the tipper into the wider tote-to-bag module
-  - the next architectural extraction should likely start with spec/layout and route-mounted-machine installation conventions, not with sorter cosmetics
+- For tote-to-bag cleanup/integration follow-up:
+  - keep the current tipper-entry module mounted into the tote-to-bag harness; do not regress back to placeholder upstream machine boxes
+  - treat the PDC/PRL/PCR transport cell as the stable core and the mounted tipper entry as the current canonical upstream module shape
+  - the next cleanup slices should likely be:
+    - replace the remaining mount magic numbers in `ToteToBagDebugRig` with named layout values/spec entries
+    - split `TipperEntryModule` further so assembly, visual sync, and helper geometry/path math are not all in one class
+    - clean up `TestScene` scene selection so sessions stop relying on comment/uncomment switching
+    - only then consider whether the sorter-outfeed to PDC sink boundary should become a named handoff type
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
 - Treat the straight conveyor assembly as the canonical direction for conveyor visuals.
   - Reuse the single straight conveyor assembly model for transfer-focused machines and fixed conveyor-backed runs.
@@ -385,6 +411,6 @@
   - review whether any remaining conveyor-backed track visuals should now become mounted fixed assemblies rather than route-derived spans
   - decide whether additional transfer-machine variants can be expressed as `SteeringConveyorMechanism` plus initial-outcome/strategy configuration rather than new mechanism classes
   - perform hot path analysis on the render loop and identify opportunities to reduce immutable-object creation / transient allocation inside per-frame rendering code
-- The current active runnable scene is intentionally no longer the straight conveyor proof:
-  - `TestScene` is currently wired to the tote/oval route demo so the reusable conveyor assembly can be assessed in-context
-  - `setupParallelTracks(...)` remains the best focused scene for transfer-machine visual/steering checks
+- The current active runnable scene is intentionally back on the tote-to-bag integration harness:
+  - `TestScene` is currently wired to the integrated `ToteToBagDebugRig`
+  - `setupOvalTrack(...)` and `setupParallelTracks(...)` remain the best focused scenes for validating shared route-track rendering changes outside tote-to-bag

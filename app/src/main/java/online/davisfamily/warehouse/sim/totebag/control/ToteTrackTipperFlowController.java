@@ -31,6 +31,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private final PdcConveyor sorterOutfeedConveyor;
     private final float sorterOutfeedEntryCenterDistance;
     private final double dischargeDurationSeconds;
+    private final PackSink sorterOutfeedSink;
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
     private final List<TippingDischargeTransfer> activeDischarges = new ArrayList<>();
     private final Queue<Pack> pendingSorterOutfeed = new ArrayDeque<>();
@@ -50,6 +51,32 @@ public class ToteTrackTipperFlowController implements SimulationController {
             PdcConveyor sorterOutfeedConveyor,
             float sorterOutfeedEntryCenterDistance,
             double dischargeDurationSeconds) {
+        this(
+                tote,
+                toteLoadPlan,
+                tipperSegment,
+                tipperStopDistance,
+                tipperTippedAngleRadians,
+                tippingMachine,
+                sortingMachine,
+                sorterOutfeedConveyor,
+                sorterOutfeedEntryCenterDistance,
+                dischargeDurationSeconds,
+                null);
+    }
+
+    public ToteTrackTipperFlowController(
+            Tote tote,
+            ToteLoadPlan toteLoadPlan,
+            RouteSegment tipperSegment,
+            float tipperStopDistance,
+            float tipperTippedAngleRadians,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor sorterOutfeedConveyor,
+            float sorterOutfeedEntryCenterDistance,
+            double dischargeDurationSeconds,
+            PackSink sorterOutfeedSink) {
         if (tote == null
                 || toteLoadPlan == null
                 || tipperSegment == null
@@ -83,6 +110,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         this.sorterOutfeedConveyor = sorterOutfeedConveyor;
         this.sorterOutfeedEntryCenterDistance = sorterOutfeedEntryCenterDistance;
         this.dischargeDurationSeconds = dischargeDurationSeconds;
+        this.sorterOutfeedSink = sorterOutfeedSink;
     }
 
     @Override
@@ -179,11 +207,22 @@ public class ToteTrackTipperFlowController implements SimulationController {
 
     private void completeOutfedPacks() {
         while (true) {
-            Pack pack = sorterOutfeedConveyor.pollLeadingPackAtOutfeed().orElse(null);
+            Pack pack = sorterOutfeedConveyor.peekLeadingPackAtOutfeed().orElse(null);
             if (pack == null) {
                 return;
             }
-            pack.setState(Pack.PackMotionState.CONSUMED);
+            if (sorterOutfeedSink != null && !sorterOutfeedSink.canAccept(pack)) {
+                return;
+            }
+            pack = sorterOutfeedConveyor.pollLeadingPackAtOutfeed().orElse(null);
+            if (pack == null) {
+                return;
+            }
+            if (sorterOutfeedSink != null) {
+                sorterOutfeedSink.accept(pack);
+            } else {
+                pack.setState(Pack.PackMotionState.CONSUMED);
+            }
             completedOutputPacks.add(pack);
         }
     }

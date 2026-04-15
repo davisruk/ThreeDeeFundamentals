@@ -98,10 +98,10 @@ public class TrackBuilder {
 			SampleFrame f = frames.get(i);
 			Vec3 left = f.centre.subtract(f.side.scale(halfWidth));
 			Vec3 right = f.centre.add(f.side.scale(halfWidth));
-			tl[i] = mb.addVertex(left.x, topY, left.z);
-			tr[i] = mb.addVertex(right.x, topY, right.z);
-			bl[i] = mb.addVertex(left.x, bottomY, left.z);
-			br[i] = mb.addVertex(right.x, bottomY, right.z);
+			tl[i] = mb.addVertex(left.x, f.centre.y + topY, left.z);
+			tr[i] = mb.addVertex(right.x, f.centre.y + topY, right.z);
+			bl[i] = mb.addVertex(left.x, f.centre.y + bottomY, left.z);
+			br[i] = mb.addVertex(right.x, f.centre.y + bottomY, right.z);
 		}
 
 		for (int i = 0; i < frames.size() - 1; i++) {
@@ -230,10 +230,10 @@ public class TrackBuilder {
 	        Vec3 inner = f.centre.add(f.side.scale(innerOffset));
 	        Vec3 outer = f.centre.add(f.side.scale(outerOffset));
 
-	        ib[i] = mb.addVertex(inner.x, y0, inner.z);
-	        it[i] = mb.addVertex(inner.x, y1, inner.z);
-	        ob[i] = mb.addVertex(outer.x, y0, outer.z);
-	        ot[i] = mb.addVertex(outer.x, y1, outer.z);
+	        ib[i] = mb.addVertex(inner.x, f.centre.y + y0, inner.z);
+	        it[i] = mb.addVertex(inner.x, f.centre.y + y1, inner.z);
+	        ob[i] = mb.addVertex(outer.x, f.centre.y + y0, outer.z);
+	        ot[i] = mb.addVertex(outer.x, f.centre.y + y1, outer.z);
 	    }
 
 	    boolean outerIsPositiveSide = outerOffset > innerOffset;
@@ -289,7 +289,7 @@ public class TrackBuilder {
 				yaw,
 				0f,
 				f.centre.x,
-				spec.deckTopY + spec.rollerHeight * 0.5f,
+				f.centre.y + spec.deckTopY + spec.rollerHeight * 0.5f,
 				f.centre.z,
 				new Mat4()
 			);
