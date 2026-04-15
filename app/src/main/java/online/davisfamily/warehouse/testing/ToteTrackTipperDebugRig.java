@@ -52,12 +52,12 @@ import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfe
 public class ToteTrackTipperDebugRig {
     private static final Vec3 RIG_ORIGIN = new Vec3(0f, 0f, 0f);
     private static final float RIG_YAW_RADIANS = 0f;
+    private static final float SORTER_YAW_RADIANS = (float) Math.toRadians(180d);
     private static final float TRACK_Z = 0f;
     private static final float TRACK_LENGTH = 6.0f;
     private static final float TIPPER_LENGTH = 1.25f;
     private static final float TIPPER_START_X = (TRACK_LENGTH - TIPPER_LENGTH) * 0.5f;
     private static final float TIPPER_STOP_DISTANCE = TIPPER_START_X + (TIPPER_LENGTH * 0.5f);
-    private static final float SORTER_Z = -1.24f;
     private static final float OUTFEED_Z = -1.24f;
     private static final float TIPPER_TIPPED_ANGLE_RADIANS = -1.02f;
     private static final float SORTER_OUTFEED_TOP_Y_OFFSET = 0.10f;
@@ -69,6 +69,12 @@ public class ToteTrackTipperDebugRig {
     private static final float CONTAINED_PACK_GAP_X = 0.012f;
     private static final float CONTAINED_PACK_GAP_Z = 0.012f;
     private static final float CONTAINED_PACK_GAP_Y = 0.010f;
+    private static final int SORTER_BODY_COLOUR = 0xFF5B6E7A;
+    private static final int SORTER_FRAME_COLOUR = 0xFF39454D;
+    private static final int SORTER_PANEL_COLOUR = 0xFF8EA1AB;
+    private static final int SORTER_INTAKE_COLOUR = 0xFF6F7F87;
+    private static final int SORTER_OUTFEED_COLOUR = 0xFF444F55;
+    private static final float SORTER_HOPPER_WALL_THICKNESS = 0.020f;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -94,9 +100,6 @@ public class ToteTrackTipperDebugRig {
     private final Vec3 sorterIntakeLocal;
     private final Vec3 sorterOutfeedBaseLocal;
     private final float slideEntryWidth;
-    private final float sorterIntakeX;
-    private final float sorterIntakeY;
-    private final float sorterIntakeZ;
     private final ConveyorRuntimeState sorterOutfeedRuntimeState;
     private final ConveyorRuntimeState tipperTrackRuntimeState;
     private final float tippedAngleRadians;
@@ -280,26 +283,17 @@ public class ToteTrackTipperDebugRig {
                 tipperSlideRenderable.transformation.yTranslation - 0.04f,
                 tipperSlideRenderable.transformation.zTranslation - SLIDE_LENGTH - SORTER_INTAKE_CLEARANCE,
                 tippedAngleRadians);
-        Vec3 slideEndAtTip = localToWorld(sorterIntakeLocal);
-        sorterIntakeX = slideEndAtTip.x;
-        sorterIntakeY = slideEndAtTip.y;
-        sorterIntakeZ = slideEndAtTip.z;
 
-        sorterRenderable = createBox(
-                "sorting_machine",
-                0.56f,
-                0.24f,
-                0.34f,
-                0xFF5B6E7A);
         Vec3 sorterLocalOrigin = new Vec3(
                 sorterIntakeLocal.x,
                 sorterIntakeLocal.y - 0.12f,
                 sorterIntakeLocal.z - 0.12f);
+        sorterRenderable = createSorterRenderable("sorting_machine");
         Vec3 sorterWorldOrigin = localToWorld(sorterLocalOrigin);
         sorterRenderable.transformation.xTranslation = sorterWorldOrigin.x;
         sorterRenderable.transformation.yTranslation = sorterWorldOrigin.y;
         sorterRenderable.transformation.zTranslation = sorterWorldOrigin.z;
-        sorterRenderable.transformation.angleY = RIG_YAW_RADIANS;
+        sorterRenderable.transformation.angleY = RIG_YAW_RADIANS + SORTER_YAW_RADIANS;
 
         sorterOutfeedRuntimeState = new ConveyorRuntimeState();
         sorterOutfeedRuntimeState.setRunning(true);
@@ -317,15 +311,16 @@ public class ToteTrackTipperDebugRig {
                         ConveyorVisualSpeed.fixed(0.85d)),
                 sorterOutfeedRuntimeState,
                 trackAppearance);
+        Vec3 sorterOutfeedOffsetLocal = Vec3.rotateY(new Vec3(-1.56f, -0.08f, 0f), SORTER_YAW_RADIANS);
         sorterOutfeedBaseLocal = new Vec3(
-                sorterLocalOrigin.x + 0.82f,
-                sorterLocalOrigin.y - 0.08f,
-                OUTFEED_Z);
+                sorterLocalOrigin.x + sorterOutfeedOffsetLocal.x,
+                sorterLocalOrigin.y + sorterOutfeedOffsetLocal.y,
+                OUTFEED_Z + sorterOutfeedOffsetLocal.z);
         Vec3 sorterOutfeedWorld = localToWorld(sorterOutfeedBaseLocal);
         sorterOutfeedRenderable.transformation.xTranslation = sorterOutfeedWorld.x;
         sorterOutfeedRenderable.transformation.yTranslation = sorterOutfeedWorld.y;
         sorterOutfeedRenderable.transformation.zTranslation = sorterOutfeedWorld.z;
-        sorterOutfeedRenderable.transformation.angleY = RIG_YAW_RADIANS;
+        sorterOutfeedRenderable.transformation.angleY = RIG_YAW_RADIANS + SORTER_YAW_RADIANS + (float) Math.PI;
 
         objects.add(toteRenderable);
         objects.add(tipperAssemblyRenderable);
@@ -533,13 +528,23 @@ public class ToteTrackTipperDebugRig {
             float height,
             float width,
             int colour) {
+        return createBox(id, length, height, width, colour, true);
+    }
+
+    private RenderableObject createBox(
+            String id,
+            float length,
+            float height,
+            float width,
+            int colour,
+            boolean selectable) {
         return RenderableObject.create(
                 id,
                 tr,
                 RollerMeshFactory.createBoxRollerMesh(length, height, width),
                 new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
                 new OneColourStrategyImpl(colour),
-                true);
+                selectable);
     }
 
     private RenderableObject createFunnelSlideRenderable(String id, int colour) {
@@ -550,6 +555,150 @@ public class ToteTrackTipperDebugRig {
                 new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
                 new OneColourStrategyImpl(colour),
                 true);
+    }
+
+    private RenderableObject createSorterRenderable(String id) {
+        RenderableObject root = createBox(id, 0.60f, 0.22f, 0.36f, SORTER_BODY_COLOUR);
+
+        RenderableObject intakeHopper = createFunnelHopperRenderable(
+                id + "_intake_hopper",
+                0.34f,
+                0.18f,
+                0.22f,
+                0.12f,
+                0.14f,
+                SORTER_HOPPER_WALL_THICKNESS,
+                SORTER_INTAKE_COLOUR);
+        intakeHopper.transformation.xTranslation = -0.02f;
+        intakeHopper.transformation.yTranslation = 0.19f;
+        intakeHopper.transformation.zTranslation = -0.01f;
+        root.addChild(intakeHopper);
+
+        RenderableObject meteringCover = createBox(
+                id + "_metering_cover",
+                0.16f,
+                0.06f,
+                0.18f,
+                SORTER_PANEL_COLOUR,
+                false);
+        meteringCover.transformation.xTranslation = 0.18f;
+        meteringCover.transformation.yTranslation = 0.17f;
+        meteringCover.transformation.zTranslation = 0f;
+        root.addChild(meteringCover);
+
+        RenderableObject outfeedThroat = createBox(
+                id + "_outfeed_throat",
+                0.28f,
+                0.10f,
+                0.16f,
+                SORTER_OUTFEED_COLOUR,
+                false);
+        outfeedThroat.transformation.xTranslation = -0.44f;
+        outfeedThroat.transformation.yTranslation = 0.02f;
+        outfeedThroat.transformation.zTranslation = 0f;
+        root.addChild(outfeedThroat);
+
+        RenderableObject leftFrame = createBox(
+                id + "_left_frame",
+                0.62f,
+                0.06f,
+                0.04f,
+                SORTER_FRAME_COLOUR,
+                false);
+        leftFrame.transformation.xTranslation = 0f;
+        leftFrame.transformation.yTranslation = -0.14f;
+        leftFrame.transformation.zTranslation = -0.16f;
+        root.addChild(leftFrame);
+
+        RenderableObject rightFrame = createBox(
+                id + "_right_frame",
+                0.62f,
+                0.06f,
+                0.04f,
+                SORTER_FRAME_COLOUR,
+                false);
+        rightFrame.transformation.xTranslation = 0f;
+        rightFrame.transformation.yTranslation = -0.14f;
+        rightFrame.transformation.zTranslation = 0.16f;
+        root.addChild(rightFrame);
+
+        return root;
+    }
+
+    private RenderableObject createFunnelHopperRenderable(
+            String id,
+            float topLength,
+            float bottomLength,
+            float topWidth,
+            float bottomWidth,
+            float height,
+            float wallThickness,
+            int colour) {
+        float topY = height * 0.5f;
+        float bottomY = -height * 0.5f;
+        float topHalfLength = topLength * 0.5f;
+        float bottomHalfLength = bottomLength * 0.5f;
+        float topHalfWidth = topWidth * 0.5f;
+        float bottomHalfWidth = bottomWidth * 0.5f;
+        float innerTopHalfLength = topHalfLength - wallThickness;
+        float innerBottomHalfLength = bottomHalfLength - wallThickness;
+        float innerTopHalfWidth = topHalfWidth - wallThickness;
+        float innerBottomHalfWidth = bottomHalfWidth - wallThickness;
+
+        if (innerTopHalfLength <= 0f || innerBottomHalfLength <= 0f
+                || innerTopHalfWidth <= 0f || innerBottomHalfWidth <= 0f) {
+            throw new IllegalArgumentException("wallThickness too large for hopper dimensions");
+        }
+
+        Vec4[] vertices = new Vec4[] {
+                new Vec4(-topHalfLength, topY, -topHalfWidth, 1f),
+                new Vec4(topHalfLength, topY, -topHalfWidth, 1f),
+                new Vec4(topHalfLength, topY, topHalfWidth, 1f),
+                new Vec4(-topHalfLength, topY, topHalfWidth, 1f),
+                new Vec4(-bottomHalfLength, bottomY, -bottomHalfWidth, 1f),
+                new Vec4(bottomHalfLength, bottomY, -bottomHalfWidth, 1f),
+                new Vec4(bottomHalfLength, bottomY, bottomHalfWidth, 1f),
+                new Vec4(-bottomHalfLength, bottomY, bottomHalfWidth, 1f),
+
+                new Vec4(-innerTopHalfLength, topY, -innerTopHalfWidth, 1f),
+                new Vec4(innerTopHalfLength, topY, -innerTopHalfWidth, 1f),
+                new Vec4(innerTopHalfLength, topY, innerTopHalfWidth, 1f),
+                new Vec4(-innerTopHalfLength, topY, innerTopHalfWidth, 1f),
+                new Vec4(-innerBottomHalfLength, bottomY, -innerBottomHalfWidth, 1f),
+                new Vec4(innerBottomHalfLength, bottomY, -innerBottomHalfWidth, 1f),
+                new Vec4(innerBottomHalfLength, bottomY, innerBottomHalfWidth, 1f),
+                new Vec4(-innerBottomHalfLength, bottomY, innerBottomHalfWidth, 1f)
+        };
+
+        int[][] triangles = new int[][] {
+                {0, 5, 4}, {0, 1, 5},
+                {1, 6, 5}, {1, 2, 6},
+                {2, 7, 6}, {2, 3, 7},
+                {3, 4, 7}, {3, 0, 4},
+
+                {8, 12, 13}, {8, 13, 9},
+                {9, 13, 14}, {9, 14, 10},
+                {10, 14, 15}, {10, 15, 11},
+                {11, 15, 12}, {11, 12, 8},
+
+                {0, 8, 9}, {0, 9, 1},
+                {1, 9, 10}, {1, 10, 2},
+                {2, 10, 11}, {2, 11, 3},
+                {3, 11, 8}, {3, 8, 0},
+
+                {4, 13, 12}, {4, 5, 13},
+                {5, 14, 13}, {5, 6, 14},
+                {6, 15, 14}, {6, 7, 15},
+                {7, 12, 15}, {7, 4, 12}
+        };
+
+        return RenderableObject.create(
+                id,
+                tr,
+                new Mesh(vertices, triangles, id + "_mesh"),
+                new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
+                new OneColourStrategyImpl(colour),
+                false);
     }
 
     private RenderableObject createSlideGuide(String id, float xOffset, float entryWidth, float exitWidth) {
