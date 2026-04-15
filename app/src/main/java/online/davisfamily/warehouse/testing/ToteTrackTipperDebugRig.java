@@ -69,10 +69,14 @@ public class ToteTrackTipperDebugRig {
     private static final float CONTAINED_PACK_GAP_X = 0.012f;
     private static final float CONTAINED_PACK_GAP_Z = 0.012f;
     private static final float CONTAINED_PACK_GAP_Y = 0.010f;
-    private static final float SORTER_OUTFEED_VISUAL_LENGTH = 2.4f;
+    private static final float SORTER_OUTFEED_USABLE_LENGTH = 2.4f;
+    private static final float SORTER_OUTFEED_SPEED = 1.15f;
+    private static final float SORTER_OUTFEED_VISUAL_LENGTH = 2.6f;
     private static final float SORTER_OUTFEED_VISUAL_WIDTH = 0.30f;
-    private static final float SORTER_OUTFEED_ENTRY_CENTER_DISTANCE = 1.10f;
-    private static final Vec3 SORTER_OUTFEED_ANCHOR_LOCAL = new Vec3(0.00f, -0.22f, 0.00f);
+    private static final float SORTER_OUTFEED_ENTRY_CENTER_DISTANCE = 1.25f;
+    private static final Vec3 SORTER_OUTFEED_ANCHOR_LOCAL = new Vec3(0.08f, -0.22f, 0.00f);
+    private static final Vec3 SORTER_HOPPER_MOUTH_LOCAL = new Vec3(0.00f, 0.24f, 0.00f);
+    private static final float SORTER_QUEUE_VERTICAL_STEP = 0.10f;
     private static final int SORTER_BODY_COLOUR = 0xFF5B6E7A;
     private static final int SORTER_FRAME_COLOUR = 0xFF39454D;
     private static final int SORTER_PANEL_COLOUR = 0xFF8EA1AB;
@@ -223,8 +227,8 @@ public class ToteTrackTipperDebugRig {
         sortingMachine = new SortingMachine("sorter", 0.22d);
         sorterOutfeedConveyor = new PdcConveyor(
                 "sorter_outfeed",
-                new ConveyorOccupancyModel(2.2f, 0.04f, 0f),
-                0.85f);
+                new ConveyorOccupancyModel(SORTER_OUTFEED_USABLE_LENGTH, 0.04f, 0f),
+                SORTER_OUTFEED_SPEED);
         flowController = new ToteTrackTipperFlowController(
                 tote,
                 toteLoadPlan,
@@ -313,7 +317,7 @@ public class ToteTrackTipperDebugRig {
                         0.10f,
                         0.08f,
                         0.004f,
-                        ConveyorVisualSpeed.fixed(0.85d)),
+                        ConveyorVisualSpeed.fixed(SORTER_OUTFEED_SPEED)),
                 sorterOutfeedRuntimeState,
                 trackAppearance);
         Vec3 sorterOutfeedWorld = sorterLocalPointToWorld(SORTER_OUTFEED_ANCHOR_LOCAL);
@@ -463,14 +467,15 @@ public class ToteTrackTipperDebugRig {
                 continue;
             }
             detachFromToteIfNeeded(pack, renderable, null);
-            Vec3 queueWorld = localToWorld(
-                    sorterIntakeLocal.x,
-                    sorterIntakeLocal.y - 0.015f,
-                    sorterIntakeLocal.z + (index * 0.08f));
+            Vec3 conveyorEntryWorld = sorterConveyorPackCenterWorld(pack);
+            Vec3 queueWorld = new Vec3(
+                    conveyorEntryWorld.x,
+                    conveyorEntryWorld.y + 0.05f + (index * SORTER_QUEUE_VERTICAL_STEP),
+                    conveyorEntryWorld.z);
             renderable.transformation.xTranslation = queueWorld.x;
             renderable.transformation.yTranslation = queueWorld.y;
             renderable.transformation.zTranslation = queueWorld.z;
-            renderable.transformation.angleY = RIG_YAW_RADIANS;
+            renderable.transformation.angleY = RIG_YAW_RADIANS + SORTER_YAW_RADIANS + (float) Math.PI;
             index++;
             placedPackIds.add(pack.getId());
         }
@@ -563,8 +568,68 @@ public class ToteTrackTipperDebugRig {
     }
 
     private RenderableObject createSorterRenderable(String id) {
-        RenderableObject root = createBox(id, 0.62f, 0.05f, 0.48f, SORTER_BODY_COLOUR);
+        RenderableObject root = createAnchor(id);
         root.transformation.yTranslation = 0.18f;
+
+        RenderableObject leftDeck = createBox(
+                id + "_left_deck",
+                0.62f,
+                0.05f,
+                0.12f,
+                SORTER_BODY_COLOUR,
+                true);
+        leftDeck.transformation.xTranslation = 0f;
+        leftDeck.transformation.yTranslation = 0f;
+        leftDeck.transformation.zTranslation = -0.18f;
+        root.addChild(leftDeck);
+
+        RenderableObject rightDeck = createBox(
+                id + "_right_deck",
+                0.62f,
+                0.05f,
+                0.12f,
+                SORTER_BODY_COLOUR,
+                false);
+        rightDeck.transformation.xTranslation = 0f;
+        rightDeck.transformation.yTranslation = 0f;
+        rightDeck.transformation.zTranslation = 0.18f;
+        root.addChild(rightDeck);
+
+        RenderableObject frontBridge = createBox(
+                id + "_front_bridge",
+                0.14f,
+                0.05f,
+                0.24f,
+                SORTER_BODY_COLOUR,
+                false);
+        frontBridge.transformation.xTranslation = -0.24f;
+        frontBridge.transformation.yTranslation = 0f;
+        frontBridge.transformation.zTranslation = 0f;
+        root.addChild(frontBridge);
+
+        RenderableObject rearBridge = createBox(
+                id + "_rear_bridge",
+                0.14f,
+                0.05f,
+                0.24f,
+                SORTER_BODY_COLOUR,
+                false);
+        rearBridge.transformation.xTranslation = 0.24f;
+        rearBridge.transformation.yTranslation = 0f;
+        rearBridge.transformation.zTranslation = 0f;
+        root.addChild(rearBridge);
+
+        RenderableObject hopperCollar = createBox(
+                id + "_hopper_collar",
+                0.20f,
+                0.03f,
+                0.16f,
+                SORTER_OUTFEED_COLOUR,
+                false);
+        hopperCollar.transformation.xTranslation = 0.00f;
+        hopperCollar.transformation.yTranslation = -0.02f;
+        hopperCollar.transformation.zTranslation = 0.00f;
+        root.addChild(hopperCollar);
 
         RenderableObject leftHousing = createBox(
                 id + "_left_housing",
@@ -649,7 +714,6 @@ public class ToteTrackTipperDebugRig {
                 false);
         meteringPedestal.transformation.xTranslation = 0.18f;
         meteringPedestal.transformation.yTranslation = 0.03f;
-        meteringCover.transformation.zTranslation = 0f;
         meteringPedestal.transformation.zTranslation = 0.08f;
         root.addChild(meteringPedestal);
 
@@ -866,6 +930,19 @@ public class ToteTrackTipperDebugRig {
                 sorterRenderable.transformation.yTranslation,
                 sorterRenderable.transformation.zTranslation));
         return rotated;
+    }
+
+    private Vec3 sorterConveyorPackCenterWorld(Pack pack) {
+        float conveyorYaw = RIG_YAW_RADIANS + SORTER_YAW_RADIANS + (float) Math.PI;
+        Vec3 forward = Vec3.rotateY(new Vec3(1f, 0f, 0f), conveyorYaw);
+        float packCenterDistance = -(sorterOutfeedConveyor.getUsableLength() * 0.5f) + SORTER_OUTFEED_ENTRY_CENTER_DISTANCE;
+        return new Vec3(
+                sorterOutfeedRenderable.transformation.xTranslation + (forward.x * packCenterDistance),
+                sorterOutfeedRenderable.transformation.yTranslation
+                        + SORTER_OUTFEED_TOP_Y_OFFSET
+                        + (pack.getDimensions().height() * 0.5f)
+                        + 0.002f,
+                sorterOutfeedRenderable.transformation.zTranslation + (forward.z * packCenterDistance));
     }
 
     private Vec3 tipperAssemblyPointToWorldLocal(
