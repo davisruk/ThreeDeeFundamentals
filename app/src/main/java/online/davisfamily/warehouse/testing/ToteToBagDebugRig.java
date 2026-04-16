@@ -35,6 +35,7 @@ import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
 import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPoint;
@@ -107,7 +108,12 @@ public class ToteToBagDebugRig {
                 objects,
                 inspectionRegistry,
                 new TipperEntryLayoutSpec(new Vec3(upstreamPose.x(), upstreamPose.y(), upstreamPose.z()), upstreamPose.yawRadians()),
-                new online.davisfamily.warehouse.sim.totebag.control.PackSink() {
+                new PackReceiveTarget() {
+                    @Override
+                    public PackHandoffPoint handoffPoint() {
+                        return sorterOutfeedPoint;
+                    }
+
                     @Override
                     public boolean canAccept(Pack pack) {
                         return pdcConveyor.canAcceptIncomingPackAtFrontDistance(pack, sorterOutfeedFrontDistance(pack));

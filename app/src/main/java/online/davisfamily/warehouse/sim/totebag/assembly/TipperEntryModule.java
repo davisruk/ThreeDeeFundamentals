@@ -31,11 +31,11 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseSegmentMetadata;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
 import online.davisfamily.warehouse.sim.tote.Tote;
-import online.davisfamily.warehouse.sim.totebag.control.PackSink;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPointProvider;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.layout.ContainedPackLayout;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
@@ -113,7 +113,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
             List<RenderableObject> objects,
             SelectionInspectionRegistry inspectionRegistry,
             TipperEntryLayoutSpec layoutSpec,
-            PackSink sorterOutfeedSink) {
+            PackReceiveTarget sorterOutfeedTarget) {
         this.tr = tr;
         this.objects = objects;
         this.inspectionRegistry = inspectionRegistry;
@@ -226,7 +226,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 tippingMachine,
                 sortingMachine,
                 0.55d,
-                sorterOutfeedSink);
+                sorterOutfeedTarget);
 
         sim.addSimObject(tippingMachine);
         sim.addSimObject(sortingMachine);

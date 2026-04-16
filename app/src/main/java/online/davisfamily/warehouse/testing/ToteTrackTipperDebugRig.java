@@ -20,14 +20,14 @@ public class ToteTrackTipperDebugRig {
             SimulationWorld sim,
             List<RenderableObject> objects,
             SelectionInspectionRegistry inspectionRegistry) {
-        ForwardingPackSink sorterOutfeedSink = new ForwardingPackSink();
+        ForwardingPackReceiveTarget sorterOutfeedTarget = new ForwardingPackReceiveTarget();
         module = new TipperEntryModuleBuilder().build(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
                 TipperEntryLayoutSpec.debugDefaults(),
-                sorterOutfeedSink);
+                sorterOutfeedTarget);
         sorterOutfeedDebugConveyor = new SorterOutfeedDebugConveyor(
                 tr,
                 sim,
@@ -35,7 +35,7 @@ public class ToteTrackTipperDebugRig {
                 inspectionRegistry,
                 module.resolveHandoffPoint(MachineHandoffPointId.SORTER_PACK_OUTFEED),
                 null);
-        sorterOutfeedSink.setDelegate(sorterOutfeedDebugConveyor.entrySink());
+        sorterOutfeedTarget.setDelegate(sorterOutfeedDebugConveyor);
     }
 
     public void syncVisuals() {

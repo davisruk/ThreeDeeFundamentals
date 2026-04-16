@@ -16,13 +16,13 @@ import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFacto
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.ConveyorVisualSpeed;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.StraightConveyorSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
-import online.davisfamily.warehouse.sim.totebag.control.PackSink;
 import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 
-public class SorterOutfeedDebugConveyor {
+public class SorterOutfeedDebugConveyor implements PackReceiveTarget {
     private static final float TOP_Y_OFFSET = 0.10f;
     private static final float USABLE_LENGTH = 2.4f;
     private static final float SPEED = 1.15f;
@@ -33,7 +33,6 @@ public class SorterOutfeedDebugConveyor {
     private final PdcConveyor conveyor;
     private final RenderableObject renderable;
     private final ConveyorRuntimeState runtimeState;
-    private final PackSink entrySink;
 
     public SorterOutfeedDebugConveyor(
             TriangleRenderer tr,
@@ -41,7 +40,7 @@ public class SorterOutfeedDebugConveyor {
             List<RenderableObject> objects,
             SelectionInspectionRegistry inspectionRegistry,
             PackHandoffPoint outfeedPoint,
-            PackSink downstreamSink) {
+            PackReceiveTarget downstreamTarget) {
         if (tr == null || sim == null || objects == null || outfeedPoint == null) {
             throw new IllegalArgumentException("Sorter outfeed debug conveyor inputs must not be null");
         }
@@ -85,33 +84,38 @@ public class SorterOutfeedDebugConveyor {
                     "Lane packs: " + conveyor.getLaneEntries().size()));
         }
 
-        entrySink = new PackSink() {
-            @Override
-            public boolean canAccept(Pack pack) {
-                float entryFrontDistance = ENTRY_CENTER_DISTANCE + (pack.getDimensions().length() * 0.5f);
-                return conveyor.canAcceptIncomingPackAtFrontDistance(pack, entryFrontDistance);
-            }
-
-            @Override
-            public void accept(Pack pack) {
-                float entryFrontDistance = ENTRY_CENTER_DISTANCE + (pack.getDimensions().length() * 0.5f);
-                conveyor.acceptIncomingPackAtFrontDistance(pack, entryFrontDistance);
-            }
-        };
-
         sim.addController(new SimulationController() {
             @Override
             public void update(SimulationContext context, double dtSeconds) {
                 runtimeState.setRunning(!conveyor.getLaneEntries().isEmpty());
                 conveyor.setRunning(!conveyor.getLaneEntries().isEmpty());
                 conveyor.update(dtSeconds);
-                drainOutfeed(downstreamSink);
+                drainOutfeed(downstreamTarget);
             }
         });
     }
 
-    public PackSink entrySink() {
-        return entrySink;
+    @Override
+    public PackHandoffPoint handoffPoint() {
+        return new PackHandoffPoint(
+                renderable.id,
+                new Vec3(
+                        renderable.transformation.xTranslation,
+                        renderable.transformation.yTranslation,
+                        renderable.transformation.zTranslation),
+                renderable.transformation.angleY);
+    }
+
+    @Override
+    public boolean canAccept(Pack pack) {
+        float entryFrontDistance = ENTRY_CENTER_DISTANCE + (pack.getDimensions().length() * 0.5f);
+        return conveyor.canAcceptIncomingPackAtFrontDistance(pack, entryFrontDistance);
+    }
+
+    @Override
+    public void accept(Pack pack) {
+        float entryFrontDistance = ENTRY_CENTER_DISTANCE + (pack.getDimensions().length() * 0.5f);
+        conveyor.acceptIncomingPackAtFrontDistance(pack, entryFrontDistance);
     }
 
     public void syncVisuals(Function<String, RenderableObject> packRenderableResolver) {
@@ -137,21 +141,21 @@ public class SorterOutfeedDebugConveyor {
         }
     }
 
-    private void drainOutfeed(PackSink downstreamSink) {
+    private void drainOutfeed(PackReceiveTarget downstreamTarget) {
         while (true) {
             Pack pack = conveyor.peekLeadingPackAtOutfeed().orElse(null);
             if (pack == null) {
                 return;
             }
-            if (downstreamSink != null && !downstreamSink.canAccept(pack)) {
+            if (downstreamTarget != null && !downstreamTarget.canAccept(pack)) {
                 return;
             }
             pack = conveyor.pollLeadingPackAtOutfeed().orElse(null);
             if (pack == null) {
                 return;
             }
-            if (downstreamSink != null) {
-                downstreamSink.accept(pack);
+            if (downstreamTarget != null) {
+                downstreamTarget.accept(pack);
             } else {
                 pack.setState(Pack.PackMotionState.CONSUMED);
             }

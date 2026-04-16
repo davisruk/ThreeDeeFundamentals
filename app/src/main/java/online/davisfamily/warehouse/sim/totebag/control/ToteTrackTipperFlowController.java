@@ -13,6 +13,7 @@ import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
@@ -28,7 +29,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
     private final double dischargeDurationSeconds;
-    private final PackSink sorterOutfeedSink;
+    private final PackReceiveTarget sorterOutfeedTarget;
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
     private final List<TippingDischargeTransfer> activeDischarges = new ArrayList<>();
     private final Queue<Pack> pendingSorterOutfeed = new ArrayDeque<>();
@@ -67,7 +68,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
             double dischargeDurationSeconds,
-            PackSink sorterOutfeedSink) {
+            PackReceiveTarget sorterOutfeedTarget) {
         if (tote == null
                 || toteLoadPlan == null
                 || tipperSegment == null
@@ -95,7 +96,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         this.tippingMachine = tippingMachine;
         this.sortingMachine = sortingMachine;
         this.dischargeDurationSeconds = dischargeDurationSeconds;
-        this.sorterOutfeedSink = sorterOutfeedSink;
+        this.sorterOutfeedTarget = sorterOutfeedTarget;
     }
 
     @Override
@@ -175,12 +176,12 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private void flushPendingSorterOutfeed() {
         while (!pendingSorterOutfeed.isEmpty()) {
             Pack pack = pendingSorterOutfeed.peek();
-            if (sorterOutfeedSink != null && !sorterOutfeedSink.canAccept(pack)) {
+            if (sorterOutfeedTarget != null && !sorterOutfeedTarget.canAccept(pack)) {
                 return;
             }
             pack = pendingSorterOutfeed.remove();
-            if (sorterOutfeedSink != null) {
-                sorterOutfeedSink.accept(pack);
+            if (sorterOutfeedTarget != null) {
+                sorterOutfeedTarget.accept(pack);
             } else {
                 pack.setState(Pack.PackMotionState.CONSUMED);
             }
