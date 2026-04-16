@@ -4,6 +4,8 @@ import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 public class ToteToBagCoreLayout {
+    private static final float PRL_LANE_END_INSET = 0.30f;
+
     private final ToteToBagCoreLayoutSpec spec;
 
     public ToteToBagCoreLayout(ToteToBagCoreLayoutSpec spec) {
@@ -26,15 +28,27 @@ public class ToteToBagCoreLayout {
     }
 
     public float pcrStartX() {
-        return spec.pdcCenterX() - (spec.pcrLength() * 0.5f);
+        return spec.pcrCenterX() - (spec.pcrLength() * 0.5f);
     }
 
     public float pcrEndX() {
-        return spec.pdcCenterX() + (spec.pcrLength() * 0.5f);
+        return spec.pcrCenterX() + (spec.pcrLength() * 0.5f);
     }
 
     public float prlCenterX(int index) {
         return spec.prlFirstCenterX() + (index * spec.prlSpacing());
+    }
+
+    public float prlRenderCenterZ() {
+        return prlInfeedEndZ() - (spec.prlLength() * 0.5f);
+    }
+
+    public float prlStartZ() {
+        return prlInfeedEndZ() - PRL_LANE_END_INSET;
+    }
+
+    public float pcrZ() {
+        return prlOutfeedEndZ() - spec.prlGap() - (spec.singlePackConveyorWidth() * 0.5f);
     }
 
     public float pdcDiversionFrontDistanceFor(int prlIndex, Pack pack) {
@@ -51,7 +65,7 @@ public class ToteToBagCoreLayout {
         float targetX = prlCenterX(prlIndex);
         float startX = pdcStartX() + pdcDiversionFrontDistanceFor(prlIndex, probe) - (probe.getDimensions().length() * 0.5f);
         float dx = targetX - startX;
-        float dz = spec.prlStartZ() - spec.pdcZ();
+        float dz = prlStartZ() - spec.pdcZ();
         float travelLength = (float) Math.sqrt((dx * dx) + (dz * dz));
         return travelLength / spec.pdcTransferSpeed();
     }
@@ -60,9 +74,9 @@ public class ToteToBagCoreLayout {
         Pack probe = probePack();
         float prlX = prlCenterX(prlIndex);
         float joinX = pcrStartX() + prlToPcrEntryFrontDistanceFor(prlIndex, probe) - (probe.getDimensions().length() * 0.5f);
-        float startZ = spec.prlStartZ() - 1.8f + (probe.getDimensions().length() * 0.5f);
+        float startZ = prlStartZ() - 1.8f + (probe.getDimensions().length() * 0.5f);
         float dx = joinX - prlX;
-        float dz = spec.pcrZ() - startZ;
+        float dz = pcrZ() - startZ;
         float travelLength = (float) Math.sqrt((dx * dx) + (dz * dz));
         return travelLength / spec.prlBeltSpeed();
     }
@@ -73,9 +87,9 @@ public class ToteToBagCoreLayout {
             case PDC_INFEED -> new ToteToBagAttachmentPose(pdcStartX(), this.spec.conveyorY(), this.spec.pdcZ(), 0f);
             case PDC_OUTFEED -> new ToteToBagAttachmentPose(pdcEndX(), this.spec.conveyorY(), this.spec.pdcZ(), 0f);
             case PDC_CENTER -> new ToteToBagAttachmentPose(this.spec.pdcCenterX(), this.spec.conveyorY(), this.spec.pdcZ(), 0f);
-            case PCR_INFEED -> new ToteToBagAttachmentPose(pcrStartX(), this.spec.conveyorY(), this.spec.pcrZ(), 0f);
-            case PCR_OUTFEED -> new ToteToBagAttachmentPose(pcrEndX(), this.spec.conveyorY(), this.spec.pcrZ(), 0f);
-            case PCR_CENTER -> new ToteToBagAttachmentPose(this.spec.pdcCenterX(), this.spec.conveyorY(), this.spec.pcrZ(), 0f);
+            case PCR_INFEED -> new ToteToBagAttachmentPose(pcrStartX(), this.spec.conveyorY(), pcrZ(), 0f);
+            case PCR_OUTFEED -> new ToteToBagAttachmentPose(pcrEndX(), this.spec.conveyorY(), pcrZ(), 0f);
+            case PCR_CENTER -> new ToteToBagAttachmentPose(this.spec.pcrCenterX(), this.spec.conveyorY(), pcrZ(), 0f);
         };
         return new ToteToBagAttachmentPose(
                 anchor.x() + spec.offsetX(),
@@ -90,5 +104,13 @@ public class ToteToBagCoreLayout {
 
     private float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private float prlInfeedEndZ() {
+        return spec.pdcZ() - (spec.singlePackConveyorWidth() * 0.5f) - spec.prlGap();
+    }
+
+    private float prlOutfeedEndZ() {
+        return prlInfeedEndZ() - spec.prlLength();
     }
 }

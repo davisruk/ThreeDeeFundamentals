@@ -34,6 +34,7 @@ import online.davisfamily.warehouse.sim.totebag.transfer.PrlToPcrTransfer;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
 import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPoint;
@@ -42,6 +43,7 @@ import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 public class ToteToBagDebugRig {
     private static final float BUMPER_REST_Z = 0.27f;
     private static final float BUMPER_ACTIVE_Z = 0.18f;
+    private static final float INTEGRATED_PDC_EXTENSION = 2.6f;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -49,7 +51,7 @@ public class ToteToBagDebugRig {
     private final ToteToBagSubsystem subsystem;
     private final ToteToBagCoreLayoutSpec layoutSpec;
     private final TipperEntryModule tipperEntryModule;
-    private final SorterOutfeedDebugConveyor sorterOutfeedDebugConveyor;
+    private final PackHandoffPoint sorterOutfeedPoint;
 
     private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
@@ -84,7 +86,7 @@ public class ToteToBagDebugRig {
                 new OneColourStrategyImpl(0xFFB8B8B8),
                 new OneColourStrategyImpl(0xFF596A54),
                 new OneColourStrategyImpl(0xFF596A54));
-        layoutSpec = ToteToBagCoreLayoutSpec.debugDefaults();
+        layoutSpec = integratedLayoutSpec();
         subsystem = new ToteToBagSubsystemBuilder().buildCore(tr, conveyorAppearance, layoutSpec);
 
         pdcConveyor = subsystem.getPdcConveyor();
@@ -93,33 +95,30 @@ public class ToteToBagDebugRig {
         pcrConveyor = subsystem.getPcrConveyor();
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
         var upstreamPose = subsystem.resolveAttachmentPose(
-                new MachineAttachmentSpec(ToteToBagAttachmentPoint.UPSTREAM_MODULE_ROOT, -4.22f, 1.45f, 0.99f, 0f));
-        ForwardingPackSink sorterOutfeedSink = new ForwardingPackSink();
+                new MachineAttachmentSpec(
+                        ToteToBagAttachmentPoint.UPSTREAM_MODULE_ROOT,
+                        -4.22f + INTEGRATED_PDC_EXTENSION,
+                        1.45f,
+                        0.99f,
+                        0f));
         tipperEntryModule = new TipperEntryModuleBuilder().build(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
                 new TipperEntryLayoutSpec(new Vec3(upstreamPose.x(), upstreamPose.y(), upstreamPose.z()), upstreamPose.yawRadians()),
-                sorterOutfeedSink);
-        sorterOutfeedDebugConveyor = new SorterOutfeedDebugConveyor(
-                tr,
-                sim,
-                objects,
-                inspectionRegistry,
-                tipperEntryModule.resolveHandoffPoint(MachineHandoffPointId.SORTER_PACK_OUTFEED),
                 new online.davisfamily.warehouse.sim.totebag.control.PackSink() {
                     @Override
                     public boolean canAccept(Pack pack) {
-                        return pdcConveyor.canAcceptIncomingPack(pack);
+                        return pdcConveyor.canAcceptIncomingPackAtFrontDistance(pack, sorterOutfeedFrontDistance(pack));
                     }
 
                     @Override
                     public void accept(Pack pack) {
-                        pdcConveyor.acceptIncomingPack(pack);
+                        pdcConveyor.acceptIncomingPackAtFrontDistance(pack, sorterOutfeedFrontDistance(pack));
                     }
                 });
-        sorterOutfeedSink.setDelegate(sorterOutfeedDebugConveyor.entrySink());
+        sorterOutfeedPoint = tipperEntryModule.resolveHandoffPoint(MachineHandoffPointId.SORTER_PACK_OUTFEED);
         flowController = new ToteToBagFlowController(
                 tipperEntryModule.getToteLoadPlan(),
                 pdcConveyor,
@@ -156,7 +155,6 @@ public class ToteToBagDebugRig {
     public void syncVisuals() {
         syncConveyorRuntimeStates();
         tipperEntryModule.syncVisuals();
-        sorterOutfeedDebugConveyor.syncVisuals(tipperEntryModule::getPackRenderable);
 
         for (var entry : flowController.getPdcLaneEntries()) {
             positionPackOnPdc(entry.pack(), entry.frontDistance());
@@ -178,7 +176,7 @@ public class ToteToBagDebugRig {
         if (baggingMachine.getCurrentGroup() != null) {
             int baggerPackIndex = 0;
             for (Pack pack : baggingMachine.getCurrentGroup().packs()) {
-                positionPack(pack, 4.0f + (baggerPackIndex * 0.10f), 0.48f, layoutSpec.pcrZ());
+                positionPack(pack, 4.0f + (baggerPackIndex * 0.10f), 0.48f, subsystem.getLayout().pcrZ());
                 baggerPackIndex++;
             }
         }
@@ -190,7 +188,7 @@ public class ToteToBagDebugRig {
             if (bagRenderable != null) {
                 bagRenderable.transformation.xTranslation = 5.6f + (completedIndex * 0.42f);
                 bagRenderable.transformation.yTranslation = 0.16f;
-                bagRenderable.transformation.zTranslation = layoutSpec.pcrZ();
+                bagRenderable.transformation.zTranslation = subsystem.getLayout().pcrZ();
             }
             completedIndex++;
         }
@@ -344,7 +342,7 @@ public class ToteToBagDebugRig {
         float pdcStartX = subsystem.getLayout().pdcStartX();
         float startX = pdcStartX + transfer.getSourcePdcFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
         float x = (float) (startX + ((targetX - startX) * progress));
-        float z = (float) (layoutSpec.pdcZ() + ((layoutSpec.prlStartZ() - layoutSpec.pdcZ()) * progress));
+        float z = (float) (layoutSpec.pdcZ() + ((subsystem.getLayout().prlStartZ() - layoutSpec.pdcZ()) * progress));
         positionPack(transfer.getPack(), x, layoutSpec.packY(), z);
     }
 
@@ -353,10 +351,10 @@ public class ToteToBagDebugRig {
         int prlIndex = indexOfPrl(transfer.getSourcePrlId());
         float prlX = subsystem.getLayout().prlCenterX(prlIndex);
         float joinX = subsystem.getLayout().pcrStartX() + transfer.getTargetPcrFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
-        float startZ = layoutSpec.prlStartZ() - 1.8f + (transfer.getPack().getDimensions().length() * 0.5f);
+        float startZ = subsystem.getLayout().prlStartZ() - 1.8f + (transfer.getPack().getDimensions().length() * 0.5f);
 
         float x = (float) (prlX + ((joinX - prlX) * progress));
-        float z = (float) (startZ + ((layoutSpec.pcrZ() - startZ) * progress));
+        float z = (float) (startZ + ((subsystem.getLayout().pcrZ() - startZ) * progress));
         positionPack(transfer.getPack(), x, layoutSpec.packY(), z);
     }
 
@@ -391,18 +389,52 @@ public class ToteToBagDebugRig {
     }
 
     private void positionPackOnPrl(Pack pack, float prlX, float frontDistance) {
-        float z = layoutSpec.prlStartZ() - frontDistance + (pack.getDimensions().length() * 0.5f);
+        float z = subsystem.getLayout().prlStartZ() - frontDistance + (pack.getDimensions().length() * 0.5f);
         positionPack(pack, prlX, layoutSpec.packY(), z);
     }
 
     private void positionPackOnPcr(Pack pack, float frontDistance) {
         float x = subsystem.getLayout().pcrStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
-        positionPack(pack, x, layoutSpec.packY(), layoutSpec.pcrZ());
+        positionPack(pack, x, layoutSpec.packY(), subsystem.getLayout().pcrZ());
     }
 
     private void positionPackOnPdc(Pack pack, float frontDistance) {
         float x = subsystem.getLayout().pdcStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
         positionPack(pack, x, layoutSpec.packY(), layoutSpec.pdcZ());
+    }
+
+    private float sorterOutfeedFrontDistance(Pack pack) {
+        float alongPdc = sorterOutfeedPoint.worldPosition().x - subsystem.getLayout().pdcStartX();
+        return alongPdc + (pack.getDimensions().length() * 0.5f);
+    }
+
+    private ToteToBagCoreLayoutSpec integratedLayoutSpec() {
+        ToteToBagCoreLayoutSpec defaults = ToteToBagCoreLayoutSpec.debugDefaults();
+        return new ToteToBagCoreLayoutSpec(
+                defaults.pdcCenterX() - (INTEGRATED_PDC_EXTENSION * 0.5f),
+                defaults.pcrCenterX(),
+                defaults.conveyorY(),
+                defaults.pdcZ(),
+                defaults.packY(),
+                defaults.singlePackConveyorWidth(),
+                defaults.pdcLength() + INTEGRATED_PDC_EXTENSION,
+                defaults.pcrLength(),
+                defaults.prlLength(),
+                defaults.prlCount(),
+                defaults.prlFirstCenterX(),
+                defaults.prlSpacing(),
+                defaults.pdcBeltSpeed(),
+                defaults.pdcTransferSpeed(),
+                defaults.prlBeltSpeed(),
+                defaults.prlIndexDistance(),
+                defaults.prlGap(),
+                defaults.pcrMinimumGap(),
+                defaults.pcrSafetyMargin(),
+                defaults.conveyorMinimumGap(),
+                defaults.sorterReleaseIntervalSeconds(),
+                defaults.diversionArmDelaySeconds(),
+                defaults.diversionActuationDurationSeconds(),
+                defaults.diversionResetDurationSeconds());
     }
 
     private double pdcTransferDurationFor(String prlId) {

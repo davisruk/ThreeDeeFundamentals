@@ -2,10 +2,9 @@ package online.davisfamily.warehouse.sim.totebag.layout;
 
 public record ToteToBagCoreLayoutSpec(
         float pdcCenterX,
+        float pcrCenterX,
         float conveyorY,
         float pdcZ,
-        float pcrZ,
-        float prlStartZ,
         float packY,
         float singlePackConveyorWidth,
         float pdcLength,
@@ -18,6 +17,7 @@ public record ToteToBagCoreLayoutSpec(
         float pdcTransferSpeed,
         float prlBeltSpeed,
         float prlIndexDistance,
+        float prlGap,
         float pcrMinimumGap,
         float pcrSafetyMargin,
         float conveyorMinimumGap,
@@ -41,10 +41,9 @@ public record ToteToBagCoreLayoutSpec(
     public static ToteToBagCoreLayoutSpec debugDefaults() {
         return new ToteToBagCoreLayoutSpec(
                 -0.9f,
+                -0.9f,
                 0.02f,
                 0.2f,
-                -2.9f,
-                -0.42f,
                 0.16f,
                 0.18f,
                 4.6f,
@@ -57,6 +56,7 @@ public record ToteToBagCoreLayoutSpec(
                 1.55f,
                 1.80f,
                 0.34f,
+                0.08f,
                 0.06f,
                 0.15f,
                 0.06f,
