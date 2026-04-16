@@ -402,8 +402,13 @@ Current recommended cleanup slices
   - move the tuned upstream module offsets in `ToteToBagDebugRig` into named layout values/spec entries
   - avoid leaving critical visual alignment dependent on unexplained numeric literals in the harness
 - cleanup slice 2: split `TipperEntryModule`
-  - keep the current module boundary for now, but continue the split now that `TipperModule` and `SortingModule` exist
-  - separate assembly/building from visual-sync/helper geometry/path math so the class is easier to reason about and safer to extend
+  - this split advanced materially in the current session:
+    - sorter render assembly, sorter anchor math, sorter handoff-point ownership, and sorter queued-pack visual sync now live in `SortingModule`
+    - tipper visual sync, tip-angle/discharge-anchor ownership, tipper discharge handoff-point ownership, and sorter-intake mount-point derivation now live in `TipperModule`
+    - `TipperEntryModule` is now more clearly a composition/orchestration type rather than owning both module internals directly
+  - the main remaining design decision is whether the cross-module tipper-to-sorter discharge path should:
+    - remain assembled inside `TipperEntryModule`
+    - or move into a dedicated seam/helper object that owns only the cross-module discharge path geometry/math
 - cleanup slice 3: clean up active scene selection
   - stop relying on comment/uncomment switching in `TestScene`
   - make the active example/harness selection explicit
@@ -414,9 +419,27 @@ Current recommended cleanup slices
 End-of-session cleanup observations
 - `TestScene` still relies on manual comment/uncomment switching between harnesses and should eventually move to an explicit scene-selection mechanism
 - `ToteToBagDebugRig` still contains tuned mount numbers and the temporary integrated PDC extension constant; those should eventually become named layout values/spec fields
-- `TipperEntryModule` is now improved by composing `TipperModule` and `SortingModule`, but it is still fairly large and still mixes assembly, render-sync, and helper geometry/path math
-- the tipper-to-sorter path is still implicit inside the composed entry assembly/controller flow; sorter-outfeed has the clearer handoff boundary now, but tipper-to-sorter may still deserve the same treatment later
+- `TipperEntryModule` has now been reduced further:
+  sorter-specific assembly/render-sync ownership now lives in `SortingModule`, and tipper-specific visual-anchor ownership now lives in `TipperModule`
+- the main remaining `TipperEntryModule` follow-up is the cross-module discharge-path boundary:
+  decide whether that seam should remain composed there or be promoted into a dedicated seam/helper type
 - the remaining uncommitted local `gradle.properties` edits were intentionally left untouched because they are not part of the tote-to-bag architectural slice
+
+Latest session update
+- `TipperEntryModule` decomposition progressed materially in this session
+- `SortingModule` is no longer only a thin holder:
+  - it now owns sorter render construction
+  - it now owns sorter-local anchor/world-point math
+  - it now owns sorter intake/outfeed handoff-point calculation
+  - it now owns sorter queued-pack visual placement
+- `TipperModule` is no longer only a tote/tipping-machine holder:
+  - it now owns tipper visual sync
+  - it now owns tip-angle/discharge-anchor calculations
+  - it now owns tipper discharge handoff-point calculation
+  - it now provides the sorter-intake mount point used to place the sorter relative to the tipper
+- `TipperEntryModule` still owns pack-renderable lifecycle and the visible cross-module discharge-path assembly, but it no longer owns the internal anchor math for both sides of that seam
+- after this session the main remaining `TipperEntryModule` design choice is narrow:
+  decide whether the tipper-to-sorter discharge path should stay as entry-module composition glue or move into a dedicated seam/helper object
 
 Route-mounted machine alignment note
 The current isolated tipper work has now clarified an architectural point that should guide later integration work:
