@@ -38,6 +38,9 @@ import online.davisfamily.warehouse.sim.totebag.control.PackSink;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
+import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPointProvider;
 import online.davisfamily.warehouse.sim.totebag.layout.ContainedPackLayout;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
@@ -51,7 +54,7 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfer;
 
-public class TipperEntryModule {
+public class TipperEntryModule implements PackHandoffPointProvider {
     private static final float SORTER_YAW_RADIANS = (float) Math.toRadians(180d);
     private static final float TRACK_Z = 0f;
     private static final float TRACK_LENGTH = 6.0f;
@@ -363,6 +366,18 @@ public class TipperEntryModule {
 
     public RenderableObject getPackRenderable(String packId) {
         return packRenderablesById.get(packId);
+    }
+
+    @Override
+    public PackHandoffPoint resolveHandoffPoint(MachineHandoffPointId pointId) {
+        if (pointId == null) {
+            throw new IllegalArgumentException("pointId must not be null");
+        }
+        return switch (pointId) {
+            case TIPPER_PACK_DISCHARGE -> tipperPackDischargePoint();
+            case SORTER_PACK_INTAKE -> sorterPackIntakePoint();
+            case SORTER_PACK_OUTFEED -> sorterPackOutfeedPoint();
+        };
     }
 
     private void registerInspectableObjects() {
@@ -943,6 +958,32 @@ public class TipperEntryModule {
                 sorterRenderable.transformation.yTranslation,
                 sorterRenderable.transformation.zTranslation));
         return rotated;
+    }
+
+    private PackHandoffPoint tipperPackDischargePoint() {
+        Vec3 dischargeWorld = localToWorld(tipperAssemblyPointToWorldLocal(
+                0f,
+                tipperSlideRenderable.transformation.yTranslation - 0.04f,
+                tipperSlideRenderable.transformation.zTranslation - SLIDE_LENGTH,
+                tippedAngleRadians));
+        return new PackHandoffPoint(
+                MachineHandoffPointId.TIPPER_PACK_DISCHARGE.name().toLowerCase(),
+                dischargeWorld,
+                rigYaw());
+    }
+
+    private PackHandoffPoint sorterPackIntakePoint() {
+        return new PackHandoffPoint(
+                MachineHandoffPointId.SORTER_PACK_INTAKE.name().toLowerCase(),
+                sorterLocalPointToWorld(SORTER_HOPPER_MOUTH_LOCAL),
+                sorterRenderable.transformation.angleY);
+    }
+
+    private PackHandoffPoint sorterPackOutfeedPoint() {
+        return new PackHandoffPoint(
+                MachineHandoffPointId.SORTER_PACK_OUTFEED.name().toLowerCase(),
+                sorterLocalPointToWorld(SORTER_OUTFEED_ANCHOR_LOCAL),
+                rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI);
     }
 
     private Vec3 sorterConveyorPackCenterWorld(Pack pack) {
