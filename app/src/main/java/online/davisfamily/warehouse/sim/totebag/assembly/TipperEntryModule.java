@@ -39,9 +39,7 @@ import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.layout.ContainedPackLayout;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
-import online.davisfamily.warehouse.sim.totebag.machine.SortingMachineState;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
-import online.davisfamily.warehouse.sim.totebag.machine.TippingMachineState;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack.PackContainmentState;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
@@ -50,7 +48,6 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfer;
 
 public class TipperEntryModule implements PackHandoffPointProvider {
-    private static final float SORTER_YAW_RADIANS = (float) Math.toRadians(180d);
     private static final float TRACK_Z = 0f;
     private static final float TRACK_LENGTH = 6.0f;
     private static final float TIPPER_LENGTH = 1.25f;
@@ -66,15 +63,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private static final float CONTAINED_PACK_GAP_X = 0.012f;
     private static final float CONTAINED_PACK_GAP_Z = 0.012f;
     private static final float CONTAINED_PACK_GAP_Y = 0.010f;
-    private static final Vec3 SORTER_OUTFEED_ANCHOR_LOCAL = new Vec3(0.08f, -0.22f, 0.00f);
-    private static final Vec3 SORTER_HOPPER_MOUTH_LOCAL = new Vec3(0.00f, 0.24f, 0.00f);
-    private static final float SORTER_QUEUE_VERTICAL_STEP = 0.10f;
-    private static final int SORTER_BODY_COLOUR = 0xFF5B6E7A;
-    private static final int SORTER_FRAME_COLOUR = 0xFF39454D;
-    private static final int SORTER_PANEL_COLOUR = 0xFF8EA1AB;
-    private static final int SORTER_INTAKE_COLOUR = 0xFF6F7F87;
-    private static final int SORTER_OUTFEED_COLOUR = 0xFF444F55;
-    private static final float SORTER_HOPPER_WALL_THICKNESS = 0.020f;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -93,12 +81,10 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private final RenderableObject tipperAssemblyRenderable;
     private final RenderableObject tipperTrackRenderable;
     private final RenderableObject tipperSlideRenderable;
-    private final RenderableObject sorterRenderable;
     private final Vec3 tipperAssemblyLocalOrigin;
     private final Vec3 dischargeToteInteriorLocal;
     private final Vec3 dischargeLidLocal;
     private final Vec3 dischargeSlideEntryLocal;
-    private final Vec3 sorterIntakeLocal;
     private final float slideEntryWidth;
     private final ConveyorRuntimeState tipperTrackRuntimeState;
     private final float tippedAngleRadians;
@@ -276,26 +262,14 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 0f,
                 tipperSlideRenderable.transformation.yTranslation + 0.01f,
                 tipperSlideRenderable.transformation.zTranslation - 0.02f);
-        sorterIntakeLocal = tipperAssemblyPointToWorldLocal(
+        Vec3 sorterIntakeLocal = tipperAssemblyPointToWorldLocal(
                 0f,
                 tipperSlideRenderable.transformation.yTranslation - 0.04f,
                 tipperSlideRenderable.transformation.zTranslation - SLIDE_LENGTH - SORTER_INTAKE_CLEARANCE,
                 tippedAngleRadians);
 
-        Vec3 sorterLocalOrigin = new Vec3(
-                sorterIntakeLocal.x,
-                sorterIntakeLocal.y - 0.12f,
-                sorterIntakeLocal.z - 0.12f);
-        sorterRenderable = createSorterRenderable("sorting_machine");
-        Vec3 sorterWorldOrigin = localToWorld(sorterLocalOrigin);
-        sorterRenderable.transformation.xTranslation = sorterWorldOrigin.x;
-        sorterRenderable.transformation.yTranslation = sorterWorldOrigin.y;
-        sorterRenderable.transformation.zTranslation = sorterWorldOrigin.z;
-        sorterRenderable.transformation.angleY = rigYaw() + SORTER_YAW_RADIANS;
-
         objects.add(toteRenderable);
         objects.add(tipperAssemblyRenderable);
-        objects.add(sorterRenderable);
 
         tipperModule = new TipperModule(
                 tote,
@@ -305,10 +279,12 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 tipperAssemblyRenderable,
                 this::tipperPackDischargePoint);
         sortingModule = new SortingModule(
+                tr,
                 sortingMachine,
-                sorterRenderable,
-                this::sorterPackIntakePoint,
-                this::sorterPackOutfeedPoint);
+                layoutSpec.origin(),
+                rigYaw(),
+                sorterIntakeLocal);
+        objects.add(sortingModule.getRenderable());
 
         registerInspectableObjects();
     }
@@ -321,7 +297,10 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         Set<String> placedPackIds = new HashSet<>();
         positionRemainingPacksInTote(placedPackIds);
         positionActiveDischarges(placedPackIds);
-        positionSorterQueue(placedPackIds);
+        sortingModule.syncQueuedPackVisuals(
+                packRenderablesById,
+                placedPackIds,
+                (pack, renderable) -> detachFromToteIfNeeded(pack, renderable, null));
     }
 
     public ToteLoadPlan getToteLoadPlan() {
@@ -453,28 +432,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         }
     }
 
-    private void positionSorterQueue(Set<String> placedPackIds) {
-        int index = 0;
-        for (Pack pack : sortingModule.getSortingMachine().getQueuedPacks()) {
-            RenderableObject renderable = packRenderablesById.get(pack.getId());
-            if (renderable == null) {
-                continue;
-            }
-            detachFromToteIfNeeded(pack, renderable, null);
-            Vec3 conveyorEntryWorld = sortingModule.outfeedPoint().worldPosition();
-            Vec3 queueWorld = new Vec3(
-                    conveyorEntryWorld.x,
-                    conveyorEntryWorld.y + 0.05f + (index * SORTER_QUEUE_VERTICAL_STEP),
-                    conveyorEntryWorld.z);
-            renderable.transformation.xTranslation = queueWorld.x;
-            renderable.transformation.yTranslation = queueWorld.y;
-            renderable.transformation.zTranslation = queueWorld.z;
-            renderable.transformation.angleY = rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI;
-            index++;
-            placedPackIds.add(pack.getId());
-        }
-    }
-
     private ToteLoadPlan createDemoPlan(String toteId) {
         return new ToteLoadPlan(
                 toteId,
@@ -532,259 +489,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
                 new OneColourStrategyImpl(colour),
                 true);
-    }
-
-    private RenderableObject createSorterRenderable(String id) {
-        RenderableObject root = createAnchor(id);
-        root.transformation.yTranslation = 0.18f;
-
-        RenderableObject leftDeck = createBox(
-                id + "_left_deck",
-                0.62f,
-                0.05f,
-                0.12f,
-                SORTER_BODY_COLOUR,
-                true);
-        leftDeck.transformation.xTranslation = 0f;
-        leftDeck.transformation.yTranslation = 0f;
-        leftDeck.transformation.zTranslation = -0.18f;
-        root.addChild(leftDeck);
-
-        RenderableObject rightDeck = createBox(
-                id + "_right_deck",
-                0.62f,
-                0.05f,
-                0.12f,
-                SORTER_BODY_COLOUR,
-                false);
-        rightDeck.transformation.xTranslation = 0f;
-        rightDeck.transformation.yTranslation = 0f;
-        rightDeck.transformation.zTranslation = 0.18f;
-        root.addChild(rightDeck);
-
-        RenderableObject frontBridge = createBox(
-                id + "_front_bridge",
-                0.14f,
-                0.05f,
-                0.24f,
-                SORTER_BODY_COLOUR,
-                false);
-        frontBridge.transformation.xTranslation = -0.24f;
-        frontBridge.transformation.yTranslation = 0f;
-        frontBridge.transformation.zTranslation = 0f;
-        root.addChild(frontBridge);
-
-        RenderableObject rearBridge = createBox(
-                id + "_rear_bridge",
-                0.14f,
-                0.05f,
-                0.24f,
-                SORTER_BODY_COLOUR,
-                false);
-        rearBridge.transformation.xTranslation = 0.24f;
-        rearBridge.transformation.yTranslation = 0f;
-        rearBridge.transformation.zTranslation = 0f;
-        root.addChild(rearBridge);
-
-        RenderableObject hopperCollar = createBox(
-                id + "_hopper_collar",
-                0.20f,
-                0.03f,
-                0.16f,
-                SORTER_OUTFEED_COLOUR,
-                false);
-        hopperCollar.transformation.xTranslation = 0.00f;
-        hopperCollar.transformation.yTranslation = -0.02f;
-        hopperCollar.transformation.zTranslation = 0.00f;
-        root.addChild(hopperCollar);
-
-        RenderableObject leftHousing = createBox(
-                id + "_left_housing",
-                0.54f,
-                0.18f,
-                0.08f,
-                SORTER_BODY_COLOUR,
-                false);
-        leftHousing.transformation.xTranslation = -0.01f;
-        leftHousing.transformation.yTranslation = -0.11f;
-        leftHousing.transformation.zTranslation = -0.20f;
-        root.addChild(leftHousing);
-
-        RenderableObject rightHousing = createBox(
-                id + "_right_housing",
-                0.54f,
-                0.18f,
-                0.08f,
-                SORTER_BODY_COLOUR,
-                false);
-        rightHousing.transformation.xTranslation = -0.01f;
-        rightHousing.transformation.yTranslation = -0.11f;
-        rightHousing.transformation.zTranslation = 0.20f;
-        root.addChild(rightHousing);
-
-        RenderableObject leftFoot = createBox(
-                id + "_left_foot",
-                0.48f,
-                0.05f,
-                0.06f,
-                SORTER_FRAME_COLOUR,
-                false);
-        leftFoot.transformation.xTranslation = -0.03f;
-        leftFoot.transformation.yTranslation = -0.22f;
-        leftFoot.transformation.zTranslation = -0.20f;
-        root.addChild(leftFoot);
-
-        RenderableObject rightFoot = createBox(
-                id + "_right_foot",
-                0.48f,
-                0.05f,
-                0.06f,
-                SORTER_FRAME_COLOUR,
-                false);
-        rightFoot.transformation.xTranslation = -0.03f;
-        rightFoot.transformation.yTranslation = -0.22f;
-        rightFoot.transformation.zTranslation = 0.20f;
-        root.addChild(rightFoot);
-
-        RenderableObject intakeHopper = createFunnelHopperRenderable(
-                id + "_intake_hopper",
-                0.34f,
-                0.18f,
-                0.22f,
-                0.12f,
-                0.14f,
-                SORTER_HOPPER_WALL_THICKNESS,
-                SORTER_INTAKE_COLOUR);
-        intakeHopper.transformation.xTranslation = 0.00f;
-        intakeHopper.transformation.yTranslation = 0.12f;
-        intakeHopper.transformation.zTranslation = -0.01f;
-        root.addChild(intakeHopper);
-
-        RenderableObject meteringCover = createBox(
-                id + "_metering_cover",
-                0.16f,
-                0.06f,
-                0.18f,
-                SORTER_PANEL_COLOUR,
-                false);
-        meteringCover.transformation.xTranslation = 0.24f;
-        meteringCover.transformation.yTranslation = 0.08f;
-        meteringCover.transformation.zTranslation = 0.12f;
-        root.addChild(meteringCover);
-
-        RenderableObject meteringPedestal = createBox(
-                id + "_metering_pedestal",
-                0.10f,
-                0.04f,
-                0.10f,
-                SORTER_OUTFEED_COLOUR,
-                false);
-        meteringPedestal.transformation.xTranslation = 0.18f;
-        meteringPedestal.transformation.yTranslation = 0.03f;
-        meteringPedestal.transformation.zTranslation = 0.08f;
-        root.addChild(meteringPedestal);
-
-        RenderableObject leftFrame = createBox(
-                id + "_left_frame",
-                0.66f,
-                0.03f,
-                0.03f,
-                SORTER_FRAME_COLOUR,
-                false);
-        leftFrame.transformation.xTranslation = 0f;
-        leftFrame.transformation.yTranslation = -0.02f;
-        leftFrame.transformation.zTranslation = -0.14f;
-        root.addChild(leftFrame);
-
-        RenderableObject rightFrame = createBox(
-                id + "_right_frame",
-                0.66f,
-                0.03f,
-                0.03f,
-                SORTER_FRAME_COLOUR,
-                false);
-        rightFrame.transformation.xTranslation = 0f;
-        rightFrame.transformation.yTranslation = -0.02f;
-        rightFrame.transformation.zTranslation = 0.14f;
-        root.addChild(rightFrame);
-
-        return root;
-    }
-
-    private RenderableObject createFunnelHopperRenderable(
-            String id,
-            float topLength,
-            float bottomLength,
-            float topWidth,
-            float bottomWidth,
-            float height,
-            float wallThickness,
-            int colour) {
-        float topY = height * 0.5f;
-        float bottomY = -height * 0.5f;
-        float topHalfLength = topLength * 0.5f;
-        float bottomHalfLength = bottomLength * 0.5f;
-        float topHalfWidth = topWidth * 0.5f;
-        float bottomHalfWidth = bottomWidth * 0.5f;
-        float innerTopHalfLength = topHalfLength - wallThickness;
-        float innerBottomHalfLength = bottomHalfLength - wallThickness;
-        float innerTopHalfWidth = topHalfWidth - wallThickness;
-        float innerBottomHalfWidth = bottomHalfWidth - wallThickness;
-
-        if (innerTopHalfLength <= 0f || innerBottomHalfLength <= 0f
-                || innerTopHalfWidth <= 0f || innerBottomHalfWidth <= 0f) {
-            throw new IllegalArgumentException("wallThickness too large for hopper dimensions");
-        }
-
-        Vec4[] vertices = new Vec4[] {
-                new Vec4(-topHalfLength, topY, -topHalfWidth, 1f),
-                new Vec4(topHalfLength, topY, -topHalfWidth, 1f),
-                new Vec4(topHalfLength, topY, topHalfWidth, 1f),
-                new Vec4(-topHalfLength, topY, topHalfWidth, 1f),
-                new Vec4(-bottomHalfLength, bottomY, -bottomHalfWidth, 1f),
-                new Vec4(bottomHalfLength, bottomY, -bottomHalfWidth, 1f),
-                new Vec4(bottomHalfLength, bottomY, bottomHalfWidth, 1f),
-                new Vec4(-bottomHalfLength, bottomY, bottomHalfWidth, 1f),
-
-                new Vec4(-innerTopHalfLength, topY, -innerTopHalfWidth, 1f),
-                new Vec4(innerTopHalfLength, topY, -innerTopHalfWidth, 1f),
-                new Vec4(innerTopHalfLength, topY, innerTopHalfWidth, 1f),
-                new Vec4(-innerTopHalfLength, topY, innerTopHalfWidth, 1f),
-                new Vec4(-innerBottomHalfLength, bottomY, -innerBottomHalfWidth, 1f),
-                new Vec4(innerBottomHalfLength, bottomY, -innerBottomHalfWidth, 1f),
-                new Vec4(innerBottomHalfLength, bottomY, innerBottomHalfWidth, 1f),
-                new Vec4(-innerBottomHalfLength, bottomY, innerBottomHalfWidth, 1f)
-        };
-
-        int[][] triangles = new int[][] {
-                {0, 5, 4}, {0, 1, 5},
-                {1, 6, 5}, {1, 2, 6},
-                {2, 7, 6}, {2, 3, 7},
-                {3, 4, 7}, {3, 0, 4},
-
-                {8, 12, 13}, {8, 13, 9},
-                {9, 13, 14}, {9, 14, 10},
-                {10, 14, 15}, {10, 15, 11},
-                {11, 15, 12}, {11, 12, 8},
-
-                {0, 8, 9}, {0, 9, 1},
-                {1, 9, 10}, {1, 10, 2},
-                {2, 10, 11}, {2, 11, 3},
-                {3, 11, 8}, {3, 8, 0},
-
-                {4, 13, 12}, {4, 5, 13},
-                {5, 14, 13}, {5, 6, 14},
-                {6, 15, 14}, {6, 7, 15},
-                {7, 12, 15}, {7, 4, 12}
-        };
-
-        return RenderableObject.create(
-                id,
-                tr,
-                new Mesh(vertices, triangles, id + "_mesh"),
-                new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
-                new OneColourStrategyImpl(colour),
-                false);
     }
 
     private RenderableObject createSlideGuide(String id, float xOffset, float entryWidth, float exitWidth) {
@@ -890,15 +594,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         return rotated;
     }
 
-    private Vec3 sorterLocalPointToWorld(Vec3 sorterLocalPoint) {
-        Vec3 rotated = Vec3.rotateY(sorterLocalPoint, sorterRenderable.transformation.angleY);
-        rotated.mutableAdd(new Vec3(
-                sorterRenderable.transformation.xTranslation,
-                sorterRenderable.transformation.yTranslation,
-                sorterRenderable.transformation.zTranslation));
-        return rotated;
-    }
-
     private PackHandoffPoint tipperPackDischargePoint() {
         Vec3 dischargeWorld = localToWorld(tipperAssemblyPointToWorldLocal(
                 0f,
@@ -909,20 +604,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 MachineHandoffPointId.TIPPER_PACK_DISCHARGE.name().toLowerCase(),
                 dischargeWorld,
                 rigYaw());
-    }
-
-    private PackHandoffPoint sorterPackIntakePoint() {
-        return new PackHandoffPoint(
-                MachineHandoffPointId.SORTER_PACK_INTAKE.name().toLowerCase(),
-                sorterLocalPointToWorld(SORTER_HOPPER_MOUTH_LOCAL),
-                sorterRenderable.transformation.angleY);
-    }
-
-    private PackHandoffPoint sorterPackOutfeedPoint() {
-        return new PackHandoffPoint(
-                MachineHandoffPointId.SORTER_PACK_OUTFEED.name().toLowerCase(),
-                sorterLocalPointToWorld(SORTER_OUTFEED_ANCHOR_LOCAL),
-                rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI);
     }
 
     private Vec3 tipperAssemblyPointToWorldLocal(
@@ -942,7 +623,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         float angle = currentTipAngle();
         float clearance = (pack.getDimensions().height() * 0.5f) + 0.008f;
         Vec3 startWorld = findTransferStartWorld(pack);
-        Vec3 sorterIntakeWorld = sorterLocalPointToWorld(SORTER_HOPPER_MOUTH_LOCAL);
+        Vec3 sorterIntakeWorld = sortingModule.intakePoint().worldPosition();
         Vec3 toteInteriorAnchor = localToWorld(tipperAssemblyPointToWorldLocal(
                 dischargeToteInteriorLocal.x,
                 dischargeToteInteriorLocal.y,
