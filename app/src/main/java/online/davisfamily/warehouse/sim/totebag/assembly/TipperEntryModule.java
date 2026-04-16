@@ -86,6 +86,8 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
     private final ToteTrackTipperFlowController flowController;
+    private final TipperModule tipperModule;
+    private final SortingModule sortingModule;
 
     private final RenderableObject toteRenderable;
     private final RenderableObject tipperAssemblyRenderable;
@@ -295,6 +297,19 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         objects.add(tipperAssemblyRenderable);
         objects.add(sorterRenderable);
 
+        tipperModule = new TipperModule(
+                tote,
+                toteLoadPlan,
+                tippingMachine,
+                toteRenderable,
+                tipperAssemblyRenderable,
+                this::tipperPackDischargePoint);
+        sortingModule = new SortingModule(
+                sortingMachine,
+                sorterRenderable,
+                this::sorterPackIntakePoint,
+                this::sorterPackOutfeedPoint);
+
         registerInspectableObjects();
     }
 
@@ -313,6 +328,14 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         return toteLoadPlan;
     }
 
+    public TipperModule getTipperModule() {
+        return tipperModule;
+    }
+
+    public SortingModule getSortingModule() {
+        return sortingModule;
+    }
+
     public RenderableObject getPackRenderable(String packId) {
         return packRenderablesById.get(packId);
     }
@@ -323,32 +346,32 @@ public class TipperEntryModule implements PackHandoffPointProvider {
             throw new IllegalArgumentException("pointId must not be null");
         }
         return switch (pointId) {
-            case TIPPER_PACK_DISCHARGE -> tipperPackDischargePoint();
-            case SORTER_PACK_INTAKE -> sorterPackIntakePoint();
-            case SORTER_PACK_OUTFEED -> sorterPackOutfeedPoint();
+            case TIPPER_PACK_DISCHARGE -> tipperModule.dischargePoint();
+            case SORTER_PACK_INTAKE -> sortingModule.intakePoint();
+            case SORTER_PACK_OUTFEED -> sortingModule.outfeedPoint();
         };
     }
 
     private void registerInspectableObjects() {
         inspectionRegistry.register(toteRenderable, () -> List.of(
                 "Type: Tote",
-                "Id: " + tote.getId(),
-                "Motion: " + tote.getInteractionMode(),
-                "Distance: " + (tote.getLastSnapshot() == null
+                "Id: " + tipperModule.getTote().getId(),
+                "Motion: " + tipperModule.getTote().getInteractionMode(),
+                "Distance: " + (tipperModule.getTote().getLastSnapshot() == null
                         ? "None"
-                        : String.format("%.3f", tote.getLastSnapshot().distanceAlongSegment()))));
+                        : String.format("%.3f", tipperModule.getTote().getLastSnapshot().distanceAlongSegment()))));
 
-        inspectionRegistry.register(tipperAssemblyRenderable, () -> List.of(
+        inspectionRegistry.register(tipperModule.getAssemblyRenderable(), () -> List.of(
                 "Type: Tipper",
-                "State: " + tippingMachine.getState(),
+                "State: " + tipperModule.getTippingMachine().getState(),
                 "Captured tote: " + flowController.isToteCaptured(),
-                "Remaining packs: " + tippingMachine.getRemainingPackCount(),
+                "Remaining packs: " + tipperModule.getTippingMachine().getRemainingPackCount(),
                 "Active discharges: " + flowController.getActiveDischarges().size()));
 
-        inspectionRegistry.register(sorterRenderable, () -> List.of(
+        inspectionRegistry.register(sortingModule.getRenderable(), () -> List.of(
                 "Type: Sorter",
-                "State: " + sortingMachine.getState(),
-                "Queued packs: " + sortingMachine.getQueuedPacks().size(),
+                "State: " + sortingModule.getSortingMachine().getState(),
+                "Queued packs: " + sortingModule.getSortingMachine().getQueuedPacks().size(),
                 "Completed output packs: " + flowController.getCompletedOutputPacks().size()));
     }
 
@@ -432,13 +455,13 @@ public class TipperEntryModule implements PackHandoffPointProvider {
 
     private void positionSorterQueue(Set<String> placedPackIds) {
         int index = 0;
-        for (Pack pack : sortingMachine.getQueuedPacks()) {
+        for (Pack pack : sortingModule.getSortingMachine().getQueuedPacks()) {
             RenderableObject renderable = packRenderablesById.get(pack.getId());
             if (renderable == null) {
                 continue;
             }
             detachFromToteIfNeeded(pack, renderable, null);
-            Vec3 conveyorEntryWorld = sorterPackOutfeedPoint().worldPosition();
+            Vec3 conveyorEntryWorld = sortingModule.outfeedPoint().worldPosition();
             Vec3 queueWorld = new Vec3(
                     conveyorEntryWorld.x,
                     conveyorEntryWorld.y + 0.05f + (index * SORTER_QUEUE_VERTICAL_STEP),

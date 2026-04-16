@@ -8,7 +8,6 @@ import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperEntryModule;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperEntryModuleBuilder;
-import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 
 public class ToteTrackTipperDebugRig {
@@ -33,7 +32,7 @@ public class ToteTrackTipperDebugRig {
                 sim,
                 objects,
                 inspectionRegistry,
-                module.resolveHandoffPoint(MachineHandoffPointId.SORTER_PACK_OUTFEED),
+                module.getSortingModule().outfeedPoint(),
                 null);
         sorterOutfeedTarget.setDelegate(sorterOutfeedDebugConveyor);
     }

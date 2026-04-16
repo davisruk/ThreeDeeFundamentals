@@ -33,7 +33,6 @@ import online.davisfamily.warehouse.sim.totebag.transfer.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.transfer.PrlToPcrTransfer;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
-import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
@@ -124,9 +123,9 @@ public class ToteToBagDebugRig {
                         pdcConveyor.acceptIncomingPackAtFrontDistance(pack, sorterOutfeedFrontDistance(pack));
                     }
                 });
-        sorterOutfeedPoint = tipperEntryModule.resolveHandoffPoint(MachineHandoffPointId.SORTER_PACK_OUTFEED);
+        sorterOutfeedPoint = tipperEntryModule.getSortingModule().outfeedPoint();
         flowController = new ToteToBagFlowController(
-                tipperEntryModule.getToteLoadPlan(),
+                tipperEntryModule.getTipperModule().getToteLoadPlan(),
                 pdcConveyor,
                 pcrConveyor,
                 baggingMachine,

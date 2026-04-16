@@ -323,6 +323,27 @@ Latest integration update
 - sorter-outfeed now hands packs into the tote-to-bag `PdcConveyor` through a small sink boundary rather than through harness-local fake placement
 - the active scene is now back on the integrated tote-to-bag harness
 
+Latest boundary cleanup update
+- the sorter-underflow conveyor is no longer treated as reusable entry-module-owned transport
+- the isolated `ToteTrackTipperDebugRig` now owns that conveyor explicitly as placeholder proving equipment attached to sorter outfeed
+- the integrated `ToteToBagDebugRig` no longer routes sorter output through that placeholder conveyor:
+  sorter output now enters the real PDC earlier, and the integrated PDC has been extended upstream so it physically sits under the sorter
+- the sorter outfeed boundary now uses the newer handoff abstraction directly:
+  `PackReceiveTarget` is now the active sorter-outfeed receiver boundary and the older `PackSink` type has been removed from the live code path
+- explicit handoff vocabulary now exists under `warehouse.sim.totebag.handoff`
+  - `PackHandoffPoint`
+  - `MachineHandoffPointId`
+  - `PackHandoffPointProvider`
+  - `PackReceiveTarget`
+  - `PackReleaseSource`
+- the tote-to-bag core layout has been refined so the integrated visual arrangement is no longer over-coupled:
+  - PCR x placement is now independent of PDC center through `pcrCenterX`
+  - PRL spacing to both PDC and PCR is now driven by a single `prlGap` layout value
+  - PRL render placement now follows that derived layout instead of a hard-coded z
+- a first explicit module split has now started:
+  - `TipperModule` and `SortingModule` now exist under `warehouse.sim.totebag.assembly`
+  - `TipperEntryModule` currently composes and exposes those submodules rather than yet fully disappearing
+
 Latest rendering / alignment fixes
 - a discharge-path integration bug was fixed:
   the tipper discharge path now consistently converts local tipper anchors into world space before constructing the discharge polyline
@@ -381,14 +402,14 @@ Current recommended cleanup slices
   - move the tuned upstream module offsets in `ToteToBagDebugRig` into named layout values/spec entries
   - avoid leaving critical visual alignment dependent on unexplained numeric literals in the harness
 - cleanup slice 2: split `TipperEntryModule`
-  - keep the current module boundary
+  - keep the current module boundary for now, but continue the split now that `TipperModule` and `SortingModule` exist
   - separate assembly/building from visual-sync/helper geometry/path math so the class is easier to reason about and safer to extend
 - cleanup slice 3: clean up active scene selection
   - stop relying on comment/uncomment switching in `TestScene`
   - make the active example/harness selection explicit
 - cleanup slice 4: consider a named sorter-outfeed to PDC handoff type
-  - the current sink hook is acceptable for the thin slice
-  - only introduce a richer boundary type if a second mounted module or second similar handoff appears
+  - sorter outfeed now already uses the general handoff target abstraction rather than the earlier sink callback
+  - the remaining question is whether tipper-to-sorter should also be promoted to a more explicit handoff transfer boundary rather than remaining inside the composed entry assembly/controller path
 
 Route-mounted machine alignment note
 The current isolated tipper work has now clarified an architectural point that should guide later integration work:

@@ -257,6 +257,36 @@
 
 ## Latest Session Update
 
+- The tote-to-bag / tipper-entry integration boundary has been cleaned up materially:
+  - handoff boundary types now exist under `warehouse.sim.totebag.handoff`
+  - `PackHandoffPoint`, `MachineHandoffPointId`, `PackHandoffPointProvider`, `PackReceiveTarget`, and `PackReleaseSource` now define the intended machine handoff vocabulary
+- `TipperEntryModule` now exposes named handoff points for:
+  - tipper pack discharge
+  - sorter pack intake
+  - sorter pack outfeed
+- Placeholder sorter-underflow conveyor ownership has been moved out of the reusable entry assembly:
+  - the reusable `TipperEntryModule` no longer owns the placeholder sorter outfeed conveyor/renderable
+  - `ToteTrackTipperDebugRig` now explicitly composes that placeholder outfeed conveyor as rig-owned proving equipment
+- The integrated tote-to-bag harness no longer routes through that placeholder conveyor:
+  - `ToteToBagDebugRig` now feeds sorter output directly onto the real PDC
+  - the integrated PDC has been extended upstream so it physically occupies the sorter-underflow span in the integrated harness
+- Tote-to-bag core x/z layout has been decoupled and cleaned up further:
+  - PCR x placement is no longer implicitly tied to `pdcCenterX`
+  - `ToteToBagCoreLayoutSpec` now carries an independent `pcrCenterX`
+  - PRL-to-PDC and PRL-to-PCR z spacing is now derived from a single `prlGap` layout value rather than from ad hoc fixed absolute z positions
+  - PRL render placement now follows the same derived layout rather than using a hard-coded visual z
+- The sorter-outfeed live boundary now uses the newer handoff abstraction directly:
+  - `PackSink` has been removed from the active code path and deleted
+  - `ToteTrackTipperFlowController`, `TipperEntryModule`, and the rigs now use `PackReceiveTarget` for sorter outfeed handoff
+  - `SorterOutfeedDebugConveyor` now implements `PackReceiveTarget` directly
+- A final structural cleanup has started to make the proven architecture more explicit in code:
+  - `TipperModule` and `SortingModule` now exist under `warehouse.sim.totebag.assembly`
+  - `TipperEntryModule` now composes and exposes those module objects via getters rather than being only one monolithic reusable type
+- Current practical state after this session:
+  - isolated tipper rig still proves sorter-outfeed plugability using an explicit placeholder conveyor
+  - integrated tote-to-bag rig now shows the intended physical ownership more accurately, with the real PDC running under the sorter
+  - the remaining follow-up is more about further decomposition / API cleanup than about missing the intended thin-slice behaviour
+
 - The previously isolated tote-track tipper rig has now been extracted into a reusable mounted entry module:
   - `TipperEntryModule` now lives under `warehouse.sim.totebag.assembly`
   - `TipperEntryModuleBuilder` provides the assembly/install entry point
@@ -390,11 +420,12 @@
 - For tote-to-bag cleanup/integration follow-up:
   - keep the current tipper-entry module mounted into the tote-to-bag harness; do not regress back to placeholder upstream machine boxes
   - treat the PDC/PRL/PCR transport cell as the stable core and the mounted tipper entry as the current canonical upstream module shape
+  - keep the integrated harness on the real extended PDC under the sorter; do not reintroduce the placeholder sorter-underflow conveyor into the integrated path
   - the next cleanup slices should likely be:
     - replace the remaining mount magic numbers in `ToteToBagDebugRig` with named layout values/spec entries
-    - split `TipperEntryModule` further so assembly, visual sync, and helper geometry/path math are not all in one class
+    - continue splitting `TipperEntryModule` further now that `TipperModule` and `SortingModule` exist, so assembly, visual sync, and helper geometry/path math are not all in one class
     - clean up `TestScene` scene selection so sessions stop relying on comment/uncomment switching
-    - only then consider whether the sorter-outfeed to PDC sink boundary should become a named handoff type
+    - consider whether the remaining tipper-to-sorter path should also move from implicit composition/controller wiring toward a more explicit transfer/handoff object now that sorter outfeed already uses the handoff target abstraction
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
 - Treat the straight conveyor assembly as the canonical direction for conveyor visuals.
   - Reuse the single straight conveyor assembly model for transfer-focused machines and fixed conveyor-backed runs.
