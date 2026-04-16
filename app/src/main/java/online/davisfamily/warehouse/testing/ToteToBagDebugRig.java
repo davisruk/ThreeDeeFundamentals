@@ -33,6 +33,7 @@ import online.davisfamily.warehouse.sim.totebag.transfer.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.transfer.PrlToPcrTransfer;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
+import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPoint;
@@ -48,6 +49,7 @@ public class ToteToBagDebugRig {
     private final ToteToBagSubsystem subsystem;
     private final ToteToBagCoreLayoutSpec layoutSpec;
     private final TipperEntryModule tipperEntryModule;
+    private final SorterOutfeedDebugConveyor sorterOutfeedDebugConveyor;
 
     private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
@@ -92,12 +94,20 @@ public class ToteToBagDebugRig {
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
         var upstreamPose = subsystem.resolveAttachmentPose(
                 new MachineAttachmentSpec(ToteToBagAttachmentPoint.UPSTREAM_MODULE_ROOT, -4.22f, 1.45f, 0.99f, 0f));
+        ForwardingPackSink sorterOutfeedSink = new ForwardingPackSink();
         tipperEntryModule = new TipperEntryModuleBuilder().build(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
                 new TipperEntryLayoutSpec(new Vec3(upstreamPose.x(), upstreamPose.y(), upstreamPose.z()), upstreamPose.yawRadians()),
+                sorterOutfeedSink);
+        sorterOutfeedDebugConveyor = new SorterOutfeedDebugConveyor(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                tipperEntryModule.resolveHandoffPoint(MachineHandoffPointId.SORTER_PACK_OUTFEED),
                 new online.davisfamily.warehouse.sim.totebag.control.PackSink() {
                     @Override
                     public boolean canAccept(Pack pack) {
@@ -109,6 +119,7 @@ public class ToteToBagDebugRig {
                         pdcConveyor.acceptIncomingPack(pack);
                     }
                 });
+        sorterOutfeedSink.setDelegate(sorterOutfeedDebugConveyor.entrySink());
         flowController = new ToteToBagFlowController(
                 tipperEntryModule.getToteLoadPlan(),
                 pdcConveyor,
@@ -145,6 +156,7 @@ public class ToteToBagDebugRig {
     public void syncVisuals() {
         syncConveyorRuntimeStates();
         tipperEntryModule.syncVisuals();
+        sorterOutfeedDebugConveyor.syncVisuals(tipperEntryModule::getPackRenderable);
 
         for (var entry : flowController.getPdcLaneEntries()) {
             positionPackOnPdc(entry.pack(), entry.frontDistance());

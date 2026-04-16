@@ -13,7 +13,6 @@ import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
-import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
@@ -28,8 +27,6 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private final float tipperTippedAngleRadians;
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
-    private final PdcConveyor sorterOutfeedConveyor;
-    private final float sorterOutfeedEntryCenterDistance;
     private final double dischargeDurationSeconds;
     private final PackSink sorterOutfeedSink;
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
@@ -48,8 +45,6 @@ public class ToteTrackTipperFlowController implements SimulationController {
             float tipperTippedAngleRadians,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
-            PdcConveyor sorterOutfeedConveyor,
-            float sorterOutfeedEntryCenterDistance,
             double dischargeDurationSeconds) {
         this(
                 tote,
@@ -59,8 +54,6 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 tipperTippedAngleRadians,
                 tippingMachine,
                 sortingMachine,
-                sorterOutfeedConveyor,
-                sorterOutfeedEntryCenterDistance,
                 dischargeDurationSeconds,
                 null);
     }
@@ -73,16 +66,13 @@ public class ToteTrackTipperFlowController implements SimulationController {
             float tipperTippedAngleRadians,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
-            PdcConveyor sorterOutfeedConveyor,
-            float sorterOutfeedEntryCenterDistance,
             double dischargeDurationSeconds,
             PackSink sorterOutfeedSink) {
         if (tote == null
                 || toteLoadPlan == null
                 || tipperSegment == null
                 || tippingMachine == null
-                || sortingMachine == null
-                || sorterOutfeedConveyor == null) {
+                || sortingMachine == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null");
         }
         if (!tote.getId().equals(toteLoadPlan.getToteId())) {
@@ -94,9 +84,6 @@ public class ToteTrackTipperFlowController implements SimulationController {
         if (Float.isNaN(tipperTippedAngleRadians) || Float.isInfinite(tipperTippedAngleRadians)) {
             throw new IllegalArgumentException("tipperTippedAngleRadians must be finite");
         }
-        if (sorterOutfeedEntryCenterDistance < 0f || sorterOutfeedEntryCenterDistance > sorterOutfeedConveyor.getUsableLength()) {
-            throw new IllegalArgumentException("sorterOutfeedEntryCenterDistance must be within the conveyor usable length");
-        }
         if (dischargeDurationSeconds <= 0d) {
             throw new IllegalArgumentException("dischargeDurationSeconds must be > 0");
         }
@@ -107,8 +94,6 @@ public class ToteTrackTipperFlowController implements SimulationController {
         this.tipperTippedAngleRadians = tipperTippedAngleRadians;
         this.tippingMachine = tippingMachine;
         this.sortingMachine = sortingMachine;
-        this.sorterOutfeedConveyor = sorterOutfeedConveyor;
-        this.sorterOutfeedEntryCenterDistance = sorterOutfeedEntryCenterDistance;
         this.dischargeDurationSeconds = dischargeDurationSeconds;
         this.sorterOutfeedSink = sorterOutfeedSink;
     }
@@ -121,9 +106,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         updateVisualTipProgress(dtSeconds);
         syncToteVisualTilt();
         drainSortingMachine();
-        startPendingSorterOutfeed();
-        updateSorterOutfeed(dtSeconds);
-        completeOutfedPacks();
+        flushPendingSorterOutfeed();
         releaseToteIfReady();
     }
 
@@ -189,35 +172,13 @@ public class ToteTrackTipperFlowController implements SimulationController {
         }
     }
 
-    private void startPendingSorterOutfeed() {
+    private void flushPendingSorterOutfeed() {
         while (!pendingSorterOutfeed.isEmpty()) {
             Pack pack = pendingSorterOutfeed.peek();
-            float entryFrontDistance = sorterOutfeedEntryCenterDistance + (pack.getDimensions().length() * 0.5f);
-            if (!sorterOutfeedConveyor.canAcceptIncomingPackAtFrontDistance(pack, entryFrontDistance)) {
-                return;
-            }
-            sorterOutfeedConveyor.acceptIncomingPackAtFrontDistance(pendingSorterOutfeed.remove(), entryFrontDistance);
-        }
-    }
-
-    private void updateSorterOutfeed(double dtSeconds) {
-        sorterOutfeedConveyor.setRunning(true);
-        sorterOutfeedConveyor.update(dtSeconds);
-    }
-
-    private void completeOutfedPacks() {
-        while (true) {
-            Pack pack = sorterOutfeedConveyor.peekLeadingPackAtOutfeed().orElse(null);
-            if (pack == null) {
-                return;
-            }
             if (sorterOutfeedSink != null && !sorterOutfeedSink.canAccept(pack)) {
                 return;
             }
-            pack = sorterOutfeedConveyor.pollLeadingPackAtOutfeed().orElse(null);
-            if (pack == null) {
-                return;
-            }
+            pack = pendingSorterOutfeed.remove();
             if (sorterOutfeedSink != null) {
                 sorterOutfeedSink.accept(pack);
             } else {

@@ -26,9 +26,6 @@ import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
 import online.davisfamily.warehouse.rendering.model.tracks.RenderableTrackFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory;
-import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory;
-import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.ConveyorVisualSpeed;
-import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.StraightConveyorSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseSegmentMetadata;
@@ -36,8 +33,6 @@ import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.control.PackSink;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
-import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
-import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPointProvider;
@@ -63,7 +58,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private static final float TIPPER_STOP_DISTANCE = TIPPER_START_X + (TIPPER_LENGTH * 0.5f);
     private static final float OUTFEED_Z = -1.24f;
     private static final float TIPPER_TIPPED_ANGLE_RADIANS = -1.02f;
-    private static final float SORTER_OUTFEED_TOP_Y_OFFSET = 0.10f;
     private static final float SLIDE_ENTRY_WIDTH = 0.90f;
     private static final float SLIDE_EXIT_WIDTH = 0.30f;
     private static final float SLIDE_LENGTH = 1.20f;
@@ -72,11 +66,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private static final float CONTAINED_PACK_GAP_X = 0.012f;
     private static final float CONTAINED_PACK_GAP_Z = 0.012f;
     private static final float CONTAINED_PACK_GAP_Y = 0.010f;
-    private static final float SORTER_OUTFEED_USABLE_LENGTH = 2.4f;
-    private static final float SORTER_OUTFEED_SPEED = 1.15f;
-    private static final float SORTER_OUTFEED_VISUAL_LENGTH = 2.6f;
-    private static final float SORTER_OUTFEED_VISUAL_WIDTH = 0.30f;
-    private static final float SORTER_OUTFEED_ENTRY_CENTER_DISTANCE = 1.25f;
     private static final Vec3 SORTER_OUTFEED_ANCHOR_LOCAL = new Vec3(0.08f, -0.22f, 0.00f);
     private static final Vec3 SORTER_HOPPER_MOUTH_LOCAL = new Vec3(0.00f, 0.24f, 0.00f);
     private static final float SORTER_QUEUE_VERTICAL_STEP = 0.10f;
@@ -96,7 +85,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private final ToteLoadPlan toteLoadPlan;
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
-    private final PdcConveyor sorterOutfeedConveyor;
     private final ToteTrackTipperFlowController flowController;
 
     private final RenderableObject toteRenderable;
@@ -104,15 +92,12 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private final RenderableObject tipperTrackRenderable;
     private final RenderableObject tipperSlideRenderable;
     private final RenderableObject sorterRenderable;
-    private final RenderableObject sorterOutfeedRenderable;
     private final Vec3 tipperAssemblyLocalOrigin;
     private final Vec3 dischargeToteInteriorLocal;
     private final Vec3 dischargeLidLocal;
     private final Vec3 dischargeSlideEntryLocal;
     private final Vec3 sorterIntakeLocal;
-    private final Vec3 sorterOutfeedBaseLocal;
     private final float slideEntryWidth;
-    private final ConveyorRuntimeState sorterOutfeedRuntimeState;
     private final ConveyorRuntimeState tipperTrackRuntimeState;
     private final float tippedAngleRadians;
     private final float toteInteriorHalfWidth;
@@ -232,10 +217,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                         .layoutPackPlans(toteLoadPlan.getPackPlans());
         tippingMachine = new TippingMachine("tipper", 0.45d, 0.18d, 0.35d);
         sortingMachine = new SortingMachine("sorter", 0.22d);
-        sorterOutfeedConveyor = new PdcConveyor(
-                "sorter_outfeed",
-                new ConveyorOccupancyModel(SORTER_OUTFEED_USABLE_LENGTH, 0.04f, 0f),
-                SORTER_OUTFEED_SPEED);
         flowController = new ToteTrackTipperFlowController(
                 tote,
                 toteLoadPlan,
@@ -244,8 +225,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 TIPPER_TIPPED_ANGLE_RADIANS,
                 tippingMachine,
                 sortingMachine,
-                sorterOutfeedConveyor,
-                SORTER_OUTFEED_ENTRY_CENTER_DISTANCE,
                 0.55d,
                 sorterOutfeedSink);
 
@@ -312,43 +291,14 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         sorterRenderable.transformation.zTranslation = sorterWorldOrigin.z;
         sorterRenderable.transformation.angleY = rigYaw() + SORTER_YAW_RADIANS;
 
-        sorterOutfeedRuntimeState = new ConveyorRuntimeState();
-        sorterOutfeedRuntimeState.setRunning(true);
-        sorterOutfeedRenderable = StraightConveyorFactory.create(
-                "sorter_outfeed_visual",
-                tr,
-                new StraightConveyorSpec(
-                        SORTER_OUTFEED_VISUAL_LENGTH,
-                        SORTER_OUTFEED_VISUAL_WIDTH,
-                        0.05f,
-                        0.008f,
-                        0.10f,
-                        0.08f,
-                        0.004f,
-                        ConveyorVisualSpeed.fixed(SORTER_OUTFEED_SPEED)),
-                sorterOutfeedRuntimeState,
-                trackAppearance);
-        Vec3 sorterOutfeedWorld = sorterLocalPointToWorld(SORTER_OUTFEED_ANCHOR_LOCAL);
-        sorterOutfeedBaseLocal = new Vec3(
-                sorterOutfeedWorld.x,
-                sorterOutfeedWorld.y,
-                sorterOutfeedWorld.z);
-        sorterOutfeedRenderable.transformation.xTranslation = sorterOutfeedWorld.x;
-        sorterOutfeedRenderable.transformation.yTranslation = sorterOutfeedWorld.y;
-        sorterOutfeedRenderable.transformation.zTranslation = sorterOutfeedWorld.z;
-        sorterOutfeedRenderable.transformation.angleY = rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI;
-
         objects.add(toteRenderable);
         objects.add(tipperAssemblyRenderable);
         objects.add(sorterRenderable);
-        objects.add(sorterOutfeedRenderable);
 
         registerInspectableObjects();
     }
 
     public void syncVisuals() {
-        sorterOutfeedRuntimeState.setRunning(
-                !sorterOutfeedConveyor.getLaneEntries().isEmpty() || !flowController.getActiveDischarges().isEmpty());
         tipperTrackRuntimeState.setRunning(!flowController.isToteCaptured());
         syncTipperVisuals();
         ensurePackRenderablesExist();
@@ -357,7 +307,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         positionRemainingPacksInTote(placedPackIds);
         positionActiveDischarges(placedPackIds);
         positionSorterQueue(placedPackIds);
-        positionSorterOutfeed(placedPackIds);
     }
 
     public ToteLoadPlan getToteLoadPlan() {
@@ -400,12 +349,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 "Type: Sorter",
                 "State: " + sortingMachine.getState(),
                 "Queued packs: " + sortingMachine.getQueuedPacks().size(),
-                "Outfeed packs: " + sorterOutfeedConveyor.getLaneEntries().size()));
-
-        inspectionRegistry.register(sorterOutfeedRenderable, () -> List.of(
-                "Type: Sorter outfeed",
-                "Running: " + sorterOutfeedRuntimeState.isRunning(),
-                "Lane packs: " + sorterOutfeedConveyor.getLaneEntries().size(),
                 "Completed output packs: " + flowController.getCompletedOutputPacks().size()));
     }
 
@@ -495,7 +438,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 continue;
             }
             detachFromToteIfNeeded(pack, renderable, null);
-            Vec3 conveyorEntryWorld = sorterConveyorPackCenterWorld(pack);
+            Vec3 conveyorEntryWorld = sorterPackOutfeedPoint().worldPosition();
             Vec3 queueWorld = new Vec3(
                     conveyorEntryWorld.x,
                     conveyorEntryWorld.y + 0.05f + (index * SORTER_QUEUE_VERTICAL_STEP),
@@ -506,33 +449,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
             renderable.transformation.angleY = rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI;
             index++;
             placedPackIds.add(pack.getId());
-        }
-    }
-
-    private void positionSorterOutfeed(Set<String> placedPackIds) {
-        for (var entry : sorterOutfeedConveyor.getLaneEntries()) {
-            RenderableObject renderable = packRenderablesById.get(entry.pack().getId());
-            if (renderable == null) {
-                continue;
-            }
-            detachFromToteIfNeeded(entry.pack(), renderable, null);
-            float conveyorYaw = rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI;
-            Vec3 forward = Vec3.rotateY(new Vec3(1f, 0f, 0f), conveyorYaw);
-            float alongConveyor = -(sorterOutfeedConveyor.getUsableLength() * 0.5f)
-                    + entry.frontDistance()
-                    - (entry.pack().getDimensions().length() * 0.5f);
-            Vec3 outfeedWorld = new Vec3(
-                    sorterOutfeedRenderable.transformation.xTranslation + (forward.x * alongConveyor),
-                    sorterOutfeedRenderable.transformation.yTranslation
-                            + SORTER_OUTFEED_TOP_Y_OFFSET
-                            + (entry.pack().getDimensions().height() * 0.5f)
-                            + 0.002f,
-                    sorterOutfeedRenderable.transformation.zTranslation + (forward.z * alongConveyor));
-            renderable.transformation.xTranslation = outfeedWorld.x;
-            renderable.transformation.yTranslation = outfeedWorld.y;
-            renderable.transformation.zTranslation = outfeedWorld.z;
-            renderable.transformation.angleY = conveyorYaw;
-            placedPackIds.add(entry.pack().getId());
         }
     }
 
@@ -984,19 +900,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 MachineHandoffPointId.SORTER_PACK_OUTFEED.name().toLowerCase(),
                 sorterLocalPointToWorld(SORTER_OUTFEED_ANCHOR_LOCAL),
                 rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI);
-    }
-
-    private Vec3 sorterConveyorPackCenterWorld(Pack pack) {
-        float conveyorYaw = rigYaw() + SORTER_YAW_RADIANS + (float) Math.PI;
-        Vec3 forward = Vec3.rotateY(new Vec3(1f, 0f, 0f), conveyorYaw);
-        float packCenterDistance = -(sorterOutfeedConveyor.getUsableLength() * 0.5f) + SORTER_OUTFEED_ENTRY_CENTER_DISTANCE;
-        return new Vec3(
-                sorterOutfeedRenderable.transformation.xTranslation + (forward.x * packCenterDistance),
-                sorterOutfeedRenderable.transformation.yTranslation
-                        + SORTER_OUTFEED_TOP_Y_OFFSET
-                        + (pack.getDimensions().height() * 0.5f)
-                        + 0.002f,
-                sorterOutfeedRenderable.transformation.zTranslation + (forward.z * packCenterDistance));
     }
 
     private Vec3 tipperAssemblyPointToWorldLocal(
