@@ -411,6 +411,13 @@ Current recommended cleanup slices
   - sorter outfeed now already uses the general handoff target abstraction rather than the earlier sink callback
   - the remaining question is whether tipper-to-sorter should also be promoted to a more explicit handoff transfer boundary rather than remaining inside the composed entry assembly/controller path
 
+End-of-session cleanup observations
+- `TestScene` still relies on manual comment/uncomment switching between harnesses and should eventually move to an explicit scene-selection mechanism
+- `ToteToBagDebugRig` still contains tuned mount numbers and the temporary integrated PDC extension constant; those should eventually become named layout values/spec fields
+- `TipperEntryModule` is now improved by composing `TipperModule` and `SortingModule`, but it is still fairly large and still mixes assembly, render-sync, and helper geometry/path math
+- the tipper-to-sorter path is still implicit inside the composed entry assembly/controller flow; sorter-outfeed has the clearer handoff boundary now, but tipper-to-sorter may still deserve the same treatment later
+- the remaining uncommitted local `gradle.properties` edits were intentionally left untouched because they are not part of the tote-to-bag architectural slice
+
 Route-mounted machine alignment note
 The current isolated tipper work has now clarified an architectural point that should guide later integration work:
 - the tipper should follow the same general integration conventions as mounted transfer machines
