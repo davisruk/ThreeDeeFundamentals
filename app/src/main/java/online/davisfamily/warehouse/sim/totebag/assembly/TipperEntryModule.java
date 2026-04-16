@@ -59,7 +59,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private static final float SLIDE_EXIT_WIDTH = 0.30f;
     private static final float SLIDE_LENGTH = 1.20f;
     private static final float SLIDE_THICKNESS = 0.03f;
-    private static final float SORTER_INTAKE_CLEARANCE = 0.08f;
     private static final float CONTAINED_PACK_GAP_X = 0.012f;
     private static final float CONTAINED_PACK_GAP_Z = 0.012f;
     private static final float CONTAINED_PACK_GAP_Y = 0.010f;
@@ -79,15 +78,8 @@ public class TipperEntryModule implements PackHandoffPointProvider {
 
     private final RenderableObject toteRenderable;
     private final RenderableObject tipperAssemblyRenderable;
-    private final RenderableObject tipperTrackRenderable;
-    private final RenderableObject tipperSlideRenderable;
-    private final Vec3 tipperAssemblyLocalOrigin;
-    private final Vec3 dischargeToteInteriorLocal;
-    private final Vec3 dischargeLidLocal;
-    private final Vec3 dischargeSlideEntryLocal;
     private final float slideEntryWidth;
     private final ConveyorRuntimeState tipperTrackRuntimeState;
-    private final float tippedAngleRadians;
     private final float toteInteriorHalfWidth;
     private final float toteInteriorHalfDepth;
     private final float toteInteriorFloorLocalY;
@@ -224,7 +216,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         tipperTrackRuntimeState.setRunning(true);
         float tipperTrackOverallWidth = tipperTrackSpec.getOverallWidth();
         slideEntryWidth = TIPPER_LENGTH;
-        tipperAssemblyLocalOrigin = new Vec3(
+        Vec3 tipperAssemblyLocalOrigin = new Vec3(
                 TIPPER_STOP_DISTANCE,
                 0.02f,
                 TRACK_Z - (tipperTrackOverallWidth * 0.5f));
@@ -235,9 +227,9 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         tipperAssemblyRenderable.transformation.zTranslation = tipperAssemblyWorld.z;
         tipperAssemblyRenderable.transformation.angleY = rigYaw();
 
-        tipperTrackRenderable = createLocalTipperTrack(tr, tipperTrackSpec, trackAppearance, tipperTrackRuntimeState);
+        RenderableObject tipperTrackRenderable = createLocalTipperTrack(tr, tipperTrackSpec, trackAppearance, tipperTrackRuntimeState);
         tipperTrackRenderable.transformation.zTranslation = tipperTrackOverallWidth * 0.5f;
-        tipperSlideRenderable = createFunnelSlideRenderable("tipper_slide", 0xFFFF00FF);
+        RenderableObject tipperSlideRenderable = createFunnelSlideRenderable("tipper_slide", 0xFFFF00FF);
         tipperSlideRenderable.transformation.xTranslation = 0f;
         tipperSlideRenderable.transformation.yTranslation = 0.04f;
         tipperSlideRenderable.transformation.zTranslation = -0.02f;
@@ -255,18 +247,12 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         tipperAssemblyRenderable.addChild(tipperTrackRenderable);
         tipperAssemblyRenderable.addChild(tipperSlideRenderable);
 
-        tippedAngleRadians = TIPPER_TIPPED_ANGLE_RADIANS;
-        dischargeToteInteriorLocal = new Vec3(0f, toteInteriorFloorLocalY + 0.06f, 0.10f);
-        dischargeLidLocal = new Vec3(0f, 0.24f, -0.08f);
-        dischargeSlideEntryLocal = new Vec3(
+        Vec3 dischargeToteInteriorLocal = new Vec3(0f, toteInteriorFloorLocalY + 0.06f, 0.10f);
+        Vec3 dischargeLidLocal = new Vec3(0f, 0.24f, -0.08f);
+        Vec3 dischargeSlideEntryLocal = new Vec3(
                 0f,
                 tipperSlideRenderable.transformation.yTranslation + 0.01f,
                 tipperSlideRenderable.transformation.zTranslation - 0.02f);
-        Vec3 sorterIntakeLocal = tipperAssemblyPointToWorldLocal(
-                0f,
-                tipperSlideRenderable.transformation.yTranslation - 0.04f,
-                tipperSlideRenderable.transformation.zTranslation - SLIDE_LENGTH - SORTER_INTAKE_CLEARANCE,
-                tippedAngleRadians);
 
         objects.add(toteRenderable);
         objects.add(tipperAssemblyRenderable);
@@ -277,13 +263,19 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 tippingMachine,
                 toteRenderable,
                 tipperAssemblyRenderable,
-                this::tipperPackDischargePoint);
+                layoutSpec.origin(),
+                tipperAssemblyLocalOrigin,
+                dischargeToteInteriorLocal,
+                dischargeLidLocal,
+                dischargeSlideEntryLocal,
+                TIPPER_TIPPED_ANGLE_RADIANS,
+                rigYaw());
         sortingModule = new SortingModule(
                 tr,
                 sortingMachine,
                 layoutSpec.origin(),
                 rigYaw(),
-                sorterIntakeLocal);
+                tipperModule.sorterIntakeMountLocalPoint());
         objects.add(sortingModule.getRenderable());
 
         registerInspectableObjects();
@@ -291,7 +283,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
 
     public void syncVisuals() {
         tipperTrackRuntimeState.setRunning(!flowController.isToteCaptured());
-        syncTipperVisuals();
+        tipperModule.syncVisuals(flowController.getVisualTipProgress());
         ensurePackRenderablesExist();
         hideDetachedPacks();
         Set<String> placedPackIds = new HashSet<>();
@@ -352,11 +344,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 "State: " + sortingModule.getSortingMachine().getState(),
                 "Queued packs: " + sortingModule.getSortingMachine().getQueuedPacks().size(),
                 "Completed output packs: " + flowController.getCompletedOutputPacks().size()));
-    }
-
-    private void syncTipperVisuals() {
-        float targetAngle = tippedAngleRadians * flowController.getVisualTipProgress();
-        tipperAssemblyRenderable.transformation.angleX = targetAngle;
     }
 
     private void ensurePackRenderablesExist() {
@@ -594,51 +581,13 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         return rotated;
     }
 
-    private PackHandoffPoint tipperPackDischargePoint() {
-        Vec3 dischargeWorld = localToWorld(tipperAssemblyPointToWorldLocal(
-                0f,
-                tipperSlideRenderable.transformation.yTranslation - 0.04f,
-                tipperSlideRenderable.transformation.zTranslation - SLIDE_LENGTH,
-                tippedAngleRadians));
-        return new PackHandoffPoint(
-                MachineHandoffPointId.TIPPER_PACK_DISCHARGE.name().toLowerCase(),
-                dischargeWorld,
-                rigYaw());
-    }
-
-    private Vec3 tipperAssemblyPointToWorldLocal(
-            float localX,
-            float localY,
-            float localZ,
-            float angleX) {
-        Vec3 rotated = new Vec3(
-                localX,
-                rotatedY(localY, localZ, angleX),
-                rotatedZ(localY, localZ, angleX));
-        rotated.mutableAdd(tipperAssemblyLocalOrigin);
-        return rotated;
-    }
-
     private Vec3 sampleDischargeWorldPosition(double progress, Pack pack) {
-        float angle = currentTipAngle();
         float clearance = (pack.getDimensions().height() * 0.5f) + 0.008f;
         Vec3 startWorld = findTransferStartWorld(pack);
         Vec3 sorterIntakeWorld = sortingModule.intakePoint().worldPosition();
-        Vec3 toteInteriorAnchor = localToWorld(tipperAssemblyPointToWorldLocal(
-                dischargeToteInteriorLocal.x,
-                dischargeToteInteriorLocal.y,
-                dischargeToteInteriorLocal.z,
-                angle));
-        Vec3 lidAnchor = localToWorld(tipperAssemblyPointToWorldLocal(
-                dischargeLidLocal.x,
-                dischargeLidLocal.y,
-                dischargeLidLocal.z,
-                angle));
-        Vec3 slideEntryAnchor = localToWorld(tipperAssemblyPointToWorldLocal(
-                dischargeSlideEntryLocal.x,
-                dischargeSlideEntryLocal.y,
-                dischargeSlideEntryLocal.z,
-                angle));
+        Vec3 toteInteriorAnchor = tipperModule.dischargeToteInteriorWorld();
+        Vec3 lidAnchor = tipperModule.dischargeLidWorld();
+        Vec3 slideEntryAnchor = tipperModule.dischargeSlideEntryWorld();
         float slideMidX = Vec3.lerp(slideEntryAnchor.x, sorterIntakeWorld.x, 0.55f);
         float slideMidY = Vec3.lerp(slideEntryAnchor.y, sorterIntakeWorld.y + 0.08f, 0.45f);
         float slideMidZ = Vec3.lerp(slideEntryAnchor.z, sorterIntakeWorld.z, 0.55f);
@@ -705,10 +654,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         return false;
     }
 
-    private float currentTipAngle() {
-        return tippedAngleRadians * tippingMachine.getTipProgress();
-    }
-
     private Vec3 containedPackLocalFor(String packId) {
         return containedPackLayoutById.get(packId);
     }
@@ -761,14 +706,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
             }
         }
         return null;
-    }
-
-    private float rotatedY(float localY, float localZ, float angleX) {
-        return (float) ((localY * Math.cos(angleX)) - (localZ * Math.sin(angleX)));
-    }
-
-    private float rotatedZ(float localY, float localZ, float angleX) {
-        return (float) ((localY * Math.sin(angleX)) + (localZ * Math.cos(angleX)));
     }
 
     private Mesh createFunnelSlideMesh() {
