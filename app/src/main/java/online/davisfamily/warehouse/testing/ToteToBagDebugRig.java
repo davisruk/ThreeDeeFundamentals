@@ -35,7 +35,6 @@ import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
-import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 
 public class ToteToBagDebugRig {
@@ -91,13 +90,12 @@ public class ToteToBagDebugRig {
         pdcDiversionDevices = subsystem.getPdcDiversionDevices();
         pcrConveyor = subsystem.getPcrConveyor();
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
-        var upstreamPose = subsystem.resolveAttachmentPose(layoutSpec.tipperEntryMount());
         tipperEntryModule = new TipperEntryModuleBuilder().build(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
-                new TipperEntryLayoutSpec(new Vec3(upstreamPose.x(), upstreamPose.y(), upstreamPose.z()), upstreamPose.yawRadians()),
+                subsystem.getLayout().resolveTipperEntryLayoutSpec(),
                 new PackReceiveTarget() {
                     @Override
                     public PackHandoffPoint handoffPoint() {

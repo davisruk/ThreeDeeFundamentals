@@ -1,5 +1,6 @@
 package online.davisfamily.warehouse.sim.totebag.layout;
 
+import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
@@ -96,6 +97,13 @@ public class ToteToBagCoreLayout {
                 anchor.y() + spec.offsetY(),
                 anchor.z() + spec.offsetZ(),
                 spec.yawRadians());
+    }
+
+    public TipperEntryLayoutSpec resolveTipperEntryLayoutSpec() {
+        ToteToBagAttachmentPose pose = resolveAttachmentPose(spec.tipperEntryMount());
+        return new TipperEntryLayoutSpec(
+                new Vec3(pose.x(), pose.y(), pose.z()),
+                pose.yawRadians());
     }
 
     private Pack probePack() {
