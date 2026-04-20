@@ -12,14 +12,14 @@ class ToteToBagCoreLayoutTest {
 
     @Test
     void shouldResolveAttachmentPoseFromCoreAnchors() {
-        ToteToBagCoreLayout layout = new ToteToBagCoreLayout(ToteToBagCoreLayoutSpec.debugDefaults());
+        ToteToBagCoreLayoutSpec spec = ToteToBagCoreLayoutSpec.debugDefaults();
+        ToteToBagCoreLayout layout = new ToteToBagCoreLayout(spec);
 
-        ToteToBagAttachmentPose pose = layout.resolveAttachmentPose(
-                new MachineAttachmentSpec(ToteToBagAttachmentPoint.PCR_OUTFEED, 2.6f, 0.26f, 0f, 0f));
+        ToteToBagAttachmentPose pose = layout.resolveAttachmentPose(spec.baggerMount());
 
         assertEquals(4.0f, pose.x(), 0.0001f);
         assertEquals(0.28f, pose.y(), 0.0001f);
-        assertEquals(-2.9f, pose.z(), 0.0001f);
+        assertEquals(layout.pcrZ(), pose.z(), 0.0001f);
     }
 
     @Test

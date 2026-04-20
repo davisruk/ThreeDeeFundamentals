@@ -35,15 +35,12 @@ import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
-import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
-import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPoint;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 
 public class ToteToBagDebugRig {
     private static final float BUMPER_REST_Z = 0.27f;
     private static final float BUMPER_ACTIVE_Z = 0.18f;
-    private static final float INTEGRATED_PDC_EXTENSION = 2.6f;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -94,13 +91,7 @@ public class ToteToBagDebugRig {
         pdcDiversionDevices = subsystem.getPdcDiversionDevices();
         pcrConveyor = subsystem.getPcrConveyor();
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
-        var upstreamPose = subsystem.resolveAttachmentPose(
-                new MachineAttachmentSpec(
-                        ToteToBagAttachmentPoint.UPSTREAM_MODULE_ROOT,
-                        -4.22f + INTEGRATED_PDC_EXTENSION,
-                        1.45f,
-                        0.99f,
-                        0f));
+        var upstreamPose = subsystem.resolveAttachmentPose(layoutSpec.upstreamModuleMount());
         tipperEntryModule = new TipperEntryModuleBuilder().build(
                 tr,
                 sim,
@@ -144,7 +135,7 @@ public class ToteToBagDebugRig {
         pdcRenderable = subsystem.getPdcRenderable();
         pcrRenderable = subsystem.getPcrRenderable();
         baggerRenderable = createBox("bagging_machine", 0f, 0f, 0f, 0.8f, 0.56f, 0.9f, 0xFF6F5E49);
-        subsystem.attachRenderable(baggerRenderable, new MachineAttachmentSpec(ToteToBagAttachmentPoint.PCR_OUTFEED, 2.6f, 0.26f, 0f, 0f));
+        subsystem.attachRenderable(baggerRenderable, layoutSpec.baggerMount());
 
         objects.add(baggerRenderable);
         objects.addAll(subsystem.getCoreRenderables());
@@ -416,13 +407,13 @@ public class ToteToBagDebugRig {
     private ToteToBagCoreLayoutSpec integratedLayoutSpec() {
         ToteToBagCoreLayoutSpec defaults = ToteToBagCoreLayoutSpec.debugDefaults();
         return new ToteToBagCoreLayoutSpec(
-                defaults.pdcCenterX() - (INTEGRATED_PDC_EXTENSION * 0.5f),
+                defaults.pdcCenterX() - (defaults.upstreamPdcExtensionLength() * 0.5f),
                 defaults.pcrCenterX(),
                 defaults.conveyorY(),
                 defaults.pdcZ(),
                 defaults.packY(),
                 defaults.singlePackConveyorWidth(),
-                defaults.pdcLength() + INTEGRATED_PDC_EXTENSION,
+                defaults.pdcLength() + defaults.upstreamPdcExtensionLength(),
                 defaults.pcrLength(),
                 defaults.prlLength(),
                 defaults.prlCount(),
@@ -436,6 +427,9 @@ public class ToteToBagDebugRig {
                 defaults.pcrMinimumGap(),
                 defaults.pcrSafetyMargin(),
                 defaults.conveyorMinimumGap(),
+                defaults.upstreamPdcExtensionLength(),
+                defaults.upstreamModuleMount(),
+                defaults.baggerMount(),
                 defaults.sorterReleaseIntervalSeconds(),
                 defaults.diversionArmDelaySeconds(),
                 defaults.diversionActuationDurationSeconds(),
