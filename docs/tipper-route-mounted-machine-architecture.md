@@ -20,6 +20,25 @@ In the current code:
 
 This is acceptable for the current thin slice and for isolated proving rigs, but it is not the intended production boundary for a plug-together warehouse application.
 
+## Current Code Position After Recent Refactors
+
+The code has moved materially closer to the intended boundary, but the current reusable shape is still one composition level too coarse.
+
+Recent completed cleanup:
+
+- `TipperModule` now more clearly owns tipper-side visual sync and anchor math
+- `SortingModule` now more clearly owns sorter-side render/anchor ownership
+- `TipperEntryPackVisuals` now owns pack-renderable lifecycle and visual placement for the mounted entry section
+- `TipperToSorterDischargeSeam` now owns the visible tipper-to-sorter transfer path math
+- `TipperAssemblyFactory` now owns the mounted tipper assembly render construction
+- tote-to-bag integrated upstream mount policy now lives in `ToteToBagCoreLayoutSpec` / `ToteToBagCoreLayout` rather than being rebuilt ad hoc in the rig
+
+Current remaining issue:
+
+- `TipperEntryModule` is still effectively a reusable "tipper plus sorter" section rather than a composition helper built from two independently mountable machines
+
+This means the current code is improved, but it does not yet fully support swapping the sorter for another downstream machine or station without treating the pair as a special-case reusable unit.
+
 ## Transfer-Zone Pattern To Align With
 
 The transfer system currently provides the architectural style that the tipper should follow.
@@ -87,6 +106,12 @@ The reusable production-facing tipper installation should own:
 - explicit tote/machine interaction boundary
 - downstream pack handoff points
 - machine-local renderables and anchor math
+
+Additional clarified requirement from later discussion:
+
+- the tipper and sorter must be independently reusable and independently replaceable
+- a helper/composition type specifically for "tipper to sorter" is acceptable
+- that helper must not become the primary architectural abstraction for the tipper itself
 
 ## Decisions Made
 
@@ -312,6 +337,12 @@ Owns:
 - sorter intake/outfeed handoff points
 - sorter queued-pack visual placement
 
+Important clarification:
+
+- `SortingModule` should remain independently mountable
+- it should not be treated as an inherent part of a reusable tipper machine package
+- the same principle should apply to future machines such as lid handling, strapping, exception/manual/third-party stations, and bagging
+
 ### `TipperToSorterDischargePath`
 
 Role:
@@ -327,6 +358,169 @@ Reason:
 
 - this is the main remaining seam still owned by `TipperEntryModule`
 - extracting it would materially narrow `TipperEntryModule`/installer ownership
+
+Current note:
+
+- this seam extraction has now happened in code under `TipperToSorterDischargeSeam`
+- the broader architectural lesson remains important:
+  machine-to-machine transfer seams should be explicit so adjacent machines can be swapped without collapsing them into one reusable type
+
+## Additional Architectural Clarification: Independent Machines Plus Composition
+
+Later discussion clarified that the main remaining architecture issue is not sorter-to-PDC coupling.
+
+The more important remaining concern is that tipper-to-sorter is still too tightly packaged from the point of view of reuse.
+
+The agreed direction is now:
+
+- treat each machine as independently mountable
+- expose explicit handoff points
+- express machine-to-machine transfer through dedicated seam/composition objects
+- keep scene/build code responsible for choosing which machines are connected
+
+This is important because future machine families are expected to include:
+
+- lid opening / closing machine
+- tote strapping machine
+- bagging machine
+- exceptions station
+- third-party station
+- manual station
+
+Those machines will not all share identical semantics, but they will benefit from a shared composition style.
+
+### What Should Be Reusable
+
+The reusable unit should usually be:
+
+- an independently mountable machine module
+
+not:
+
+- a fixed pairing of adjacent machines
+
+Examples:
+
+- `TipperModule` should be reusable without `SortingModule`
+- `SortingModule` should be reusable without `TipperModule`
+- a future tipper could discharge into:
+  - a sorter
+  - another tote route section below
+  - an exception/manual handling station
+  - some other downstream machine
+
+### What Kind Of Coupling Is Acceptable
+
+It is acceptable to keep convenience composition helpers such as:
+
+- `TipperToSorterSection`
+- `TipperSorterSectionInstaller`
+
+if they are clearly composition helpers and not the primary machine abstraction.
+
+That means:
+
+- `TipperEntryModule` in its current role is too close to being treated as the reusable machine unit
+- the long-term direction should be to rename/reframe that shape as a composition helper built from independent machines plus a seam
+
+### Lightweight Shared Convention Worth Introducing
+
+A heavy common inheritance hierarchy is not required yet.
+
+A lightweight shared route-mounted-machine convention would likely be enough:
+
+- machine owns its runtime and renderables
+- machine exposes handoff points
+- machine can be mounted from external layout/route ownership
+- machine-to-machine seams are explicit
+- scene/build code composes machines and seams
+
+This shared convention is the part that will help upcoming machines, not forcing identical state machines or identical topology objects.
+
+## Work Still Required
+
+The following work is still required to reach the now-clarified target architecture.
+
+### 1. Reframe `TipperEntryModule`
+
+Required work:
+
+- stop treating `TipperEntryModule` as the reusable machine abstraction
+- either rename it or materially document/restructure it as a composition helper for:
+  - `TipperModule`
+  - `SortingModule`
+  - `TipperToSorterDischargeSeam`
+  - any section-level visual helper/controller glue
+
+Reasoning:
+
+- the current name/shape still implies that "tipper plus sorter" is the primary reusable unit
+- that makes it harder to replace the sorter with another downstream station later
+
+### 2. Introduce A Small Independent-Machine Surface
+
+Required work:
+
+- define a lightweight convention or interface for independently mountable machines
+- this may be minimal and should not over-generalise
+
+Likely capabilities:
+
+- expose root renderables / inspection roots
+- expose handoff points
+- support visual sync
+- support explicit install/registration from scene/build code
+
+Reasoning:
+
+- the upcoming machine set is broad enough that a small common composition style will help
+- a disciplined shared boundary is more valuable than a premature large abstraction hierarchy
+
+### 3. Move Scene-Level Composition Out Of The Debug Rig
+
+Required work:
+
+- extract the remaining scene-level wiring from `ToteToBagDebugRig`
+- create a builder/installer whose job is specifically to compose:
+  - tote-to-bag core
+  - mounted tipper
+  - mounted sorter
+  - seam/handoff objects
+  - controllers
+
+Reasoning:
+
+- the debug rig should not remain the only place where the real production composition pattern exists
+- production scenes should be able to ask for a mounted machine section without copying rig logic
+
+### 4. Make Alternate Downstream Targets First-Class
+
+Required work:
+
+- ensure the tipper-side machine composition can target something other than a sorter
+- likely by expressing downstream dependencies through explicit handoff/receive targets or seam installers
+
+Examples to keep in mind:
+
+- tipper -> sorter
+- tipper -> lower tote track
+- tipper -> exception/manual station
+
+Reasoning:
+
+- this is the concrete proof that the architecture no longer treats the sorter as part of the tipper’s identity
+
+### 5. Revisit Sorter-To-PDC Only If It Helps The Same Boundary
+
+Required work:
+
+- sorter-to-PDC may later be expressed more explicitly if that improves independence/composition
+- this is lower priority than tipper/sorter independence
+
+Reasoning:
+
+- PDC is realistically much more likely to be fed by a sorter than the tipper is to always feed a sorter
+- tipper/downstream independence therefore carries more architectural value right now
 
 ### `TipperSectionInstaller`
 
@@ -408,6 +602,19 @@ The agreed recommendation is not to jump directly to the final production shape 
 5. Mount the reusable tipper installation against externally created route infrastructure
 6. After tipper behaviour is validated under the new boundary, revisit transfer-zone identity flow and align it with the direct-reference direction
 
+Updated interpretation after later refactors/discussion:
+
+- seam extraction and internal cleanup have progressed materially
+- the next refactor priority is now independent-machine composition rather than more internal cleanup inside the current paired section
+
+Updated recommended next sequence:
+
+1. Reframe the current `TipperEntryModule` shape as a composition helper rather than a primary machine abstraction
+2. Introduce a small explicit independent-machine convention/surface
+3. Extract reusable scene/build composition out of `ToteToBagDebugRig`
+4. Prove one alternate downstream target for the tipper beyond sorter ownership, or at least shape the seam/install API so such a target can be plugged in cleanly
+5. Only then decide whether sorter-to-PDC also benefits from the same abstraction layer
+
 ## Important Non-Goals For This Refactor
 
 The following were explicitly not the aim of the discussion:
@@ -429,5 +636,11 @@ When resuming work in the next session:
    - installer/install-result surface
    - direct tote reference inside tipper machine/controller logic
    - load-plan lookup through provider
-4. Prefer the next implementation slice to start with the missing boundary types and the discharge-path seam extraction rather than immediately attempting the entire production integration at once.
-
+4. Treat the current code position as improved but still not fully decoupled:
+   - `TipperModule` and `SortingModule` should become the primary independently mountable units
+   - the current paired section should become an explicit composition helper, not the primary tipper abstraction
+5. Prefer the next implementation slice to focus on independent-machine composition:
+   - reframe/rename the current paired section
+   - define a lightweight independent-machine convention
+   - extract production-facing composition out of the debug rig
+   - keep future downstream replacement scenarios in mind
