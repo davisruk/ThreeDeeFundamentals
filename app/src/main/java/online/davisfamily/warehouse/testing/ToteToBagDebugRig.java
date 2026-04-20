@@ -83,7 +83,7 @@ public class ToteToBagDebugRig {
                 new OneColourStrategyImpl(0xFFB8B8B8),
                 new OneColourStrategyImpl(0xFF596A54),
                 new OneColourStrategyImpl(0xFF596A54));
-        layoutSpec = integratedLayoutSpec();
+        layoutSpec = ToteToBagCoreLayoutSpec.integratedDebugDefaults();
         subsystem = new ToteToBagSubsystemBuilder().buildCore(tr, conveyorAppearance, layoutSpec);
 
         pdcConveyor = subsystem.getPdcConveyor();
@@ -91,7 +91,7 @@ public class ToteToBagDebugRig {
         pdcDiversionDevices = subsystem.getPdcDiversionDevices();
         pcrConveyor = subsystem.getPcrConveyor();
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
-        var upstreamPose = subsystem.resolveAttachmentPose(layoutSpec.upstreamModuleMount());
+        var upstreamPose = subsystem.resolveAttachmentPose(layoutSpec.tipperEntryMount());
         tipperEntryModule = new TipperEntryModuleBuilder().build(
                 tr,
                 sim,
@@ -402,38 +402,6 @@ public class ToteToBagDebugRig {
     private float sorterOutfeedFrontDistance(Pack pack) {
         float alongPdc = sorterOutfeedPoint.worldPosition().x - subsystem.getLayout().pdcStartX();
         return alongPdc + (pack.getDimensions().length() * 0.5f);
-    }
-
-    private ToteToBagCoreLayoutSpec integratedLayoutSpec() {
-        ToteToBagCoreLayoutSpec defaults = ToteToBagCoreLayoutSpec.debugDefaults();
-        return new ToteToBagCoreLayoutSpec(
-                defaults.pdcCenterX() - (defaults.upstreamPdcExtensionLength() * 0.5f),
-                defaults.pcrCenterX(),
-                defaults.conveyorY(),
-                defaults.pdcZ(),
-                defaults.packY(),
-                defaults.singlePackConveyorWidth(),
-                defaults.pdcLength() + defaults.upstreamPdcExtensionLength(),
-                defaults.pcrLength(),
-                defaults.prlLength(),
-                defaults.prlCount(),
-                defaults.prlFirstCenterX(),
-                defaults.prlSpacing(),
-                defaults.pdcBeltSpeed(),
-                defaults.pdcTransferSpeed(),
-                defaults.prlBeltSpeed(),
-                defaults.prlIndexDistance(),
-                defaults.prlGap(),
-                defaults.pcrMinimumGap(),
-                defaults.pcrSafetyMargin(),
-                defaults.conveyorMinimumGap(),
-                defaults.upstreamPdcExtensionLength(),
-                defaults.upstreamModuleMount(),
-                defaults.baggerMount(),
-                defaults.sorterReleaseIntervalSeconds(),
-                defaults.diversionArmDelaySeconds(),
-                defaults.diversionActuationDurationSeconds(),
-                defaults.diversionResetDurationSeconds());
     }
 
     private double pdcTransferDurationFor(String prlId) {

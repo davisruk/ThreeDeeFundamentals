@@ -22,7 +22,7 @@ public record ToteToBagCoreLayoutSpec(
         float pcrSafetyMargin,
         float conveyorMinimumGap,
         float upstreamPdcExtensionLength,
-        MachineAttachmentSpec upstreamModuleMount,
+        MachineAttachmentSpec tipperEntryMount,
         MachineAttachmentSpec baggerMount,
         double sorterReleaseIntervalSeconds,
         double diversionArmDelaySeconds,
@@ -42,8 +42,8 @@ public record ToteToBagCoreLayoutSpec(
         if (upstreamPdcExtensionLength < 0f) {
             throw new IllegalArgumentException("upstreamPdcExtensionLength must be >= 0");
         }
-        if (upstreamModuleMount == null) {
-            throw new IllegalArgumentException("upstreamModuleMount must not be null");
+        if (tipperEntryMount == null) {
+            throw new IllegalArgumentException("tipperEntryMount must not be null");
         }
         if (baggerMount == null) {
             throw new IllegalArgumentException("baggerMount must not be null");
@@ -79,5 +79,37 @@ public record ToteToBagCoreLayoutSpec(
                 0d,
                 0.08d,
                 0.08d);
+    }
+
+    public static ToteToBagCoreLayoutSpec integratedDebugDefaults() {
+        ToteToBagCoreLayoutSpec defaults = debugDefaults();
+        return new ToteToBagCoreLayoutSpec(
+                defaults.pdcCenterX() - (defaults.upstreamPdcExtensionLength() * 0.5f),
+                defaults.pcrCenterX(),
+                defaults.conveyorY(),
+                defaults.pdcZ(),
+                defaults.packY(),
+                defaults.singlePackConveyorWidth(),
+                defaults.pdcLength() + defaults.upstreamPdcExtensionLength(),
+                defaults.pcrLength(),
+                defaults.prlLength(),
+                defaults.prlCount(),
+                defaults.prlFirstCenterX(),
+                defaults.prlSpacing(),
+                defaults.pdcBeltSpeed(),
+                defaults.pdcTransferSpeed(),
+                defaults.prlBeltSpeed(),
+                defaults.prlIndexDistance(),
+                defaults.prlGap(),
+                defaults.pcrMinimumGap(),
+                defaults.pcrSafetyMargin(),
+                defaults.conveyorMinimumGap(),
+                defaults.upstreamPdcExtensionLength(),
+                defaults.tipperEntryMount(),
+                defaults.baggerMount(),
+                defaults.sorterReleaseIntervalSeconds(),
+                defaults.diversionArmDelaySeconds(),
+                defaults.diversionActuationDurationSeconds(),
+                defaults.diversionResetDurationSeconds());
     }
 }
