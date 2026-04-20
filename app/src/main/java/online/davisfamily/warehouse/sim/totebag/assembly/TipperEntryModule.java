@@ -1,10 +1,8 @@
 package online.davisfamily.warehouse.sim.totebag.assembly;
 
-import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.HashSet;
-import java.util.Set;
 
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -40,12 +38,9 @@ import online.davisfamily.warehouse.sim.totebag.layout.ContainedPackLayout;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
-import online.davisfamily.warehouse.sim.totebag.pack.Pack;
-import online.davisfamily.warehouse.sim.totebag.pack.Pack.PackContainmentState;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
-import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfer;
 
 public class TipperEntryModule implements PackHandoffPointProvider {
     private static final float TRACK_Z = 0f;
@@ -53,9 +48,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private static final float TIPPER_LENGTH = 1.25f;
     private static final float TIPPER_START_X = (TRACK_LENGTH - TIPPER_LENGTH) * 0.5f;
     private static final float TIPPER_STOP_DISTANCE = TIPPER_START_X + (TIPPER_LENGTH * 0.5f);
-    private static final float OUTFEED_Z = -1.24f;
     private static final float TIPPER_TIPPED_ANGLE_RADIANS = -1.02f;
-    private static final float SLIDE_ENTRY_WIDTH = 0.90f;
     private static final float SLIDE_EXIT_WIDTH = 0.30f;
     private static final float SLIDE_LENGTH = 1.20f;
     private static final float SLIDE_THICKNESS = 0.03f;
@@ -80,12 +73,10 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     private final RenderableObject tipperAssemblyRenderable;
     private final float slideEntryWidth;
     private final ConveyorRuntimeState tipperTrackRuntimeState;
-    private final float toteInteriorHalfWidth;
-    private final float toteInteriorHalfDepth;
     private final float toteInteriorFloorLocalY;
     private final Map<String, Vec3> containedPackLayoutById;
-    private final Map<String, PackPlan> packPlansById = new LinkedHashMap<>();
-    private final Map<String, RenderableObject> packRenderablesById = new LinkedHashMap<>();
+    private final TipperToSorterDischargeSeam dischargeSeam;
+    private final TipperEntryPackVisuals packVisuals;
 
     public TipperEntryModule(
             TriangleRenderer tr,
@@ -101,8 +92,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
 
         ToteGeometry toteGeometry = new ToteGeometry();
         toteRenderable = RenderableToteFactory.createRenderableTote("tipper_demo_tote", tr, toteGeometry, true);
-        toteInteriorHalfWidth = toteGeometry.getInnerBottomWidth() * 0.5f;
-        toteInteriorHalfDepth = toteGeometry.getInnerBottomDepth() * 0.5f;
         toteInteriorFloorLocalY = 0.04f + (toteGeometry.getOuterHeight() - toteGeometry.getInnerHeight()) + 0.01f;
         ToteEnvelope toteEnvelope = new ToteEnvelope(
                 toteGeometry.getOuterBottomWidth(),
@@ -184,9 +173,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         sim.addTrackableObject(tote);
 
         toteLoadPlan = createDemoPlan(tote.getId());
-        for (PackPlan plan : toteLoadPlan.getPackPlans()) {
-            packPlansById.put(plan.packId(), plan);
-        }
         containedPackLayoutById = new ContainedPackLayout(
                 toteGeometry.getInnerBottomWidth(),
                 toteGeometry.getInnerBottomDepth(),
@@ -277,6 +263,16 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 rigYaw(),
                 tipperModule.sorterIntakeMountLocalPoint());
         objects.add(sortingModule.getRenderable());
+        dischargeSeam = new TipperToSorterDischargeSeam();
+        packVisuals = new TipperEntryPackVisuals(
+                tr,
+                objects,
+                inspectionRegistry,
+                toteRenderable,
+                toteLoadPlan,
+                containedPackLayoutById,
+                rigYaw(),
+                dischargeSeam);
 
         registerInspectableObjects();
     }
@@ -284,15 +280,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     public void syncVisuals() {
         tipperTrackRuntimeState.setRunning(!flowController.isToteCaptured());
         tipperModule.syncVisuals(flowController.getVisualTipProgress());
-        ensurePackRenderablesExist();
-        hideDetachedPacks();
-        Set<String> placedPackIds = new HashSet<>();
-        positionRemainingPacksInTote(placedPackIds);
-        positionActiveDischarges(placedPackIds);
-        sortingModule.syncQueuedPackVisuals(
-                packRenderablesById,
-                placedPackIds,
-                (pack, renderable) -> detachFromToteIfNeeded(pack, renderable, null));
+        packVisuals.sync(flowController, tipperModule, sortingModule);
     }
 
     public ToteLoadPlan getToteLoadPlan() {
@@ -308,7 +296,7 @@ public class TipperEntryModule implements PackHandoffPointProvider {
     }
 
     public RenderableObject getPackRenderable(String packId) {
-        return packRenderablesById.get(packId);
+        return packVisuals.getPackRenderable(packId);
     }
 
     @Override
@@ -346,79 +334,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 "Completed output packs: " + flowController.getCompletedOutputPacks().size()));
     }
 
-    private void ensurePackRenderablesExist() {
-        for (PackPlan plan : toteLoadPlan.getPackPlans()) {
-            packRenderablesById.computeIfAbsent(plan.packId(), ignored -> {
-                RenderableObject renderable = createPackRenderable(
-                        plan.packId(),
-                        plan.dimensions(),
-                        plan.correlationId());
-                toteRenderable.addChild(renderable);
-                inspectionRegistry.register(renderable, () -> List.of(
-                        "Type: Pack",
-                        "Id: " + plan.packId(),
-                        "Correlation: " + plan.correlationId()));
-                return renderable;
-            });
-        }
-    }
-
-    private void hideDetachedPacks() {
-        for (RenderableObject renderable : packRenderablesById.values()) {
-            if (toteRenderable.children.contains(renderable)) {
-                continue;
-            }
-            renderable.transformation.xTranslation = -50f;
-            renderable.transformation.yTranslation = -50f;
-            renderable.transformation.zTranslation = -50f;
-            renderable.transformation.angleX = 0f;
-            renderable.transformation.angleY = 0f;
-            renderable.transformation.angleZ = 0f;
-        }
-    }
-
-    private void positionActiveDischarges(Set<String> placedPackIds) {
-        for (TippingDischargeTransfer transfer : flowController.getActiveDischarges()) {
-            RenderableObject renderable = packRenderablesById.get(transfer.getPack().getId());
-            if (renderable == null) {
-                continue;
-            }
-            detachFromToteIfNeeded(transfer.getPack(), renderable, transfer);
-            Vec3 dischargeWorld = sampleDischargeWorldPosition(transfer.getProgress(), transfer.getPack());
-            renderable.transformation.xTranslation = dischargeWorld.x;
-            renderable.transformation.yTranslation = dischargeWorld.y;
-            renderable.transformation.zTranslation = dischargeWorld.z;
-            renderable.transformation.angleX = 0f;
-            renderable.transformation.angleY = rigYaw();
-            renderable.transformation.angleZ = 0f;
-            placedPackIds.add(transfer.getPack().getId());
-        }
-    }
-
-    private void positionRemainingPacksInTote(Set<String> placedPackIds) {
-        for (PackPlan plan : toteLoadPlan.getPackPlans()) {
-            if (isObserved(plan.packId())) {
-                continue;
-            }
-            RenderableObject renderable = packRenderablesById.get(plan.packId());
-            if (renderable == null) {
-                continue;
-            }
-            ensureAttachedToTote(renderable);
-            Vec3 local = containedPackLocalFor(plan.packId());
-            if (local == null) {
-                continue;
-            }
-            renderable.transformation.xTranslation = local.x;
-            renderable.transformation.yTranslation = local.y;
-            renderable.transformation.zTranslation = local.z;
-            renderable.transformation.angleX = 0f;
-            renderable.transformation.angleY = 0f;
-            renderable.transformation.angleZ = 0f;
-            placedPackIds.add(plan.packId());
-        }
-    }
-
     private ToteLoadPlan createDemoPlan(String toteId) {
         return new ToteLoadPlan(
                 toteId,
@@ -428,19 +343,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                         new PackPlan("pack-a2", "bag-a", new PackDimensions(0.16f, 0.10f, 0.08f)),
                         new PackPlan("pack-c1", "bag-c", new PackDimensions(0.22f, 0.12f, 0.10f)),
                         new PackPlan("pack-b2", "bag-b", new PackDimensions(0.19f, 0.11f, 0.09f))));
-    }
-
-    private RenderableObject createPackRenderable(String packId, PackDimensions dimensions, String correlationId) {
-        return RenderableObject.create(
-                packId,
-                tr,
-                RollerMeshFactory.createBoxRollerMesh(
-                        dimensions.length(),
-                        dimensions.height(),
-                        dimensions.width()),
-                new ObjectTransformation(0f, 0f, 0f, -50f, -50f, -50f, new Mat4()),
-                new OneColourStrategyImpl(colourForCorrelation(correlationId)),
-                true);
     }
 
     private RenderableObject createBox(
@@ -523,15 +425,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
                 true);
     }
 
-    private int colourForCorrelation(String correlationId) {
-        return switch (correlationId) {
-            case "bag-a" -> 0xFFE67E22;
-            case "bag-b" -> 0xFF4AA3DF;
-            case "bag-c" -> 0xFF7ABF66;
-            default -> 0xFFBBBBBB;
-        };
-    }
-
     private RenderableObject createLocalTipperTrack(
             TriangleRenderer tr,
             TrackSpec toteTrackSpec,
@@ -579,133 +472,6 @@ public class TipperEntryModule implements PackHandoffPointProvider {
         Vec3 rotated = Vec3.rotateY(localPoint, rigYaw());
         rotated.mutableAdd(layoutSpec.origin());
         return rotated;
-    }
-
-    private Vec3 sampleDischargeWorldPosition(double progress, Pack pack) {
-        float clearance = (pack.getDimensions().height() * 0.5f) + 0.008f;
-        Vec3 startWorld = findTransferStartWorld(pack);
-        Vec3 sorterIntakeWorld = sortingModule.intakePoint().worldPosition();
-        Vec3 toteInteriorAnchor = tipperModule.dischargeToteInteriorWorld();
-        Vec3 lidAnchor = tipperModule.dischargeLidWorld();
-        Vec3 slideEntryAnchor = tipperModule.dischargeSlideEntryWorld();
-        float slideMidX = Vec3.lerp(slideEntryAnchor.x, sorterIntakeWorld.x, 0.55f);
-        float slideMidY = Vec3.lerp(slideEntryAnchor.y, sorterIntakeWorld.y + 0.08f, 0.45f);
-        float slideMidZ = Vec3.lerp(slideEntryAnchor.z, sorterIntakeWorld.z, 0.55f);
-        Vec3 startPoint = startWorld != null
-                ? Vec3.copy(startWorld)
-                : addClearance(
-                        containedPackLocalFor(pack.getId()),
-                        0.008f);
-        Vec3[] path = new Vec3[] {
-                startPoint,
-                addClearance(toteInteriorAnchor, clearance),
-                addClearance(lidAnchor, clearance),
-                addClearance(slideEntryAnchor, clearance),
-                addClearance(new Vec3(slideMidX, slideMidY, slideMidZ), clearance),
-                addClearance(new Vec3(sorterIntakeWorld.x, sorterIntakeWorld.y + 0.06f, sorterIntakeWorld.z), clearance),
-                addClearance(sorterIntakeWorld, clearance)
-        };
-        return samplePolyline(path, (float) progress);
-    }
-
-    private Vec3 addClearance(Vec3 localPoint, float clearance) {
-        return new Vec3(localPoint.x, localPoint.y + clearance, localPoint.z);
-    }
-
-    private Vec3 samplePolyline(Vec3[] points, float progress) {
-        if (points.length == 0) {
-            return new Vec3();
-        }
-        if (points.length == 1) {
-            return Vec3.copy(points[0]);
-        }
-        float clamped = Math.max(0f, Math.min(1f, progress));
-        float totalLength = 0f;
-        float[] segmentLengths = new float[points.length - 1];
-        for (int i = 0; i < points.length - 1; i++) {
-            float segmentLength = points[i].distanceTo(points[i + 1]);
-            segmentLengths[i] = segmentLength;
-            totalLength += segmentLength;
-        }
-        if (totalLength <= 0.0001f) {
-            return Vec3.copy(points[points.length - 1]);
-        }
-        float targetDistance = totalLength * clamped;
-        float distanceCovered = 0f;
-        for (int i = 0; i < segmentLengths.length; i++) {
-            float segmentLength = segmentLengths[i];
-            if (targetDistance <= distanceCovered + segmentLength || i == segmentLengths.length - 1) {
-                float segmentProgress = segmentLength <= 0.0001f
-                        ? 1f
-                        : (targetDistance - distanceCovered) / segmentLength;
-                return Vec3.immutableLerp(points[i], points[i + 1], segmentProgress);
-            }
-            distanceCovered += segmentLength;
-        }
-        return Vec3.copy(points[points.length - 1]);
-    }
-
-    private boolean isObserved(String packId) {
-        for (Pack pack : flowController.getObservedPacks()) {
-            if (pack.getId().equals(packId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private Vec3 containedPackLocalFor(String packId) {
-        return containedPackLayoutById.get(packId);
-    }
-
-    private void ensureAttachedToTote(RenderableObject renderable) {
-        if (!toteRenderable.children.contains(renderable)) {
-            objects.remove(renderable);
-            toteRenderable.addChild(renderable);
-        }
-    }
-
-    private void detachFromToteIfNeeded(Pack pack, RenderableObject renderable, TippingDischargeTransfer transfer) {
-        if (!toteRenderable.children.contains(renderable)) {
-            pack.setContainmentState(PackContainmentState.FREE);
-            return;
-        }
-        Vec3 capturedWorld = capturePackWorldPosition(renderable);
-        toteRenderable.removeChild(renderable);
-        if (!objects.contains(renderable)) {
-            objects.add(renderable);
-        }
-        renderable.transformation.xTranslation = capturedWorld.x;
-        renderable.transformation.yTranslation = capturedWorld.y;
-        renderable.transformation.zTranslation = capturedWorld.z;
-        renderable.transformation.angleX = 0f;
-        renderable.transformation.angleY = rigYaw();
-        renderable.transformation.angleZ = 0f;
-        pack.setContainmentState(PackContainmentState.FREE);
-        if (transfer != null && transfer.getStartWorldPosition() == null) {
-            transfer.setStartWorldPosition(capturedWorld);
-        }
-    }
-
-    private Vec3 capturePackWorldPosition(RenderableObject packRenderable) {
-        toteRenderable.transformation.setupModel();
-        Vec3 out = new Vec3();
-        toteRenderable.transformation.model.transformPoint(
-                new Vec3(
-                        packRenderable.transformation.xTranslation,
-                        packRenderable.transformation.yTranslation,
-                        packRenderable.transformation.zTranslation),
-                out);
-        return out;
-    }
-
-    private Vec3 findTransferStartWorld(Pack pack) {
-        for (TippingDischargeTransfer transfer : flowController.getActiveDischarges()) {
-            if (transfer.getPack() == pack) {
-                return transfer.getStartWorldPosition();
-            }
-        }
-        return null;
     }
 
     private Mesh createFunnelSlideMesh() {
