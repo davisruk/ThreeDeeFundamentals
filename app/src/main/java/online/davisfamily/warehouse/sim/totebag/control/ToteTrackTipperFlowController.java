@@ -1,16 +1,14 @@
 package online.davisfamily.warehouse.sim.totebag.control;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
-import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
@@ -28,13 +26,10 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private final float tipperStopDistance;
     private final float tipperTippedAngleRadians;
     private final TippingMachine tippingMachine;
-    private final SortingMachine sortingMachine;
+    private final TipperDownstreamFlow downstreamFlow;
     private final double dischargeDurationSeconds;
-    private final PackReceiveTarget sorterOutfeedTarget;
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
     private final List<TippingDischargeTransfer> activeDischarges = new ArrayList<>();
-    private final Queue<Pack> pendingSorterOutfeed = new ArrayDeque<>();
-    private final List<Pack> completedOutputPacks = new ArrayList<>();
     private float visualTipProgress;
     private boolean toteCaptured;
     private boolean toteReleased;
@@ -56,9 +51,8 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 tipperStopDistance,
                 tipperTippedAngleRadians,
                 tippingMachine,
-                sortingMachine,
-                dischargeDurationSeconds,
-                null);
+                new SorterTipperDownstreamFlow(sortingMachine, null),
+                dischargeDurationSeconds);
     }
 
     public ToteTrackTipperFlowController(
@@ -77,9 +71,8 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 tipperStopDistance,
                 tipperTippedAngleRadians,
                 tippingMachine,
-                sortingMachine,
-                dischargeDurationSeconds,
-                null);
+                new SorterTipperDownstreamFlow(sortingMachine, null),
+                dischargeDurationSeconds);
     }
 
     public ToteTrackTipperFlowController(
@@ -92,11 +85,31 @@ public class ToteTrackTipperFlowController implements SimulationController {
             SortingMachine sortingMachine,
             double dischargeDurationSeconds,
             PackReceiveTarget sorterOutfeedTarget) {
+        this(
+                tote,
+                toteLoadPlanProvider,
+                tipperSegment,
+                tipperStopDistance,
+                tipperTippedAngleRadians,
+                tippingMachine,
+                new SorterTipperDownstreamFlow(sortingMachine, sorterOutfeedTarget),
+                dischargeDurationSeconds);
+    }
+
+    public ToteTrackTipperFlowController(
+            Tote tote,
+            ToteLoadPlanProvider toteLoadPlanProvider,
+            RouteSegment tipperSegment,
+            float tipperStopDistance,
+            float tipperTippedAngleRadians,
+            TippingMachine tippingMachine,
+            TipperDownstreamFlow downstreamFlow,
+            double dischargeDurationSeconds) {
         if (tote == null
                 || toteLoadPlanProvider == null
                 || tipperSegment == null
                 || tippingMachine == null
-                || sortingMachine == null) {
+                || downstreamFlow == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null");
         }
         if (tipperStopDistance < 0f) {
@@ -114,9 +127,8 @@ public class ToteTrackTipperFlowController implements SimulationController {
         this.tipperStopDistance = tipperStopDistance;
         this.tipperTippedAngleRadians = tipperTippedAngleRadians;
         this.tippingMachine = tippingMachine;
-        this.sortingMachine = sortingMachine;
+        this.downstreamFlow = downstreamFlow;
         this.dischargeDurationSeconds = dischargeDurationSeconds;
-        this.sorterOutfeedTarget = sorterOutfeedTarget;
     }
 
     @Override
@@ -126,8 +138,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         updateActiveDischarges(dtSeconds);
         updateVisualTipProgress(dtSeconds);
         syncToteVisualTilt();
-        drainSortingMachine();
-        flushPendingSorterOutfeed();
+        downstreamFlow.update(dtSeconds);
         releaseToteIfReady();
     }
 
@@ -137,10 +148,6 @@ public class ToteTrackTipperFlowController implements SimulationController {
 
     public List<TippingDischargeTransfer> getActiveDischarges() {
         return List.copyOf(activeDischarges);
-    }
-
-    public List<Pack> getCompletedOutputPacks() {
-        return List.copyOf(completedOutputPacks);
     }
 
     public boolean isToteCaptured() {
@@ -182,31 +189,12 @@ public class ToteTrackTipperFlowController implements SimulationController {
             if (!transfer.isComplete()) {
                 continue;
             }
+            if (!downstreamFlow.canAcceptDischargedPack(transfer.getPack())) {
+                continue;
+            }
             transfer.getPack().setState(Pack.PackMotionState.HELD);
-            sortingMachine.receive(transfer.getPack());
+            downstreamFlow.acceptDischargedPack(transfer.getPack());
             iterator.remove();
-        }
-    }
-
-    private void drainSortingMachine() {
-        while (sortingMachine.hasReleasedPack()) {
-            pendingSorterOutfeed.add(sortingMachine.pollReleasedPack());
-        }
-    }
-
-    private void flushPendingSorterOutfeed() {
-        while (!pendingSorterOutfeed.isEmpty()) {
-            Pack pack = pendingSorterOutfeed.peek();
-            if (sorterOutfeedTarget != null && !sorterOutfeedTarget.canAccept(pack)) {
-                return;
-            }
-            pack = pendingSorterOutfeed.remove();
-            if (sorterOutfeedTarget != null) {
-                sorterOutfeedTarget.accept(pack);
-            } else {
-                pack.setState(Pack.PackMotionState.CONSUMED);
-            }
-            completedOutputPacks.add(pack);
         }
     }
 
@@ -216,9 +204,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         }
         boolean machinesClear = tippingMachine.isIdle()
                 && activeDischarges.isEmpty()
-                && sortingMachine.getQueuedPacks().isEmpty()
-                && !sortingMachine.hasReleasedPack()
-                && pendingSorterOutfeed.isEmpty();
+                && !downstreamFlow.keepsTipperOccupied();
         if (!machinesClear) {
             return;
         }

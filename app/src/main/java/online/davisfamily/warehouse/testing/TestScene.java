@@ -19,12 +19,14 @@ public class TestScene extends BaseScene{
 	private DirectionalLight lightDirection;
 	private ToteToBagDebugRig toteToBagDebugRig;
 	private ToteTrackTipperDebugRig toteTrackTipperDebugRig;
+	private TipperToReceiverDebugRig tipperToReceiverDebugRig;
 
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions) {
 		super(pane, dimensions,	CameraPosition.aboveLeft());
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
 		//toteTrackTipperDebugRig = new ToteTrackTipperDebugRig(tr, sim, objects, inspectionRegistry);
+		//tipperToReceiverDebugRig = new TipperToReceiverDebugRig(tr, sim, objects, inspectionRegistry);
 		toteToBagDebugRig = new ToteToBagDebugRig(tr, sim, objects, inspectionRegistry);
 		//WarehouseTrackFactory.setupStraightConveyorTest(tr, sim, objects);
 		//ToteGeometry t = setupTote();
@@ -38,6 +40,7 @@ public class TestScene extends BaseScene{
 //		if (inputState.isSet(Mode.SHOW_PATH))
 //			debug.drawPathForObject(rTote, camera.getView(), projection);
 		//toteTrackTipperDebugRig.syncVisuals();
+		//tipperToReceiverDebugRig.syncVisuals();
 		toteToBagDebugRig.syncVisuals();
 		drawObject(objects, dtSeconds, lightDirection);
 	}

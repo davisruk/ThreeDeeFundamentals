@@ -70,6 +70,19 @@
 - `SteeringConveyorMechanism`
   - First concrete transfer-zone mechanism implementation; owns one governing state and can drive one-or-more renderable parts together.
   - Can now be built with an explicit initial outcome/pose so always-branch/fixed steering cases do not need a separate mechanism type.
+- `TipperTrackSection`
+  - Externally owned mounted route section used by the installed tipper.
+- `TipperSectionInstaller` / `TipperInstallation`
+  - Production-facing installed tipper surface.
+  - Own mounted tipper runtime/render wiring but not route creation or tote load-plan ownership.
+- `SortingSectionInstaller` / `SortingInstallation`
+  - Production-facing installed sorter surface.
+- `TipperToSorterSection`
+  - Explicit composition helper for the paired `tipper -> sorter` path.
+- `ToteLoadPlanProvider`
+  - External provider keyed by tote id for active tipper load plans.
+- `TipperDownstreamFlow`
+  - Small downstream-capacity boundary used by the tipper controller to decide discharge acceptance and tote-release readiness.
 
 ## Core Execution Flow
 
@@ -86,6 +99,11 @@
    - dispatch queued events
    - update controllers
 6. The warehouse tote advances through its route, updates its render transform, may trigger sensors, and may enter transfer state.
+7. In the tipper path, the shared tipper controller can:
+   - capture the tote on the mounted tipper section
+   - resolve the tote load plan through `ToteLoadPlanProvider`
+   - run the local tip / discharge sequence
+   - delegate downstream acceptance / occupancy rules through `TipperDownstreamFlow`
 7. After simulation completes for the frame, rendering uses the latest transforms.
 
 ## Movement and Routing Model
@@ -179,6 +197,8 @@
 - conveyor/track layout rules
 - transfer zones and transfer machines
 - transfer-zone-mounted mechanisms
+- mounted tipper / sorter machine installations
+- tote-load-plan providers
 - guide openings and clearances
 - warehouse track rendering specs and mesh generation
 
@@ -256,6 +276,25 @@
   - It is not a design proposal and does not describe unimplemented intended architecture.
 
 ## Latest Session Update
+
+- The tipper / sorter separation work has now reached the intended architectural baseline:
+  - `TipperEntryModule` and `TipperEntryModuleBuilder` have been removed
+  - `TipperTrackSection` / `TipperTrackSectionInstaller` now own the externally-created mounted route section
+  - `TipperSectionInstaller` / `TipperInstallation` now define the production-facing installed tipper surface
+  - `SortingSectionInstaller` / `SortingInstallation` now define the production-facing installed sorter surface
+  - `TipperToSorterSection` is now the explicit paired composition helper
+- Tote load-plan ownership has been moved behind `ToteLoadPlanProvider`:
+  - demo tote/load fixtures still exist only under `warehouse.testing`
+  - the installed tipper path no longer treats demo tote content as intrinsic machine ownership
+- Local tipper sequencing and downstream occupancy concerns are now separated:
+  - `ToteTrackTipperFlowController` now owns the shared tipper-side capture / tip / discharge sequence
+  - downstream-specific acceptance / release state is now represented through `TipperDownstreamFlow`
+  - `SorterTipperDownstreamFlow` implements the sorter-backed path
+  - a debug-only immediate receive implementation under `warehouse.testing` proves the alternate downstream path
+- The branch now proves both:
+  - `tipper -> sorter`
+  - `tipper -> non-sorter debug-only receive target`
+- The current code should therefore be treated as a repeatable mounted-machine composition pattern for future machines rather than as a still-unfinished tipper / sorter untangling exercise.
 
 - The tote-to-bag / tipper-entry integration boundary has been cleaned up materially:
   - handoff boundary types now exist under `warehouse.sim.totebag.handoff`

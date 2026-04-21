@@ -6,6 +6,29 @@ This note records the design discussion and decisions made for refactoring the c
 
 The intent is that a future session can read this document and continue the refactor from the agreed direction rather than inferring it from code or chat history.
 
+## Implemented Outcome
+
+The main separation work described in this note has now been implemented materially.
+
+Implemented result:
+
+- `TipperEntryModule` / `TipperEntryModuleBuilder` have been removed
+- `TipperTrackSection` / `TipperTrackSectionInstaller` now own the externally-created mounted route section used by the tipper
+- `TipperSectionInstaller` / `TipperInstallation` now define the production-facing installed tipper surface
+- `SortingSectionInstaller` / `SortingInstallation` now define the production-facing installed sorter surface
+- `TipperToSorterSectionInstaller` / `TipperToSorterSection` now define the explicit paired composition helper
+- `ToteLoadPlanProvider` now owns tote load-plan lookup outside the installed machine package
+- `ToteTrackTipperFlowController` now owns the shared local tipper capture / tip / discharge sequencing
+- `TipperDownstreamFlow` now separates local tipper sequencing from downstream occupancy / acceptance concerns
+- the branch now proves both:
+  - `tipper -> sorter`
+  - `tipper -> alternate debug-only receive target`
+
+Practical interpretation:
+
+- the original tipper / sorter separation goal has been met sufficiently for this branch
+- future work should treat this installed-machine composition style as the baseline for additional mounted machines
+
 ## Context
 
 The current tote-to-bag work has a reusable `TipperEntryModule`, but that type still reflects its proving-harness origin.
@@ -439,7 +462,9 @@ This shared convention is the part that will help upcoming machines, not forcing
 
 ## Work Still Required
 
-The following work is still required to reach the now-clarified target architecture.
+The original mandatory separation work in this document is now largely complete.
+
+The remaining items below should be read as optional follow-up or future-machine work rather than as blockers for the tipper / sorter cleanup itself.
 
 ### 1. Reframe `TipperEntryModule`
 
@@ -630,17 +655,12 @@ When resuming work in the next session:
 
 1. Read this document first.
 2. Treat the tipper as a route-mounted machine family that should match transfer-zone architectural style, not transfer-zone semantics.
-3. Keep the goal focused on boundary cleanup:
-   - external route ownership
-   - external tote ownership
-   - installer/install-result surface
-   - direct tote reference inside tipper machine/controller logic
-   - load-plan lookup through provider
-4. Treat the current code position as improved but still not fully decoupled:
-   - `TipperModule` and `SortingModule` should become the primary independently mountable units
-   - the current paired section should become an explicit composition helper, not the primary tipper abstraction
-5. Prefer the next implementation slice to focus on independent-machine composition:
-   - reframe/rename the current paired section
-   - define a lightweight independent-machine convention
-   - extract production-facing composition out of the debug rig
-   - keep future downstream replacement scenarios in mind
+3. Treat the current code position as the completed separation baseline:
+   - `TipperModule` and `SortingModule` are independently mountable
+   - the paired `tipper -> sorter` path is an explicit composition helper
+   - route and load-plan ownership are external
+   - local tipper sequencing is separated from downstream occupancy concerns
+4. Prefer follow-up work to focus on:
+   - applying the same pattern to future mounted machines
+   - evolving higher-level tote-release / capacity orchestration above the local machine controller layer
+   - only introducing broader abstractions when multiple real machine families demonstrate the same need
