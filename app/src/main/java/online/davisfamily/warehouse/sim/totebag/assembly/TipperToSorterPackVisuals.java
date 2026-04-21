@@ -1,10 +1,11 @@
 package online.davisfamily.warehouse.sim.totebag.assembly;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.HashSet;
+import java.util.function.BiConsumer;
 
 import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.matrices.Mat4;
@@ -22,7 +23,7 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfer;
 
-public class TipperEntryPackVisuals {
+public class TipperToSorterPackVisuals {
     private final TriangleRenderer tr;
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -33,7 +34,7 @@ public class TipperEntryPackVisuals {
     private final TipperToSorterDischargeSeam dischargeSeam;
     private final Map<String, RenderableObject> packRenderablesById = new LinkedHashMap<>();
 
-    public TipperEntryPackVisuals(
+    public TipperToSorterPackVisuals(
             TriangleRenderer tr,
             List<RenderableObject> objects,
             SelectionInspectionRegistry inspectionRegistry,

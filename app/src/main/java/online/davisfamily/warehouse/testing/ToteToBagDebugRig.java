@@ -16,8 +16,14 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
-import online.davisfamily.warehouse.sim.totebag.assembly.TipperEntryModule;
-import online.davisfamily.warehouse.sim.totebag.assembly.TipperEntryModuleBuilder;
+import online.davisfamily.warehouse.sim.totebag.assembly.SortingInstallation;
+import online.davisfamily.warehouse.sim.totebag.assembly.SortingSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperInstallation;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSection;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assignment.ToteToBagAssignmentPlanner;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
@@ -46,7 +52,7 @@ public class ToteToBagDebugRig {
     private final TriangleRenderer tr;
     private final ToteToBagSubsystem subsystem;
     private final ToteToBagCoreLayoutSpec layoutSpec;
-    private final TipperEntryModule tipperEntryModule;
+    private final TipperToSorterSection tipperToSorterSection;
     private final PackHandoffPoint sorterOutfeedPoint;
 
     private final PdcConveyor pdcConveyor;
@@ -90,12 +96,32 @@ public class ToteToBagDebugRig {
         pdcDiversionDevices = subsystem.getPdcDiversionDevices();
         pcrConveyor = subsystem.getPcrConveyor();
         baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
-        tipperEntryModule = new TipperEntryModuleBuilder().build(
+        TipperTrackSection trackSection = new TipperTrackSectionInstaller().install(
+                tr,
+                objects,
+                subsystem.getLayout().resolveTipperEntryLayoutSpec());
+        TipperInstallation tipperInstallation = new TipperSectionInstaller().install(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
-                subsystem.getLayout().resolveTipperEntryLayoutSpec(),
+                trackSection,
+                TipperDemoFixtures.createDemoTotePayload(tr, sim, trackSection));
+        SortingInstallation sortingInstallation = new SortingSectionInstaller().install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                trackSection.getLayoutSpec(),
+                tipperInstallation.getTipperModule().sorterIntakeMountLocalPoint());
+        sorterOutfeedPoint = sortingInstallation.getSortingModule().outfeedPoint();
+        tipperToSorterSection = new TipperToSorterSectionInstaller().install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                tipperInstallation,
+                sortingInstallation,
                 new PackReceiveTarget() {
                     @Override
                     public PackHandoffPoint handoffPoint() {
@@ -112,9 +138,8 @@ public class ToteToBagDebugRig {
                         pdcConveyor.acceptIncomingPackAtFrontDistance(pack, sorterOutfeedFrontDistance(pack));
                     }
                 });
-        sorterOutfeedPoint = tipperEntryModule.getSortingModule().outfeedPoint();
         flowController = new ToteToBagFlowController(
-                tipperEntryModule.getTipperModule().getToteLoadPlan(),
+                tipperInstallation.getToteLoadPlan(),
                 pdcConveyor,
                 pcrConveyor,
                 baggingMachine,
@@ -148,7 +173,7 @@ public class ToteToBagDebugRig {
 
     public void syncVisuals() {
         syncConveyorRuntimeStates();
-        tipperEntryModule.syncVisuals();
+        tipperToSorterSection.syncVisuals();
 
         for (var entry : flowController.getPdcLaneEntries()) {
             positionPackOnPdc(entry.pack(), entry.frontDistance());
@@ -320,7 +345,7 @@ public class ToteToBagDebugRig {
     }
 
     private void positionPack(Pack pack, float x, float y, float z) {
-        RenderableObject renderable = tipperEntryModule.getPackRenderable(pack.getId());
+        RenderableObject renderable = tipperToSorterSection.getPackRenderable(pack.getId());
         if (renderable == null) {
             return;
         }

@@ -1,15 +1,27 @@
 package online.davisfamily.warehouse.sim.totebag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.threedee.behaviour.routing.RouteFollower;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
+import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.totebag.assignment.PrlState;
 import online.davisfamily.warehouse.sim.totebag.assignment.ToteToBagAssignmentPlanner;
+import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
+import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
@@ -26,6 +38,71 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 class ToteToBagFlowControllerTest {
+
+    @Test
+    void shouldCaptureToteAtSegmentLocalTipperMidpoint() {
+        RouteSegment infeedSegment = new RouteSegment(
+                "infeed",
+                new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(2f, 0f, 0f), false));
+        RouteSegment tipperSegment = new RouteSegment(
+                "tipper",
+                new LinearSegment3(new Vec3(2f, 0f, 0f), new Vec3(3.25f, 0f, 0f), false));
+        RouteSegment exitSegment = new RouteSegment(
+                "exit",
+                new LinearSegment3(new Vec3(3.25f, 0f, 0f), new Vec3(5f, 0f, 0f), false));
+        infeedSegment.connectTo(tipperSegment);
+        tipperSegment.connectTo(exitSegment);
+
+        RenderableObject toteRenderable = RenderableObject.create(
+                "tote",
+                null,
+                anchorMesh(),
+                new Mat4.ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
+                triangleIndex -> 0,
+                false);
+        Tote tote = new Tote(
+                "tote-1",
+                new RouteFollower("tote-1", infeedSegment, 0f, 1.4d),
+                toteRenderable,
+                new Vec3(0f, 0f, 0f),
+                0f);
+
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-1",
+                List.of(new PackPlan("pack-1", "bag-a", new PackDimensions(0.20f, 0.10f, 0.08f))));
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.20d, 0.10d, 0.10d);
+        SortingMachine sortingMachine = new SortingMachine("sorter", 0.10d);
+        ToteTrackTipperFlowController controller = new ToteTrackTipperFlowController(
+                tote,
+                toteLoadPlan,
+                tipperSegment,
+                0.625f,
+                -1.02f,
+                tippingMachine,
+                sortingMachine,
+                0.20d);
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addTrackableObject(tote);
+        sim.addSimObject(tippingMachine);
+        sim.addSimObject(sortingMachine);
+        sim.addController(controller);
+
+        boolean sawCaptureAtTipperMidpoint = false;
+        for (int i = 0; i < 50; i++) {
+            sim.update(0.05d);
+            if (controller.isToteCaptured()) {
+                sawCaptureAtTipperMidpoint = true;
+                assertEquals(ToteMotionState.HELD, tote.getInteractionMode());
+                assertSame(tipperSegment, tote.getLastSnapshot().currentSegment());
+                assertEquals(0.625f, tote.getLastSnapshot().distanceAlongSegment(), 0.0001f);
+                assertEquals("tote-1", tippingMachine.getActiveToteId());
+                break;
+            }
+        }
+
+        assertTrue(sawCaptureAtTipperMidpoint);
+    }
 
     @Test
     void shouldRunSimpleToteToBagFlowEndToEnd() {
@@ -243,5 +320,16 @@ class ToteToBagFlowControllerTest {
 
         assertTrue(sawArmedBeforeTransfer);
         assertTrue(sawTransferWhileDeviceBusy);
+    }
+
+    private static Mesh anchorMesh() {
+        return new Mesh(
+                new Vec4[] {
+                        new Vec4(0f, 0f, 0f, 1f),
+                        new Vec4(0f, 0f, 0f, 1f),
+                        new Vec4(0f, 0f, 0f, 1f)
+                },
+                new int[][] { {0, 1, 2} },
+                "anchor");
     }
 }
