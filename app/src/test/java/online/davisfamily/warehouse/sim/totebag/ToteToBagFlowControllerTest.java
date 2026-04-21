@@ -36,6 +36,7 @@ import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 
 class ToteToBagFlowControllerTest {
 
@@ -70,11 +71,12 @@ class ToteToBagFlowControllerTest {
         ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
                 "tote-1",
                 List.of(new PackPlan("pack-1", "bag-a", new PackDimensions(0.20f, 0.10f, 0.08f))));
+        ToteLoadPlanProvider toteLoadPlanProvider = toteId -> toteLoadPlan.getToteId().equals(toteId) ? toteLoadPlan : null;
         TippingMachine tippingMachine = new TippingMachine("tipper", 0.20d, 0.10d, 0.10d);
         SortingMachine sortingMachine = new SortingMachine("sorter", 0.10d);
         ToteTrackTipperFlowController controller = new ToteTrackTipperFlowController(
                 tote,
-                toteLoadPlan,
+                toteLoadPlanProvider,
                 tipperSegment,
                 0.625f,
                 -1.02f,

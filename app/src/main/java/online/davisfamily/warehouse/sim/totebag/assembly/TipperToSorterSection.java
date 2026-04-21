@@ -10,6 +10,7 @@ import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowContr
 import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPointProvider;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 public class TipperToSorterSection implements PackHandoffPointProvider {
     private final TipperInstallation tipperInstallation;
@@ -25,6 +26,7 @@ public class TipperToSorterSection implements PackHandoffPointProvider {
             SelectionInspectionRegistry inspectionRegistry,
             TipperInstallation tipperInstallation,
             SortingInstallation sortingInstallation,
+            ToteLoadPlan toteLoadPlan,
             ToteTrackTipperFlowController flowController) {
         if (tr == null
                 || sim == null
@@ -32,6 +34,7 @@ public class TipperToSorterSection implements PackHandoffPointProvider {
                 || inspectionRegistry == null
                 || tipperInstallation == null
                 || sortingInstallation == null
+                || toteLoadPlan == null
                 || flowController == null) {
             throw new IllegalArgumentException("Tipper-to-sorter section inputs must not be null");
         }
@@ -44,7 +47,7 @@ public class TipperToSorterSection implements PackHandoffPointProvider {
                 objects,
                 inspectionRegistry,
                 tipperInstallation.getTotePayload().getToteRenderable(),
-                tipperInstallation.getToteLoadPlan(),
+                toteLoadPlan,
                 tipperInstallation.getTotePayload().getContainedPackLayoutById(),
                 tipperInstallation.getTrackSection().rigYaw(),
                 dischargeSeam);

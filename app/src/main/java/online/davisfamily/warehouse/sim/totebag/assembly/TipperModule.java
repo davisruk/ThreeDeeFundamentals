@@ -6,14 +6,12 @@ import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.handoff.MachineHandoffPointId;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
-import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 public class TipperModule {
     private static final float SLIDE_LENGTH = 1.20f;
     private static final float SORTER_INTAKE_CLEARANCE = 0.08f;
 
     private final Tote tote;
-    private final ToteLoadPlan toteLoadPlan;
     private final TippingMachine tippingMachine;
     private final RenderableObject toteRenderable;
     private final RenderableObject assemblyRenderable;
@@ -27,7 +25,6 @@ public class TipperModule {
 
     public TipperModule(
             Tote tote,
-            ToteLoadPlan toteLoadPlan,
             TippingMachine tippingMachine,
             RenderableObject toteRenderable,
             RenderableObject assemblyRenderable,
@@ -39,7 +36,6 @@ public class TipperModule {
             float tippedAngleRadians,
             float rigYaw) {
         if (tote == null
-                || toteLoadPlan == null
                 || tippingMachine == null
                 || toteRenderable == null
                 || assemblyRenderable == null
@@ -51,7 +47,6 @@ public class TipperModule {
             throw new IllegalArgumentException("TipperModule inputs must not be null");
         }
         this.tote = tote;
-        this.toteLoadPlan = toteLoadPlan;
         this.tippingMachine = tippingMachine;
         this.toteRenderable = toteRenderable;
         this.assemblyRenderable = assemblyRenderable;
@@ -66,10 +61,6 @@ public class TipperModule {
 
     public Tote getTote() {
         return tote;
-    }
-
-    public ToteLoadPlan getToteLoadPlan() {
-        return toteLoadPlan;
     }
 
     public TippingMachine getTippingMachine() {

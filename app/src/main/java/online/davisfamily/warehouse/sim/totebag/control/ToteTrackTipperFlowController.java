@@ -18,11 +18,12 @@ import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfer;
 
 public class ToteTrackTipperFlowController implements SimulationController {
     private final Tote tote;
-    private final ToteLoadPlan toteLoadPlan;
+    private final ToteLoadPlanProvider toteLoadPlanProvider;
     private final RouteSegment tipperSegment;
     private final float tipperStopDistance;
     private final float tipperTippedAngleRadians;
@@ -37,6 +38,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private float visualTipProgress;
     private boolean toteCaptured;
     private boolean toteReleased;
+    private ToteLoadPlan activeToteLoadPlan;
 
     public ToteTrackTipperFlowController(
             Tote tote,
@@ -49,7 +51,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
             double dischargeDurationSeconds) {
         this(
                 tote,
-                toteLoadPlan,
+                singlePlanProvider(toteLoadPlan),
                 tipperSegment,
                 tipperStopDistance,
                 tipperTippedAngleRadians,
@@ -61,7 +63,28 @@ public class ToteTrackTipperFlowController implements SimulationController {
 
     public ToteTrackTipperFlowController(
             Tote tote,
-            ToteLoadPlan toteLoadPlan,
+            ToteLoadPlanProvider toteLoadPlanProvider,
+            RouteSegment tipperSegment,
+            float tipperStopDistance,
+            float tipperTippedAngleRadians,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            double dischargeDurationSeconds) {
+        this(
+                tote,
+                toteLoadPlanProvider,
+                tipperSegment,
+                tipperStopDistance,
+                tipperTippedAngleRadians,
+                tippingMachine,
+                sortingMachine,
+                dischargeDurationSeconds,
+                null);
+    }
+
+    public ToteTrackTipperFlowController(
+            Tote tote,
+            ToteLoadPlanProvider toteLoadPlanProvider,
             RouteSegment tipperSegment,
             float tipperStopDistance,
             float tipperTippedAngleRadians,
@@ -70,14 +93,11 @@ public class ToteTrackTipperFlowController implements SimulationController {
             double dischargeDurationSeconds,
             PackReceiveTarget sorterOutfeedTarget) {
         if (tote == null
-                || toteLoadPlan == null
+                || toteLoadPlanProvider == null
                 || tipperSegment == null
                 || tippingMachine == null
                 || sortingMachine == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null");
-        }
-        if (!tote.getId().equals(toteLoadPlan.getToteId())) {
-            throw new IllegalArgumentException("Tote load plan must match the tote id");
         }
         if (tipperStopDistance < 0f) {
             throw new IllegalArgumentException("tipperStopDistance must be >= 0");
@@ -89,7 +109,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
             throw new IllegalArgumentException("dischargeDurationSeconds must be > 0");
         }
         this.tote = tote;
-        this.toteLoadPlan = toteLoadPlan;
+        this.toteLoadPlanProvider = toteLoadPlanProvider;
         this.tipperSegment = tipperSegment;
         this.tipperStopDistance = tipperStopDistance;
         this.tipperTippedAngleRadians = tipperTippedAngleRadians;
@@ -140,7 +160,8 @@ public class ToteTrackTipperFlowController implements SimulationController {
         tote.getRouteFollower().setDistanceAlongSegment(tipperStopDistance);
         tote.setInteractionMode(ToteMotionState.HELD);
         tote.snapToRouteDistance(tipperStopDistance);
-        tippingMachine.loadTote(toteLoadPlan);
+        activeToteLoadPlan = resolveLoadPlanForCapturedTote();
+        tippingMachine.loadTote(activeToteLoadPlan);
         toteCaptured = true;
     }
 
@@ -255,5 +276,23 @@ public class ToteTrackTipperFlowController implements SimulationController {
         }
         float maxStep = (float) (Math.max(0d, dtSeconds) / resetDurationSeconds);
         visualTipProgress = Math.max(target, visualTipProgress - maxStep);
+    }
+
+    private ToteLoadPlan resolveLoadPlanForCapturedTote() {
+        ToteLoadPlan toteLoadPlan = toteLoadPlanProvider.getLoadPlanFor(tote.getId());
+        if (toteLoadPlan == null) {
+            throw new IllegalStateException("No tote load plan available for tote " + tote.getId());
+        }
+        if (!tote.getId().equals(toteLoadPlan.getToteId())) {
+            throw new IllegalArgumentException("Tote load plan must match the tote id");
+        }
+        return toteLoadPlan;
+    }
+
+    private static ToteLoadPlanProvider singlePlanProvider(ToteLoadPlan toteLoadPlan) {
+        if (toteLoadPlan == null) {
+            throw new IllegalArgumentException("toteLoadPlan must not be null");
+        }
+        return toteId -> toteLoadPlan.getToteId().equals(toteId) ? toteLoadPlan : null;
     }
 }

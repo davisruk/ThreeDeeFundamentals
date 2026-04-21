@@ -8,6 +8,7 @@ import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 public class TipperToSorterSectionInstaller {
     public TipperToSorterSection install(
@@ -26,10 +27,15 @@ public class TipperToSorterSectionInstaller {
                 || sortingInstallation == null) {
             throw new IllegalArgumentException("Tipper-to-sorter install inputs must not be null");
         }
+        ToteLoadPlan toteLoadPlan = tipperInstallation.getToteLoadPlanProvider()
+                .getLoadPlanFor(tipperInstallation.getTote().getId());
+        if (toteLoadPlan == null) {
+            throw new IllegalStateException("No tote load plan available for tote " + tipperInstallation.getTote().getId());
+        }
 
         ToteTrackTipperFlowController flowController = new ToteTrackTipperFlowController(
                 tipperInstallation.getTote(),
-                tipperInstallation.getToteLoadPlan(),
+                tipperInstallation.getToteLoadPlanProvider(),
                 tipperInstallation.getTrackSection().getTipperSegment(),
                 tipperInstallation.getTrackSection().getTipperStopDistance(),
                 tipperInstallation.getTrackSection().getTippedAngleRadians(),
@@ -45,6 +51,7 @@ public class TipperToSorterSectionInstaller {
                 inspectionRegistry,
                 tipperInstallation,
                 sortingInstallation,
+                toteLoadPlan,
                 flowController);
     }
 }

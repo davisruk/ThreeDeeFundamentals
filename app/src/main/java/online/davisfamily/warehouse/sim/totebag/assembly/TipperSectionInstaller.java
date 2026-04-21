@@ -9,6 +9,7 @@ import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 
 public class TipperSectionInstaller {
     public TipperInstallation install(
@@ -17,13 +18,15 @@ public class TipperSectionInstaller {
             List<RenderableObject> objects,
             SelectionInspectionRegistry inspectionRegistry,
             TipperTrackSection trackSection,
-            TipperTotePayload totePayload) {
+            TipperTotePayload totePayload,
+            ToteLoadPlanProvider toteLoadPlanProvider) {
         if (tr == null
                 || sim == null
                 || objects == null
                 || inspectionRegistry == null
                 || trackSection == null
-                || totePayload == null) {
+                || totePayload == null
+                || toteLoadPlanProvider == null) {
             throw new IllegalArgumentException("Tipper install inputs must not be null");
         }
 
@@ -56,7 +59,6 @@ public class TipperSectionInstaller {
 
         TipperModule tipperModule = new TipperModule(
                 totePayload.getTote(),
-                totePayload.getToteLoadPlan(),
                 tippingMachine,
                 toteRenderable,
                 tipperAssemblyRenderable,
@@ -73,6 +75,7 @@ public class TipperSectionInstaller {
         return new TipperInstallation(
                 trackSection,
                 totePayload,
+                toteLoadPlanProvider,
                 tippingMachine,
                 tipperModule,
                 tipperAssemblyRenderable,

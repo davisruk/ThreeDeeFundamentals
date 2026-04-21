@@ -4,11 +4,12 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
-import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 
 public class TipperInstallation {
     private final TipperTrackSection trackSection;
     private final TipperTotePayload totePayload;
+    private final ToteLoadPlanProvider toteLoadPlanProvider;
     private final TippingMachine tippingMachine;
     private final TipperModule tipperModule;
     private final RenderableObject tipperAssemblyRenderable;
@@ -17,12 +18,14 @@ public class TipperInstallation {
     public TipperInstallation(
             TipperTrackSection trackSection,
             TipperTotePayload totePayload,
+            ToteLoadPlanProvider toteLoadPlanProvider,
             TippingMachine tippingMachine,
             TipperModule tipperModule,
             RenderableObject tipperAssemblyRenderable,
             ConveyorRuntimeState tipperTrackRuntimeState) {
         if (trackSection == null
                 || totePayload == null
+                || toteLoadPlanProvider == null
                 || tippingMachine == null
                 || tipperModule == null
                 || tipperAssemblyRenderable == null
@@ -31,6 +34,7 @@ public class TipperInstallation {
         }
         this.trackSection = trackSection;
         this.totePayload = totePayload;
+        this.toteLoadPlanProvider = toteLoadPlanProvider;
         this.tippingMachine = tippingMachine;
         this.tipperModule = tipperModule;
         this.tipperAssemblyRenderable = tipperAssemblyRenderable;
@@ -49,8 +53,8 @@ public class TipperInstallation {
         return totePayload.getTote();
     }
 
-    public ToteLoadPlan getToteLoadPlan() {
-        return totePayload.getToteLoadPlan();
+    public ToteLoadPlanProvider getToteLoadPlanProvider() {
+        return toteLoadPlanProvider;
     }
 
     public TippingMachine getTippingMachine() {

@@ -30,13 +30,15 @@ public class ToteTrackTipperDebugRig {
                 tr,
                 objects,
                 TipperEntryLayoutSpec.debugDefaults());
+        TipperDemoFixtures.DemoTipperFeed demoTipperFeed = TipperDemoFixtures.createDemoTipperFeed(tr, sim, trackSection);
         TipperInstallation tipperInstallation = new TipperSectionInstaller().install(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
                 trackSection,
-                TipperDemoFixtures.createDemoTotePayload(tr, sim, trackSection));
+                demoTipperFeed.totePayload(),
+                demoTipperFeed.toteLoadPlanProvider());
         SortingInstallation sortingInstallation = new SortingSectionInstaller().install(
                 tr,
                 sim,

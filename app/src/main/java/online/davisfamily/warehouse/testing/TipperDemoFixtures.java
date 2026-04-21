@@ -16,6 +16,7 @@ import online.davisfamily.warehouse.sim.totebag.layout.ContainedPackLayout;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 
 public final class TipperDemoFixtures {
     private static final float CONTAINED_PACK_GAP_X = 0.012f;
@@ -25,7 +26,7 @@ public final class TipperDemoFixtures {
     private TipperDemoFixtures() {
     }
 
-    public static TipperTotePayload createDemoTotePayload(
+    public static DemoTipperFeed createDemoTipperFeed(
             TriangleRenderer tr,
             SimulationWorld sim,
             TipperTrackSection trackSection) {
@@ -54,12 +55,13 @@ public final class TipperDemoFixtures {
                 CONTAINED_PACK_GAP_Y)
                         .layoutPackPlans(toteLoadPlan.getPackPlans());
 
-        return new TipperTotePayload(
+        TipperTotePayload totePayload = new TipperTotePayload(
                 tote,
-                toteLoadPlan,
                 toteRenderable,
                 toteInteriorFloorLocalY,
                 containedPackLayoutById);
+        ToteLoadPlanProvider toteLoadPlanProvider = toteId -> toteLoadPlan.getToteId().equals(toteId) ? toteLoadPlan : null;
+        return new DemoTipperFeed(totePayload, toteLoadPlanProvider);
     }
 
     private static ToteLoadPlan createDemoPlan(String toteId) {
@@ -71,5 +73,16 @@ public final class TipperDemoFixtures {
                         new PackPlan("pack-a2", "bag-a", new PackDimensions(0.16f, 0.10f, 0.08f)),
                         new PackPlan("pack-c1", "bag-c", new PackDimensions(0.22f, 0.12f, 0.10f)),
                         new PackPlan("pack-b2", "bag-b", new PackDimensions(0.19f, 0.11f, 0.09f))));
+    }
+
+    public record DemoTipperFeed(
+            TipperTotePayload totePayload,
+            ToteLoadPlanProvider toteLoadPlanProvider) {
+
+        public DemoTipperFeed {
+            if (totePayload == null || toteLoadPlanProvider == null) {
+                throw new IllegalArgumentException("Demo tipper feed inputs must not be null");
+            }
+        }
     }
 }
