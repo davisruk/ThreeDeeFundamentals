@@ -87,6 +87,8 @@ public class TipperToSorterSection implements PackHandoffPointProvider {
             case TIPPER_PACK_DISCHARGE -> tipperInstallation.getTipperModule().dischargePoint();
             case SORTER_PACK_INTAKE -> sortingInstallation.getSortingModule().intakePoint();
             case SORTER_PACK_OUTFEED -> sortingInstallation.getSortingModule().outfeedPoint();
+            case BAGGING_PACK_INTAKE -> throw new IllegalArgumentException(
+                    "Bagging handoff point is not owned by TipperToSorterSection");
         };
     }
 }

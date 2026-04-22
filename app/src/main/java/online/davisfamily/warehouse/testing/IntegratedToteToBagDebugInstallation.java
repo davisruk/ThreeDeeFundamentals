@@ -1,20 +1,20 @@
 package online.davisfamily.warehouse.testing;
 
 import online.davisfamily.warehouse.sim.totebag.assembly.SortingInstallation;
+import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSection;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
-import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 
 public class IntegratedToteToBagDebugInstallation {
     private final ToteToBagSubsystem subsystem;
     private final TipperTrackSection trackSection;
     private final TipperInstallation tipperInstallation;
     private final SortingInstallation sortingInstallation;
+    private final BaggingInstallation baggingInstallation;
     private final TipperToSorterSection tipperToSorterSection;
-    private final BaggingMachine baggingMachine;
     private final ToteToBagFlowController flowController;
 
     public IntegratedToteToBagDebugInstallation(
@@ -22,15 +22,15 @@ public class IntegratedToteToBagDebugInstallation {
             TipperTrackSection trackSection,
             TipperInstallation tipperInstallation,
             SortingInstallation sortingInstallation,
+            BaggingInstallation baggingInstallation,
             TipperToSorterSection tipperToSorterSection,
-            BaggingMachine baggingMachine,
             ToteToBagFlowController flowController) {
         if (subsystem == null
                 || trackSection == null
                 || tipperInstallation == null
                 || sortingInstallation == null
+                || baggingInstallation == null
                 || tipperToSorterSection == null
-                || baggingMachine == null
                 || flowController == null) {
             throw new IllegalArgumentException("Integrated tote-to-bag installation inputs must not be null");
         }
@@ -38,8 +38,8 @@ public class IntegratedToteToBagDebugInstallation {
         this.trackSection = trackSection;
         this.tipperInstallation = tipperInstallation;
         this.sortingInstallation = sortingInstallation;
+        this.baggingInstallation = baggingInstallation;
         this.tipperToSorterSection = tipperToSorterSection;
-        this.baggingMachine = baggingMachine;
         this.flowController = flowController;
     }
 
@@ -59,12 +59,12 @@ public class IntegratedToteToBagDebugInstallation {
         return sortingInstallation;
     }
 
-    public TipperToSorterSection getTipperToSorterSection() {
-        return tipperToSorterSection;
+    public BaggingInstallation getBaggingInstallation() {
+        return baggingInstallation;
     }
 
-    public BaggingMachine getBaggingMachine() {
-        return baggingMachine;
+    public TipperToSorterSection getTipperToSorterSection() {
+        return tipperToSorterSection;
     }
 
     public ToteToBagFlowController getFlowController() {

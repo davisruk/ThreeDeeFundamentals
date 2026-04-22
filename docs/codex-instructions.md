@@ -8,7 +8,12 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/tote-to-bag-requirements.txt`
-3. `docs/tipper-route-mounted-machine-architecture.md`
+3. `docs/bagging_machine_requirements.txt`
+4. `docs/tipper-route-mounted-machine-architecture.md`
+5. If continuing the bagger/control-flow discussion, read the current transfer-zone classes before proposing architectural unification:
+   - `app/src/main/java/online/davisfamily/warehouse/sim/transfer/TransferZone.java`
+   - `app/src/main/java/online/davisfamily/warehouse/sim/transfer/TransferZoneMachine.java`
+   - `app/src/main/java/online/davisfamily/warehouse/sim/transfer/TransferZoneController.java`
 
 ## Working Rule
 
@@ -49,3 +54,4 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
   - small downstream-flow boundary for local controller release / occupancy decisions
 - likely follow-up work is now about applying the same pattern to future mounted machines and higher-level orchestration rather than continuing tipper / sorter untangling for its own sake
 - for day-to-day running, prefer explicit scene launches via the `--scene=...` command-line switch or the matching VS Code launch profiles
+- for bagging-machine follow-up, do not assume the existing transfer-zone subsystem should simply be absorbed into the mounted-machine architecture; re-evaluate the seam vocabulary first

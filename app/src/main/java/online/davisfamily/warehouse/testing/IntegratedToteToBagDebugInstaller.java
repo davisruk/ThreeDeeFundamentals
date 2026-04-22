@@ -7,6 +7,8 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
+import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
+import online.davisfamily.warehouse.sim.totebag.assembly.BaggingSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assembly.SortingInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.SortingSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInstallation;
@@ -25,7 +27,6 @@ import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
 import online.davisfamily.warehouse.sim.totebag.handoff.SorterOutfeedToPdcReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
-import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 
 public class IntegratedToteToBagDebugInstaller {
     public IntegratedToteToBagDebugInstallation install(
@@ -34,15 +35,13 @@ public class IntegratedToteToBagDebugInstaller {
             List<RenderableObject> objects,
             SelectionInspectionRegistry inspectionRegistry,
             TrackAppearance conveyorAppearance,
-            ToteToBagCoreLayoutSpec layoutSpec,
-            BaggingMachine baggingMachine) {
+            ToteToBagCoreLayoutSpec layoutSpec) {
         if (tr == null
                 || sim == null
                 || objects == null
                 || inspectionRegistry == null
                 || conveyorAppearance == null
-                || layoutSpec == null
-                || baggingMachine == null) {
+                || layoutSpec == null) {
             throw new IllegalArgumentException("Integrated tote-to-bag debug install inputs must not be null");
         }
 
@@ -73,6 +72,13 @@ public class IntegratedToteToBagDebugInstaller {
                 inspectionRegistry,
                 trackSection.getLayoutSpec(),
                 tipperInstallation.getTipperModule().sorterIntakeMountLocalPoint());
+        BaggingInstallation baggingInstallation = new BaggingSectionInstaller().install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                subsystem.getLayout(),
+                conveyorAppearance);
 
         TipperToSorterSection tipperToSorterSection = new TipperToSorterSectionInstaller().install(
                 tr,
@@ -90,7 +96,7 @@ public class IntegratedToteToBagDebugInstaller {
                 tipperInstallation.getToteLoadPlanProvider().getLoadPlanFor(tipperInstallation.getTote().getId()),
                 pdcConveyor,
                 pcrConveyor,
-                baggingMachine,
+                baggingInstallation.getBaggingMachine(),
                 new ToteToBagAssignmentPlanner(),
                 prls,
                 pdcDiversionDevices,
@@ -100,7 +106,6 @@ public class IntegratedToteToBagDebugInstaller {
                 (prlId, pack) -> subsystem.getLayout().prlToPcrEntryFrontDistanceFor(indexOfPrl(prls, prlId), pack));
 
         sim.addSimObject(pcrConveyor);
-        sim.addSimObject(baggingMachine);
         sim.addController(flowController);
 
         return new IntegratedToteToBagDebugInstallation(
@@ -108,8 +113,8 @@ public class IntegratedToteToBagDebugInstaller {
                 trackSection,
                 tipperInstallation,
                 sortingInstallation,
+                baggingInstallation,
                 tipperToSorterSection,
-                baggingMachine,
                 flowController);
     }
 

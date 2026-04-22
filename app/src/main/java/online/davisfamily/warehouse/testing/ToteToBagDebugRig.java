@@ -15,6 +15,8 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
+import online.davisfamily.warehouse.sim.totebag.assembly.BaggingModule;
+import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
@@ -23,6 +25,7 @@ import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDeviceState;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
+import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachineState;
 import online.davisfamily.warehouse.sim.totebag.machine.CompletedBag;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
@@ -45,6 +48,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
     private final BaggingMachine baggingMachine;
+    private final BaggingModule baggingModule;
     private final List<PrlConveyor> prls;
     private final List<PdcDiversionDevice> pdcDiversionDevices;
     private final ToteToBagFlowController flowController;
@@ -76,15 +80,13 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
                 new OneColourStrategyImpl(0xFF596A54),
                 new OneColourStrategyImpl(0xFF596A54));
         layoutSpec = ToteToBagCoreLayoutSpec.integratedDebugDefaults();
-        baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
         IntegratedToteToBagDebugInstallation installation = new IntegratedToteToBagDebugInstaller().install(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
                 conveyorAppearance,
-                layoutSpec,
-                baggingMachine);
+                layoutSpec);
 
         subsystem = installation.getSubsystem();
         pdcConveyor = subsystem.getPdcConveyor();
@@ -93,13 +95,14 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         pcrConveyor = subsystem.getPcrConveyor();
         tipperToSorterSection = installation.getTipperToSorterSection();
         flowController = installation.getFlowController();
+        BaggingInstallation baggingInstallation = installation.getBaggingInstallation();
+        baggingMachine = baggingInstallation.getBaggingMachine();
+        baggingModule = baggingInstallation.getBaggingModule();
 
         pdcRenderable = subsystem.getPdcRenderable();
         pcrRenderable = subsystem.getPcrRenderable();
-        baggerRenderable = createBox("bagging_machine", 0f, 0f, 0f, 0.8f, 0.56f, 0.9f, 0xFF6F5E49);
-        subsystem.attachRenderable(baggerRenderable, layoutSpec.baggerMount());
+        baggerRenderable = baggingModule.getRenderable();
 
-        objects.add(baggerRenderable);
         objects.addAll(subsystem.getCoreRenderables());
         prlRenderablesById.putAll(subsystem.getPrlRenderablesById());
         pdcBumperRenderablesByPrlId.putAll(subsystem.getPdcBumpersByPrlId());
@@ -133,15 +136,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         }
 
         if (baggingMachine.getCurrentGroup() != null) {
-            int baggerPackIndex = 0;
-            for (Pack pack : baggingMachine.getCurrentGroup().packs()) {
-                positionPack(
-                        pack,
-                        subsystem.getLayout().baggerPackDisplayX(baggerPackIndex),
-                        subsystem.getLayout().baggerPackDisplayY(),
-                        subsystem.getLayout().pcrZ());
-                baggerPackIndex++;
-            }
+            positionPacksOnBaggerIntake();
         }
 
         ensureCompletedBagRenderablesExist();
@@ -210,14 +205,6 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
                 "Ready groups: " + pcrConveyor.getReadyGroups().size(),
                 "Incoming transfers: " + flowController.getActivePrlToPcrTransfers().size()));
 
-        inspectionRegistry.register(baggerRenderable, () -> List.of(
-                "Type: Bagging machine",
-                "State: " + baggingMachine.getState(),
-                "Current group: " + (baggingMachine.getCurrentGroup() == null
-                        ? "None"
-                        : baggingMachine.getCurrentGroup().correlationId()),
-                "Completed bags: " + baggingMachine.getCompletedCorrelationIds()));
-
         for (PrlConveyor prl : prls) {
             RenderableObject prlRenderable = prlRenderablesById.get(prl.getId());
             inspectionRegistry.register(prlRenderable, () -> List.of(
@@ -259,24 +246,6 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         }
     }
 
-    private RenderableObject createBox(
-            String id,
-            float x,
-            float y,
-            float z,
-            float length,
-            float height,
-            float width,
-            int colour) {
-        return RenderableObject.create(
-                id,
-                tr,
-                RollerMeshFactory.createBoxRollerMesh(length, height, width),
-                new ObjectTransformation(0f, 0f, 0f, x, y, z, new Mat4()),
-                new OneColourStrategyImpl(colour),
-                true);
-    }
-
     private void syncConveyorRuntimeStates() {
         pdcRuntimeState.setRunning(true);
         pcrRuntimeState.setRunning(pcrConveyor.isRunning() || baggingMachine.getCurrentGroup() != null);
@@ -289,6 +258,10 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     }
 
     private void positionPack(Pack pack, float x, float y, float z) {
+        positionPack(pack, x, y, z, 0f, 0f, 0f);
+    }
+
+    private void positionPack(Pack pack, float x, float y, float z, float angleX, float angleY, float angleZ) {
         RenderableObject renderable = tipperToSorterSection.getPackRenderable(pack.getId());
         if (renderable == null) {
             return;
@@ -296,6 +269,9 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         renderable.transformation.xTranslation = x;
         renderable.transformation.yTranslation = y;
         renderable.transformation.zTranslation = z;
+        renderable.transformation.angleX = angleX;
+        renderable.transformation.angleY = angleY;
+        renderable.transformation.angleZ = angleZ;
     }
 
     private void positionActivePdcTransfer(PdcTransfer transfer) {
@@ -364,6 +340,44 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private void positionPackOnPdc(Pack pack, float frontDistance) {
         float x = subsystem.getLayout().pdcStartX() + frontDistance - (pack.getDimensions().length() * 0.5f);
         positionPack(pack, x, layoutSpec.packY(), layoutSpec.pdcZ());
+    }
+
+    private void positionPacksOnBaggerIntake() {
+        if (baggingMachine.getCurrentGroup() == null) {
+            return;
+        }
+
+        List<Pack> packs = baggingMachine.getCurrentGroup().packs();
+        float receivingProgress = baggingMachine.getState() == BaggingMachineState.RECEIVING
+                ? normalizedProgress(baggingMachine.getTimeInStateSeconds(), baggingMachine.getReceivingDurationSeconds())
+                : 1f;
+        float leadFrontDistance = baggingModule.intakeTravelDistance() * receivingProgress;
+
+        float trailingDistance = 0f;
+        for (Pack pack : packs) {
+            float packFrontDistance = leadFrontDistance - trailingDistance;
+            BaggingModule.IntakePackPose pose = baggingModule.resolveIntakePackPose(packFrontDistance, pack.getDimensions());
+            positionPack(
+                    pack,
+                    pose.worldPosition().x,
+                    pose.worldPosition().y,
+                    pose.worldPosition().z,
+                    0f,
+                    pose.yawRadians(),
+                    pose.angleZRadians());
+            trailingDistance += frontSpacingFor(pack);
+        }
+    }
+
+    private float frontSpacingFor(Pack pack) {
+        return pack.getDimensions().length() + 0.04f;
+    }
+
+    private float normalizedProgress(double elapsedSeconds, double durationSeconds) {
+        if (durationSeconds <= 0d) {
+            return 1f;
+        }
+        return (float) Math.max(0d, Math.min(1d, elapsedSeconds / durationSeconds));
     }
 
 }

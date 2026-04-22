@@ -112,6 +112,14 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState> {
         return currentGroup;
     }
 
+    public double getTimeInStateSeconds() {
+        return timeInStateSeconds;
+    }
+
+    public double getReceivingDurationSeconds() {
+        return receivingDurationSeconds;
+    }
+
     public List<String> getCompletedCorrelationIds() {
         return Collections.unmodifiableList(completedCorrelationIds);
     }

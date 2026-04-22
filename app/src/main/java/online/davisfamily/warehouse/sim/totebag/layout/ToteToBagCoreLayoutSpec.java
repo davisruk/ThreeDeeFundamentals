@@ -85,7 +85,7 @@ public record ToteToBagCoreLayoutSpec(
                 2.6f,
                 1.8f,
                 new MachineAttachmentSpec(ToteToBagAttachmentPoint.UPSTREAM_MODULE_ROOT, -1.62f, 1.45f, 0.99f, 0f),
-                new MachineAttachmentSpec(ToteToBagAttachmentPoint.PCR_OUTFEED, 2.6f, 0.26f, 0f, 0f),
+                new MachineAttachmentSpec(ToteToBagAttachmentPoint.PCR_OUTFEED, 0.8f, 0.26f, 0f, 0f),
                 -1.2f,
                 0.48f,
                 0.10f,

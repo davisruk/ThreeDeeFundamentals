@@ -1,0 +1,183 @@
+Bagging Machine
+
+Requirements
+
+- Internals do not need to be simulated or rendered physically.
+- Machine receives packs from the PCR conveyor.
+- Packs should transfer from the PCR conveyor onto a first intake conveyor.
+- First intake conveyor characteristics:
+  - sloped in `+y` direction
+  - short, but long enough to carry 2 or 3 packs
+- Packs then transfer onto a second intake conveyor.
+- Second intake conveyor characteristics:
+  - not sloped
+  - even shorter than the first intake conveyor, could carry 1 or 2 packs
+- Actual intake into the machine can be a "black hole".
+- Second intake conveyor can butt up against the black-hole intake.
+- The black-hole intake on the bagging machine emits bags onto a connected chute.
+- Intake conveyors and chute can be considered fixed relative to the machine body; positioning them independently of the machine body is not required.
+- Bags slide down the chute and into a tote.
+- Bag visual shape should look similar to the example in `C:\misc\img\bag.png`.
+- The first bag mesh only needs the basic bag shape; decals / text are not required for the current slice.
+- Tote should be considered a receiver; it is not part of the bagging machine construct.
+- Tote should be on a conveyor.
+- Tote should move on when full. That will be governed by a controller later, but for the test / debug rig this can initially be driven by the number of bags in the rig.
+- Bagging machine should follow the same architectural principles as the existing tipping / sorting machines for:
+  - building / scene placement
+  - install surface and install result
+  - state management and state reporting / querying
+
+Additional clarified requirements
+
+- The two intake conveyors and the chute are part of the bagging machine installation.
+- The downstream tote conveyor remains external to the bagging machine installation.
+- Bags should follow the same convention as packs for runtime ownership and rendering:
+  - after bag creation they are first-class moving simulation objects
+  - once received into a tote they can become children of the tote for rendering while the tote lid is open
+- Packs should remain visibly moving on the two intake conveyors until they reach the black-hole intake.
+- The chute should carry one completed bag at a time for the first slice.
+- The bagging machine should act as the readiness boundary for the next PCR delivery:
+  - intake conveyors should only run when a new group is being delivered
+  - PCR and the bagger intake path should not deliver the next group until the bagging machine returns to `IDLE`
+  - in practical control terms, PCR timing should be driven by bagging machine readiness rather than the bagger passively accepting whatever PCR already released
+
+Architectural Direction
+
+- Treat the bagging machine as an installed machine family in the same general style as the existing tipper and sorter.
+- Keep machine-owned concerns out of the debug rig from the start.
+- Expected ownership split:
+  - `BaggingMachine`: machine-local runtime/state
+  - `BaggingModule`: machine-owned renderables, intake conveyors, chute, anchor math
+  - `BaggingSectionInstaller` / `BaggingInstallation`: install surface and install result
+  - external tote receiver / tote conveyor: composed outside the bagging installation
+- External boundaries should be explicit:
+  - PCR should hand off into a bagging intake boundary
+  - the chute exit should become the machine-owned downstream bag release point
+- Machine internals should remain timed/stateful abstractions rather than physics-based simulation.
+- The current debug-rig bagger box should be treated as temporary and replaced by a proper installed bagging module.
+
+Recommended implementation sequence
+
+1. First slice:
+   - introduce `BaggingModule`
+   - introduce `BaggingSectionInstaller` / `BaggingInstallation`
+   - replace the inline bagging-machine render box in the debug rig with an installed bagging module
+   - keep the current logical `BaggingMachine` runtime behavior bridged behind that new boundary
+2. Second slice:
+   - introduce first-class `Bag` runtime objects
+   - make the bagger emit bags onto the chute / downstream receiver path
+   - gate PCR release timing by bagging-machine readiness
+3. Later slice:
+   - add external tote receiver controller logic for full-tote move-on / replacement
+   - integrate with future lid-opening / lid-closing machine work
+
+Current code position
+
+- The first structural bagging-machine slice is now in place.
+- `BaggingModule` now exists under `warehouse.sim.totebag.assembly`.
+- `BaggingSectionInstaller` / `BaggingInstallation` now exist and are used by the integrated tote-to-bag debug path.
+- The integrated tote-to-bag debug installer now installs the bagger as a machine-owned assembly instead of constructing only a simple inline bagger box in the debug rig.
+- The current `BaggingMachine` runtime has intentionally been left as the existing logical/timed consumer for now and is merely bridged behind the new installed-machine boundary.
+- The bagging machine currently owns:
+  - machine body renderable
+  - first intake conveyor renderable
+  - second intake conveyor renderable
+  - chute renderable
+  - explicit visible intake and outfeed mouth geometry
+- Intake-side placement has started moving away from ad hoc local tuning:
+  - first intake conveyor start is now derived from the PCR outfeed anchor with a small gap/drop policy
+  - second intake conveyor start is derived from the first conveyor end
+  - machine body x placement is now derived from the second conveyor end plus a small face offset
+- The intake and outfeed mouth geometry is now explicitly visible on the bagging machine rather than relying only on hidden handoff points.
+- The current bagger visual is intentionally still a thin-slice proving assembly:
+  - acceptable for continued architecture work
+  - not yet intended as final machine fidelity
+
+Current known issues / accepted temporary state
+
+- Intake-side and outfeed-side geometry is now acceptable for the current slice, but not yet final.
+- The current bagger openings are sized and aligned well enough to continue, but may still need later visual refinement.
+- Conveyor height matching between the bagger-owned conveyors and the tote-to-bag PDC/PRL/PCR conveyors has been intentionally deferred.
+- The bagger still behaves logically as an immediate timed consumer after PCR readiness rather than yet owning the full explicit intake-process-discharge flow.
+- The current PCR-to-FIC / FIC-to-SIC pack transitions are improved but still not final.
+- Those remaining transition issues should be treated as acceptable temporary state for commit:
+  - they exposed a deeper seam/control question rather than just a local visual bug
+  - the correct fix depends on decisions about machine-to-machine contracts, readiness/reservation semantics, and how existing transfer-zone architecture should participate
+
+What is still left
+
+Next major runtime slice
+
+- Introduce first-class `Bag` runtime objects.
+- Replace the current `CompletedBag`-only effect with explicit emitted bags moving down the chute and into the external tote receiver path.
+- Keep bags following the same ownership/rendering convention as packs:
+  - first-class moving objects while free
+  - later renderable as tote children when received into an open tote
+
+Next control-flow slice
+
+- Change PCR delivery so it is gated by bagging-machine readiness.
+- The bagger should no longer be treated as passively consuming whatever PCR has already released.
+- PCR should not become a waiting/buffer stage after PRL release.
+- Once a PRL releases packs onto PCR, they should continue moving at conveyor pace without stopping.
+- PCR capacity checking is not needed for this path:
+  - PCR only ever carries one released PRL group at a time
+  - bagging readiness is the relevant release gate
+- Practical target:
+  - bagging installation advertises readiness for the next group
+  - only then may PCR release/deliver the next group
+  - bagger intake conveyors run as part of that acceptance window
+
+Next external-composition slice
+
+- Add the external tote receiver path for completed bags.
+- Keep that tote receiver external to the bagging installation.
+- For the debug rig, tote move-on can still initially be driven by bag count.
+- Later that policy should move behind a dedicated controller / downstream receiver boundary.
+
+Remaining visual / geometry follow-up
+
+- Refine bagger intake and outfeed geometry only after the runtime/control slices above are established.
+- Add the basic bag mesh shape based on `C:\misc\img\bag.png`:
+  - tapered paper-bag silhouette
+  - folded top
+  - no text/decals required yet
+- Revisit whether PDC/PRL/PCR conveyor sizing should be brought closer to the bagger conveyor proportions once broader visual tuning becomes worthwhile.
+
+Architecture discussion to resume next session
+
+- The main open question is no longer just visual transition smoothing.
+- We need to settle the seam contract between adjacent systems before finalising the PCR/FIC/SIC flow.
+- Desired direction:
+  - avoid concrete coupling where one machine knows named upstream/downstream machine classes
+  - prefer small contracts around readiness, reservation, state query, and handoff lifecycle
+  - keep machine-local state ownership inside each machine rather than having neighbours drive internal state directly
+- Wider-system concern noted:
+  - downstream receivers such as totes can become full
+  - something external to the bagger must determine fullness and trigger hold/release or move-on behaviour
+  - route/graph topology may mean there are multiple possible downstream systems rather than one fixed neighbour
+- Existing transfer-zone subsystem was reviewed and should be taken seriously as its own architecture:
+  - it already has state, controller, sensors, events, strategies, and mechanisms
+  - it is currently route/tote-transfer oriented, not a generic mounted-machine seam abstraction
+  - we should not casually "turn transfer zones into machines"
+- Current recommendation:
+  - keep machine architecture and transfer-zone architecture distinct for now
+  - look for a shared seam vocabulary rather than forcing both into the same concrete type
+  - likely shared concepts are readiness, reservation, blocked/unavailable, handoff started, and handoff completed
+- This conversation should be resumed before doing major refactoring of PCR/bagger control flow.
+
+Recommended next-session starting point
+
+1. Read this document first.
+2. Treat the installed bagger boundary as established for the current thin slice.
+3. Do not push tote receiver ownership back into the bagging machine.
+4. Start from the architecture discussion above, not from transition tweaking in isolation.
+5. Re-read the current transfer-zone classes before deciding whether bagger/PCR flow should reuse concepts from them or remain a separate adjacent-machine seam.
+6. Treat the current intake-transition issues as symptoms of the unresolved seam contract, not just as local animation defects.
+7. After the seam/control direction is agreed, continue with:
+   - first-class `Bag` objects
+   - bagger readiness gating PRL/PCR release without PCR buffering
+   - external tote receiver composition
+
+
+ 
