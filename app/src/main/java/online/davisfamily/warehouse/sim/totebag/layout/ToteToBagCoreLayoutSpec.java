@@ -22,8 +22,15 @@ public record ToteToBagCoreLayoutSpec(
         float pcrSafetyMargin,
         float conveyorMinimumGap,
         float upstreamPdcExtensionLength,
+        float prlToPcrTransferStartZOffset,
         MachineAttachmentSpec tipperEntryMount,
         MachineAttachmentSpec baggerMount,
+        float baggerPackDisplayOffsetX,
+        float baggerPackDisplayY,
+        float baggerPackDisplaySpacingX,
+        float completedBagDisplayOffsetX,
+        float completedBagDisplayY,
+        float completedBagDisplaySpacingX,
         double sorterReleaseIntervalSeconds,
         double diversionArmDelaySeconds,
         double diversionActuationDurationSeconds,
@@ -41,6 +48,9 @@ public record ToteToBagCoreLayoutSpec(
         }
         if (upstreamPdcExtensionLength < 0f) {
             throw new IllegalArgumentException("upstreamPdcExtensionLength must be >= 0");
+        }
+        if (prlToPcrTransferStartZOffset <= 0f) {
+            throw new IllegalArgumentException("prlToPcrTransferStartZOffset must be > 0");
         }
         if (tipperEntryMount == null) {
             throw new IllegalArgumentException("tipperEntryMount must not be null");
@@ -73,8 +83,15 @@ public record ToteToBagCoreLayoutSpec(
                 0.15f,
                 0.06f,
                 2.6f,
+                1.8f,
                 new MachineAttachmentSpec(ToteToBagAttachmentPoint.UPSTREAM_MODULE_ROOT, -1.62f, 1.45f, 0.99f, 0f),
                 new MachineAttachmentSpec(ToteToBagAttachmentPoint.PCR_OUTFEED, 2.6f, 0.26f, 0f, 0f),
+                -1.2f,
+                0.48f,
+                0.10f,
+                0.4f,
+                0.16f,
+                0.42f,
                 0.95d,
                 0d,
                 0.08d,
@@ -105,8 +122,15 @@ public record ToteToBagCoreLayoutSpec(
                 defaults.pcrSafetyMargin(),
                 defaults.conveyorMinimumGap(),
                 defaults.upstreamPdcExtensionLength(),
+                defaults.prlToPcrTransferStartZOffset(),
                 defaults.tipperEntryMount(),
                 defaults.baggerMount(),
+                defaults.baggerPackDisplayOffsetX(),
+                defaults.baggerPackDisplayY(),
+                defaults.baggerPackDisplaySpacingX(),
+                defaults.completedBagDisplayOffsetX(),
+                defaults.completedBagDisplayY(),
+                defaults.completedBagDisplaySpacingX(),
                 defaults.sorterReleaseIntervalSeconds(),
                 defaults.diversionArmDelaySeconds(),
                 defaults.diversionActuationDurationSeconds(),

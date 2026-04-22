@@ -135,7 +135,11 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         if (baggingMachine.getCurrentGroup() != null) {
             int baggerPackIndex = 0;
             for (Pack pack : baggingMachine.getCurrentGroup().packs()) {
-                positionPack(pack, 4.0f + (baggerPackIndex * 0.10f), 0.48f, subsystem.getLayout().pcrZ());
+                positionPack(
+                        pack,
+                        subsystem.getLayout().baggerPackDisplayX(baggerPackIndex),
+                        subsystem.getLayout().baggerPackDisplayY(),
+                        subsystem.getLayout().pcrZ());
                 baggerPackIndex++;
             }
         }
@@ -145,8 +149,8 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         for (CompletedBag completedBag : baggingMachine.getCompletedBags()) {
             RenderableObject bagRenderable = completedBagRenderablesById.get(completedBag.correlationId());
             if (bagRenderable != null) {
-                bagRenderable.transformation.xTranslation = 5.6f + (completedIndex * 0.42f);
-                bagRenderable.transformation.yTranslation = 0.16f;
+                bagRenderable.transformation.xTranslation = subsystem.getLayout().completedBagDisplayX(completedIndex);
+                bagRenderable.transformation.yTranslation = subsystem.getLayout().completedBagDisplayY();
                 bagRenderable.transformation.zTranslation = subsystem.getLayout().pcrZ();
             }
             completedIndex++;
@@ -310,7 +314,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         int prlIndex = indexOfPrl(transfer.getSourcePrlId());
         float prlX = subsystem.getLayout().prlCenterX(prlIndex);
         float joinX = subsystem.getLayout().pcrStartX() + transfer.getTargetPcrFrontDistance() - (transfer.getPack().getDimensions().length() * 0.5f);
-        float startZ = subsystem.getLayout().prlStartZ() - 1.8f + (transfer.getPack().getDimensions().length() * 0.5f);
+        float startZ = subsystem.getLayout().prlToPcrTransferStartZ(transfer.getPack());
 
         float x = (float) (prlX + ((joinX - prlX) * progress));
         float z = (float) (startZ + ((subsystem.getLayout().pcrZ() - startZ) * progress));

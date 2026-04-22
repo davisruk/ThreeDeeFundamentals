@@ -75,7 +75,7 @@ public class ToteToBagCoreLayout {
         Pack probe = probePack();
         float prlX = prlCenterX(prlIndex);
         float joinX = pcrStartX() + prlToPcrEntryFrontDistanceFor(prlIndex, probe) - (probe.getDimensions().length() * 0.5f);
-        float startZ = prlStartZ() - 1.8f + (probe.getDimensions().length() * 0.5f);
+        float startZ = prlToPcrTransferStartZ(probe);
         float dx = joinX - prlX;
         float dz = pcrZ() - startZ;
         float travelLength = (float) Math.sqrt((dx * dx) + (dz * dz));
@@ -104,6 +104,28 @@ public class ToteToBagCoreLayout {
         return new TipperEntryLayoutSpec(
                 new Vec3(pose.x(), pose.y(), pose.z()),
                 pose.yawRadians());
+    }
+
+    public float prlToPcrTransferStartZ(Pack pack) {
+        return prlStartZ() - spec.prlToPcrTransferStartZOffset() + (pack.getDimensions().length() * 0.5f);
+    }
+
+    public float baggerPackDisplayX(int packIndex) {
+        return resolveAttachmentPose(spec.baggerMount()).x() + spec.baggerPackDisplayOffsetX()
+                + (packIndex * spec.baggerPackDisplaySpacingX());
+    }
+
+    public float baggerPackDisplayY() {
+        return spec.baggerPackDisplayY();
+    }
+
+    public float completedBagDisplayX(int bagIndex) {
+        return resolveAttachmentPose(spec.baggerMount()).x() + spec.completedBagDisplayOffsetX()
+                + (bagIndex * spec.completedBagDisplaySpacingX());
+    }
+
+    public float completedBagDisplayY() {
+        return spec.completedBagDisplayY();
     }
 
     private Pack probePack() {
