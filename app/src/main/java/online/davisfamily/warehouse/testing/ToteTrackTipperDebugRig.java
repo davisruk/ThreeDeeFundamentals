@@ -16,7 +16,7 @@ import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSection;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 
-public class ToteTrackTipperDebugRig {
+public class ToteTrackTipperDebugRig implements DebugSceneRuntime {
     private final TipperToSorterSection section;
     private final SorterOutfeedDebugConveyor sorterOutfeedDebugConveyor;
 
@@ -64,6 +64,7 @@ public class ToteTrackTipperDebugRig {
                 sorterOutfeedTarget);
     }
 
+    @Override
     public void syncVisuals() {
         section.syncVisuals();
         sorterOutfeedDebugConveyor.syncVisuals(section::getPackRenderable);

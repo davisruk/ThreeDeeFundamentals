@@ -14,7 +14,7 @@ import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSectionInsta
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.layout.TipperEntryLayoutSpec;
 
-public class TipperToReceiverDebugRig {
+public class TipperToReceiverDebugRig implements DebugSceneRuntime {
     private final TipperInstallation tipperInstallation;
     private final SimplePackReceiverTarget receiverTarget;
     private final ToteTrackTipperFlowController flowController;
@@ -73,6 +73,7 @@ public class TipperToReceiverDebugRig {
                 dischargeSeam);
     }
 
+    @Override
     public void syncVisuals() {
         tipperInstallation.getTipperTrackRuntimeState().setRunning(!flowController.isToteCaptured());
         tipperInstallation.getTipperModule().syncVisuals(flowController.getVisualTipProgress());

@@ -270,6 +270,28 @@ The tote-to-bag core transport cell can now be assembled programmatically.
 - peripheral machine renderables can now be attached against explicit subsystem attachment points rather than being baked into the core geometry
 - the debug rig now builds the core through this builder rather than assembling the cell inline
 
+Completed integrated debug composition cleanup slice
+The tote-to-bag integrated debug path now has an explicit harness-level composition surface instead of relying on one large debug-rig constructor.
+- `IntegratedToteToBagDebugInstaller` now owns integrated debug composition for:
+  - tote-to-bag core subsystem creation
+  - mounted tipper track section installation
+  - tipper and sorter installation
+  - sorter-outfeed to PDC seam wiring
+  - tote-to-bag flow-controller creation and registration
+- `IntegratedToteToBagDebugInstallation` now exposes the installed integrated debug package back to the harness
+- `ToteToBagDebugRig` is now thinner and primarily keeps debug-facing visual sync and inspection wiring
+
+Completed explicit scene-selection slice
+The runnable debug scenes no longer depend on comment/uncomment switching inside `TestScene`.
+- `SoftwareRenderer` now accepts `--scene=...`
+- `DebugSceneKind` and `DebugSceneOptions` now define the explicit scene-selection path
+- the default launch still uses the tote-to-bag harness when no scene switch is supplied
+
+Completed sorter-outfeed-to-PDC named handoff slice
+The integrated sorter-outfeed boundary is now named rather than being represented by an inline anonymous adapter.
+- `SorterOutfeedToPdcReceiveTarget` now implements `PackReceiveTarget`
+- sorter-outfeed into the tote-to-bag PDC now follows the same explicit handoff style as the rest of the current machine-boundary cleanup
+
 Completed tote-to-bag package structure refinement
 The tote-to-bag simulation package is no longer a single flat directory.
 - the code is now split into role-based subpackages under `warehouse.sim.totebag`
@@ -362,8 +384,8 @@ Subsystem integration
 - the first real integration slice is now in place:
   the mounted tipper entry is in the tote-to-bag harness and should be treated as the current canonical upstream-module direction
 - the next integration work is now more about cleanup and API shape than about proving the boundary exists
-- decide how the tote-to-bag subsystem should live in the broader warehouse scene setup now that the core cell has a builder, attachment anchors, and a mounted upstream module
-- extend the current assembly approach from debug-rig consumption toward a cleaner scene-level integration API
+- decide how the tote-to-bag subsystem should live in the broader warehouse scene setup now that the core cell has a builder, attachment anchors, a harness-level integrated installer, and a mounted upstream module
+- extend the current assembly approach from the current debug installer toward any cleaner scene-level integration API that later proves useful outside the harness
 - propagate inspection support to any additional runtime objects introduced as that integration is refined
 
 Peripheral attachment refinement
@@ -409,15 +431,14 @@ Current recommended cleanup slices
   - the main remaining design decision is whether the cross-module tipper-to-sorter discharge path should:
     - remain assembled inside `TipperEntryModule`
     - or move into a dedicated seam/helper object that owns only the cross-module discharge path geometry/math
-- cleanup slice 3: clean up active scene selection
-  - stop relying on comment/uncomment switching in `TestScene`
-  - make the active example/harness selection explicit
-- cleanup slice 4: consider a named sorter-outfeed to PDC handoff type
-  - sorter outfeed now already uses the general handoff target abstraction rather than the earlier sink callback
-  - the remaining question is whether tipper-to-sorter should also be promoted to a more explicit handoff transfer boundary rather than remaining inside the composed entry assembly/controller path
+- cleanup slice 3: reduce remaining harness-local debug wiring
+  - keep `ToteToBagDebugRig` focused on visual sync and debug-facing inspection
+  - only move additional responsibilities out of the rig when they are genuine reusable composition concerns
+- cleanup slice 4: revisit whether any remaining tipper-to-sorter seam should become a more explicit handoff object
+  - sorter outfeed now already uses a named `PackReceiveTarget`
+  - the remaining question is whether any adjacent seam still gains enough reuse value from the same treatment
 
 End-of-session cleanup observations
-- `TestScene` still relies on manual comment/uncomment switching between harnesses and should eventually move to an explicit scene-selection mechanism
 - `ToteToBagDebugRig` still contains tuned mount numbers and the temporary integrated PDC extension constant; those should eventually become named layout values/spec fields
 - `TipperEntryModule` has now been reduced further:
   sorter-specific assembly/render-sync ownership now lives in `SortingModule`, and tipper-specific visual-anchor ownership now lives in `TipperModule`

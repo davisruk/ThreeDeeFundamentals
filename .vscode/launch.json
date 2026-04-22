@@ -1,0 +1,60 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Scene: Tote To Bag",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=tote-to-bag"
+        },
+        {
+            "type": "java",
+            "name": "Scene: Tipper Track",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=tipper-track"
+        },
+        {
+            "type": "java",
+            "name": "Scene: Tipper To Receiver",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=tipper-to-receiver"
+        },
+        {
+            "type": "java",
+            "name": "Scene: Oval Track",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=oval-track"
+        },
+        {
+            "type": "java",
+            "name": "Scene: Parallel Track",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=parallel-track"
+        },
+        {
+            "type": "java",
+            "name": "Scene: Straight Conveyor",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=straight-conveyor"
+        },
+        {
+            "type": "java",
+            "name": "Scene: Default",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app"
+        }
+    ]
+}

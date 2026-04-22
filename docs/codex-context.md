@@ -3,7 +3,8 @@
 ## System Overview
 
 - Plain Java simulation and software-rendered 3D engine built as a Gradle project.
-- The current runnable example is back on the tote-to-bag debug harness after the upstream tipper-entry module was integrated into that harness.
+- The current default runnable example is the tote-to-bag debug harness.
+- Scene selection is now explicit via a `--scene=...` command-line switch parsed by `DebugSceneOptions`; the default remains the tote-to-bag harness.
 - The codebase mixes a generic engine layer (`threedee`) with a warehouse-specific example layer (`warehouse`).
 - Main concepts visible in code:
   - route-based movement over connected path segments
@@ -16,6 +17,7 @@
 
 - Main application entry point: `app/src/main/java/online/davisfamily/threedee/SoftwareRenderer.java`
 - Active example scene: `app/src/main/java/online/davisfamily/warehouse/testing/TestScene.java`
+- Scene-selection support: `app/src/main/java/online/davisfamily/warehouse/testing/DebugSceneOptions.java`
 - Warehouse layout and simulation setup: `app/src/main/java/online/davisfamily/warehouse/testing/WarehouseTrackFactory.java`
 - Per-frame simulation orchestration: `app/src/main/java/online/davisfamily/threedee/scene/BaseScene.java`
 - Route-follow movement: `app/src/main/java/online/davisfamily/threedee/behaviour/routing/RouteFollower.java`
@@ -83,12 +85,17 @@
   - External provider keyed by tote id for active tipper load plans.
 - `TipperDownstreamFlow`
   - Small downstream-capacity boundary used by the tipper controller to decide discharge acceptance and tote-release readiness.
+- `IntegratedToteToBagDebugInstaller` / `IntegratedToteToBagDebugInstallation`
+  - Harness-level integrated composition surface for the tote-to-bag debug path.
+  - Own construction/wiring of the tote-to-bag core, upstream mounted tipper/sorter path, and tote-to-bag flow controller for the debug harness.
+- `SorterOutfeedToPdcReceiveTarget`
+  - Named handoff target that maps sorter outfeed directly onto the tote-to-bag PDC entry position.
 
 ## Core Execution Flow
 
-1. `SoftwareRenderer.main()` creates a `TestScene` and starts a thread that computes `dt` and calls `scene.renderFrame(dt)`.
+1. `SoftwareRenderer.main()` parses `DebugSceneOptions`, creates a `TestScene`, and starts a thread that computes `dt` and calls `scene.renderFrame(dt)`.
 2. `BaseScene.renderFrame()` updates camera/input state, clears buffers, and delegates scene-specific rendering.
-3. `TestScene.executeChildRenderOperations()` calls `drawObject(objects, dtSeconds, lightDirection)`.
+3. `TestScene` installs one explicit scene/harness based on `DebugSceneKind`; `executeChildRenderOperations()` syncs that runtime and then calls `drawObject(objects, dtSeconds, lightDirection)`.
 4. `BaseScene.drawObject()` performs:
    - `sim.update(dtSeconds)`
    - `RenderableObject.update(dtSeconds)` for all renderables
@@ -277,6 +284,18 @@
 
 ## Latest Session Update
 
+- Active scene selection has been cleaned up:
+  - `SoftwareRenderer` now accepts `--scene=...`
+  - `DebugSceneKind`, `DebugSceneOptions`, and `DebugSceneRuntime` now define the explicit scene-selection path
+  - `TestScene` no longer depends on comment/uncomment switching between harnesses
+- The tote-to-bag integrated debug path now has an explicit harness-level composition surface:
+  - `IntegratedToteToBagDebugInstaller` now owns the integrated tote-to-bag debug composition wiring that previously lived inline in `ToteToBagDebugRig`
+  - `IntegratedToteToBagDebugInstallation` now exposes the installed integrated debug package
+  - `ToteToBagDebugRig` is now thinner and primarily retains debug-facing visual sync and inspection responsibilities
+- The sorter-outfeed to PDC live boundary is now represented by a named handoff target:
+  - `SorterOutfeedToPdcReceiveTarget` now implements `PackReceiveTarget`
+  - the integrated tote-to-bag path no longer uses an anonymous inline receive-target class for sorter-outfeed to PDC wiring
+
 - The tipper / sorter separation work has now reached the intended architectural baseline:
   - `TipperEntryModule` and `TipperEntryModuleBuilder` have been removed
   - `TipperTrackSection` / `TipperTrackSectionInstaller` now own the externally-created mounted route section
@@ -345,10 +364,8 @@
   - sorter-outfeed to PDC x/z alignment is attachment-driven
   - y alignment now depends on the mounted tipper-side world height being respected consistently by both route-backed tracks and straight conveyor assemblies
 - Remaining cleanup items identified from this session:
-  - `TestScene` still acts as a manual scene switchboard and should eventually move to a cleaner explicit scene-selection approach
   - the upstream module mount in `ToteToBagDebugRig` still uses tuned numeric offsets and should eventually become named layout values
   - `TipperEntryModule` is still large and still mixes assembly, visual sync, and layout/math helpers
-  - the sorter-outfeed to PDC handoff is now correct but still represented as an implicit sink hook rather than a named handoff type
 
 - Tote-to-bag isolated tipper proving work has advanced further on `feature/tote-track-tipper-rig`.
 - `TestScene` is currently switched back to the isolated tipper rig rather than the parallel-track scene.
@@ -463,8 +480,8 @@
   - the next cleanup slices should likely be:
     - replace the remaining mount magic numbers in `ToteToBagDebugRig` with named layout values/spec entries
     - continue splitting `TipperEntryModule` further now that `TipperModule` and `SortingModule` exist, so assembly, visual sync, and helper geometry/path math are not all in one class
-    - clean up `TestScene` scene selection so sessions stop relying on comment/uncomment switching
-    - consider whether the remaining tipper-to-sorter path should also move from implicit composition/controller wiring toward a more explicit transfer/handoff object now that sorter outfeed already uses the handoff target abstraction
+    - decide whether the explicit scene-selection path should eventually grow beyond command-line / IDE launch-profile control into a richer launcher if that becomes worthwhile
+    - consider whether any remaining tipper-to-sorter path should also move from composition/controller wiring toward a more explicit transfer/handoff object where that improves reuse
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
 - Treat the straight conveyor assembly as the canonical direction for conveyor visuals.
   - Reuse the single straight conveyor assembly model for transfer-focused machines and fixed conveyor-backed runs.
@@ -481,6 +498,7 @@
   - review whether any remaining conveyor-backed track visuals should now become mounted fixed assemblies rather than route-derived spans
   - decide whether additional transfer-machine variants can be expressed as `SteeringConveyorMechanism` plus initial-outcome/strategy configuration rather than new mechanism classes
   - perform hot path analysis on the render loop and identify opportunities to reduce immutable-object creation / transient allocation inside per-frame rendering code
-- The current active runnable scene is intentionally back on the tote-to-bag integration harness:
-  - `TestScene` is currently wired to the integrated `ToteToBagDebugRig`
+- The current default runnable scene is the tote-to-bag integration harness:
+  - `TestScene` now selects scenes explicitly via `DebugSceneKind`
+  - `TOTE_TO_BAG` remains the default when no `--scene=...` switch is supplied
   - `setupOvalTrack(...)` and `setupParallelTracks(...)` remain the best focused scenes for validating shared route-track rendering changes outside tote-to-bag

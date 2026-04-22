@@ -1,0 +1,124 @@
+package online.davisfamily.warehouse.testing;
+
+import java.util.List;
+
+import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
+import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.rendering.TriangleRenderer;
+import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
+import online.davisfamily.warehouse.sim.totebag.assembly.SortingInstallation;
+import online.davisfamily.warehouse.sim.totebag.assembly.SortingSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperInstallation;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSection;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
+import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
+import online.davisfamily.warehouse.sim.totebag.assignment.ToteToBagAssignmentPlanner;
+import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
+import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
+import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
+import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
+import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
+import online.davisfamily.warehouse.sim.totebag.handoff.SorterOutfeedToPdcReceiveTarget;
+import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
+import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
+
+public class IntegratedToteToBagDebugInstaller {
+    public IntegratedToteToBagDebugInstallation install(
+            TriangleRenderer tr,
+            SimulationWorld sim,
+            List<RenderableObject> objects,
+            SelectionInspectionRegistry inspectionRegistry,
+            TrackAppearance conveyorAppearance,
+            ToteToBagCoreLayoutSpec layoutSpec,
+            BaggingMachine baggingMachine) {
+        if (tr == null
+                || sim == null
+                || objects == null
+                || inspectionRegistry == null
+                || conveyorAppearance == null
+                || layoutSpec == null
+                || baggingMachine == null) {
+            throw new IllegalArgumentException("Integrated tote-to-bag debug install inputs must not be null");
+        }
+
+        ToteToBagSubsystem subsystem = new ToteToBagSubsystemBuilder().buildCore(tr, conveyorAppearance, layoutSpec);
+        PdcConveyor pdcConveyor = subsystem.getPdcConveyor();
+        PcrConveyor pcrConveyor = subsystem.getPcrConveyor();
+        List<PrlConveyor> prls = subsystem.getPrls();
+        List<PdcDiversionDevice> pdcDiversionDevices = subsystem.getPdcDiversionDevices();
+
+        TipperTrackSection trackSection = new TipperTrackSectionInstaller().install(
+                tr,
+                objects,
+                subsystem.getLayout().resolveTipperEntryLayoutSpec());
+        TipperDemoFixtures.DemoTipperFeed demoTipperFeed = TipperDemoFixtures.createDemoTipperFeed(tr, sim, trackSection);
+
+        TipperInstallation tipperInstallation = new TipperSectionInstaller().install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                trackSection,
+                demoTipperFeed.totePayload(),
+                demoTipperFeed.toteLoadPlanProvider());
+        SortingInstallation sortingInstallation = new SortingSectionInstaller().install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                trackSection.getLayoutSpec(),
+                tipperInstallation.getTipperModule().sorterIntakeMountLocalPoint());
+
+        TipperToSorterSection tipperToSorterSection = new TipperToSorterSectionInstaller().install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                tipperInstallation,
+                sortingInstallation,
+                new SorterOutfeedToPdcReceiveTarget(
+                        sortingInstallation.getSortingModule().outfeedPoint(),
+                        pdcConveyor,
+                        subsystem.getLayout()));
+
+        ToteToBagFlowController flowController = new ToteToBagFlowController(
+                tipperInstallation.getToteLoadPlanProvider().getLoadPlanFor(tipperInstallation.getTote().getId()),
+                pdcConveyor,
+                pcrConveyor,
+                baggingMachine,
+                new ToteToBagAssignmentPlanner(),
+                prls,
+                pdcDiversionDevices,
+                prlId -> subsystem.getLayout().pdcTransferDurationFor(indexOfPrl(prls, prlId)),
+                (prlId, pack) -> subsystem.getLayout().pdcDiversionFrontDistanceFor(indexOfPrl(prls, prlId), pack),
+                prlId -> subsystem.getLayout().prlToPcrTransferDurationFor(indexOfPrl(prls, prlId)),
+                (prlId, pack) -> subsystem.getLayout().prlToPcrEntryFrontDistanceFor(indexOfPrl(prls, prlId), pack));
+
+        sim.addSimObject(pcrConveyor);
+        sim.addSimObject(baggingMachine);
+        sim.addController(flowController);
+
+        return new IntegratedToteToBagDebugInstallation(
+                subsystem,
+                trackSection,
+                tipperInstallation,
+                sortingInstallation,
+                tipperToSorterSection,
+                baggingMachine,
+                flowController);
+    }
+
+    private int indexOfPrl(List<PrlConveyor> prls, String prlId) {
+        for (int i = 0; i < prls.size(); i++) {
+            if (prls.get(i).getId().equals(prlId)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+}

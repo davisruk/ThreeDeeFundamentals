@@ -8,7 +8,6 @@ import java.util.Map;
 import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
-import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
@@ -16,15 +15,7 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
-import online.davisfamily.warehouse.sim.totebag.assembly.SortingInstallation;
-import online.davisfamily.warehouse.sim.totebag.assembly.SortingSectionInstaller;
-import online.davisfamily.warehouse.sim.totebag.assembly.TipperInstallation;
-import online.davisfamily.warehouse.sim.totebag.assembly.TipperSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
-import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSectionInstaller;
-import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSection;
-import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSectionInstaller;
-import online.davisfamily.warehouse.sim.totebag.assignment.ToteToBagAssignmentPlanner;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
@@ -38,12 +29,9 @@ import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.transfer.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.transfer.PrlToPcrTransfer;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
-import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystemBuilder;
-import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
-import online.davisfamily.warehouse.sim.totebag.handoff.PackReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 
-public class ToteToBagDebugRig {
+public class ToteToBagDebugRig implements DebugSceneRuntime {
     private static final float BUMPER_REST_Z = 0.27f;
     private static final float BUMPER_ACTIVE_Z = 0.18f;
 
@@ -53,7 +41,6 @@ public class ToteToBagDebugRig {
     private final ToteToBagSubsystem subsystem;
     private final ToteToBagCoreLayoutSpec layoutSpec;
     private final TipperToSorterSection tipperToSorterSection;
-    private final PackHandoffPoint sorterOutfeedPoint;
 
     private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
@@ -89,73 +76,23 @@ public class ToteToBagDebugRig {
                 new OneColourStrategyImpl(0xFF596A54),
                 new OneColourStrategyImpl(0xFF596A54));
         layoutSpec = ToteToBagCoreLayoutSpec.integratedDebugDefaults();
-        subsystem = new ToteToBagSubsystemBuilder().buildCore(tr, conveyorAppearance, layoutSpec);
+        baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
+        IntegratedToteToBagDebugInstallation installation = new IntegratedToteToBagDebugInstaller().install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                conveyorAppearance,
+                layoutSpec,
+                baggingMachine);
 
+        subsystem = installation.getSubsystem();
         pdcConveyor = subsystem.getPdcConveyor();
         prls = subsystem.getPrls();
         pdcDiversionDevices = subsystem.getPdcDiversionDevices();
         pcrConveyor = subsystem.getPcrConveyor();
-        baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.35d, 0.25d, 0.30d, 0.25d);
-        TipperTrackSection trackSection = new TipperTrackSectionInstaller().install(
-                tr,
-                objects,
-                subsystem.getLayout().resolveTipperEntryLayoutSpec());
-        TipperDemoFixtures.DemoTipperFeed demoTipperFeed = TipperDemoFixtures.createDemoTipperFeed(tr, sim, trackSection);
-        TipperInstallation tipperInstallation = new TipperSectionInstaller().install(
-                tr,
-                sim,
-                objects,
-                inspectionRegistry,
-                trackSection,
-                demoTipperFeed.totePayload(),
-                demoTipperFeed.toteLoadPlanProvider());
-        SortingInstallation sortingInstallation = new SortingSectionInstaller().install(
-                tr,
-                sim,
-                objects,
-                inspectionRegistry,
-                trackSection.getLayoutSpec(),
-                tipperInstallation.getTipperModule().sorterIntakeMountLocalPoint());
-        sorterOutfeedPoint = sortingInstallation.getSortingModule().outfeedPoint();
-        tipperToSorterSection = new TipperToSorterSectionInstaller().install(
-                tr,
-                sim,
-                objects,
-                inspectionRegistry,
-                tipperInstallation,
-                sortingInstallation,
-                new PackReceiveTarget() {
-                    @Override
-                    public PackHandoffPoint handoffPoint() {
-                        return sorterOutfeedPoint;
-                    }
-
-                    @Override
-                    public boolean canAccept(Pack pack) {
-                        return pdcConveyor.canAcceptIncomingPackAtFrontDistance(pack, sorterOutfeedFrontDistance(pack));
-                    }
-
-                    @Override
-                    public void accept(Pack pack) {
-                        pdcConveyor.acceptIncomingPackAtFrontDistance(pack, sorterOutfeedFrontDistance(pack));
-                    }
-                });
-        flowController = new ToteToBagFlowController(
-                tipperInstallation.getToteLoadPlanProvider().getLoadPlanFor(tipperInstallation.getTote().getId()),
-                pdcConveyor,
-                pcrConveyor,
-                baggingMachine,
-                new ToteToBagAssignmentPlanner(),
-                prls,
-                pdcDiversionDevices,
-                this::pdcTransferDurationFor,
-                this::pdcDiversionFrontDistanceFor,
-                this::prlToPcrTransferDurationFor,
-                this::prlToPcrEntryFrontDistanceFor);
-
-        sim.addSimObject(pcrConveyor);
-        sim.addSimObject(baggingMachine);
-        sim.addController(flowController);
+        tipperToSorterSection = installation.getTipperToSorterSection();
+        flowController = installation.getFlowController();
 
         pdcRenderable = subsystem.getPdcRenderable();
         pcrRenderable = subsystem.getPcrRenderable();
@@ -173,6 +110,7 @@ public class ToteToBagDebugRig {
         registerInspectableRoots();
     }
 
+    @Override
     public void syncVisuals() {
         syncConveyorRuntimeStates();
         tipperToSorterSection.syncVisuals();
@@ -424,24 +362,4 @@ public class ToteToBagDebugRig {
         positionPack(pack, x, layoutSpec.packY(), layoutSpec.pdcZ());
     }
 
-    private float sorterOutfeedFrontDistance(Pack pack) {
-        float alongPdc = sorterOutfeedPoint.worldPosition().x - subsystem.getLayout().pdcStartX();
-        return alongPdc + (pack.getDimensions().length() * 0.5f);
-    }
-
-    private double pdcTransferDurationFor(String prlId) {
-        return subsystem.getLayout().pdcTransferDurationFor(indexOfPrl(prlId));
-    }
-
-    private float pdcDiversionFrontDistanceFor(String prlId, Pack pack) {
-        return subsystem.getLayout().pdcDiversionFrontDistanceFor(indexOfPrl(prlId), pack);
-    }
-
-    private double prlToPcrTransferDurationFor(String prlId) {
-        return subsystem.getLayout().prlToPcrTransferDurationFor(indexOfPrl(prlId));
-    }
-
-    private float prlToPcrEntryFrontDistanceFor(String prlId, Pack pack) {
-        return subsystem.getLayout().prlToPcrEntryFrontDistanceFor(indexOfPrl(prlId), pack);
-    }
 }

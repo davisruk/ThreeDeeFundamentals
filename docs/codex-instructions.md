@@ -27,6 +27,9 @@ Current code position:
 - route ownership is external to the mounted tipper installation through `TipperTrackSection`
 - tote load-plan ownership is externalised through `ToteLoadPlanProvider`
 - the tipper-side flow controller now uses a small downstream-capacity boundary (`TipperDownstreamFlow`)
+- `TestScene` scene choice is now explicit through `DebugSceneOptions` / `DebugSceneKind` rather than comment-uncomment switching
+- the integrated tote-to-bag harness composition now sits behind `IntegratedToteToBagDebugInstaller` / `IntegratedToteToBagDebugInstallation`
+- sorter-outfeed into the tote-to-bag PDC is now represented by the named handoff target `SorterOutfeedToPdcReceiveTarget`
 - the branch now proves both:
   - `tipper -> sorter`
   - `tipper -> alternate debug-only receive target`
@@ -45,3 +48,4 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
   - explicit composition helper between adjacent machines
   - small downstream-flow boundary for local controller release / occupancy decisions
 - likely follow-up work is now about applying the same pattern to future mounted machines and higher-level orchestration rather than continuing tipper / sorter untangling for its own sake
+- for day-to-day running, prefer explicit scene launches via the `--scene=...` command-line switch or the matching VS Code launch profiles
