@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.RecordingCompletedBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
@@ -35,6 +36,11 @@ class BaggingMachineTest {
 
         assertEquals(List.of("bag-a"), baggingMachine.getCompletedCorrelationIds());
         assertEquals(List.of("bag-a"), receiver.getCompletedCorrelationIds());
+        assertEquals(1, baggingMachine.getCompletedRuntimeBags().size());
+        Bag runtimeBag = baggingMachine.getCompletedRuntimeBags().getFirst();
+        assertEquals("bag_bag-a", runtimeBag.getId());
+        assertEquals("bag-a", runtimeBag.getCorrelationId());
+        assertEquals(group.toPackPlans(), runtimeBag.getPackContents());
     }
 
     private static ReleasedPackGroup releasedGroup(String correlationId) {

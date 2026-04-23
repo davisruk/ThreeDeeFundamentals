@@ -15,6 +15,7 @@ import java.util.List;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.StatefulSimObject;
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.CompletedBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.handoff.CompletedBagReservation;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReceiver;
@@ -30,6 +31,7 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
     private final CompletedBagReceiver completedBagReceiver;
     private final List<String> completedCorrelationIds = new ArrayList<>();
     private final List<CompletedBag> completedBags = new ArrayList<>();
+    private final List<Bag> completedRuntimeBags = new ArrayList<>();
 
     private BaggingMachineState state = BaggingMachineState.IDLE;
     private ReleasedPackGroup reservedGroup;
@@ -103,8 +105,9 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
                     for (Pack pack : currentGroup.packs()) {
                         pack.setState(Pack.PackMotionState.CONSUMED);
                     }
+                    Bag runtimeBag = buildRuntimeBag(currentGroup);
                     CompletedBag completedBag = buildCompletedBag(currentGroup);
-                    completeBag(completedBag);
+                    completeBag(completedBag, runtimeBag);
                     currentGroup = null;
                     activeReservation = null;
                     incomingTransferComplete = false;
@@ -209,6 +212,10 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         return Collections.unmodifiableList(completedBags);
     }
 
+    public List<Bag> getCompletedRuntimeBags() {
+        return Collections.unmodifiableList(completedRuntimeBags);
+    }
+
     private void transitionWhenElapsed(BaggingMachineState nextState, double durationSeconds) {
         if (timeInStateSeconds >= durationSeconds) {
             state = nextState;
@@ -220,12 +227,17 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         return new CompletedBag(group.correlationId(), group.packs().size(), bagSpec);
     }
 
-    private void completeBag(CompletedBag completedBag) {
+    private Bag buildRuntimeBag(ReleasedPackGroup group) {
+        return Bag.fromReleasedPackGroup("bag_" + group.correlationId(), group, bagSpec);
+    }
+
+    private void completeBag(CompletedBag completedBag, Bag runtimeBag) {
         if (completedBagReceiver != null) {
             CompletedBagReservation reservation = completedBagReceiver.reserveIncomingBag(completedBag);
             completedBagReceiver.beginReceiving(reservation);
             completedBagReceiver.completeReceiving(reservation);
         }
+        completedRuntimeBags.add(runtimeBag);
         completedBags.add(completedBag);
         completedCorrelationIds.add(completedBag.correlationId());
     }
