@@ -4,6 +4,7 @@ import java.util.List;
 
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
+import online.davisfamily.warehouse.sim.totebag.transfer.ReleasedPackGroup;
 
 public class Bag {
     public enum BagMotionState {
@@ -44,6 +45,13 @@ public class Bag {
         this.correlationId = correlationId;
         this.packContents = List.copyOf(packContents);
         this.bagSpec = bagSpec;
+    }
+
+    public static Bag fromReleasedPackGroup(String id, ReleasedPackGroup group, BagSpec bagSpec) {
+        if (group == null) {
+            throw new IllegalArgumentException("group must not be null");
+        }
+        return new Bag(id, group.correlationId(), group.toPackPlans(), bagSpec);
     }
 
     public String getId() {
