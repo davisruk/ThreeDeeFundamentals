@@ -143,7 +143,7 @@ class ToteToBagFlowControllerTest {
         sim.addSimObject(baggingMachine);
         sim.addController(controller);
 
-        for (int i = 0; i < 300; i++) {
+        for (int i = 0; i < 600 && baggingMachine.getCompletedCorrelationIds().size() < 2; i++) {
             sim.update(0.05d);
         }
 

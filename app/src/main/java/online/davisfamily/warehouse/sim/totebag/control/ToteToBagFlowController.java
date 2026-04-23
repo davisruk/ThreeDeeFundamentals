@@ -21,6 +21,7 @@ import java.util.Queue;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReservation;
 
 public class ToteToBagFlowController implements SimulationController {
     private final ToteLoadPlan toteLoadPlan;
@@ -40,6 +41,7 @@ public class ToteToBagFlowController implements SimulationController {
     private final PdcDiversionDistanceProvider pdcDiversionDistanceProvider;
     private final PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider;
     private final PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider;
+    private PackGroupReservation baggingReservation;
     private boolean initialized;
     private boolean toteLoaded;
 
@@ -219,7 +221,7 @@ public class ToteToBagFlowController implements SimulationController {
         attemptPrlRelease();
         startPrlToPcrTransfers();
         updatePrlToPcrTransfers(dtSeconds);
-        attemptBaggingStart();
+        handOffPcrOutfeedToBagger();
     }
 
     public Map<String, PrlConveyor> getPrlsById() {
@@ -369,7 +371,7 @@ public class ToteToBagFlowController implements SimulationController {
     private void attemptPrlRelease() {
         boolean prlAlreadyReleasing = prlsById.values().stream()
                 .anyMatch(prl -> prl.getAssignment().getState() == PrlState.RELEASING);
-        if (prlAlreadyReleasing || pcrConveyor.hasWorkInFlight() || baggingMachine.getCurrentGroup() != null) {
+        if (prlAlreadyReleasing || pcrConveyor.hasWorkInFlight() || !baggingMachine.isAvailable()) {
             return;
         }
 
@@ -381,10 +383,10 @@ public class ToteToBagFlowController implements SimulationController {
         }
 
         ReleasedPackGroup candidate = readyPrl.get().peekReadyGroup();
-        PcrReleaseDecision decision = pcrConveyor.evaluateRelease(candidate);
-        if (!decision.allowed()) {
+        if (!baggingMachine.canReserveIncomingGroup(candidate)) {
             return;
         }
+        baggingReservation = baggingMachine.reserveIncomingGroup(candidate);
         ReleasedPackGroup releasedGroup = readyPrl.get().releaseGroup();
         pcrConveyor.startReceivingGroup(releasedGroup);
         releasedGroups.add(releasedGroup);
@@ -427,11 +429,33 @@ public class ToteToBagFlowController implements SimulationController {
         }
     }
 
-    private void attemptBaggingStart() {
-        if (!baggingMachine.isAvailable() || !pcrConveyor.hasReadyGroup()) {
+    private void handOffPcrOutfeedToBagger() {
+        ReleasedPackGroup groupAtOutfeed = pcrConveyor.peekGroupAtOutfeed().orElse(null);
+        if (groupAtOutfeed == null) {
             return;
         }
-        baggingMachine.startBagging(pcrConveyor.pollReadyGroup());
+        if (baggingMachine.hasReservationFor(groupAtOutfeed)) {
+            baggingMachine.beginReceiving(baggingReservation);
+            baggingReservation = null;
+        }
+
+        if (baggingMachine.getCurrentGroup() == null
+                || !baggingMachine.getCurrentGroup().correlationId().equals(groupAtOutfeed.correlationId())) {
+            return;
+        }
+
+        while (true) {
+            ReleasedPackGroup nextGroupAtOutfeed = pcrConveyor.peekGroupAtOutfeed().orElse(null);
+            if (nextGroupAtOutfeed == null
+                    || !nextGroupAtOutfeed.correlationId().equals(groupAtOutfeed.correlationId())) {
+                return;
+            }
+            pcrConveyor.pollPackAtOutfeed();
+            if (!pcrConveyor.hasWorkInFlight()) {
+                baggingMachine.completeIncomingTransfer(groupAtOutfeed);
+                return;
+            }
+        }
     }
 
     private Optional<PrlConveyor> findPrlForCorrelation(String correlationId) {

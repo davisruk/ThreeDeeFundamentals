@@ -15,8 +15,10 @@ import java.util.List;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.StatefulSimObject;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReservation;
 
-public class BaggingMachine implements StatefulSimObject<BaggingMachineState> {
+public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, PackGroupReceiver {
     private final String id;
     private final BagSpec bagSpec;
     private final double receivingDurationSeconds;
@@ -27,7 +29,10 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState> {
     private final List<CompletedBag> completedBags = new ArrayList<>();
 
     private BaggingMachineState state = BaggingMachineState.IDLE;
+    private ReleasedPackGroup reservedGroup;
+    private PackGroupReservation activeReservation;
     private ReleasedPackGroup currentGroup;
+    private boolean incomingTransferComplete;
     private double timeInStateSeconds;
 
     public BaggingMachine(
@@ -64,7 +69,11 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState> {
 
         timeInStateSeconds += dtSeconds;
         switch (state) {
-            case RECEIVING -> transitionWhenElapsed(BaggingMachineState.DROPPING, receivingDurationSeconds);
+            case RECEIVING -> {
+                if (incomingTransferComplete) {
+                    transitionWhenElapsed(BaggingMachineState.DROPPING, receivingDurationSeconds);
+                }
+            }
             case DROPPING -> transitionWhenElapsed(BaggingMachineState.SEALING, droppingDurationSeconds);
             case SEALING -> transitionWhenElapsed(BaggingMachineState.DISCHARGING, sealingDurationSeconds);
             case DISCHARGING -> {
@@ -75,6 +84,8 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState> {
                     completedBags.add(buildCompletedBag(currentGroup));
                     completedCorrelationIds.add(currentGroup.correlationId());
                     currentGroup = null;
+                    activeReservation = null;
+                    incomingTransferComplete = false;
                     state = BaggingMachineState.IDLE;
                     timeInStateSeconds = 0d;
                 }
@@ -90,26 +101,74 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState> {
     }
 
     public boolean isAvailable() {
-        return state == BaggingMachineState.IDLE;
+        return state == BaggingMachineState.IDLE && reservedGroup == null && currentGroup == null;
     }
 
     public void startBagging(ReleasedPackGroup group) {
-        if (!isAvailable()) {
-            throw new IllegalStateException("Bagging machine is not available");
+        beginReceiving(reserveIncomingGroup(group));
+    }
+
+    @Override
+    public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
+        return group != null && isAvailable();
+    }
+
+    @Override
+    public PackGroupReservation reserveIncomingGroup(ReleasedPackGroup group) {
+        if (!canReserveIncomingGroup(group)) {
+            throw new IllegalStateException("Bagging machine cannot reserve incoming group");
         }
-        if (group == null) {
-            throw new IllegalArgumentException("group must not be null");
+        reservedGroup = group;
+        activeReservation = new PackGroupReservation(id, group.correlationId());
+        return activeReservation;
+    }
+
+    @Override
+    public boolean hasReservationFor(ReleasedPackGroup group) {
+        return group != null
+                && reservedGroup != null
+                && group.correlationId().equals(reservedGroup.correlationId());
+    }
+
+    @Override
+    public void beginReceiving(PackGroupReservation reservation) {
+        if (reservation == null) {
+            throw new IllegalArgumentException("reservation must not be null");
         }
-        currentGroup = group;
-        for (Pack pack : group.packs()) {
+        if (reservedGroup == null || activeReservation == null || !activeReservation.equals(reservation)) {
+            throw new IllegalStateException("Reservation does not match the bagging machine's reserved group");
+        }
+
+        currentGroup = reservedGroup;
+        reservedGroup = null;
+        for (Pack pack : currentGroup.packs()) {
             pack.setState(Pack.PackMotionState.HELD);
         }
         state = BaggingMachineState.RECEIVING;
+        incomingTransferComplete = false;
         timeInStateSeconds = 0d;
+    }
+
+    public void completeIncomingTransfer(ReleasedPackGroup group) {
+        if (group == null) {
+            throw new IllegalArgumentException("group must not be null");
+        }
+        if (currentGroup == null || !currentGroup.correlationId().equals(group.correlationId())) {
+            throw new IllegalStateException("Incoming transfer does not match the current bagging group");
+        }
+        incomingTransferComplete = true;
     }
 
     public ReleasedPackGroup getCurrentGroup() {
         return currentGroup;
+    }
+
+    public ReleasedPackGroup getReservedGroup() {
+        return reservedGroup;
+    }
+
+    public PackGroupReservation getActiveReservation() {
+        return activeReservation;
     }
 
     public double getTimeInStateSeconds() {

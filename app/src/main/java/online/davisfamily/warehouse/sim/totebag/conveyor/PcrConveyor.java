@@ -9,11 +9,10 @@ import online.davisfamily.warehouse.sim.totebag.device.*;
 import online.davisfamily.warehouse.sim.totebag.assignment.*;
 import online.davisfamily.warehouse.sim.totebag.control.*;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Queue;
+import java.util.Optional;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.SimObject;
@@ -21,9 +20,8 @@ import online.davisfamily.threedee.sim.framework.objects.SimObject;
 public class PcrConveyor implements SimObject {
     private static final class ActiveGroup {
         private final ReleasedPackGroup group;
-        private final List<Pack> arrivedPacks = new ArrayList<>();
         private int acceptedPackCount;
-        private int arrivedPackCount;
+        private int transferredPackCount;
 
         private ActiveGroup(ReleasedPackGroup group) {
             this.group = group;
@@ -34,7 +32,6 @@ public class PcrConveyor implements SimObject {
     private final ConveyorOccupancyModel occupancyModel;
     private final LinearConveyorLane lane;
     private final List<ActiveGroup> travellingGroups = new ArrayList<>();
-    private final Queue<ActiveGroup> readyForBagging = new ArrayDeque<>();
 
     public PcrConveyor(String id, ConveyorOccupancyModel occupancyModel, double travelDurationSeconds) {
         if (id == null || id.isBlank()) {
@@ -68,8 +65,6 @@ public class PcrConveyor implements SimObject {
                 pack.setState(Pack.PackMotionState.MOVING);
             }
         }
-        transferArrivedPacksFromLane();
-        markReadyGroups();
     }
 
     public PcrReleaseDecision evaluateRelease(ReleasedPackGroup group) {
@@ -77,9 +72,11 @@ public class PcrConveyor implements SimObject {
     }
 
     public void startReceivingGroup(ReleasedPackGroup group) {
-        PcrReleaseDecision decision = evaluateRelease(group);
-        if (!decision.allowed()) {
-            throw new IllegalStateException(decision.reason());
+        if (group == null) {
+            throw new IllegalArgumentException("group must not be null");
+        }
+        if (!travellingGroups.isEmpty()) {
+            throw new IllegalStateException("PCR is already carrying a released group");
         }
         travellingGroups.add(new ActiveGroup(group));
     }
@@ -107,17 +104,8 @@ public class PcrConveyor implements SimObject {
         activeGroup.acceptedPackCount++;
     }
 
-    public boolean hasReadyGroup() {
-        return !readyForBagging.isEmpty();
-    }
-
     public boolean hasWorkInFlight() {
-        return !travellingGroups.isEmpty() || !readyForBagging.isEmpty();
-    }
-
-    public ReleasedPackGroup pollReadyGroup() {
-        ActiveGroup readyGroup = readyForBagging.poll();
-        return readyGroup == null ? null : readyGroup.group;
+        return !travellingGroups.isEmpty();
     }
 
     public float getOccupiedLength() {
@@ -141,10 +129,7 @@ public class PcrConveyor implements SimObject {
     }
 
     public List<LinearLaneEntrySnapshot> getLaneEntries() {
-        List<LinearLaneEntrySnapshot> snapshots = new ArrayList<>(lane.getEntrySnapshots());
-        appendArrivedGroupSnapshots(snapshots, travellingGroups);
-        appendArrivedGroupSnapshots(snapshots, readyForBagging);
-        return Collections.unmodifiableList(snapshots);
+        return lane.getEntrySnapshots();
     }
 
     public List<ReleasedPackGroup> getTravellingGroups() {
@@ -156,48 +141,30 @@ public class PcrConveyor implements SimObject {
     }
 
     public List<ReleasedPackGroup> getReadyGroups() {
-        List<ReleasedPackGroup> readyGroups = new ArrayList<>();
-        for (ActiveGroup readyGroup : readyForBagging) {
-            readyGroups.add(readyGroup.group);
-        }
-        return Collections.unmodifiableList(readyGroups);
+        return List.of();
     }
 
-    private void markReadyGroups() {
-        while (!travellingGroups.isEmpty()) {
-            ActiveGroup firstGroup = travellingGroups.getFirst();
-            if (firstGroup.acceptedPackCount < firstGroup.group.packs().size()
-                    || firstGroup.arrivedPackCount < firstGroup.group.packs().size()) {
-                return;
-            }
-            travellingGroups.removeFirst();
-            readyForBagging.add(firstGroup);
+    public Optional<ReleasedPackGroup> peekGroupAtOutfeed() {
+        Pack leadingPack = lane.peekLeadingPackAtOutfeed().orElse(null);
+        if (leadingPack == null) {
+            return Optional.empty();
         }
+        return findTravellingGroupForPack(leadingPack).map(group -> group.group);
     }
 
-    private void transferArrivedPacksFromLane() {
-        while (true) {
-            Pack arrivedPack = lane.peekLeadingPackAtOutfeed().orElse(null);
-            if (arrivedPack == null) {
-                return;
-            }
-            Pack removedPack = lane.pollLeadingPackAtOutfeed()
-                    .orElseThrow(() -> new IllegalStateException("Expected PCR pack at outfeed"));
-            ActiveGroup activeGroup = findTravellingGroupForPack(removedPack)
-                    .orElseThrow(() -> new IllegalStateException("No active PCR group for pack " + removedPack.getId()));
-            activeGroup.arrivedPacks.add(removedPack);
-            activeGroup.arrivedPackCount++;
+    public Optional<Pack> pollPackAtOutfeed() {
+        Pack leadingPack = lane.pollLeadingPackAtOutfeed().orElse(null);
+        if (leadingPack == null) {
+            return Optional.empty();
         }
-    }
 
-    private void appendArrivedGroupSnapshots(List<LinearLaneEntrySnapshot> snapshots, Iterable<ActiveGroup> groups) {
-        for (ActiveGroup group : groups) {
-            float frontDistance = occupancyModel.getUsableLength();
-            for (Pack pack : group.arrivedPacks) {
-                snapshots.add(new LinearLaneEntrySnapshot(pack, frontDistance));
-                frontDistance -= pack.getDimensions().length() + occupancyModel.getMinimumGap();
-            }
+        ActiveGroup activeGroup = findTravellingGroupForPack(leadingPack)
+                .orElseThrow(() -> new IllegalStateException("No active PCR group for pack " + leadingPack.getId()));
+        activeGroup.transferredPackCount++;
+        if (activeGroup.transferredPackCount >= activeGroup.group.packs().size()) {
+            travellingGroups.remove(activeGroup);
         }
+        return Optional.of(leadingPack);
     }
 
     private java.util.Optional<ActiveGroup> findTravellingGroupForPack(Pack pack) {
