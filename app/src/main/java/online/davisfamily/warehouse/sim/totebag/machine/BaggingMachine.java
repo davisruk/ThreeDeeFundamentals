@@ -15,6 +15,8 @@ import java.util.List;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.StatefulSimObject;
+import online.davisfamily.warehouse.sim.totebag.handoff.CompletedBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.CompletedBagReservation;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReceiver;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReservation;
 
@@ -25,6 +27,7 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
     private final double droppingDurationSeconds;
     private final double sealingDurationSeconds;
     private final double dischargingDurationSeconds;
+    private final CompletedBagReceiver completedBagReceiver;
     private final List<String> completedCorrelationIds = new ArrayList<>();
     private final List<CompletedBag> completedBags = new ArrayList<>();
 
@@ -42,6 +45,24 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
             double droppingDurationSeconds,
             double sealingDurationSeconds,
             double dischargingDurationSeconds) {
+        this(
+                id,
+                bagSpec,
+                receivingDurationSeconds,
+                droppingDurationSeconds,
+                sealingDurationSeconds,
+                dischargingDurationSeconds,
+                null);
+    }
+
+    public BaggingMachine(
+            String id,
+            BagSpec bagSpec,
+            double receivingDurationSeconds,
+            double droppingDurationSeconds,
+            double sealingDurationSeconds,
+            double dischargingDurationSeconds,
+            CompletedBagReceiver completedBagReceiver) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("id must not be blank");
         }
@@ -54,6 +75,7 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         this.droppingDurationSeconds = droppingDurationSeconds;
         this.sealingDurationSeconds = sealingDurationSeconds;
         this.dischargingDurationSeconds = dischargingDurationSeconds;
+        this.completedBagReceiver = completedBagReceiver;
     }
 
     @Override
@@ -81,8 +103,8 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
                     for (Pack pack : currentGroup.packs()) {
                         pack.setState(Pack.PackMotionState.CONSUMED);
                     }
-                    completedBags.add(buildCompletedBag(currentGroup));
-                    completedCorrelationIds.add(currentGroup.correlationId());
+                    CompletedBag completedBag = buildCompletedBag(currentGroup);
+                    completeBag(completedBag);
                     currentGroup = null;
                     activeReservation = null;
                     incomingTransferComplete = false;
@@ -196,5 +218,15 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
 
     private CompletedBag buildCompletedBag(ReleasedPackGroup group) {
         return new CompletedBag(group.correlationId(), group.packs().size(), bagSpec);
+    }
+
+    private void completeBag(CompletedBag completedBag) {
+        if (completedBagReceiver != null) {
+            CompletedBagReservation reservation = completedBagReceiver.reserveIncomingBag(completedBag);
+            completedBagReceiver.beginReceiving(reservation);
+            completedBagReceiver.completeReceiving(reservation);
+        }
+        completedBags.add(completedBag);
+        completedCorrelationIds.add(completedBag.correlationId());
     }
 }
