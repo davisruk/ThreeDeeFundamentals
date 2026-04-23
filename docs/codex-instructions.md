@@ -19,6 +19,16 @@ Read these documents before starting:
 
 Do not make any code or document changes unless the user explicitly agrees in the current session.
 
+## Capacity-Safe Slice Rule
+
+When capacity issues require using faster reasoning for implementation, use medium reasoning to define the slice first.
+
+- Keep implementation slices small, explicit, and reversible.
+- Do not broaden an implementation slice beyond the written brief.
+- Do not commit incomplete or unsafe intermediate states.
+- Stop and report if the brief conflicts with the code or requires a new architectural decision.
+- Leave unrelated files untouched.
+
 ## Current Position
 
 The main tipper / sorter architectural cleanup described in earlier sessions has now been completed materially.

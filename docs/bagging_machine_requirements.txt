@@ -166,6 +166,35 @@ Architecture discussion to resume next session
   - likely shared concepts are readiness, reservation, blocked/unavailable, handoff started, and handoff completed
 - This conversation should be resumed before doing major refactoring of PCR/bagger control flow.
 
+Working method while OpenAI capacity is unstable
+
+- Use medium reasoning to define architecture direction and exact implementation slices.
+- Use fast reasoning only to implement one explicitly scoped slice at a time.
+- Keep slices small enough that they can be safely reverted to `HEAD` and retried.
+- Do not commit incomplete or unsafe intermediate states.
+- A slice brief should state:
+  - goal
+  - allowed files
+  - required behaviour
+  - non-goals
+  - verification command
+  - stop conditions
+- Fast implementation should stop rather than broaden the task if the brief conflicts with the code or requires architectural decisions.
+- Behaviour-changing slices should include or update focused tests where practical.
+
+Bagger-to-receiver seam direction
+
+- The downstream receiver should be represented as a generic completed-bag receiver, not as a tote-specific dependency.
+- The bagger should only know whether a downstream receiver can reserve and receive a completed bag.
+- The bagger should not decide when a tote is full or when a tote should be released.
+- Fullness, hold/release, and route move-on behaviour belong outside the bagger, likely in a receiver/controller/transfer-zone strategy depending on the eventual topology.
+- First contract-only slice:
+  - add `CompletedBagReceiver`
+  - add `CompletedBagReservation`
+  - do not wire runtime behaviour yet
+  - do not introduce first-class moving `Bag` objects yet
+  - do not modify transfer-zone classes
+
 Recommended next-session starting point
 
 1. Read this document first.
