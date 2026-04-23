@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import online.davisfamily.warehouse.sim.totebag.machine.CompletedBag;
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 
 public class RecordingCompletedBagReceiver implements CompletedBagReceiver {
     private final String id;
@@ -25,24 +25,24 @@ public class RecordingCompletedBagReceiver implements CompletedBagReceiver {
     }
 
     @Override
-    public boolean canReserveIncomingBag(CompletedBag bag) {
+    public boolean canReserveIncomingBag(Bag bag) {
         return bag != null && activeReservation == null;
     }
 
     @Override
-    public CompletedBagReservation reserveIncomingBag(CompletedBag bag) {
+    public CompletedBagReservation reserveIncomingBag(Bag bag) {
         if (!canReserveIncomingBag(bag)) {
             throw new IllegalStateException("Completed bag receiver cannot reserve incoming bag");
         }
-        activeReservation = new CompletedBagReservation(id, bag.correlationId());
+        activeReservation = new CompletedBagReservation(id, bag.getCorrelationId());
         return activeReservation;
     }
 
     @Override
-    public boolean hasReservationFor(CompletedBag bag) {
+    public boolean hasReservationFor(Bag bag) {
         return bag != null
                 && activeReservation != null
-                && bag.correlationId().equals(activeReservation.correlationId());
+                && bag.getCorrelationId().equals(activeReservation.correlationId());
     }
 
     @Override

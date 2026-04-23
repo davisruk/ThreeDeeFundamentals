@@ -233,7 +233,7 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
 
     private void completeBag(CompletedBag completedBag, Bag runtimeBag) {
         if (completedBagReceiver != null) {
-            CompletedBagReservation reservation = completedBagReceiver.reserveIncomingBag(completedBag);
+            CompletedBagReservation reservation = completedBagReceiver.reserveIncomingBag(runtimeBag);
             completedBagReceiver.beginReceiving(reservation);
             completedBagReceiver.completeReceiving(reservation);
         }

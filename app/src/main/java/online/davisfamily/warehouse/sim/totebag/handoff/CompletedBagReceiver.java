@@ -1,11 +1,11 @@
 package online.davisfamily.warehouse.sim.totebag.handoff;
 
-import online.davisfamily.warehouse.sim.totebag.machine.CompletedBag;
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 
 public interface CompletedBagReceiver {
-    boolean canReserveIncomingBag(CompletedBag bag);
-    CompletedBagReservation reserveIncomingBag(CompletedBag bag);
-    boolean hasReservationFor(CompletedBag bag);
+    boolean canReserveIncomingBag(Bag bag);
+    CompletedBagReservation reserveIncomingBag(Bag bag);
+    boolean hasReservationFor(Bag bag);
     void beginReceiving(CompletedBagReservation reservation);
     void completeReceiving(CompletedBagReservation reservation);
 }

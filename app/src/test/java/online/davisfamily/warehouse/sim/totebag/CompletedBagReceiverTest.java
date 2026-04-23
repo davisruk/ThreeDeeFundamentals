@@ -8,16 +8,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.CompletedBagReservation;
 import online.davisfamily.warehouse.sim.totebag.handoff.RecordingCompletedBagReceiver;
-import online.davisfamily.warehouse.sim.totebag.machine.CompletedBag;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
+import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 
 class CompletedBagReceiverTest {
     @Test
     void shouldReserveReceiveAndRecordCompletedBag() {
         RecordingCompletedBagReceiver receiver = new RecordingCompletedBagReceiver("receiver");
-        CompletedBag bag = completedBag("bag-a");
+        Bag bag = completedBag("bag-a");
 
         assertTrue(receiver.canReserveIncomingBag(bag));
         CompletedBagReservation reservation = receiver.reserveIncomingBag(bag);
@@ -45,7 +47,11 @@ class CompletedBagReceiverTest {
         assertThrows(IllegalStateException.class, () -> receiver.completeReceiving(otherReservation));
     }
 
-    private static CompletedBag completedBag(String correlationId) {
-        return new CompletedBag(correlationId, 2, new BagSpec(0.34f, 0.28f, 0.22f));
+    private static Bag completedBag(String correlationId) {
+        return new Bag(
+                "bag_" + correlationId,
+                correlationId,
+                java.util.List.of(new PackPlan("pack-1", correlationId, new PackDimensions(0.20f, 0.10f, 0.08f))),
+                new BagSpec(0.34f, 0.28f, 0.22f));
     }
 }
