@@ -45,6 +45,11 @@ Current code position:
 - `TestScene` scene choice is now explicit through `DebugSceneOptions` / `DebugSceneKind` rather than comment-uncomment switching
 - the integrated tote-to-bag harness composition now sits behind `IntegratedToteToBagDebugInstaller` / `IntegratedToteToBagDebugInstallation`
 - sorter-outfeed into the tote-to-bag PDC is now represented by the named handoff target `SorterOutfeedToPdcReceiveTarget`
+- the bagging machine is now installed through `BaggingModule` / `BaggingSectionInstaller` / `BaggingInstallation`
+- the bagging intake side now has an explicit PCR-to-bagger readiness/reservation seam
+- the bagging output side now has a generic `BagReceiver` / `BagReservation` seam rather than a tote-specific dependency
+- completed bag output is now represented by first-class logical `Bag` objects, including logical pack contents
+- `BagDischarge` now exists as a domain-only lifecycle object for the future bagger-outfeed-to-receiver transfer, but it is not wired into `BaggingMachine` yet
 - the branch now proves both:
   - `tipper -> sorter`
   - `tipper -> alternate debug-only receive target`
@@ -65,3 +70,4 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
 - likely follow-up work is now about applying the same pattern to future mounted machines and higher-level orchestration rather than continuing tipper / sorter untangling for its own sake
 - for day-to-day running, prefer explicit scene launches via the `--scene=...` command-line switch or the matching VS Code launch profiles
 - for bagging-machine follow-up, do not assume the existing transfer-zone subsystem should simply be absorbed into the mounted-machine architecture; re-evaluate the seam vocabulary first
+- for the next bagging-machine slice, continue from the committed `BagDischarge` object and wire an explicit discharge lifecycle before adding chute rendering or tote-full release policy

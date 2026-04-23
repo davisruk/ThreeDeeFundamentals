@@ -292,10 +292,20 @@ The integrated sorter-outfeed boundary is now named rather than being represente
 - `SorterOutfeedToPdcReceiveTarget` now implements `PackReceiveTarget`
 - sorter-outfeed into the tote-to-bag PDC now follows the same explicit handoff style as the rest of the current machine-boundary cleanup
 
+Completed bagging-machine seam slices
+The bagging-machine side is now being brought into the same explicit-seam style.
+- `BaggingModule`, `BaggingSectionInstaller`, and `BaggingInstallation` install the bagger as a machine-owned assembly
+- PCR-to-bagger intake uses a `PackGroupReceiver` / `PackGroupReservation` seam so PRL/PCR release can be gated by bagger readiness
+- the downstream bag output side uses a generic `BagReceiver` / `BagReservation` seam rather than a tote-specific dependency
+- first-class logical `Bag` objects now retain the pack contents for each completed bag
+- `BaggingMachine` now creates runtime `Bag` objects and passes those to the receiver seam
+- `BagDischarge` now exists as a domain-only transfer lifecycle object for future bagger-outfeed-to-receiver movement
+- `BagDischarge` is not wired into `BaggingMachine` yet, so receiver completion is still effectively synchronous after bag creation
+
 Completed tote-to-bag package structure refinement
 The tote-to-bag simulation package is no longer a single flat directory.
 - the code is now split into role-based subpackages under `warehouse.sim.totebag`
-- current subpackages include `plan`, `pack`, `machine`, `conveyor`, `transfer`, `device`, `assignment`, `control`, `layout`, and `assembly`
+- current subpackages include `plan`, `pack`, `bag`, `machine`, `conveyor`, `transfer`, `device`, `assignment`, `control`, `layout`, `handoff`, and `assembly`
 - this is intended as an intermediate cleanup step before any later wider warehouse-root refactor
 
 Completed isolated tote-track tipper rig slice
@@ -406,6 +416,12 @@ Machine fidelity
 - tipping, sorting, and bagging remain block-like placeholders visually
 - if improved visuals are needed later they should be added after behaviour ownership is stable
 - machine internals should continue to be timed/stateful abstractions rather than physics simulations
+
+Bagging-machine receiver seam
+- the next bagging-machine slice should wire `BagDischarge` into `BaggingMachine`
+- bag creation, discharge movement, and receiver completion should become distinct lifecycle steps
+- keep tote fullness, tote release, and route hold/release policy outside the bagger
+- do not add chute rendering or tote-child rendering until the non-visual discharge lifecycle is stable
 
 Remaining work for the isolated tote-track tipper slice
 - this is no longer the primary direction for the next slice because the module is now mounted in the tote-to-bag harness
