@@ -6,14 +6,14 @@ import java.util.List;
 
 import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 
-public class RecordingCompletedBagReceiver implements CompletedBagReceiver {
+public class RecordingBagReceiver implements BagReceiver {
     private final String id;
     private final List<String> completedCorrelationIds = new ArrayList<>();
 
-    private CompletedBagReservation activeReservation;
+    private BagReservation activeReservation;
     private boolean receiving;
 
-    public RecordingCompletedBagReceiver(String id) {
+    public RecordingBagReceiver(String id) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("id must not be blank");
         }
@@ -30,11 +30,11 @@ public class RecordingCompletedBagReceiver implements CompletedBagReceiver {
     }
 
     @Override
-    public CompletedBagReservation reserveIncomingBag(Bag bag) {
+    public BagReservation reserveIncomingBag(Bag bag) {
         if (!canReserveIncomingBag(bag)) {
-            throw new IllegalStateException("Completed bag receiver cannot reserve incoming bag");
+            throw new IllegalStateException("Bag receiver cannot reserve incoming bag");
         }
-        activeReservation = new CompletedBagReservation(id, bag.getCorrelationId());
+        activeReservation = new BagReservation(id, bag.getCorrelationId());
         return activeReservation;
     }
 
@@ -46,20 +46,20 @@ public class RecordingCompletedBagReceiver implements CompletedBagReceiver {
     }
 
     @Override
-    public void beginReceiving(CompletedBagReservation reservation) {
+    public void beginReceiving(BagReservation reservation) {
         validateActiveReservation(reservation);
         receiving = true;
     }
 
     @Override
-    public void completeReceiving(CompletedBagReservation reservation) {
+    public void completeReceiving(BagReservation reservation) {
         validateActiveReservation(reservation);
         completedCorrelationIds.add(activeReservation.correlationId());
         activeReservation = null;
         receiving = false;
     }
 
-    public CompletedBagReservation getActiveReservation() {
+    public BagReservation getActiveReservation() {
         return activeReservation;
     }
 
@@ -71,7 +71,7 @@ public class RecordingCompletedBagReceiver implements CompletedBagReceiver {
         return Collections.unmodifiableList(completedCorrelationIds);
     }
 
-    private void validateActiveReservation(CompletedBagReservation reservation) {
+    private void validateActiveReservation(BagReservation reservation) {
         if (reservation == null) {
             throw new IllegalArgumentException("reservation must not be null");
         }

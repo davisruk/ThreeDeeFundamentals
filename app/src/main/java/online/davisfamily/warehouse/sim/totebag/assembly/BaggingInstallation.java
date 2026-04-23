@@ -1,23 +1,23 @@
 package online.davisfamily.warehouse.sim.totebag.assembly;
 
-import online.davisfamily.warehouse.sim.totebag.handoff.RecordingCompletedBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.RecordingBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 
 public class BaggingInstallation {
     private final BaggingMachine baggingMachine;
     private final BaggingModule baggingModule;
-    private final RecordingCompletedBagReceiver completedBagReceiver;
+    private final RecordingBagReceiver bagReceiver;
 
     public BaggingInstallation(
             BaggingMachine baggingMachine,
             BaggingModule baggingModule,
-            RecordingCompletedBagReceiver completedBagReceiver) {
-        if (baggingMachine == null || baggingModule == null || completedBagReceiver == null) {
+            RecordingBagReceiver bagReceiver) {
+        if (baggingMachine == null || baggingModule == null || bagReceiver == null) {
             throw new IllegalArgumentException("Bagging installation inputs must not be null");
         }
         this.baggingMachine = baggingMachine;
         this.baggingModule = baggingModule;
-        this.completedBagReceiver = completedBagReceiver;
+        this.bagReceiver = bagReceiver;
     }
 
     public BaggingMachine getBaggingMachine() {
@@ -28,7 +28,7 @@ public class BaggingInstallation {
         return baggingModule;
     }
 
-    public RecordingCompletedBagReceiver getCompletedBagReceiver() {
-        return completedBagReceiver;
+    public RecordingBagReceiver getBagReceiver() {
+        return bagReceiver;
     }
 }

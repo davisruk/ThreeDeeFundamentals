@@ -10,7 +10,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayout;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPoint;
-import online.davisfamily.warehouse.sim.totebag.handoff.RecordingCompletedBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.RecordingBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 
@@ -31,7 +31,7 @@ public class BaggingSectionInstaller {
             throw new IllegalArgumentException("Bagging install inputs must not be null");
         }
 
-        RecordingCompletedBagReceiver completedBagReceiver = new RecordingCompletedBagReceiver("bagger_completed_bag_receiver");
+        RecordingBagReceiver bagReceiver = new RecordingBagReceiver("bagger_bag_receiver");
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
                 new BagSpec(0.34f, 0.28f, 0.22f),
@@ -39,7 +39,7 @@ public class BaggingSectionInstaller {
                 0.25d,
                 0.30d,
                 0.25d,
-                completedBagReceiver);
+                bagReceiver);
         sim.addSimObject(baggingMachine);
 
         BaggingModule baggingModule = new BaggingModule(
@@ -55,7 +55,7 @@ public class BaggingSectionInstaller {
                 conveyorAppearance);
         objects.add(baggingModule.getRenderable());
         registerInspectableObjects(inspectionRegistry, baggingModule);
-        return new BaggingInstallation(baggingMachine, baggingModule, completedBagReceiver);
+        return new BaggingInstallation(baggingMachine, baggingModule, bagReceiver);
     }
 
     private void registerInspectableObjects(

@@ -7,7 +7,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.totebag.bag.Bag;
-import online.davisfamily.warehouse.sim.totebag.handoff.RecordingCompletedBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.RecordingBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
@@ -17,7 +17,7 @@ import online.davisfamily.warehouse.sim.totebag.transfer.ReleasedPackGroup;
 class BaggingMachineTest {
     @Test
     void shouldSynchronouslyDeliverCompletedBagToReceiverWhenConfigured() {
-        RecordingCompletedBagReceiver receiver = new RecordingCompletedBagReceiver("receiver");
+        RecordingBagReceiver receiver = new RecordingBagReceiver("receiver");
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
                 new BagSpec(0.34f, 0.28f, 0.22f),

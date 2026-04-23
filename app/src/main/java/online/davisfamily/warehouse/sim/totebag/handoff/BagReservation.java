@@ -1,9 +1,9 @@
 package online.davisfamily.warehouse.sim.totebag.handoff;
 
-public record CompletedBagReservation(
+public record BagReservation(
         String receiverId,
         String correlationId) {
-    public CompletedBagReservation {
+    public BagReservation {
         if (receiverId == null || receiverId.isBlank()) {
             throw new IllegalArgumentException("receiverId must not be blank");
         }

@@ -9,22 +9,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.totebag.bag.Bag;
-import online.davisfamily.warehouse.sim.totebag.handoff.CompletedBagReservation;
-import online.davisfamily.warehouse.sim.totebag.handoff.RecordingCompletedBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
+import online.davisfamily.warehouse.sim.totebag.handoff.RecordingBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 
-class CompletedBagReceiverTest {
+class BagReceiverTest {
     @Test
-    void shouldReserveReceiveAndRecordCompletedBag() {
-        RecordingCompletedBagReceiver receiver = new RecordingCompletedBagReceiver("receiver");
+    void shouldReserveReceiveAndRecordBag() {
+        RecordingBagReceiver receiver = new RecordingBagReceiver("receiver");
         Bag bag = completedBag("bag-a");
 
         assertTrue(receiver.canReserveIncomingBag(bag));
-        CompletedBagReservation reservation = receiver.reserveIncomingBag(bag);
+        BagReservation reservation = receiver.reserveIncomingBag(bag);
 
-        assertEquals(new CompletedBagReservation("receiver", "bag-a"), reservation);
+        assertEquals(new BagReservation("receiver", "bag-a"), reservation);
         assertTrue(receiver.hasReservationFor(bag));
         assertFalse(receiver.canReserveIncomingBag(completedBag("bag-b")));
 
@@ -39,10 +39,10 @@ class CompletedBagReceiverTest {
 
     @Test
     void shouldRejectMismatchedReservation() {
-        RecordingCompletedBagReceiver receiver = new RecordingCompletedBagReceiver("receiver");
+        RecordingBagReceiver receiver = new RecordingBagReceiver("receiver");
         receiver.reserveIncomingBag(completedBag("bag-a"));
 
-        CompletedBagReservation otherReservation = new CompletedBagReservation("receiver", "bag-b");
+        BagReservation otherReservation = new BagReservation("receiver", "bag-b");
         assertThrows(IllegalStateException.class, () -> receiver.beginReceiving(otherReservation));
         assertThrows(IllegalStateException.class, () -> receiver.completeReceiving(otherReservation));
     }
