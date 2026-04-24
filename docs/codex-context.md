@@ -90,6 +90,20 @@
   - Own construction/wiring of the tote-to-bag core, upstream mounted tipper/sorter path, and tote-to-bag flow controller for the debug harness.
 - `SorterOutfeedToPdcReceiveTarget`
   - Named handoff target that maps sorter outfeed directly onto the tote-to-bag PDC entry position.
+- `BaggingModule` / `BaggingSectionInstaller` / `BaggingInstallation`
+  - Installed bagging-machine surface.
+  - Owns bagger render assembly, machine runtime installation, and the installed downstream bag receiver.
+- `PackGroupReceiver`
+  - Generic PCR/downstream pack-group receiver seam used by `ToteToBagFlowController`.
+  - Keeps PRL/PCR release logic decoupled from concrete `BaggingMachine`.
+- `BagReceiver` / `StoredBagReceiver`
+  - Generic completed-bag receiver seam.
+  - `StoredBagReceiver` stores received runtime `Bag` objects and can apply finite capacity.
+- `BagDischarge`
+  - Active bagger-outfeed lifecycle object used by `BaggingMachine`.
+  - Separates bag creation, chute discharge movement, and receiver completion.
+- `BagMeshFactory`
+  - First-pass paper-bag mesh factory for completed bag visuals.
 
 ## Core Execution Flow
 
@@ -111,7 +125,12 @@
    - resolve the tote load plan through `ToteLoadPlanProvider`
    - run the local tip / discharge sequence
    - delegate downstream acceptance / occupancy rules through `TipperDownstreamFlow`
-7. After simulation completes for the frame, rendering uses the latest transforms.
+8. In the tote-to-bag bagger path:
+   - `ToteToBagFlowController` reserves a downstream `PackGroupReceiver` before PRL release
+   - PCR delivers the released group to that receiver without knowing whether it is a bagger
+   - `BaggingMachine` receives the group, creates a runtime `Bag`, runs `BagDischarge`, and completes the `BagReceiver` only after discharge completes
+   - downstream bag receiver capacity can make the bagger unavailable, indirectly preventing PRL/PCR release through the `PackGroupReceiver` seam
+9. After simulation completes for the frame, rendering uses the latest transforms.
 
 ## Movement and Routing Model
 
@@ -283,6 +302,22 @@
   - It is not a design proposal and does not describe unimplemented intended architecture.
 
 ## Latest Session Update
+
+- Bagging-machine runtime/control work progressed materially:
+  - `BagDischarge` is now wired into `BaggingMachine`
+  - bag creation, chute discharge, and receiver completion are separate lifecycle steps
+  - `BaggingMachine` now has `WAITING_FOR_RECEIVER` when the downstream bag receiver cannot reserve
+  - `ToteToBagFlowController` now depends on `PackGroupReceiver` rather than concrete `BaggingMachine`
+  - `PackGroupReceiver` now includes receive-state and transfer-completion callbacks needed by PCR handoff
+  - `StoredBagReceiver` now stores runtime `Bag` objects and supports finite capacity
+  - the debug receiver is capacity-limited and auto-empties after being full for a short timer via `DebugBagReceiverAutoEmptyController`
+  - active bag discharge is rendered down the chute and received bags are rendered in a simple tote-style debug receiver
+  - `BagMeshFactory` now provides a first-pass tall/narrow paper-bag mesh; it is better than the former box but still not final visual fidelity
+- Current bagger architecture guidance:
+  - PRL/PCR should remain coupled only to `PackGroupReceiver`
+  - receiver fullness should remain outside PRL/PCR and outside the bagger's ownership policy
+  - the bagger may become unavailable because its downstream receiver is full, but PRL/PCR should observe only the generic receiver seam
+  - the current debug receiver auto-empty is not production tote move-on behavior
 
 - Active scene selection has been cleaned up:
   - `SoftwareRenderer` now accepts `--scene=...`

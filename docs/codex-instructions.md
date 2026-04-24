@@ -49,7 +49,11 @@ Current code position:
 - the bagging intake side now has an explicit PCR-to-bagger readiness/reservation seam
 - the bagging output side now has a generic `BagReceiver` / `BagReservation` seam rather than a tote-specific dependency
 - completed bag output is now represented by first-class logical `Bag` objects, including logical pack contents
-- `BagDischarge` now exists as a domain-only lifecycle object for the future bagger-outfeed-to-receiver transfer, but it is not wired into `BaggingMachine` yet
+- `BagDischarge` is now wired into `BaggingMachine`; bag creation, chute discharge, and receiver completion are distinct lifecycle steps
+- `ToteToBagFlowController` now depends on the generic `PackGroupReceiver` seam rather than on concrete `BaggingMachine`
+- `StoredBagReceiver` now stores received runtime `Bag` objects and supports capacity gating
+- the debug tote-to-bag harness now renders active bag discharge, uses an external stored receiver, and auto-empties that debug receiver after it has been full for a short timer
+- bag visuals now use a first-pass `BagMeshFactory` paper-bag mesh rather than a simple box, but visual fidelity still needs refinement
 - the branch now proves both:
   - `tipper -> sorter`
   - `tipper -> alternate debug-only receive target`
@@ -69,5 +73,7 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
   - small downstream-flow boundary for local controller release / occupancy decisions
 - likely follow-up work is now about applying the same pattern to future mounted machines and higher-level orchestration rather than continuing tipper / sorter untangling for its own sake
 - for day-to-day running, prefer explicit scene launches via the `--scene=...` command-line switch or the matching VS Code launch profiles
-- for bagging-machine follow-up, do not assume the existing transfer-zone subsystem should simply be absorbed into the mounted-machine architecture; re-evaluate the seam vocabulary first
-- for the next bagging-machine slice, continue from the committed `BagDischarge` object and wire an explicit discharge lifecycle before adding chute rendering or tote-full release policy
+- for bagging-machine follow-up, keep the PCR/PRL side coupled only to `PackGroupReceiver`; do not reintroduce direct `BaggingMachine` dependencies into the flow controller
+- keep downstream receiver fullness and move-on policy outside `BaggingMachine`; the bagger should only react to whether its `BagReceiver` can reserve/receive a bag
+- the current debug receiver auto-empty policy is proving equipment, not production tote move-on logic
+- likely next bagging-machine work is visual/receiver refinement: better bag mesh, production-shaped external tote/bin receiver, and later a real tote move-on controller

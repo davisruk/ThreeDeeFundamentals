@@ -97,10 +97,14 @@ Current code position
   - `PackGroupReservation`
   - controller-driven reservation before PRL release
   - bagger receive started from PCR outfeed handoff rather than by the bagger knowing concrete upstream machinery
+- The PRL/PCR flow controller now depends on the `PackGroupReceiver` seam rather than on concrete `BaggingMachine`.
+  - PRL release is affected by downstream readiness only through that seam.
+  - Receiver fullness is hidden behind bagger/receiver availability; PRL/PCR should not inspect the bagger's downstream bag receiver directly.
 - The bagger-to-receiver side now has a generic runtime-bag receiver seam:
   - `BagReceiver`
   - `BagReservation`
   - `RecordingBagReceiver`
+  - `StoredBagReceiver`
   - `BaggingInstallation` exposes the installed receiver for debug/test composition
 - First-class logical bags now exist:
   - `Bag`
@@ -108,19 +112,34 @@ Current code position
   - the bag carries motion and containment state
   - bagged packs are logical contents and do not need individual renderables inside the bag
 - `BaggingMachine` now creates runtime `Bag` objects from completed pack groups and passes those bags to the receiver seam.
-- `BagDischarge` now exists as a domain-only lifecycle object:
+- `BagDischarge` now exists and is wired into `BaggingMachine`:
   - it holds a `Bag`, `BagReservation`, duration, elapsed time, and progress
   - it marks the bag moving while discharge is active
   - it marks the bag received / in receiver when the discharge completes
-  - it is intentionally not wired into `BaggingMachine` yet
+- receiver completion is now delayed until the active discharge completes
+- `BaggingMachine` now has a `WAITING_FOR_RECEIVER` state:
+  - if the output receiver cannot reserve a bag after the bag has been created, the bagger waits without becoming available for another pack group
+  - if the output receiver is already full while the bagger is idle, the bagger does not advertise pack-intake availability for a new group
+- The debug harness now proves an external receiver path:
+  - `StoredBagReceiver` stores received runtime `Bag` objects
+  - the debug receiver has finite capacity
+  - a debug-only auto-empty controller clears the receiver after it has been full for a short timer
+  - the receiver is rendered as a simple tote-style receiver in the harness
+- `BagMeshFactory` now provides a first-pass paper-bag mesh:
+  - tall/narrow symbolic paper-bag shape
+  - folded top and side creases
+  - no decals or writing
+  - still accepted as an early visual that needs later refinement
 
 Current known issues / accepted temporary state
 
 - Intake-side and outfeed-side geometry is now acceptable for the current slice, but not yet final.
 - The current bagger openings are sized and aligned well enough to continue, but may still need later visual refinement.
 - Conveyor height matching between the bagger-owned conveyors and the tote-to-bag PDC/PRL/PCR conveyors has been intentionally deferred.
-- The bagger still completes receiver delivery synchronously after bag creation rather than yet owning a timed discharge lifecycle.
-- `BagDischarge` is present but not yet connected to `BaggingMachine`, chute movement, or the receiver callback sequence.
+- The debug receiver visual is still proving equipment:
+  - placement is acceptable for the current harness but not production-quality
+  - the auto-empty timer is a debug policy, not real tote move-on logic
+- The first bag mesh is better than a box but still needs visual refinement.
 - The current PCR-to-FIC / FIC-to-SIC pack transitions are improved but still not final.
 - Those remaining transition issues should be treated as acceptable temporary state for commit:
   - they exposed a deeper seam/control question rather than just a local visual bug
@@ -128,18 +147,13 @@ Current known issues / accepted temporary state
 
 What is still left
 
-Next major runtime slice
+Completed runtime/control slices
 
-- Wire `BagDischarge` into `BaggingMachine` so bag creation, discharge, and receiver completion are distinct lifecycle steps.
-- Replace the current synchronous receiver effect with explicit emitted bags moving down the chute and into the external receiver path.
-- Keep bags following the same ownership/rendering convention as packs:
-  - first-class moving objects while free
-  - later renderable as tote children when received into an open tote
-- Keep the next slice non-visual if needed:
-  - create an active discharge when a bag is ready to leave the bagger
-  - advance the discharge from the bagger runtime tick
-  - complete the receiver only when discharge completes
-  - preserve existing completed-bag history and completed runtime bag query behaviour unless a deliberate replacement is agreed
+- `BagDischarge` is wired into `BaggingMachine`.
+- Bag creation, discharge movement, and receiver completion are distinct lifecycle steps.
+- PRL/PCR release is gated through the generic `PackGroupReceiver` seam, not through a concrete bagger reference.
+- Bagger output receiver availability is handled inside the bagger / receiver boundary.
+- Receiver capacity can indirectly block upstream release because a full receiver makes the bagger unavailable through the pack-group receiver seam.
 
 Next control-flow slice
 
@@ -157,18 +171,18 @@ Next control-flow slice
 
 Next external-composition slice
 
-- Add the external tote receiver path for completed bags.
-- Keep that tote receiver external to the bagging installation.
-- For the debug rig, tote move-on can still initially be driven by bag count.
-- Later that policy should move behind a dedicated controller / downstream receiver boundary.
+- Replace the debug-only receiver proving equipment with a more realistic external tote receiver path when production behaviour is needed.
+- Keep that receiver external to the bagging installation.
+- Move-on/replacement policy should remain outside the bagger.
+- The current `DebugBagReceiverAutoEmptyController` is only a test-rig stand-in for that later controller.
 
 Remaining visual / geometry follow-up
 
 - Refine bagger intake and outfeed geometry only after the runtime/control slices above are established.
-- Add the basic bag mesh shape based on `C:\misc\img\bag.png`:
-  - tapered paper-bag silhouette
-  - folded top
-  - no text/decals required yet
+- Improve the basic bag mesh shape:
+  - current `BagMeshFactory` is a first-pass tall/narrow paper-bag silhouette
+  - references used during the latest session were `C:\misc\img\better_bag.jpg` and `C:\misc\img\cartoon-bag.png`
+  - decals/text are still not required
 - Revisit whether PDC/PRL/PCR conveyor sizing should be brought closer to the bagger conveyor proportions once broader visual tuning becomes worthwhile.
 
 Architecture discussion to resume next session
@@ -230,14 +244,14 @@ Recommended next-session starting point
 4. Start from the architecture discussion above, not from transition tweaking in isolation.
 5. Re-read the current transfer-zone classes before deciding whether bagger/PCR flow should reuse concepts from them or remain a separate adjacent-machine seam.
 6. Treat the current intake-transition issues as symptoms of the unresolved seam contract, not just as local animation defects.
-7. Continue the bagger-to-receiver seam from `BagDischarge`:
-   - wire bagger output into an active discharge lifecycle
-   - delay receiver completion until discharge completion
-   - keep tote fullness and tote release outside the bagger
-8. After the discharge lifecycle is wired, continue with:
-   - chute bag rendering / movement
-   - bagger readiness gating PRL/PCR release without PCR buffering
-   - external tote receiver composition and later tote-full move-on policy
+7. Treat the bagger-to-receiver seam as established:
+   - bagger output uses `BagDischarge`
+   - receiver completion is delayed until discharge completion
+   - tote/receiver fullness stays outside the bagger
+8. Continue with:
+   - refining the bag mesh / bag orientation
+   - replacing debug receiver proving equipment with a more production-shaped external receiver when needed
+   - later implementing real tote-full move-on policy outside the bagger
 
 
  
