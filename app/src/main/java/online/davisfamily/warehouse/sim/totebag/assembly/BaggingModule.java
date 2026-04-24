@@ -17,6 +17,7 @@ import online.davisfamily.warehouse.sim.totebag.handoff.PackHandoffPoint;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPose;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
+import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 
 public class BaggingModule {
     private static final int BODY_COLOUR = 0xFF7A6A56;
@@ -54,6 +55,7 @@ public class BaggingModule {
     private final BaggingMachine baggingMachine;
     private final RenderableObject renderable;
     private final Vec3 intakePointLocal;
+    private final Vec3 bagChuteStartLocal;
     private final Vec3 bagOutfeedLocal;
     private final IntakePathGeometry intakePathGeometry;
 
@@ -78,6 +80,7 @@ public class BaggingModule {
         renderable.transformation.angleY = mountPose.yawRadians();
         IntakeAndOutfeedAnchors anchors = addChildren(tr, conveyorAppearance, pcrOutfeedPose);
         this.intakePointLocal = anchors.intakePointLocal();
+        this.bagChuteStartLocal = anchors.bagChuteStartLocal();
         this.bagOutfeedLocal = anchors.bagOutfeedLocal();
         this.intakePathGeometry = anchors.intakePathGeometry();
     }
@@ -99,6 +102,19 @@ public class BaggingModule {
 
     public Vec3 bagOutfeedWorldPoint() {
         return localPointToWorld(bagOutfeedLocal);
+    }
+
+    public BagDischargePose resolveBagDischargePose(double progress, BagSpec bagSpec) {
+        if (bagSpec == null) {
+            throw new IllegalArgumentException("bagSpec must not be null");
+        }
+        float clampedProgress = (float) Math.max(0d, Math.min(1d, progress));
+        Vec3 localPosition = pointAlongSegment(bagChuteStartLocal, bagOutfeedLocal, clampedProgress);
+        localPosition.mutableAdd(new Vec3(0f, bagSpec.height() * 0.5f + 0.025f, 0f));
+        return new BagDischargePose(
+                localPointToWorld(localPosition),
+                renderable.transformation.angleY,
+                (float) -Math.toRadians(28d));
     }
 
     public float intakeTravelDistance() {
@@ -174,6 +190,10 @@ public class BaggingModule {
                 -0.20f,
                 0f);
         float chuteStartTopLocalY = chuteStartLocal.y + conveyorTopOffset;
+        Vec3 bagChuteStartLocal = new Vec3(
+                chuteStartLocal.x - (CHUTE_LENGTH * 0.5f),
+                chuteStartLocal.y + ((float) Math.sin(Math.toRadians(28d)) * (CHUTE_LENGTH * 0.5f)),
+                chuteStartLocal.z);
         Vec3 bagOutfeedLocal = new Vec3(
                 chuteStartLocal.x + (CHUTE_LENGTH * 0.5f),
                 chuteStartLocal.y - ((float) Math.sin(Math.toRadians(28d)) * (CHUTE_LENGTH * 0.5f)),
@@ -280,6 +300,7 @@ public class BaggingModule {
 
         return new IntakeAndOutfeedAnchors(
                 intakeOneStartLocal,
+                bagChuteStartLocal,
                 bagOutfeedLocal,
                 new IntakePathGeometry(
                         pcrOutfeedLocal,
@@ -297,11 +318,18 @@ public class BaggingModule {
 
     private record IntakeAndOutfeedAnchors(
             Vec3 intakePointLocal,
+            Vec3 bagChuteStartLocal,
             Vec3 bagOutfeedLocal,
             IntakePathGeometry intakePathGeometry) {
     }
 
     public record IntakePackPose(
+            Vec3 worldPosition,
+            float yawRadians,
+            float angleZRadians) {
+    }
+
+    public record BagDischargePose(
             Vec3 worldPosition,
             float yawRadians,
             float angleZRadians) {

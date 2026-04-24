@@ -18,6 +18,8 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingModule;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
+import online.davisfamily.warehouse.sim.totebag.bag.BagDischarge;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
@@ -139,6 +141,8 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
             positionPacksOnBaggerIntake();
         }
 
+        positionActiveBagDischarge();
+
         ensureCompletedBagRenderablesExist();
         int completedIndex = 0;
         for (CompletedBag completedBag : baggingMachine.getCompletedBags()) {
@@ -221,29 +225,36 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
     private void ensureCompletedBagRenderablesExist() {
         for (CompletedBag completedBag : baggingMachine.getCompletedBags()) {
-            completedBagRenderablesById.computeIfAbsent(completedBag.correlationId(), ignored -> {
-                RenderableObject renderable = RenderableObject.create(
-                        "bag_" + completedBag.correlationId(),
-                        tr,
-                        RollerMeshFactory.createBoxRollerMesh(
-                                completedBag.bagSpec().depth(),
-                                completedBag.bagSpec().height(),
-                                completedBag.bagSpec().width()),
-                        new ObjectTransformation(0f, 0f, 0f, -50f, -50f, -50f, new Mat4()),
-                        new OneColourStrategyImpl(0xFFD8C6A0),
-                        true);
-                objects.add(renderable);
-                inspectionRegistry.register(renderable, () -> List.of(
-                        "Type: Bag",
-                        "Correlation: " + completedBag.correlationId(),
-                        "Pack count: " + completedBag.packCount(),
-                        String.format("Size W/H/D: %.2f / %.2f / %.2f",
-                                completedBag.bagSpec().width(),
-                                completedBag.bagSpec().height(),
-                                completedBag.bagSpec().depth())));
-                return renderable;
-            });
+            ensureBagRenderableExists(
+                    completedBag.correlationId(),
+                    completedBag.bagSpec(),
+                    completedBag.packCount());
         }
+    }
+
+    private RenderableObject ensureBagRenderableExists(String correlationId, BagSpec bagSpec, int packCount) {
+        return completedBagRenderablesById.computeIfAbsent(correlationId, ignored -> {
+            RenderableObject renderable = RenderableObject.create(
+                    "bag_" + correlationId,
+                    tr,
+                    RollerMeshFactory.createBoxRollerMesh(
+                            bagSpec.depth(),
+                            bagSpec.height(),
+                            bagSpec.width()),
+                    new ObjectTransformation(0f, 0f, 0f, -50f, -50f, -50f, new Mat4()),
+                    new OneColourStrategyImpl(0xFFD8C6A0),
+                    true);
+            objects.add(renderable);
+            inspectionRegistry.register(renderable, () -> List.of(
+                    "Type: Bag",
+                    "Correlation: " + correlationId,
+                    "Pack count: " + packCount,
+                    String.format("Size W/H/D: %.2f / %.2f / %.2f",
+                            bagSpec.width(),
+                            bagSpec.height(),
+                            bagSpec.depth())));
+            return renderable;
+        });
     }
 
     private void syncConveyorRuntimeStates() {
@@ -295,6 +306,27 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         float x = (float) (prlX + ((joinX - prlX) * progress));
         float z = (float) (startZ + ((subsystem.getLayout().pcrZ() - startZ) * progress));
         positionPack(transfer.getPack(), x, layoutSpec.packY(), z);
+    }
+
+    private void positionActiveBagDischarge() {
+        BagDischarge discharge = baggingMachine.getActiveDischarge();
+        if (discharge == null) {
+            return;
+        }
+
+        Bag bag = discharge.getBag();
+        RenderableObject bagRenderable = ensureBagRenderableExists(
+                bag.getCorrelationId(),
+                bag.getBagSpec(),
+                bag.getPackCount());
+        BaggingModule.BagDischargePose pose = baggingModule.resolveBagDischargePose(
+                discharge.getProgress(),
+                bag.getBagSpec());
+        bagRenderable.transformation.xTranslation = pose.worldPosition().x;
+        bagRenderable.transformation.yTranslation = pose.worldPosition().y;
+        bagRenderable.transformation.zTranslation = pose.worldPosition().z;
+        bagRenderable.transformation.angleY = pose.yawRadians();
+        bagRenderable.transformation.angleZ = pose.angleZRadians();
     }
 
     private void syncBumperVisuals() {
