@@ -39,6 +39,10 @@ import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 public class ToteToBagDebugRig implements DebugSceneRuntime {
     private static final float BUMPER_REST_Z = 0.27f;
     private static final float BUMPER_ACTIVE_Z = 0.18f;
+    private static final float BAG_RECEIVER_LENGTH = 0.70f;
+    private static final float BAG_RECEIVER_HEIGHT = 0.12f;
+    private static final float BAG_RECEIVER_WIDTH = 0.50f;
+    private static final float BAG_RECEIVER_GAP_X = 0.12f;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -58,6 +62,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private final RenderableObject pdcRenderable;
     private final RenderableObject pcrRenderable;
     private final RenderableObject baggerRenderable;
+    private final RenderableObject bagReceiverRenderable;
     private final Map<String, RenderableObject> prlRenderablesById = new LinkedHashMap<>();
     private final Map<String, RenderableObject> pdcBumperRenderablesByPrlId = new LinkedHashMap<>();
     private final Map<String, RenderableObject> completedBagRenderablesById = new LinkedHashMap<>();
@@ -104,8 +109,10 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         pdcRenderable = subsystem.getPdcRenderable();
         pcrRenderable = subsystem.getPcrRenderable();
         baggerRenderable = baggingModule.getRenderable();
+        bagReceiverRenderable = createBagReceiverRenderable();
 
         objects.addAll(subsystem.getCoreRenderables());
+        objects.add(bagReceiverRenderable);
         prlRenderablesById.putAll(subsystem.getPrlRenderablesById());
         pdcBumperRenderablesByPrlId.putAll(subsystem.getPdcBumpersByPrlId());
         pdcRuntimeState = subsystem.getPdcRuntimeState();
@@ -113,6 +120,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         prlRuntimeStatesById.putAll(subsystem.getPrlRuntimeStatesById());
         registerBumperInspection();
         registerInspectableRoots();
+        registerBagReceiverInspection();
     }
 
     @Override
@@ -145,12 +153,10 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
         ensureCompletedBagRenderablesExist();
         int completedIndex = 0;
-        for (CompletedBag completedBag : baggingMachine.getCompletedBags()) {
-            RenderableObject bagRenderable = completedBagRenderablesById.get(completedBag.correlationId());
+        for (Bag completedBag : baggingMachine.getCompletedRuntimeBags()) {
+            RenderableObject bagRenderable = completedBagRenderablesById.get(completedBag.getCorrelationId());
             if (bagRenderable != null) {
-                bagRenderable.transformation.xTranslation = subsystem.getLayout().completedBagDisplayX(completedIndex);
-                bagRenderable.transformation.yTranslation = subsystem.getLayout().completedBagDisplayY();
-                bagRenderable.transformation.zTranslation = subsystem.getLayout().pcrZ();
+                positionCompletedBagInReceiver(bagRenderable, completedBag, completedIndex);
             }
             completedIndex++;
         }
@@ -230,6 +236,13 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
                     completedBag.bagSpec(),
                     completedBag.packCount());
         }
+    }
+
+    private void registerBagReceiverInspection() {
+        inspectionRegistry.register(bagReceiverRenderable, () -> List.of(
+                "Type: Bag receiver",
+                "Received bags: " + baggingMachine.getCompletedRuntimeBags().size(),
+                "Correlations: " + baggingMachine.getCompletedCorrelationIds()));
     }
 
     private RenderableObject ensureBagRenderableExists(String correlationId, BagSpec bagSpec, int packCount) {
@@ -329,6 +342,20 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         bagRenderable.transformation.angleZ = pose.angleZRadians();
     }
 
+    private void positionCompletedBagInReceiver(RenderableObject bagRenderable, Bag bag, int completedIndex) {
+        float stackX = bagReceiverRenderable.transformation.xTranslation
+                - (BAG_RECEIVER_LENGTH * 0.25f)
+                + (completedIndex * 0.18f);
+        float stackY = bagReceiverRenderable.transformation.yTranslation
+                + (BAG_RECEIVER_HEIGHT * 0.5f)
+                + (bag.getBagSpec().height() * 0.5f);
+        bagRenderable.transformation.xTranslation = stackX;
+        bagRenderable.transformation.yTranslation = stackY;
+        bagRenderable.transformation.zTranslation = bagReceiverRenderable.transformation.zTranslation;
+        bagRenderable.transformation.angleY = bagReceiverRenderable.transformation.angleY;
+        bagRenderable.transformation.angleZ = 0f;
+    }
+
     private void syncBumperVisuals() {
         for (PrlConveyor prl : prls) {
             RenderableObject bumper = pdcBumperRenderablesByPrlId.get(prl.getId());
@@ -410,6 +437,25 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
             return 1f;
         }
         return (float) Math.max(0d, Math.min(1d, elapsedSeconds / durationSeconds));
+    }
+
+    private RenderableObject createBagReceiverRenderable() {
+        var outfeed = baggingModule.bagOutfeedWorldPoint();
+        RenderableObject renderable = RenderableObject.create(
+                "bag_receiver_debug_tray",
+                tr,
+                RollerMeshFactory.createBoxRollerMesh(
+                        BAG_RECEIVER_LENGTH,
+                        BAG_RECEIVER_HEIGHT,
+                        BAG_RECEIVER_WIDTH),
+                new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
+                new OneColourStrategyImpl(0xFF4A6B7A),
+                true);
+        renderable.transformation.xTranslation = outfeed.x + BAG_RECEIVER_GAP_X + (BAG_RECEIVER_LENGTH * 0.5f);
+        renderable.transformation.yTranslation = outfeed.y - (BAG_RECEIVER_HEIGHT * 0.5f);
+        renderable.transformation.zTranslation = outfeed.z;
+        renderable.transformation.angleY = baggerRenderable.transformation.angleY;
+        return renderable;
     }
 
 }
