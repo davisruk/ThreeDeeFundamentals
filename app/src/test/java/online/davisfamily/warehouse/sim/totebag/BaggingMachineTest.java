@@ -1,6 +1,8 @@
 package online.davisfamily.warehouse.sim.totebag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -16,7 +18,7 @@ import online.davisfamily.warehouse.sim.totebag.transfer.ReleasedPackGroup;
 
 class BaggingMachineTest {
     @Test
-    void shouldSynchronouslyDeliverCompletedBagToReceiverWhenConfigured() {
+    void shouldDeliverCompletedBagToReceiverAfterDischargeCompletes() {
         RecordingBagReceiver receiver = new RecordingBagReceiver("receiver");
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
@@ -30,9 +32,16 @@ class BaggingMachineTest {
 
         baggingMachine.startBagging(group);
         baggingMachine.completeIncomingTransfer(group);
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 3; i++) {
             baggingMachine.update(null, 0.05d);
         }
+
+        assertNotNull(baggingMachine.getActiveDischarge());
+        assertTrue(receiver.isReceiving());
+        assertEquals(List.of(), receiver.getCompletedCorrelationIds());
+        assertEquals(List.of(), baggingMachine.getCompletedCorrelationIds());
+
+        baggingMachine.update(null, 0.05d);
 
         assertEquals(List.of("bag-a"), baggingMachine.getCompletedCorrelationIds());
         assertEquals(List.of("bag-a"), receiver.getCompletedCorrelationIds());

@@ -16,6 +16,7 @@ import java.util.List;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.StatefulSimObject;
 import online.davisfamily.warehouse.sim.totebag.bag.Bag;
+import online.davisfamily.warehouse.sim.totebag.bag.BagDischarge;
 import online.davisfamily.warehouse.sim.totebag.handoff.BagReceiver;
 import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReceiver;
@@ -39,6 +40,8 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
     private ReleasedPackGroup currentGroup;
     private boolean incomingTransferComplete;
     private double timeInStateSeconds;
+    private Bag activeRuntimeBag;
+    private BagDischarge activeDischarge;
 
     public BaggingMachine(
             String id,
@@ -99,20 +102,19 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
                 }
             }
             case DROPPING -> transitionWhenElapsed(BaggingMachineState.SEALING, droppingDurationSeconds);
-            case SEALING -> transitionWhenElapsed(BaggingMachineState.DISCHARGING, sealingDurationSeconds);
+            case SEALING -> {
+                if (timeInStateSeconds >= sealingDurationSeconds) {
+                    startDischarge();
+                }
+            }
             case DISCHARGING -> {
-                if (timeInStateSeconds >= dischargingDurationSeconds) {
-                    for (Pack pack : currentGroup.packs()) {
-                        pack.setState(Pack.PackMotionState.CONSUMED);
+                if (activeDischarge != null) {
+                    activeDischarge.advance(dtSeconds);
+                    if (activeDischarge.isComplete()) {
+                        completeActiveDischarge();
                     }
-                    Bag runtimeBag = buildRuntimeBag(currentGroup);
-                    CompletedBag completedBag = buildCompletedBag(currentGroup);
-                    completeBag(completedBag, runtimeBag);
-                    currentGroup = null;
-                    activeReservation = null;
-                    incomingTransferComplete = false;
-                    state = BaggingMachineState.IDLE;
-                    timeInStateSeconds = 0d;
+                } else if (timeInStateSeconds >= dischargingDurationSeconds) {
+                    completeBagWithoutReceiver();
                 }
             }
             case IDLE -> {
@@ -204,6 +206,10 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         return receivingDurationSeconds;
     }
 
+    public BagDischarge getActiveDischarge() {
+        return activeDischarge;
+    }
+
     public List<String> getCompletedCorrelationIds() {
         return Collections.unmodifiableList(completedCorrelationIds);
     }
@@ -231,14 +237,43 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         return Bag.fromReleasedPackGroup("bag_" + group.correlationId(), group, bagSpec);
     }
 
-    private void completeBag(CompletedBag completedBag, Bag runtimeBag) {
-        if (bagReceiver != null) {
-            BagReservation reservation = bagReceiver.reserveIncomingBag(runtimeBag);
-            bagReceiver.beginReceiving(reservation);
-            bagReceiver.completeReceiving(reservation);
+    private void startDischarge() {
+        for (Pack pack : currentGroup.packs()) {
+            pack.setState(Pack.PackMotionState.CONSUMED);
         }
-        completedRuntimeBags.add(runtimeBag);
+
+        activeRuntimeBag = buildRuntimeBag(currentGroup);
+        if (bagReceiver != null) {
+            BagReservation reservation = bagReceiver.reserveIncomingBag(activeRuntimeBag);
+            bagReceiver.beginReceiving(reservation);
+            activeDischarge = new BagDischarge(activeRuntimeBag, reservation, dischargingDurationSeconds);
+        }
+        state = BaggingMachineState.DISCHARGING;
+        timeInStateSeconds = 0d;
+    }
+
+    private void completeActiveDischarge() {
+        BagDischarge completedDischarge = activeDischarge;
+        bagReceiver.completeReceiving(completedDischarge.getReservation());
+        completedRuntimeBags.add(completedDischarge.getBag());
+        completeCurrentGroup();
+        activeDischarge = null;
+    }
+
+    private void completeBagWithoutReceiver() {
+        completedRuntimeBags.add(activeRuntimeBag);
+        completeCurrentGroup();
+    }
+
+    private void completeCurrentGroup() {
+        CompletedBag completedBag = buildCompletedBag(currentGroup);
         completedBags.add(completedBag);
         completedCorrelationIds.add(completedBag.correlationId());
+        currentGroup = null;
+        activeReservation = null;
+        incomingTransferComplete = false;
+        activeRuntimeBag = null;
+        state = BaggingMachineState.IDLE;
+        timeInStateSeconds = 0d;
     }
 }
