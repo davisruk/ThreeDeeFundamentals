@@ -73,7 +73,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private ConveyorRuntimeState pcrRuntimeState;
     private final Map<String, ConveyorRuntimeState> prlRuntimeStatesById = new LinkedHashMap<>();
     private final TrackAppearance conveyorAppearance;
-    private double bagReceiverFullSeconds;
+    private final DebugBagReceiverAutoEmptyController bagReceiverAutoEmptyController;
 
     public ToteToBagDebugRig(
             TriangleRenderer tr,
@@ -110,6 +110,9 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         baggingMachine = baggingInstallation.getBaggingMachine();
         baggingModule = baggingInstallation.getBaggingModule();
         bagReceiver = baggingInstallation.getBagReceiver();
+        bagReceiverAutoEmptyController = new DebugBagReceiverAutoEmptyController(
+                bagReceiver,
+                BAG_RECEIVER_AUTO_EMPTY_SECONDS);
 
         pdcRenderable = subsystem.getPdcRenderable();
         pcrRenderable = subsystem.getPcrRenderable();
@@ -130,7 +133,12 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
     @Override
     public void syncVisuals() {
-        updateDebugBagReceiverAutoEmpty();
+        syncVisuals(0d);
+    }
+
+    @Override
+    public void syncVisuals(double dtSeconds) {
+        updateDebugBagReceiverAutoEmpty(dtSeconds);
         syncConveyorRuntimeStates();
         tipperToSorterSection.syncVisuals();
 
@@ -249,7 +257,9 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
                 "Type: Bag receiver",
                 "Received bags: " + bagReceiver.getReceivedBags().size(),
                 "Capacity: " + bagReceiver.getCapacity(),
-                String.format("Full timer: %.1f / %.1f", bagReceiverFullSeconds, BAG_RECEIVER_AUTO_EMPTY_SECONDS),
+                String.format("Full timer: %.1f / %.1f",
+                        bagReceiverAutoEmptyController.getFullElapsedSeconds(),
+                        bagReceiverAutoEmptyController.getFullDurationSeconds()),
                 "Correlations: " + bagReceiver.getCompletedCorrelationIds()));
     }
 
@@ -364,27 +374,15 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         bagRenderable.transformation.angleZ = 0f;
     }
 
-    private void updateDebugBagReceiverAutoEmpty() {
-        if (!bagReceiver.isFull()) {
-            bagReceiverFullSeconds = 0d;
-            return;
-        }
-
-        bagReceiverFullSeconds += 1d / 60d;
-        if (bagReceiverFullSeconds < BAG_RECEIVER_AUTO_EMPTY_SECONDS) {
-            return;
-        }
-
-        for (Bag bag : List.copyOf(bagReceiver.getReceivedBags())) {
+    private void updateDebugBagReceiverAutoEmpty(double dtSeconds) {
+        for (Bag bag : bagReceiverAutoEmptyController.update(dtSeconds)) {
             RenderableObject bagRenderable = completedBagRenderablesById.get(bag.getCorrelationId());
             if (bagRenderable != null) {
                 bagRenderable.transformation.xTranslation = -50f;
                 bagRenderable.transformation.yTranslation = -50f;
                 bagRenderable.transformation.zTranslation = -50f;
             }
-            bagReceiver.removeReceivedBag(bag);
         }
-        bagReceiverFullSeconds = 0d;
     }
 
     private void syncBumperVisuals() {

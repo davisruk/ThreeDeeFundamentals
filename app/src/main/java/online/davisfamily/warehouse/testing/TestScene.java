@@ -30,7 +30,7 @@ public class TestScene extends BaseScene{
 	public void executeChildRenderOperations(double dtSeconds) {
 //		if (inputState.isSet(Mode.SHOW_PATH))
 //			debug.drawPathForObject(rTote, camera.getView(), projection);
-		activeRuntime.syncVisuals();
+		activeRuntime.syncVisuals(dtSeconds);
 		drawObject(objects, dtSeconds, lightDirection);
 	}
 
