@@ -22,6 +22,7 @@ import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
 import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.bag.BagDischarge;
+import online.davisfamily.warehouse.sim.totebag.bag.BagMeshFactory;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
@@ -270,10 +271,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
             RenderableObject renderable = RenderableObject.create(
                     "bag_" + correlationId,
                     tr,
-                    RollerMeshFactory.createBoxRollerMesh(
-                            bagSpec.depth(),
-                            bagSpec.height(),
-                            bagSpec.width()),
+                    BagMeshFactory.createBagMesh(bagSpec),
                     new ObjectTransformation(0f, 0f, 0f, -50f, -50f, -50f, new Mat4()),
                     new OneColourStrategyImpl(0xFFD8C6A0),
                     true);
