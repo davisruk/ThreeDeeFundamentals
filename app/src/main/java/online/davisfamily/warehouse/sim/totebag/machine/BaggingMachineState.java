@@ -14,5 +14,6 @@ public enum BaggingMachineState {
     RECEIVING,
     DROPPING,
     SEALING,
+    WAITING_FOR_RECEIVER,
     DISCHARGING
 }

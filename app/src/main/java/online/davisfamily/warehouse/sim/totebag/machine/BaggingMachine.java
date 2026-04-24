@@ -104,9 +104,10 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
             case DROPPING -> transitionWhenElapsed(BaggingMachineState.SEALING, droppingDurationSeconds);
             case SEALING -> {
                 if (timeInStateSeconds >= sealingDurationSeconds) {
-                    startDischarge();
+                    prepareBagForDischarge();
                 }
             }
+            case WAITING_FOR_RECEIVER -> tryStartReceiverDischarge();
             case DISCHARGING -> {
                 if (activeDischarge != null) {
                     activeDischarge.advance(dtSeconds);
@@ -176,6 +177,14 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         timeInStateSeconds = 0d;
     }
 
+    @Override
+    public boolean isReceivingGroup(ReleasedPackGroup group) {
+        return group != null
+                && currentGroup != null
+                && currentGroup.correlationId().equals(group.correlationId());
+    }
+
+    @Override
     public void completeIncomingTransfer(ReleasedPackGroup group) {
         if (group == null) {
             throw new IllegalArgumentException("group must not be null");
@@ -237,17 +246,30 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         return Bag.fromReleasedPackGroup("bag_" + group.correlationId(), group, bagSpec);
     }
 
-    private void startDischarge() {
+    private void prepareBagForDischarge() {
         for (Pack pack : currentGroup.packs()) {
             pack.setState(Pack.PackMotionState.CONSUMED);
         }
 
         activeRuntimeBag = buildRuntimeBag(currentGroup);
+        state = BaggingMachineState.WAITING_FOR_RECEIVER;
+        timeInStateSeconds = 0d;
+        tryStartReceiverDischarge();
+    }
+
+    private void tryStartReceiverDischarge() {
         if (bagReceiver != null) {
+            if (!bagReceiver.canReserveIncomingBag(activeRuntimeBag)) {
+                return;
+            }
             BagReservation reservation = bagReceiver.reserveIncomingBag(activeRuntimeBag);
             bagReceiver.beginReceiving(reservation);
             activeDischarge = new BagDischarge(activeRuntimeBag, reservation, dischargingDurationSeconds);
+            state = BaggingMachineState.DISCHARGING;
+            timeInStateSeconds = 0d;
+            return;
         }
+
         state = BaggingMachineState.DISCHARGING;
         timeInStateSeconds = 0d;
     }

@@ -21,6 +21,7 @@ import java.util.Queue;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReceiver;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReservation;
 
 public class ToteToBagFlowController implements SimulationController {
@@ -29,7 +30,7 @@ public class ToteToBagFlowController implements SimulationController {
     private final SortingMachine sortingMachine;
     private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
-    private final BaggingMachine baggingMachine;
+    private final PackGroupReceiver downstreamPackGroupReceiver;
     private final ToteToBagAssignmentPlanner assignmentPlanner;
     private final Map<String, PrlConveyor> prlsById = new LinkedHashMap<>();
     private final Map<String, PdcDiversionDevice> pdcDiversionDevicesByPrlId = new LinkedHashMap<>();
@@ -49,7 +50,7 @@ public class ToteToBagFlowController implements SimulationController {
             ToteLoadPlan toteLoadPlan,
             PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
-            BaggingMachine baggingMachine,
+            PackGroupReceiver downstreamPackGroupReceiver,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
             List<PdcDiversionDevice> pdcDiversionDevices,
@@ -63,7 +64,7 @@ public class ToteToBagFlowController implements SimulationController {
                 null,
                 pdcConveyor,
                 pcrConveyor,
-                baggingMachine,
+                downstreamPackGroupReceiver,
                 assignmentPlanner,
                 prlConveyors,
                 pdcDiversionDevices,
@@ -79,7 +80,7 @@ public class ToteToBagFlowController implements SimulationController {
             SortingMachine sortingMachine,
             PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
-            BaggingMachine baggingMachine,
+            PackGroupReceiver downstreamPackGroupReceiver,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors) {
         this(
@@ -88,7 +89,7 @@ public class ToteToBagFlowController implements SimulationController {
                 sortingMachine,
                 pdcConveyor,
                 pcrConveyor,
-                baggingMachine,
+                downstreamPackGroupReceiver,
                 assignmentPlanner,
                 prlConveyors,
                 createDefaultDiversionDevices(prlConveyors),
@@ -104,7 +105,7 @@ public class ToteToBagFlowController implements SimulationController {
             SortingMachine sortingMachine,
             PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
-            BaggingMachine baggingMachine,
+            PackGroupReceiver downstreamPackGroupReceiver,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
             double pdcTransferDurationSeconds) {
@@ -114,7 +115,7 @@ public class ToteToBagFlowController implements SimulationController {
                 sortingMachine,
                 pdcConveyor,
                 pcrConveyor,
-                baggingMachine,
+                downstreamPackGroupReceiver,
                 assignmentPlanner,
                 prlConveyors,
                 createDefaultDiversionDevices(prlConveyors),
@@ -130,7 +131,7 @@ public class ToteToBagFlowController implements SimulationController {
             SortingMachine sortingMachine,
             PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
-            BaggingMachine baggingMachine,
+            PackGroupReceiver downstreamPackGroupReceiver,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
             List<PdcDiversionDevice> pdcDiversionDevices,
@@ -142,7 +143,7 @@ public class ToteToBagFlowController implements SimulationController {
                 sortingMachine,
                 pdcConveyor,
                 pcrConveyor,
-                baggingMachine,
+                downstreamPackGroupReceiver,
                 assignmentPlanner,
                 prlConveyors,
                 pdcDiversionDevices,
@@ -158,7 +159,7 @@ public class ToteToBagFlowController implements SimulationController {
             SortingMachine sortingMachine,
             PdcConveyor pdcConveyor,
             PcrConveyor pcrConveyor,
-            BaggingMachine baggingMachine,
+            PackGroupReceiver downstreamPackGroupReceiver,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
             List<PdcDiversionDevice> pdcDiversionDevices,
@@ -169,7 +170,7 @@ public class ToteToBagFlowController implements SimulationController {
         if (toteLoadPlan == null
                 || pdcConveyor == null
                 || pcrConveyor == null
-                || baggingMachine == null
+                || downstreamPackGroupReceiver == null
                 || assignmentPlanner == null
                 || prlConveyors == null
                 || prlConveyors.isEmpty()
@@ -189,7 +190,7 @@ public class ToteToBagFlowController implements SimulationController {
         this.sortingMachine = sortingMachine;
         this.pdcConveyor = pdcConveyor;
         this.pcrConveyor = pcrConveyor;
-        this.baggingMachine = baggingMachine;
+        this.downstreamPackGroupReceiver = downstreamPackGroupReceiver;
         this.assignmentPlanner = assignmentPlanner;
         this.pdcTransferDurationProvider = pdcTransferDurationProvider;
         this.pdcDiversionDistanceProvider = pdcDiversionDistanceProvider;
@@ -371,7 +372,7 @@ public class ToteToBagFlowController implements SimulationController {
     private void attemptPrlRelease() {
         boolean prlAlreadyReleasing = prlsById.values().stream()
                 .anyMatch(prl -> prl.getAssignment().getState() == PrlState.RELEASING);
-        if (prlAlreadyReleasing || pcrConveyor.hasWorkInFlight() || !baggingMachine.isAvailable()) {
+        if (prlAlreadyReleasing || pcrConveyor.hasWorkInFlight()) {
             return;
         }
 
@@ -383,10 +384,10 @@ public class ToteToBagFlowController implements SimulationController {
         }
 
         ReleasedPackGroup candidate = readyPrl.get().peekReadyGroup();
-        if (!baggingMachine.canReserveIncomingGroup(candidate)) {
+        if (!downstreamPackGroupReceiver.canReserveIncomingGroup(candidate)) {
             return;
         }
-        baggingReservation = baggingMachine.reserveIncomingGroup(candidate);
+        baggingReservation = downstreamPackGroupReceiver.reserveIncomingGroup(candidate);
         ReleasedPackGroup releasedGroup = readyPrl.get().releaseGroup();
         pcrConveyor.startReceivingGroup(releasedGroup);
         releasedGroups.add(releasedGroup);
@@ -434,13 +435,12 @@ public class ToteToBagFlowController implements SimulationController {
         if (groupAtOutfeed == null) {
             return;
         }
-        if (baggingMachine.hasReservationFor(groupAtOutfeed)) {
-            baggingMachine.beginReceiving(baggingReservation);
+        if (downstreamPackGroupReceiver.hasReservationFor(groupAtOutfeed)) {
+            downstreamPackGroupReceiver.beginReceiving(baggingReservation);
             baggingReservation = null;
         }
 
-        if (baggingMachine.getCurrentGroup() == null
-                || !baggingMachine.getCurrentGroup().correlationId().equals(groupAtOutfeed.correlationId())) {
+        if (!downstreamPackGroupReceiver.isReceivingGroup(groupAtOutfeed)) {
             return;
         }
 
@@ -452,7 +452,7 @@ public class ToteToBagFlowController implements SimulationController {
             }
             pcrConveyor.pollPackAtOutfeed();
             if (!pcrConveyor.hasWorkInFlight()) {
-                baggingMachine.completeIncomingTransfer(groupAtOutfeed);
+                downstreamPackGroupReceiver.completeIncomingTransfer(groupAtOutfeed);
                 return;
             }
         }

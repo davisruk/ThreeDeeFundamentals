@@ -7,4 +7,6 @@ public interface PackGroupReceiver {
     PackGroupReservation reserveIncomingGroup(ReleasedPackGroup group);
     boolean hasReservationFor(ReleasedPackGroup group);
     void beginReceiving(PackGroupReservation reservation);
+    boolean isReceivingGroup(ReleasedPackGroup group);
+    void completeIncomingTransfer(ReleasedPackGroup group);
 }
