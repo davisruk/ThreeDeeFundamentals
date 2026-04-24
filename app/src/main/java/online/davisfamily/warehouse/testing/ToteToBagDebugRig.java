@@ -26,6 +26,7 @@ import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDeviceState;
+import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachineState;
 import online.davisfamily.warehouse.sim.totebag.machine.CompletedBag;
@@ -55,6 +56,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private final PcrConveyor pcrConveyor;
     private final BaggingMachine baggingMachine;
     private final BaggingModule baggingModule;
+    private final StoredBagReceiver bagReceiver;
     private final List<PrlConveyor> prls;
     private final List<PdcDiversionDevice> pdcDiversionDevices;
     private final ToteToBagFlowController flowController;
@@ -105,6 +107,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         BaggingInstallation baggingInstallation = installation.getBaggingInstallation();
         baggingMachine = baggingInstallation.getBaggingMachine();
         baggingModule = baggingInstallation.getBaggingModule();
+        bagReceiver = baggingInstallation.getBagReceiver();
 
         pdcRenderable = subsystem.getPdcRenderable();
         pcrRenderable = subsystem.getPcrRenderable();
@@ -153,7 +156,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
         ensureCompletedBagRenderablesExist();
         int completedIndex = 0;
-        for (Bag completedBag : baggingMachine.getCompletedRuntimeBags()) {
+        for (Bag completedBag : bagReceiver.getReceivedBags()) {
             RenderableObject bagRenderable = completedBagRenderablesById.get(completedBag.getCorrelationId());
             if (bagRenderable != null) {
                 positionCompletedBagInReceiver(bagRenderable, completedBag, completedIndex);
@@ -241,8 +244,8 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private void registerBagReceiverInspection() {
         inspectionRegistry.register(bagReceiverRenderable, () -> List.of(
                 "Type: Bag receiver",
-                "Received bags: " + baggingMachine.getCompletedRuntimeBags().size(),
-                "Correlations: " + baggingMachine.getCompletedCorrelationIds()));
+                "Received bags: " + bagReceiver.getReceivedBags().size(),
+                "Correlations: " + bagReceiver.getCompletedCorrelationIds()));
     }
 
     private RenderableObject ensureBagRenderableExists(String correlationId, BagSpec bagSpec, int packCount) {

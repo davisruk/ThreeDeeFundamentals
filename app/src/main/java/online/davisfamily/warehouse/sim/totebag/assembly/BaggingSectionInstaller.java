@@ -10,7 +10,7 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.sim.totebag.layout.MachineAttachmentSpec;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayout;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagAttachmentPoint;
-import online.davisfamily.warehouse.sim.totebag.handoff.RecordingBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 
@@ -31,7 +31,7 @@ public class BaggingSectionInstaller {
             throw new IllegalArgumentException("Bagging install inputs must not be null");
         }
 
-        RecordingBagReceiver bagReceiver = new RecordingBagReceiver("bagger_bag_receiver");
+        StoredBagReceiver bagReceiver = new StoredBagReceiver("bagger_bag_receiver");
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
                 new BagSpec(0.34f, 0.28f, 0.22f),
