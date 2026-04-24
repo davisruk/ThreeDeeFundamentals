@@ -8,9 +8,11 @@ import java.util.Map;
 import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
+import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
+import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
@@ -40,9 +42,9 @@ import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 public class ToteToBagDebugRig implements DebugSceneRuntime {
     private static final float BUMPER_REST_Z = 0.27f;
     private static final float BUMPER_ACTIVE_Z = 0.18f;
-    private static final float BAG_RECEIVER_LENGTH = 0.70f;
-    private static final float BAG_RECEIVER_HEIGHT = 0.12f;
-    private static final float BAG_RECEIVER_WIDTH = 0.50f;
+    private static final float BAG_RECEIVER_LENGTH = 0.60f;
+    private static final float BAG_RECEIVER_HEIGHT = 0.31f;
+    private static final float BAG_RECEIVER_WIDTH = 0.40f;
     private static final float BAG_RECEIVER_GAP_X = 0.12f;
     private static final double BAG_RECEIVER_AUTO_EMPTY_SECONDS = 3.0d;
 
@@ -363,9 +365,9 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private void positionCompletedBagInReceiver(RenderableObject bagRenderable, Bag bag, int completedIndex) {
         float stackX = bagReceiverRenderable.transformation.xTranslation
                 - (BAG_RECEIVER_LENGTH * 0.25f)
-                + (completedIndex * 0.18f);
+                + (completedIndex * 0.16f);
         float stackY = bagReceiverRenderable.transformation.yTranslation
-                + (BAG_RECEIVER_HEIGHT * 0.5f)
+                + 0.04f
                 + (bag.getBagSpec().height() * 0.5f);
         bagRenderable.transformation.xTranslation = stackX;
         bagRenderable.transformation.yTranslation = stackY;
@@ -471,20 +473,22 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private RenderableObject createBagReceiverRenderable() {
         var outfeed = baggingModule.bagOutfeedWorldPoint();
         RenderableObject renderable = RenderableObject.create(
-                "bag_receiver_debug_tray",
+                "bag_receiver_debug_tote",
                 tr,
-                RollerMeshFactory.createBoxRollerMesh(
-                        BAG_RECEIVER_LENGTH,
-                        BAG_RECEIVER_HEIGHT,
-                        BAG_RECEIVER_WIDTH),
+                createReceiverToteMesh(),
                 new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
-                new OneColourStrategyImpl(0xFF4A6B7A),
+                new OneColourStrategyImpl(0xFF2D5E8C),
                 true);
         renderable.transformation.xTranslation = outfeed.x + BAG_RECEIVER_GAP_X + (BAG_RECEIVER_LENGTH * 0.5f);
-        renderable.transformation.yTranslation = outfeed.y - (BAG_RECEIVER_HEIGHT * 0.5f);
+        renderable.transformation.yTranslation = outfeed.y - 0.04f;
         renderable.transformation.zTranslation = outfeed.z;
         renderable.transformation.angleY = baggerRenderable.transformation.angleY;
         return renderable;
+    }
+
+    private Mesh createReceiverToteMesh() {
+        ToteGeometry geometry = new ToteGeometry();
+        return new Mesh(geometry.v4Vertices, geometry.triangles);
     }
 
 }
