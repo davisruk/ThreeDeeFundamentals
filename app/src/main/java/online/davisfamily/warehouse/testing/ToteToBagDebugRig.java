@@ -44,6 +44,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private static final float BAG_RECEIVER_HEIGHT = 0.12f;
     private static final float BAG_RECEIVER_WIDTH = 0.50f;
     private static final float BAG_RECEIVER_GAP_X = 0.12f;
+    private static final double BAG_RECEIVER_AUTO_EMPTY_SECONDS = 3.0d;
 
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
@@ -72,6 +73,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private ConveyorRuntimeState pcrRuntimeState;
     private final Map<String, ConveyorRuntimeState> prlRuntimeStatesById = new LinkedHashMap<>();
     private final TrackAppearance conveyorAppearance;
+    private double bagReceiverFullSeconds;
 
     public ToteToBagDebugRig(
             TriangleRenderer tr,
@@ -128,6 +130,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
     @Override
     public void syncVisuals() {
+        updateDebugBagReceiverAutoEmpty();
         syncConveyorRuntimeStates();
         tipperToSorterSection.syncVisuals();
 
@@ -245,6 +248,8 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         inspectionRegistry.register(bagReceiverRenderable, () -> List.of(
                 "Type: Bag receiver",
                 "Received bags: " + bagReceiver.getReceivedBags().size(),
+                "Capacity: " + bagReceiver.getCapacity(),
+                String.format("Full timer: %.1f / %.1f", bagReceiverFullSeconds, BAG_RECEIVER_AUTO_EMPTY_SECONDS),
                 "Correlations: " + bagReceiver.getCompletedCorrelationIds()));
     }
 
@@ -357,6 +362,29 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         bagRenderable.transformation.zTranslation = bagReceiverRenderable.transformation.zTranslation;
         bagRenderable.transformation.angleY = bagReceiverRenderable.transformation.angleY;
         bagRenderable.transformation.angleZ = 0f;
+    }
+
+    private void updateDebugBagReceiverAutoEmpty() {
+        if (!bagReceiver.isFull()) {
+            bagReceiverFullSeconds = 0d;
+            return;
+        }
+
+        bagReceiverFullSeconds += 1d / 60d;
+        if (bagReceiverFullSeconds < BAG_RECEIVER_AUTO_EMPTY_SECONDS) {
+            return;
+        }
+
+        for (Bag bag : List.copyOf(bagReceiver.getReceivedBags())) {
+            RenderableObject bagRenderable = completedBagRenderablesById.get(bag.getCorrelationId());
+            if (bagRenderable != null) {
+                bagRenderable.transformation.xTranslation = -50f;
+                bagRenderable.transformation.yTranslation = -50f;
+                bagRenderable.transformation.zTranslation = -50f;
+            }
+            bagReceiver.removeReceivedBag(bag);
+        }
+        bagReceiverFullSeconds = 0d;
     }
 
     private void syncBumperVisuals() {

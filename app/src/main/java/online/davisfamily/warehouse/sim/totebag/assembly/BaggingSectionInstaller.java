@@ -31,7 +31,7 @@ public class BaggingSectionInstaller {
             throw new IllegalArgumentException("Bagging install inputs must not be null");
         }
 
-        StoredBagReceiver bagReceiver = new StoredBagReceiver("bagger_bag_receiver");
+        StoredBagReceiver bagReceiver = new StoredBagReceiver("bagger_bag_receiver", 2);
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
                 new BagSpec(0.34f, 0.28f, 0.22f),

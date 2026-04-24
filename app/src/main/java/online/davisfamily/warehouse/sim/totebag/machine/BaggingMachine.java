@@ -138,7 +138,9 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
 
     @Override
     public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
-        return group != null && isAvailable();
+        return group != null
+                && isAvailable()
+                && canReserveOutputBagFor(group);
     }
 
     @Override
@@ -244,6 +246,10 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
 
     private Bag buildRuntimeBag(ReleasedPackGroup group) {
         return Bag.fromReleasedPackGroup("bag_" + group.correlationId(), group, bagSpec);
+    }
+
+    private boolean canReserveOutputBagFor(ReleasedPackGroup group) {
+        return bagReceiver == null || bagReceiver.canReserveIncomingBag(buildRuntimeBag(group));
     }
 
     private void prepareBagForDischarge() {

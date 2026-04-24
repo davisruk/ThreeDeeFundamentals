@@ -32,6 +32,8 @@ import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDeviceState;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReservation;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
@@ -327,7 +329,7 @@ class ToteToBagFlowControllerTest {
     }
 
     @Test
-    void shouldNotReleaseReadyPrlWhileBaggingMachineIsUnavailable() {
+    void shouldNotReleaseReadyPrlWhileDownstreamReceiverIsUnavailable() {
         PackDimensions packDimensions = new PackDimensions(0.20f, 0.10f, 0.08f);
         ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
                 "tote-1",
@@ -335,19 +337,13 @@ class ToteToBagFlowControllerTest {
         PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(3.0f, 0.05f, 0.0f), 1.0f);
         PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
         PcrConveyor pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(3.0f, 0.05f, 0.10f), 0.25d);
-        BaggingMachine baggingMachine = new BaggingMachine(
-                "bagger",
-                new BagSpec(0.34f, 0.28f, 0.22f),
-                10.0d,
-                10.0d,
-                10.0d,
-                10.0d);
+        PackGroupReceiver downstreamReceiver = new UnavailablePackGroupReceiver();
 
         ToteToBagFlowController controller = new ToteToBagFlowController(
                 toteLoadPlan,
                 pdcConveyor,
                 pcrConveyor,
-                baggingMachine,
+                downstreamReceiver,
                 new ToteToBagAssignmentPlanner(),
                 List.of(prl1),
                 List.of(new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d)),
@@ -358,17 +354,44 @@ class ToteToBagFlowControllerTest {
 
         controller.update(null, 0.05d);
         prl1.acceptPack(new Pack("pack-1", "bag-a", packDimensions));
-        baggingMachine.startBagging(new ReleasedPackGroup(
-                "bag-b",
-                "prl-b",
-                List.of(new Pack("pack-b", "bag-b", packDimensions)),
-                0.25f));
 
         controller.update(null, 0.05d);
 
         assertEquals(PrlState.READY_TO_RELEASE, prl1.getAssignment().getState());
         assertTrue(controller.getReleasedGroups().isEmpty());
         assertTrue(pcrConveyor.isEmpty());
+    }
+
+    private static class UnavailablePackGroupReceiver implements PackGroupReceiver {
+        @Override
+        public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
+            return false;
+        }
+
+        @Override
+        public PackGroupReservation reserveIncomingGroup(ReleasedPackGroup group) {
+            throw new IllegalStateException("Receiver is unavailable");
+        }
+
+        @Override
+        public boolean hasReservationFor(ReleasedPackGroup group) {
+            return false;
+        }
+
+        @Override
+        public void beginReceiving(PackGroupReservation reservation) {
+            throw new IllegalStateException("Receiver is unavailable");
+        }
+
+        @Override
+        public boolean isReceivingGroup(ReleasedPackGroup group) {
+            return false;
+        }
+
+        @Override
+        public void completeIncomingTransfer(ReleasedPackGroup group) {
+            throw new IllegalStateException("Receiver is unavailable");
+        }
     }
 
     private static Mesh anchorMesh() {

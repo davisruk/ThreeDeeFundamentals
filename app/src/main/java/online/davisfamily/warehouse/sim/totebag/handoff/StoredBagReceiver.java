@@ -8,6 +8,7 @@ import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 
 public class StoredBagReceiver implements BagReceiver {
     private final String id;
+    private final int capacity;
     private final List<Bag> receivedBags = new ArrayList<>();
 
     private Bag activeBag;
@@ -15,10 +16,18 @@ public class StoredBagReceiver implements BagReceiver {
     private boolean receiving;
 
     public StoredBagReceiver(String id) {
+        this(id, Integer.MAX_VALUE);
+    }
+
+    public StoredBagReceiver(String id, int capacity) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("id must not be blank");
         }
+        if (capacity <= 0) {
+            throw new IllegalArgumentException("capacity must be > 0");
+        }
         this.id = id;
+        this.capacity = capacity;
     }
 
     public String getId() {
@@ -27,7 +36,9 @@ public class StoredBagReceiver implements BagReceiver {
 
     @Override
     public boolean canReserveIncomingBag(Bag bag) {
-        return bag != null && activeReservation == null;
+        return bag != null
+                && activeReservation == null
+                && receivedBags.size() < capacity;
     }
 
     @Override
@@ -72,6 +83,21 @@ public class StoredBagReceiver implements BagReceiver {
 
     public List<Bag> getReceivedBags() {
         return Collections.unmodifiableList(receivedBags);
+    }
+
+    public int getCapacity() {
+        return capacity;
+    }
+
+    public boolean isFull() {
+        return receivedBags.size() >= capacity;
+    }
+
+    public boolean removeReceivedBag(Bag bag) {
+        if (bag == null) {
+            throw new IllegalArgumentException("bag must not be null");
+        }
+        return receivedBags.remove(bag);
     }
 
     public List<String> getCompletedCorrelationIds() {

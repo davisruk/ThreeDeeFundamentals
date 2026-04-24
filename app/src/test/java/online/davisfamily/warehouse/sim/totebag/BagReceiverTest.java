@@ -63,6 +63,26 @@ class BagReceiverTest {
         assertNull(receiver.getActiveReservation());
     }
 
+    @Test
+    void shouldRejectIncomingBagsWhenStoredReceiverIsFullUntilSpaceIsFreed() {
+        StoredBagReceiver receiver = new StoredBagReceiver("receiver", 1);
+        Bag firstBag = completedBag("bag-a");
+        Bag secondBag = completedBag("bag-b");
+
+        BagReservation reservation = receiver.reserveIncomingBag(firstBag);
+        receiver.beginReceiving(reservation);
+        receiver.completeReceiving(reservation);
+
+        assertTrue(receiver.isFull());
+        assertFalse(receiver.canReserveIncomingBag(secondBag));
+        assertThrows(IllegalStateException.class, () -> receiver.reserveIncomingBag(secondBag));
+
+        assertTrue(receiver.removeReceivedBag(firstBag));
+
+        assertFalse(receiver.isFull());
+        assertTrue(receiver.canReserveIncomingBag(secondBag));
+    }
+
     private static Bag completedBag(String correlationId) {
         return new Bag(
                 "bag_" + correlationId,

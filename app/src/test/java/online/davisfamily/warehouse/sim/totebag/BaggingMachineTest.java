@@ -14,6 +14,7 @@ import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.BagReceiver;
 import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
 import online.davisfamily.warehouse.sim.totebag.handoff.RecordingBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachineState;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
@@ -60,7 +61,6 @@ class BaggingMachineTest {
     @Test
     void shouldWaitForReceiverBeforeDischargingBag() {
         ToggleBagReceiver receiver = new ToggleBagReceiver("receiver");
-        receiver.setAvailable(false);
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
                 new BagSpec(0.34f, 0.28f, 0.22f),
@@ -73,6 +73,7 @@ class BaggingMachineTest {
 
         baggingMachine.startBagging(group);
         baggingMachine.completeIncomingTransfer(group);
+        receiver.setAvailable(false);
         for (int i = 0; i < 3; i++) {
             baggingMachine.update(null, 0.05d);
         }
@@ -95,6 +96,78 @@ class BaggingMachineTest {
         assertEquals(BaggingMachineState.IDLE, baggingMachine.getState());
         assertEquals(List.of("bag-a"), receiver.getCompletedCorrelationIds());
         assertEquals(List.of("bag-a"), baggingMachine.getCompletedCorrelationIds());
+    }
+
+    @Test
+    void shouldWaitForStoredReceiverCapacityBeforeDischargingBag() {
+        StoredBagReceiver receiver = new StoredBagReceiver("receiver", 1);
+        BaggingMachine baggingMachine = new BaggingMachine(
+                "bagger",
+                new BagSpec(0.34f, 0.28f, 0.22f),
+                0.05d,
+                0.05d,
+                0.05d,
+                0.05d,
+                receiver);
+        ReleasedPackGroup group = releasedGroup("bag-a");
+
+        baggingMachine.startBagging(group);
+        baggingMachine.completeIncomingTransfer(group);
+        Bag storedBag = new Bag(
+                "stored-bag",
+                "stored-bag",
+                List.of(new online.davisfamily.warehouse.sim.totebag.plan.PackPlan(
+                        "stored-pack",
+                        "stored-bag",
+                        new PackDimensions(0.20f, 0.10f, 0.08f))),
+                new BagSpec(0.34f, 0.28f, 0.22f));
+        BagReservation storedReservation = receiver.reserveIncomingBag(storedBag);
+        receiver.beginReceiving(storedReservation);
+        receiver.completeReceiving(storedReservation);
+        for (int i = 0; i < 4; i++) {
+            baggingMachine.update(null, 0.05d);
+        }
+
+        assertEquals(BaggingMachineState.WAITING_FOR_RECEIVER, baggingMachine.getState());
+        assertFalse(baggingMachine.canReserveIncomingGroup(releasedGroup("bag-b")));
+        assertEquals(List.of(storedBag), receiver.getReceivedBags());
+
+        receiver.removeReceivedBag(storedBag);
+        baggingMachine.update(null, 0.05d);
+
+        assertEquals(BaggingMachineState.DISCHARGING, baggingMachine.getState());
+        assertNotNull(baggingMachine.getActiveDischarge());
+    }
+
+    @Test
+    void shouldNotAcceptNewGroupWhenStoredReceiverIsAlreadyFull() {
+        StoredBagReceiver receiver = new StoredBagReceiver("receiver", 1);
+        Bag storedBag = new Bag(
+                "stored-bag",
+                "stored-bag",
+                List.of(new online.davisfamily.warehouse.sim.totebag.plan.PackPlan(
+                        "stored-pack",
+                        "stored-bag",
+                        new PackDimensions(0.20f, 0.10f, 0.08f))),
+                new BagSpec(0.34f, 0.28f, 0.22f));
+        BagReservation storedReservation = receiver.reserveIncomingBag(storedBag);
+        receiver.beginReceiving(storedReservation);
+        receiver.completeReceiving(storedReservation);
+        BaggingMachine baggingMachine = new BaggingMachine(
+                "bagger",
+                new BagSpec(0.34f, 0.28f, 0.22f),
+                0.05d,
+                0.05d,
+                0.05d,
+                0.05d,
+                receiver);
+        ReleasedPackGroup group = releasedGroup("bag-a");
+
+        assertFalse(baggingMachine.canReserveIncomingGroup(group));
+
+        receiver.removeReceivedBag(storedBag);
+
+        assertTrue(baggingMachine.canReserveIncomingGroup(group));
     }
 
     private static ReleasedPackGroup releasedGroup(String correlationId) {
