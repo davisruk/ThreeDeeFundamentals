@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.tote;
 
 import java.util.EnumSet;
 
+import online.davisfamily.threedee.behaviour.transformation.ClampedRotationBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower.TravelDirection;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -19,6 +20,12 @@ import online.davisfamily.warehouse.sim.transfer.TransferMotionState.TransferMot
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 
 public class Tote implements TrackableObject {
+	private static final String LEFT_LID_SUFFIX = "_LeftLid";
+	private static final String RIGHT_LID_SUFFIX = "_RightLid";
+	private static final float LEFT_LID_OPEN_DEGREES = 255f;
+	private static final float RIGHT_LID_OPEN_DEGREES = -255f;
+	private static final float LID_CLOSED_DEGREES = 0f;
+	private static final float LID_SPEED_DEGREES_PER_SECOND = 90f;
 
 	public enum FacingDirection {
 		WITH_TRAVEL,
@@ -73,6 +80,14 @@ public class Tote implements TrackableObject {
 
 	public RenderableObject getRenderable() {
 		return renderable;
+	}
+
+	public void openLids() {
+		applyLidBehaviour(LEFT_LID_OPEN_DEGREES, RIGHT_LID_OPEN_DEGREES);
+	}
+
+	public void closeLids() {
+		applyLidBehaviour(LID_CLOSED_DEGREES, LID_CLOSED_DEGREES);
 	}
 
 	@Override
@@ -373,5 +388,20 @@ public class Tote implements TrackableObject {
 				0f,
 				(float) Math.cos(yawRadians)
 		);
+	}
+
+	private void applyLidBehaviour(float leftTargetDegrees, float rightTargetDegrees) {
+		for (RenderableObject child : renderable.children) {
+			if (child.id.endsWith(LEFT_LID_SUFFIX)) {
+				setClampedLidRotation(child, leftTargetDegrees);
+			} else if (child.id.endsWith(RIGHT_LID_SUFFIX)) {
+				setClampedLidRotation(child, rightTargetDegrees);
+			}
+		}
+	}
+
+	private void setClampedLidRotation(RenderableObject lid, float targetDegrees) {
+		lid.behaviours.removeIf(ClampedRotationBehaviour.class::isInstance);
+		lid.addBehaviour(new ClampedRotationBehaviour(Axis.Z, targetDegrees, LID_SPEED_DEGREES_PER_SECOND));
 	}
 }

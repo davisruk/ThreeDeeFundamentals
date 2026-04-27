@@ -43,6 +43,7 @@ public final class TipperDemoFixtures {
                 toteRenderable,
                 new Vec3(0f, trackSection.getToteYOffset(), 0f),
                 toteRenderable.yawOffsetRadians);
+        tote.openLids();
         sim.addTrackableObject(tote);
 
         ToteLoadPlan toteLoadPlan = createDemoPlan(tote.getId());
