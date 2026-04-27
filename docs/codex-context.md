@@ -527,14 +527,33 @@
 - Session focus:
   - read `docs/tote-to-bag-requirements.txt` before starting tote-to-bag work so the current agreed direction, completed phases, and next slice are understood from the document rather than inferred from stale context
   - do not make code or document changes unless the user explicitly directs that work in the current session
+- Current tote-to-bag handoff:
+  - branch: `feature/tote-track-tipper-rig`
+  - recent commits:
+    - `be0c0b4 Scale tote bag rig and stabilize PCR handoff`
+    - `9e6fb5e Smooth bagger intake pack visuals`
+    - `a05264b Add fifteen PRL debug layout profile`
+    - `369ace0 Exercise multiple PRLs in debug manifest`
+    - `59b95cc Finish bagger intake pack travel`
+  - the integrated harness now uses `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
+  - the debug tote manifest currently uses 10 correlations, proving more than 3 PRLs are used in the 15-lane profile
+  - pack scale is now accepted as realistic for pharmaceutical packs; larger items are expected to go to a future manual station
+  - `gradle.properties` is the only known unrelated dirty file and should remain untouched
+- Next intended tote-to-bag slice:
+  - implement the planning/control prerequisite for a tote injector and multi-tote flow
+  - do not reinitialise the whole `ToteToBagFlowController` per tote
+  - add or adapt a batch/order-level plan so expected pack counts by bag correlation are independent of one tote manifest
+  - make PRL assignment persist across tote boundaries until a bag correlation is complete
+  - then add a tote injector that feeds the next tote only when the tipper is ready to accept one
+  - prove the injector with multiple totes in the 15-PRL harness, including at least one correlation whose packs span totes
 - For tote-to-bag cleanup/integration follow-up:
   - keep the current tipper-entry module mounted into the tote-to-bag harness; do not regress back to placeholder upstream machine boxes
   - treat the PDC/PRL/PCR transport cell as the stable core and the mounted tipper entry as the current canonical upstream module shape
   - keep the integrated harness on the real extended PDC under the sorter; do not reintroduce the placeholder sorter-underflow conveyor into the integrated path
   - do not implement multi-tote flow by reinitialising the whole `ToteToBagFlowController` per tote:
     PRL/bag assignments can span totes, so grouping must become batch/order-driven instead
-  - likely sequence for real-scale proving:
-    first reduce pack/bag sizes and adjust receiver bag placement, then add a 15-PRL layout profile, then introduce cross-tote batch planning and a tote injector
+  - real-scale proving state:
+    pack/bag scale, 15-PRL layout, and using more than 3 PRLs have now been done for the current harness; cross-tote planning and the injector remain
   - the next cleanup slices should likely be:
     - replace the remaining mount magic numbers in `ToteToBagDebugRig` with named layout values/spec entries
     - continue splitting `TipperEntryModule` further now that `TipperModule` and `SortingModule` exist, so assembly, visual sync, and helper geometry/path math are not all in one class

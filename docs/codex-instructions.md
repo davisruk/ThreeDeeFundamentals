@@ -76,4 +76,45 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
 - for bagging-machine follow-up, keep the PCR/PRL side coupled only to `PackGroupReceiver`; do not reintroduce direct `BaggingMachine` dependencies into the flow controller
 - keep downstream receiver fullness and move-on policy outside `BaggingMachine`; the bagger should only react to whether its `BagReceiver` can reserve/receive a bag
 - the current debug receiver auto-empty policy is proving equipment, not production tote move-on logic
-- likely next bagging-machine work is visual/receiver refinement: better bag mesh, production-shaped external tote/bin receiver, and later a real tote move-on controller
+- the integrated tote-to-bag harness now uses a 15-PRL debug profile via `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
+- the demo manifest currently uses 10 bag correlations (`bag-a` through `bag-j`) and therefore proves that the current planner/controller can use more than 3 PRLs without hard-coded lane assumptions
+- pharmaceutical pack dimensions are now treated as realistic enough for this automated path:
+  - small: about 7.0 x 4.5 x 3.5 cm
+  - medium: about 8.0 x 5.0 x 4.0 cm
+  - long: about 9.0 x 5.5 x 4.0 cm
+- larger packs are expected to be routed to a future manual station and should not complicate the current automated PRL/bagger path
+- the bagger intake visuals have been corrected so each pack uses a pack-size-aware terminal intake distance and the final pack no longer remains partly outside the intake mouth
+
+Recent commits on `feature/tote-track-tipper-rig`:
+
+- `be0c0b4 Scale tote bag rig and stabilize PCR handoff`
+- `9e6fb5e Smooth bagger intake pack visuals`
+- `a05264b Add fifteen PRL debug layout profile`
+- `369ace0 Exercise multiple PRLs in debug manifest`
+- `59b95cc Finish bagger intake pack travel`
+
+Known local state at handoff:
+
+- `gradle.properties` is dirty and unrelated; leave it untouched unless the user explicitly asks otherwise.
+- The focused test set used recently was:
+  `.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagAssignmentPlannerTest --tests online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutTest --tests online.davisfamily.warehouse.sim.totebag.PcrConveyorTest --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.totebag.BaggingMachineTest --tests online.davisfamily.warehouse.testing.DebugBagReceiverAutoEmptyControllerTest`
+  It passed after the latest committed change.
+
+## Next Slice
+
+The next intended slice is the tote injector / multi-tote feed, but do not start by simply creating multiple independent `ToteToBagFlowController` instances or reinitialising the existing controller per tote.
+
+The important architectural point is that PRL/bag assignments can span tote boundaries:
+
+- packs for `bag-a` may appear in tote A and tote B
+- the PRL assigned to `bag-a` must remain assigned until the expected pack count for that bag is complete
+- tote boundaries must not clear or recreate PRL assignment state
+- once a PRL releases a completed group, it can be reassigned to another incomplete bag correlation
+
+Recommended implementation sequence for the next session:
+
+1. Analyse the current fixed-`ToteLoadPlan` assumptions in `ToteToBagFlowController`, `ToteToBagAssignmentPlanner`, `TippingMachine`, `ToteTrackTipperFlowController`, and `IntegratedToteToBagDebugInstaller`.
+2. Introduce a minimal batch/order planning seam that can describe expected pack counts by correlation independently of any single tote manifest.
+3. Adapt PRL assignment so it is driven by that batch/order plan, while incoming packs can still arrive from the existing single-tote path initially.
+4. Only after assignment persistence is clear, add a tote injector that feeds multiple totes when the tipper reports it can accept one.
+5. Use the 15-PRL profile and multi-tote manifests to prove at least one bag correlation spans totes.
