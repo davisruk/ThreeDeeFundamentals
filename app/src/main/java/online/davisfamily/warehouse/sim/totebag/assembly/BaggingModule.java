@@ -121,6 +121,14 @@ public class BaggingModule {
         return intakePathGeometry.pcrToIntakeBlendLength() + INTAKE_ONE_LENGTH + INTAKE_TRANSFER_GAP_X + INTAKE_TWO_LENGTH;
     }
 
+    public float intakeTravelDistanceFor(PackDimensions dimensions) {
+        if (dimensions == null) {
+            throw new IllegalArgumentException("dimensions must not be null");
+        }
+        float intakeStartToHoldCenterDistance = intakeTravelDistance() + BODY_FACE_OFFSET_X;
+        return intakeStartToHoldCenterDistance + (dimensions.length() * 0.5f);
+    }
+
     public IntakePackPose resolveIntakePackPose(float frontDistanceFromIntakeStart, PackDimensions dimensions) {
         if (dimensions == null) {
             throw new IllegalArgumentException("dimensions must not be null");

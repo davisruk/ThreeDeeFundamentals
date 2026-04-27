@@ -464,7 +464,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
                     Math.max(0d, dtSeconds),
                     Double::sum);
             float packFrontDistance = (float) Math.min(
-                    baggingModule.intakeTravelDistance(),
+                    baggingModule.intakeTravelDistanceFor(pack.getDimensions()),
                     pcrConveyor.getSpeedMetersPerSecond() * elapsedSeconds);
             BaggingModule.IntakePackPose pose = baggingModule.resolveIntakePackPose(packFrontDistance, pack.getDimensions());
             positionPack(
