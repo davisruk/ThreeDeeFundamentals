@@ -98,6 +98,10 @@ public class PdcConveyor {
         return lane.getUsableLength();
     }
 
+    public float getSpeedMetersPerSecond() {
+        return lane.getSpeedMetersPerSecond();
+    }
+
     private void setLanePackState(Pack.PackMotionState state) {
         for (Pack pack : lane.getPacks()) {
             pack.setState(state);

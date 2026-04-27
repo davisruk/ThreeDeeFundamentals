@@ -69,6 +69,7 @@ public class ToteToBagSubsystemBuilder {
                     spec.prlLength(),
                     spec.singlePackConveyorWidth(),
                     (float) (Math.PI / 2.0),
+                    prl.getSpeedMetersPerSecond(),
                     prlRuntimeState);
             prlRenderablesById.put(prlId, prlRenderable);
 
@@ -97,6 +98,7 @@ public class ToteToBagSubsystemBuilder {
                 spec.pdcLength(),
                 spec.singlePackConveyorWidth(),
                 0f,
+                pdcConveyor.getSpeedMetersPerSecond(),
                 pdcRuntimeState);
         RenderableObject pcrRenderable = createConveyor(
                 tr,
@@ -108,6 +110,7 @@ public class ToteToBagSubsystemBuilder {
                 spec.pcrLength(),
                 spec.singlePackConveyorWidth(),
                 0f,
+                pcrConveyor.getSpeedMetersPerSecond(),
                 pcrRuntimeState);
 
         return new ToteToBagSubsystem(
@@ -135,6 +138,7 @@ public class ToteToBagSubsystemBuilder {
             float length,
             float width,
             float yawRadians,
+            float beltSpeedMetersPerSecond,
             ConveyorRuntimeState runtimeState) {
         RenderableObject conveyor = StraightConveyorFactory.create(
                 id,
@@ -147,7 +151,7 @@ public class ToteToBagSubsystemBuilder {
                         0.10f,
                         0.08f,
                         0.004f,
-                        ConveyorVisualSpeed.fixed(0.8d)),
+                        ConveyorVisualSpeed.matchTransport(beltSpeedMetersPerSecond)),
                 runtimeState,
                 conveyorAppearance);
         conveyor.transformation.xTranslation = x;

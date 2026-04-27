@@ -22,6 +22,9 @@ public final class TipperDemoFixtures {
     private static final float CONTAINED_PACK_GAP_X = 0.012f;
     private static final float CONTAINED_PACK_GAP_Z = 0.012f;
     private static final float CONTAINED_PACK_GAP_Y = 0.010f;
+    private static final PackDimensions SMALL_PACK = new PackDimensions(0.070f, 0.045f, 0.035f);
+    private static final PackDimensions MEDIUM_PACK = new PackDimensions(0.080f, 0.050f, 0.040f);
+    private static final PackDimensions LONG_PACK = new PackDimensions(0.090f, 0.055f, 0.040f);
 
     private TipperDemoFixtures() {
     }
@@ -69,11 +72,26 @@ public final class TipperDemoFixtures {
         return new ToteLoadPlan(
                 toteId,
                 List.of(
-                        new PackPlan("pack-a1", "bag-a", new PackDimensions(0.18f, 0.12f, 0.10f)),
-                        new PackPlan("pack-b1", "bag-b", new PackDimensions(0.20f, 0.11f, 0.10f)),
-                        new PackPlan("pack-a2", "bag-a", new PackDimensions(0.16f, 0.10f, 0.08f)),
-                        new PackPlan("pack-c1", "bag-c", new PackDimensions(0.22f, 0.12f, 0.10f)),
-                        new PackPlan("pack-b2", "bag-b", new PackDimensions(0.19f, 0.11f, 0.09f))));
+                        new PackPlan("pack-a1", "bag-a", SMALL_PACK),
+                        new PackPlan("pack-b1", "bag-b", MEDIUM_PACK),
+                        new PackPlan("pack-c1", "bag-c", LONG_PACK),
+                        new PackPlan("pack-a2", "bag-a", SMALL_PACK),
+                        new PackPlan("pack-b2", "bag-b", MEDIUM_PACK),
+                        new PackPlan("pack-c2", "bag-c", LONG_PACK),
+                        new PackPlan("pack-a3", "bag-a", MEDIUM_PACK),
+                        new PackPlan("pack-b3", "bag-b", SMALL_PACK),
+                        new PackPlan("pack-c3", "bag-c", MEDIUM_PACK),
+                        new PackPlan("pack-a4", "bag-a", SMALL_PACK),
+                        new PackPlan("pack-b4", "bag-b", LONG_PACK),
+                        new PackPlan("pack-c4", "bag-c", SMALL_PACK),
+                        new PackPlan("pack-a5", "bag-a", LONG_PACK),
+                        new PackPlan("pack-b5", "bag-b", MEDIUM_PACK),
+                        new PackPlan("pack-c5", "bag-c", SMALL_PACK),
+                        new PackPlan("pack-a6", "bag-a", SMALL_PACK),
+                        new PackPlan("pack-b6", "bag-b", SMALL_PACK),
+                        new PackPlan("pack-c6", "bag-c", MEDIUM_PACK),
+                        new PackPlan("pack-a7", "bag-a", MEDIUM_PACK),
+                        new PackPlan("pack-b7", "bag-b", SMALL_PACK)));
     }
 
     public record DemoTipperFeed(

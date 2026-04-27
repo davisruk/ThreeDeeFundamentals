@@ -16,6 +16,7 @@ import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 
 public class BaggingSectionInstaller {
     private static final double INTAKE_RECEIVING_DURATION_SECONDS = 0.55d;
+    private static final BagSpec STANDARD_DEBUG_BAG_SPEC = new BagSpec(0.090f, 0.160f, 0.060f);
 
     public BaggingInstallation install(
             TriangleRenderer tr,
@@ -54,7 +55,7 @@ public class BaggingSectionInstaller {
 
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
-                new BagSpec(0.34f, 0.28f, 0.22f),
+                STANDARD_DEBUG_BAG_SPEC,
                 INTAKE_RECEIVING_DURATION_SECONDS,
                 0.25d,
                 0.30d,

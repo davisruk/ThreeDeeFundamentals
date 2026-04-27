@@ -129,7 +129,7 @@ public class ToteToBagCoreLayout {
     }
 
     private Pack probePack() {
-        return new Pack("probe", "probe", new PackDimensions(0.18f, 0.1f, 0.1f));
+        return new Pack("probe", "probe", new PackDimensions(0.08f, 0.05f, 0.04f));
     }
 
     private float clamp(float value, float min, float max) {

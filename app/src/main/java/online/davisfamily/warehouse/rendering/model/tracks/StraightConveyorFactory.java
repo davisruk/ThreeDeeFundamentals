@@ -155,6 +155,7 @@ public final class StraightConveyorFactory {
                 appearance,
                 runtimeState,
                 spec.rollerRadius(),
+                spec.visualSpeed().resolveUnitsPerSecond(),
                 spec.width(),
                 startRollerX,
                 rollerCentreY));
@@ -166,6 +167,7 @@ public final class StraightConveyorFactory {
                 appearance,
                 runtimeState,
                 spec.rollerRadius(),
+                spec.visualSpeed().resolveUnitsPerSecond(),
                 spec.width(),
                 endRollerX,
                 rollerCentreY));
@@ -250,9 +252,13 @@ public final class StraightConveyorFactory {
             TrackAppearance appearance,
             ConveyorRuntimeState runtimeState,
             float rollerRadius,
+            double beltSpeedUnitsPerSecond,
             float rollerWidth,
             float x,
             float y) {
+        float angularSpeedZ = rollerRadius == 0f
+                ? 0f
+                : (float) (-beltSpeedUnitsPerSecond / rollerRadius);
         RenderableObject rollerRoot = RenderableObject.createWithBehaviours(
                 id,
                 tr,
@@ -260,7 +266,7 @@ public final class StraightConveyorFactory {
                 new ObjectTransformation(0f, 0f, 0f, x, y, 0f, new Mat4()),
                 triangleIndex -> 0,
                 false,
-                new ConveyorRollerSpinBehaviour(0f, 0f, -4f, runtimeState));
+                new ConveyorRollerSpinBehaviour(0f, 0f, angularSpeedZ, runtimeState));
 
         rollerRoot.addChild(RenderableObject.create(
                 id + "_body",

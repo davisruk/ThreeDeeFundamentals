@@ -65,6 +65,10 @@ public class PrlConveyor {
         return lane.isRunning();
     }
 
+    public float getSpeedMetersPerSecond() {
+        return lane.getSpeedMetersPerSecond();
+    }
+
     public void assign(PrlAssignmentPlan plan) {
         assignment.assign(plan.correlationId(), plan.expectedPackCount());
     }

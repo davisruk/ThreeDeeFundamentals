@@ -152,6 +152,12 @@ public class PcrConveyor implements SimObject {
         return List.of();
     }
 
+    public boolean isGroupFullyAccepted(ReleasedPackGroup group) {
+        return findTravellingGroup(group)
+                .map(activeGroup -> activeGroup.acceptedPackCount >= activeGroup.group.packs().size())
+                .orElse(false);
+    }
+
     public Optional<ReleasedPackGroup> peekGroupAtOutfeed() {
         Pack leadingPack = lane.peekLeadingPackAtOutfeed().orElse(null);
         if (leadingPack == null) {
@@ -169,10 +175,17 @@ public class PcrConveyor implements SimObject {
         ActiveGroup activeGroup = findTravellingGroupForPack(leadingPack)
                 .orElseThrow(() -> new IllegalStateException("No active PCR group for pack " + leadingPack.getId()));
         activeGroup.transferredPackCount++;
-        if (activeGroup.transferredPackCount >= activeGroup.group.packs().size()) {
+        if (activeGroup.acceptedPackCount >= activeGroup.group.packs().size()
+                && activeGroup.transferredPackCount >= activeGroup.group.packs().size()) {
             travellingGroups.remove(activeGroup);
         }
         return Optional.of(leadingPack);
+    }
+
+    private Optional<ActiveGroup> findTravellingGroup(ReleasedPackGroup group) {
+        return travellingGroups.stream()
+                .filter(activeGroup -> activeGroup.group.equals(group))
+                .findFirst();
     }
 
     private java.util.Optional<ActiveGroup> findTravellingGroupForPack(Pack pack) {

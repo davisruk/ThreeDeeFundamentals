@@ -30,7 +30,7 @@ import online.davisfamily.warehouse.sim.totebag.handoff.ToteBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 
 public class IntegratedToteToBagDebugInstaller {
-    private static final int DEBUG_TOTE_BAG_CAPACITY = 2;
+    private static final int DEBUG_TOTE_BAG_CAPACITY = 10;
 
     public IntegratedToteToBagDebugInstallation install(
             TriangleRenderer tr,

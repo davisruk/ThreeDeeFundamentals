@@ -435,6 +435,9 @@ public class ToteToBagFlowController implements SimulationController {
         if (groupAtOutfeed == null) {
             return;
         }
+        if (!pcrConveyor.isGroupFullyAccepted(groupAtOutfeed)) {
+            return;
+        }
         if (downstreamPackGroupReceiver.hasReservationFor(groupAtOutfeed)) {
             downstreamPackGroupReceiver.beginReceiving(baggingReservation);
             baggingReservation = null;
