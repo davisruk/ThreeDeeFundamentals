@@ -1,9 +1,11 @@
 package online.davisfamily.warehouse.testing;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.matrices.Mat4;
@@ -435,11 +437,19 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
             return;
         }
 
-        List<Pack> packs = baggingMachine.getCurrentGroup().packs();
-        float receivingProgress = baggingMachine.getState() == BaggingMachineState.RECEIVING
-                ? normalizedProgress(baggingMachine.getTimeInStateSeconds(), baggingMachine.getReceivingDurationSeconds())
-                : 1f;
-        float leadFrontDistance = baggingModule.intakeTravelDistance() * receivingProgress;
+        Set<Pack> packsStillOnPcr = packsStillOnPcr();
+        List<Pack> packs = baggingMachine.getCurrentGroup().packs().stream()
+                .filter(pack -> !packsStillOnPcr.contains(pack))
+                .toList();
+        if (packs.isEmpty()) {
+            return;
+        }
+
+        float leadFrontDistance = baggingMachine.getState() == BaggingMachineState.RECEIVING
+                ? (float) Math.min(
+                        baggingModule.intakeTravelDistance(),
+                        pcrConveyor.getSpeedMetersPerSecond() * baggingMachine.getTimeInStateSeconds())
+                : baggingModule.intakeTravelDistance();
 
         float trailingDistance = 0f;
         for (Pack pack : packs) {
@@ -457,15 +467,16 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         }
     }
 
-    private float frontSpacingFor(Pack pack) {
-        return pack.getDimensions().length() + 0.04f;
+    private Set<Pack> packsStillOnPcr() {
+        Set<Pack> packs = new HashSet<>();
+        for (var entry : pcrConveyor.getLaneEntries()) {
+            packs.add(entry.pack());
+        }
+        return packs;
     }
 
-    private float normalizedProgress(double elapsedSeconds, double durationSeconds) {
-        if (durationSeconds <= 0d) {
-            return 1f;
-        }
-        return (float) Math.max(0d, Math.min(1d, elapsedSeconds / durationSeconds));
+    private float frontSpacingFor(Pack pack) {
+        return pack.getDimensions().length() + pcrConveyor.getMinimumGap();
     }
 
     private RenderableObject createBagReceiverRenderable() {

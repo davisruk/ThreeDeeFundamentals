@@ -15,6 +15,8 @@ import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 
 public class BaggingSectionInstaller {
+    private static final double INTAKE_RECEIVING_DURATION_SECONDS = 0.55d;
+
     public BaggingInstallation install(
             TriangleRenderer tr,
             SimulationWorld sim,
@@ -35,7 +37,7 @@ public class BaggingSectionInstaller {
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
                 new BagSpec(0.34f, 0.28f, 0.22f),
-                0.35d,
+                INTAKE_RECEIVING_DURATION_SECONDS,
                 0.25d,
                 0.30d,
                 0.25d,

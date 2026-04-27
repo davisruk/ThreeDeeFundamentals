@@ -128,6 +128,14 @@ public class PcrConveyor implements SimObject {
         return lane.isRunning();
     }
 
+    public float getMinimumGap() {
+        return occupancyModel.getMinimumGap();
+    }
+
+    public float getSpeedMetersPerSecond() {
+        return lane.getSpeedMetersPerSecond();
+    }
+
     public List<LinearLaneEntrySnapshot> getLaneEntries() {
         return lane.getEntrySnapshots();
     }
