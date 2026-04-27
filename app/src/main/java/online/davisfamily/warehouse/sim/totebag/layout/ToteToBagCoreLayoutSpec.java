@@ -99,7 +99,48 @@ public record ToteToBagCoreLayoutSpec(
     }
 
     public static ToteToBagCoreLayoutSpec integratedDebugDefaults() {
-        ToteToBagCoreLayoutSpec defaults = debugDefaults();
+        return withIntegratedPdcExtension(debugDefaults());
+    }
+
+    public static ToteToBagCoreLayoutSpec fifteenPrlIntegratedDebugDefaults() {
+        return withIntegratedPdcExtension(new ToteToBagCoreLayoutSpec(
+                0.0f,
+                0.0f,
+                0.02f,
+                0.2f,
+                0.16f,
+                0.18f,
+                6.2f,
+                6.2f,
+                2.4f,
+                15,
+                -2.8f,
+                0.40f,
+                1.55f,
+                1.55f,
+                1.80f,
+                0.10f,
+                0.08f,
+                0.015f,
+                0.15f,
+                0.015f,
+                2.6f,
+                1.8f,
+                new MachineAttachmentSpec(ToteToBagAttachmentPoint.UPSTREAM_MODULE_ROOT, -1.62f, 1.45f, 0.99f, 0f),
+                new MachineAttachmentSpec(ToteToBagAttachmentPoint.PCR_OUTFEED, 0.8f, 0.26f, 0f, 0f),
+                -1.2f,
+                0.48f,
+                0.10f,
+                0.4f,
+                0.16f,
+                0.42f,
+                0.95d,
+                0d,
+                0.08d,
+                0.08d));
+    }
+
+    private static ToteToBagCoreLayoutSpec withIntegratedPdcExtension(ToteToBagCoreLayoutSpec defaults) {
         return new ToteToBagCoreLayoutSpec(
                 defaults.pdcCenterX() - (defaults.upstreamPdcExtensionLength() * 0.5f),
                 defaults.pcrCenterX(),

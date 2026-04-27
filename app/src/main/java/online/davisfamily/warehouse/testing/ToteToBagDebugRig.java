@@ -98,7 +98,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
                 new OneColourStrategyImpl(0xFFB8B8B8),
                 new OneColourStrategyImpl(0xFF596A54),
                 new OneColourStrategyImpl(0xFF596A54));
-        layoutSpec = ToteToBagCoreLayoutSpec.integratedDebugDefaults();
+        layoutSpec = ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults();
         IntegratedToteToBagDebugInstallation installation = new IntegratedToteToBagDebugInstaller().install(
                 tr,
                 sim,

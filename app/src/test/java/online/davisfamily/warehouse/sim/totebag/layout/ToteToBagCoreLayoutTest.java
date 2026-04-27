@@ -17,7 +17,7 @@ class ToteToBagCoreLayoutTest {
 
         ToteToBagAttachmentPose pose = layout.resolveAttachmentPose(spec.baggerMount());
 
-        assertEquals(4.0f, pose.x(), 0.0001f);
+        assertEquals(layout.pcrEndX() + spec.baggerMount().offsetX(), pose.x(), 0.0001f);
         assertEquals(0.28f, pose.y(), 0.0001f);
         assertEquals(layout.pcrZ(), pose.z(), 0.0001f);
     }
@@ -31,5 +31,24 @@ class ToteToBagCoreLayoutTest {
         float prl3Distance = layout.pdcDiversionFrontDistanceFor(2, probe);
 
         assertTrue(prl3Distance > prl1Distance);
+    }
+
+    @Test
+    void shouldProvideFifteenPrlIntegratedDebugProfile() {
+        ToteToBagCoreLayoutSpec spec = ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults();
+        ToteToBagCoreLayout layout = new ToteToBagCoreLayout(spec);
+        Pack probe = new Pack("probe", "probe", new PackDimensions(0.08f, 0.05f, 0.04f));
+
+        assertEquals(15, spec.prlCount());
+        assertTrue(layout.prlCenterX(0) > layout.pcrStartX());
+        assertTrue(layout.prlCenterX(14) < layout.pcrEndX());
+
+        float firstBumperDistance = layout.pdcDiversionFrontDistanceFor(0, probe);
+        float lastBumperDistance = layout.pdcDiversionFrontDistanceFor(14, probe);
+        float firstPcrJoinDistance = layout.prlToPcrEntryFrontDistanceFor(0, probe);
+        float lastPcrJoinDistance = layout.prlToPcrEntryFrontDistanceFor(14, probe);
+
+        assertTrue(lastBumperDistance > firstBumperDistance);
+        assertTrue(lastPcrJoinDistance > firstPcrJoinDistance);
     }
 }
