@@ -7,16 +7,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import online.davisfamily.threedee.behaviour.routing.RouteFollower;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
-import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
+import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
-import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.ConveyorRuntimeState;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingModule;
@@ -32,6 +35,7 @@ import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDeviceState;
 import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.ToteBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachineState;
 import online.davisfamily.warehouse.sim.totebag.machine.CompletedBag;
@@ -41,13 +45,12 @@ import online.davisfamily.warehouse.sim.totebag.transfer.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.transfer.PrlToPcrTransfer;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
+import online.davisfamily.warehouse.sim.tote.Tote;
 
 public class ToteToBagDebugRig implements DebugSceneRuntime {
     private static final float BUMPER_REST_Z = 0.27f;
     private static final float BUMPER_ACTIVE_Z = 0.18f;
     private static final float BAG_RECEIVER_LENGTH = 0.60f;
-    private static final float BAG_RECEIVER_HEIGHT = 0.31f;
-    private static final float BAG_RECEIVER_WIDTH = 0.40f;
     private static final float BAG_RECEIVER_GAP_X = 0.12f;
     private static final double BAG_RECEIVER_AUTO_EMPTY_SECONDS = 3.0d;
 
@@ -259,13 +262,20 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
     private void registerBagReceiverInspection() {
         inspectionRegistry.register(bagReceiverRenderable, () -> List.of(
-                "Type: Bag receiver",
+                "Type: Tote bag receiver",
+                "Tote id: " + toteReceiverId(),
                 "Received bags: " + bagReceiver.getReceivedBags().size(),
                 "Capacity: " + bagReceiver.getCapacity(),
                 String.format("Full timer: %.1f / %.1f",
                         bagReceiverAutoEmptyController.getFullElapsedSeconds(),
                         bagReceiverAutoEmptyController.getFullDurationSeconds()),
                 "Correlations: " + bagReceiver.getCompletedCorrelationIds()));
+    }
+
+    private String toteReceiverId() {
+        return bagReceiver instanceof ToteBagReceiver toteBagReceiver
+                ? toteBagReceiver.getToteId()
+                : bagReceiver.getId();
     }
 
     private RenderableObject ensureBagRenderableExists(String correlationId, BagSpec bagSpec, int packCount) {
@@ -481,23 +491,33 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
     private RenderableObject createBagReceiverRenderable() {
         var outfeed = baggingModule.bagOutfeedWorldPoint();
-        RenderableObject renderable = RenderableObject.create(
-                "bag_receiver_debug_tote",
+        RenderableObject renderable = RenderableToteFactory.createRenderableTote(
+                "debug_output_tote_receiver",
                 tr,
-                createReceiverToteMesh(),
-                new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
-                new OneColourStrategyImpl(0xFF2D5E8C),
+                new ToteGeometry(),
                 true);
         renderable.transformation.xTranslation = outfeed.x + BAG_RECEIVER_GAP_X + (BAG_RECEIVER_LENGTH * 0.5f);
         renderable.transformation.yTranslation = outfeed.y - 0.04f;
         renderable.transformation.zTranslation = outfeed.z;
         renderable.transformation.angleY = baggerRenderable.transformation.angleY;
+        openReceiverToteLids(renderable);
         return renderable;
     }
 
-    private Mesh createReceiverToteMesh() {
-        ToteGeometry geometry = new ToteGeometry();
-        return new Mesh(geometry.v4Vertices, geometry.triangles);
+    private void openReceiverToteLids(RenderableObject renderable) {
+        Tote tote = new Tote(
+                renderable.id,
+                new RouteFollower(renderable.id, staticReceiverRoute(), 0f, 0d),
+                renderable,
+                new Vec3(),
+                renderable.yawOffsetRadians);
+        tote.openLids();
+    }
+
+    private RouteSegment staticReceiverRoute() {
+        return new RouteSegment(
+                "debug_output_tote_receiver_route",
+                new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(1f, 0f, 0f), false));
     }
 
 }

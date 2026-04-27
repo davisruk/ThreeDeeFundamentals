@@ -24,16 +24,34 @@ public class BaggingSectionInstaller {
             SelectionInspectionRegistry inspectionRegistry,
             ToteToBagCoreLayout layout,
             TrackAppearance conveyorAppearance) {
+        return install(
+                tr,
+                sim,
+                objects,
+                inspectionRegistry,
+                layout,
+                conveyorAppearance,
+                new StoredBagReceiver("bagger_bag_receiver", 2));
+    }
+
+    public BaggingInstallation install(
+            TriangleRenderer tr,
+            SimulationWorld sim,
+            List<RenderableObject> objects,
+            SelectionInspectionRegistry inspectionRegistry,
+            ToteToBagCoreLayout layout,
+            TrackAppearance conveyorAppearance,
+            StoredBagReceiver bagReceiver) {
         if (tr == null
                 || sim == null
                 || objects == null
                 || inspectionRegistry == null
                 || layout == null
-                || conveyorAppearance == null) {
+                || conveyorAppearance == null
+                || bagReceiver == null) {
             throw new IllegalArgumentException("Bagging install inputs must not be null");
         }
 
-        StoredBagReceiver bagReceiver = new StoredBagReceiver("bagger_bag_receiver", 2);
         BaggingMachine baggingMachine = new BaggingMachine(
                 "bagger",
                 new BagSpec(0.34f, 0.28f, 0.22f),

@@ -12,6 +12,7 @@ import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
 import online.davisfamily.warehouse.sim.totebag.handoff.RecordingBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.handoff.ToteBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
@@ -81,6 +82,25 @@ class BagReceiverTest {
 
         assertFalse(receiver.isFull());
         assertTrue(receiver.canReserveIncomingBag(secondBag));
+    }
+
+    @Test
+    void shouldRepresentToteBackedBagReceiverWithCapacity() {
+        ToteBagReceiver receiver = new ToteBagReceiver("receiver", "tote-1", 1);
+        Bag bag = completedBag("bag-a");
+
+        BagReservation reservation = receiver.reserveIncomingBag(bag);
+        receiver.beginReceiving(reservation);
+        receiver.completeReceiving(reservation);
+
+        assertEquals("tote-1", receiver.getToteId());
+        assertEquals(java.util.List.of(bag), receiver.getReceivedBags());
+        assertTrue(receiver.isFull());
+    }
+
+    @Test
+    void shouldRejectToteReceiverWithoutToteId() {
+        assertThrows(IllegalArgumentException.class, () -> new ToteBagReceiver("receiver", "", 1));
     }
 
     private static Bag completedBag(String correlationId) {

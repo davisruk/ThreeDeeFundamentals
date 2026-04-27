@@ -26,9 +26,12 @@ import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
 import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
 import online.davisfamily.warehouse.sim.totebag.handoff.SorterOutfeedToPdcReceiveTarget;
+import online.davisfamily.warehouse.sim.totebag.handoff.ToteBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 
 public class IntegratedToteToBagDebugInstaller {
+    private static final int DEBUG_TOTE_BAG_CAPACITY = 2;
+
     public IntegratedToteToBagDebugInstallation install(
             TriangleRenderer tr,
             SimulationWorld sim,
@@ -72,13 +75,18 @@ public class IntegratedToteToBagDebugInstaller {
                 inspectionRegistry,
                 trackSection.getLayoutSpec(),
                 tipperInstallation.getTipperModule().sorterIntakeMountLocalPoint());
+        ToteBagReceiver toteBagReceiver = new ToteBagReceiver(
+                "debug_output_tote_receiver",
+                "debug_output_tote",
+                DEBUG_TOTE_BAG_CAPACITY);
         BaggingInstallation baggingInstallation = new BaggingSectionInstaller().install(
                 tr,
                 sim,
                 objects,
                 inspectionRegistry,
                 subsystem.getLayout(),
-                conveyorAppearance);
+                conveyorAppearance,
+                toteBagReceiver);
 
         TipperToSorterSection tipperToSorterSection = new TipperToSorterSectionInstaller().install(
                 tr,
