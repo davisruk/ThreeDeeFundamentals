@@ -150,12 +150,18 @@ Key explicit decisions made so far
 - Packs are real moving simulation objects, not queue-only placeholders
 - Packs will carry predetermined correlation metadata derived from tote contents
 - Each PRL serves exactly one bag at a time
+- A PRL / bag assignment can span multiple source totes:
+  packs from tote A and tote B may both be destined for the same PRL and eventual bag
+  tote boundaries must therefore not reset PRL assignment state
 - PDC to PRL diversion is initially instantaneous at the bumper point
 - PRL indexing is initially fixed-distance
 - Packs maintain a minimum gap on conveyors
 - Pack dimensions matter from the beginning because PCR fit / release logic depends on them
 - PCR should be architected now as a shared, capacity-aware downstream conveyor
 - Conveyor occupancy should be modelled as 1D length along the conveyor
+- The tipper should not own tote-injection policy:
+  an upstream tote injector should observe tipper readiness and feed totes when the tipper can accept them
+- The tipper should gate local tipping/discharge on downstream readiness rather than on knowledge of the full tote-to-bag plan
 
 Implemented so far
 
@@ -392,6 +398,64 @@ Latest rendering / alignment fixes
   y alignment now depends on the route-backed tipper-side tracks and straight conveyor assemblies sharing the same effective mounted world height
 
 What remains
+
+Real-scale and multi-tote proving
+- The current debug harness uses small counts and deliberately oversized packs/bags for readability.
+- Before merging this branch back, the harness should also prove a more realistic configuration:
+  - around 15 PRLs
+  - much smaller packs relative to the tote, so roughly 20 packs can visually fit in a tote
+  - smaller completed bags relative to the tote, so roughly 8-10 bags can visually fit in the receiver tote
+  - narrower PDC/PRL/PCR conveyors to match the reduced pack size
+  - tighter PRL spacing and adjusted PDC/PCR lengths so 15 PRLs are visible and usable
+- This is partly constant/layout tuning:
+  - `ToteToBagCoreLayoutSpec.prlCount`
+  - PRL spacing / first centre / PDC and PCR lengths
+  - conveyor widths
+  - demo `PackDimensions`
+  - bag `BagSpec`
+  - transfer durations derived from the new spacing
+- Adjusting the number of PRLs should be a minimal layout-level change, not a broad code change.
+- PRL count and PRL gaps should be driven by layout/spec values.
+- PDC bumper positions should derive from the PRL centre positions rather than being independently tuned.
+- PRL-to-PCR join positions and transfer distances should also derive from the same layout model.
+- Changing conveyor width is allowed to require more care because it follows from the established pack scale and is expected to be much less frequent.
+- However, multi-tote operation is not only a tuning change.
+- The current flow still assumes one `ToteLoadPlan` and one initial PRL assignment wave.
+- That model is insufficient because packs for one PRL / bag can span multiple totes.
+
+Cross-tote assignment direction
+- Introduce a broader batch/order plan separate from individual tote manifests.
+- The batch/order plan should define the expected total pack count per bag correlation.
+- Each tote manifest contributes some subset of packs to those correlations.
+- PRLs should be assigned to active bag correlations, not to a tote.
+- A PRL remains assigned across tote boundaries until the expected pack count for that bag is reached.
+- Once the PRL releases its completed group, it can be reassigned to another incomplete bag correlation.
+- Correlation ids should become globally unique or namespaced enough to avoid collisions when multiple totes are fed through the same run.
+
+Tote injector / tipper responsibility split
+- A tote injector should own upstream tote feeding.
+- The injector should observe whether the tipper can accept a tote.
+- The injector should not decide when the tote is tipped or how packs are discharged.
+- The tipper should own local capture, tip, discharge, and release behaviour.
+- The tipper should only start tipping when its downstream flow can accept discharged packs.
+- If the sorter/PDC/PRL side is blocked, the tipper should hold the tote rather than forcing packs downstream.
+- This should mirror the existing downstream-readiness/backpressure approach used elsewhere:
+  components expose readiness/reservation seams and upstream systems respond indirectly.
+
+Recommended real-scale sequence
+1. Reduce demo pack dimensions and completed bag dimensions to realistic relative scale.
+2. Adjust tote-contained pack layout and receiver-contained bag layout so the tote can visibly hold the intended counts.
+3. Create a 15-PRL layout profile:
+   - narrower conveyors
+   - tighter PRL spacing
+   - bumper positions derived from PRL centres
+   - adjusted PDC/PCR lengths
+   - retuned transfer durations
+4. Introduce batch/order planning for cross-tote bag correlations.
+5. Adapt PRL assignment so assignments persist across totes and reassign only after completed release.
+6. Add a tote injector that feeds multiple totes based on tipper readiness.
+7. Adapt tipper flow to operate on whichever tote is currently accepted rather than one fixed tote instance.
+8. Run sustained flow with multiple totes feeding shared PRL assignments and verify bagger/receiver backpressure still gates upstream release.
 
 Subsystem integration
 - the first real integration slice is now in place:

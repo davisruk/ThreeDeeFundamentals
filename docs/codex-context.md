@@ -318,6 +318,25 @@
   - receiver fullness should remain outside PRL/PCR and outside the bagger's ownership policy
   - the bagger may become unavailable because its downstream receiver is full, but PRL/PCR should observe only the generic receiver seam
   - the current debug receiver auto-empty is not production tote move-on behavior
+- Real-scale / multi-tote direction has been clarified:
+  - the current small harness uses oversized packs/bags and only a few PRLs for readability
+  - before merging the branch back, a realistic proving profile should test about 15 PRLs, smaller pack dimensions, smaller bags, narrower conveyors, tighter PRL spacing, and multiple source totes
+  - changing PRL count and PRL gaps should remain a minimal layout/spec change
+  - PDC bumper alignment, PRL-to-PCR join positions, and transfer distances should derive from PRL centre positions rather than from independent harness tuning
+  - changing conveyor width can require more care because it follows from pack scale, and pack scale is expected to stabilise once realistic dimensions are chosen
+  - packs destined for one PRL / bag can span multiple source totes
+  - PRL assignment must therefore be driven by bag/order correlations, not by tote boundaries
+  - tote manifests describe the packs inside each tote, but a broader batch/order plan should define the total expected pack counts per bag correlation
+  - PRLs should remain assigned to an active bag correlation across tote boundaries until the required pack count is complete
+  - once a PRL releases its completed group, it can be reassigned to another incomplete bag correlation
+  - correlation ids should be globally unique or namespaced so repeated tote manifests do not collide
+- Multi-tote responsibility split:
+  - a tote injector should feed totes only when the tipper reports it can accept one
+  - the tipper should own local capture, tip, discharge, and release behaviour
+  - the tipper should not own upstream injection policy or full tote-to-bag bag planning
+  - the tipper should not start tipping until its downstream path, initially sorter/PDC, is ready to accept discharged packs
+  - if downstream is blocked, the tipper should hold rather than force packs downstream
+  - this should use the same readiness/reservation/backpressure style as the rest of the tote-to-bag system
 
 - Active scene selection has been cleaned up:
   - `SoftwareRenderer` now accepts `--scene=...`
@@ -512,6 +531,10 @@
   - keep the current tipper-entry module mounted into the tote-to-bag harness; do not regress back to placeholder upstream machine boxes
   - treat the PDC/PRL/PCR transport cell as the stable core and the mounted tipper entry as the current canonical upstream module shape
   - keep the integrated harness on the real extended PDC under the sorter; do not reintroduce the placeholder sorter-underflow conveyor into the integrated path
+  - do not implement multi-tote flow by reinitialising the whole `ToteToBagFlowController` per tote:
+    PRL/bag assignments can span totes, so grouping must become batch/order-driven instead
+  - likely sequence for real-scale proving:
+    first reduce pack/bag sizes and adjust receiver bag placement, then add a 15-PRL layout profile, then introduce cross-tote batch planning and a tote injector
   - the next cleanup slices should likely be:
     - replace the remaining mount magic numbers in `ToteToBagDebugRig` with named layout values/spec entries
     - continue splitting `TipperEntryModule` further now that `TipperModule` and `SortingModule` exist, so assembly, visual sync, and helper geometry/path math are not all in one class
