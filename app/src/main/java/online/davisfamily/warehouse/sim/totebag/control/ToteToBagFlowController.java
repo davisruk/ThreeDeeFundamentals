@@ -530,15 +530,14 @@ public class ToteToBagFlowController implements SimulationController {
 
         Optional<PrlConveyor> readyPrl = prlsById.values().stream()
                 .filter(PrlConveyor::isReadyToRelease)
-                .min(Comparator.comparing(PrlConveyor::getId));
+                .sorted(Comparator.comparing(PrlConveyor::getId))
+                .filter(prl -> downstreamPackGroupReceiver.canReserveIncomingGroup(prl.peekReadyGroup()))
+                .findFirst();
         if (readyPrl.isEmpty()) {
             return;
         }
 
         ReleasedPackGroup candidate = readyPrl.get().peekReadyGroup();
-        if (!downstreamPackGroupReceiver.canReserveIncomingGroup(candidate)) {
-            return;
-        }
         baggingReservation = downstreamPackGroupReceiver.reserveIncomingGroup(candidate);
         ReleasedPackGroup releasedGroup = readyPrl.get().releaseGroup();
         pcrConveyor.startReceivingGroup(releasedGroup);

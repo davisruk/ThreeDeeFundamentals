@@ -481,6 +481,104 @@ class ToteToBagFlowControllerTest {
         assertTrue(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-a")));
     }
 
+    @Test
+    void shouldReleaseLaterReadyPrlWhenEarlierReadyPrlCannotReserveDownstream() {
+        PackDimensions packDimensions = new PackDimensions(0.20f, 0.10f, 0.08f);
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-1",
+                List.of(
+                        new PackPlan("pack-a1", "bag-a", packDimensions),
+                        new PackPlan("pack-b1", "bag-b", packDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan);
+
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.0f);
+        PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PrlConveyor prl2 = new PrlConveyor("prl-2", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PcrConveyor pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f), 0.15d);
+        PackGroupReceiver downstreamReceiver = new SelectivePackGroupReceiver(List.of("bag-b"));
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                toteLoadPlan,
+                batchPlan,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamReceiver,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl1, prl2),
+                List.of(
+                        new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-2", "prl-2", 0d, 0.05d, 0.05d)),
+                ignored -> 0.05d,
+                (ignored, pack) -> pack.getDimensions().length(),
+                ignored -> 0.80d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcrConveyor);
+        sim.addController(controller);
+
+        sim.update(0.05d);
+
+        prl1.acceptPack(new Pack("pack-a1", "bag-a", packDimensions));
+        prl2.acceptPack(new Pack("pack-b1", "bag-b", packDimensions));
+
+        sim.update(0.05d);
+
+        assertTrue(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-b")));
+        assertFalse(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-a")));
+        assertEquals(PrlState.READY_TO_RELEASE, prl1.getAssignment().getState());
+        assertEquals(PrlState.RELEASING, prl2.getAssignment().getState());
+    }
+
+    @Test
+    void shouldReleaseLowestIdReadyPrlWhenMultipleReadyPrlsCanReserve() {
+        PackDimensions packDimensions = new PackDimensions(0.20f, 0.10f, 0.08f);
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-1",
+                List.of(
+                        new PackPlan("pack-a1", "bag-a", packDimensions),
+                        new PackPlan("pack-b1", "bag-b", packDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan);
+
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.0f);
+        PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PrlConveyor prl2 = new PrlConveyor("prl-2", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PcrConveyor pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f), 0.15d);
+        PackGroupReceiver downstreamReceiver = new SelectivePackGroupReceiver(List.of("bag-a", "bag-b"));
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                toteLoadPlan,
+                batchPlan,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamReceiver,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl1, prl2),
+                List.of(
+                        new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-2", "prl-2", 0d, 0.05d, 0.05d)),
+                ignored -> 0.05d,
+                (ignored, pack) -> pack.getDimensions().length(),
+                ignored -> 0.80d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcrConveyor);
+        sim.addController(controller);
+
+        sim.update(0.05d);
+
+        prl1.acceptPack(new Pack("pack-a1", "bag-a", packDimensions));
+        prl2.acceptPack(new Pack("pack-b1", "bag-b", packDimensions));
+
+        sim.update(0.05d);
+
+        assertTrue(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-a")));
+        assertFalse(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-b")));
+        assertEquals(PrlState.RELEASING, prl1.getAssignment().getState());
+        assertEquals(PrlState.READY_TO_RELEASE, prl2.getAssignment().getState());
+    }
+
     private static class UnavailablePackGroupReceiver implements PackGroupReceiver {
         @Override
         public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
@@ -561,6 +659,45 @@ class ToteToBagFlowControllerTest {
                 reservedGroup = null;
                 reservation = null;
             }
+        }
+    }
+
+    private static final class SelectivePackGroupReceiver implements PackGroupReceiver {
+        private final List<String> allowedCorrelations;
+
+        private SelectivePackGroupReceiver(List<String> allowedCorrelations) {
+            this.allowedCorrelations = List.copyOf(allowedCorrelations);
+        }
+
+        @Override
+        public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
+            return allowedCorrelations.contains(group.correlationId());
+        }
+
+        @Override
+        public PackGroupReservation reserveIncomingGroup(ReleasedPackGroup group) {
+            if (!canReserveIncomingGroup(group)) {
+                throw new IllegalStateException("Receiver is unavailable for " + group.correlationId());
+            }
+            return new PackGroupReservation("selective-receiver", group.correlationId());
+        }
+
+        @Override
+        public boolean hasReservationFor(ReleasedPackGroup group) {
+            return allowedCorrelations.contains(group.correlationId());
+        }
+
+        @Override
+        public void beginReceiving(PackGroupReservation reservation) {
+        }
+
+        @Override
+        public boolean isReceivingGroup(ReleasedPackGroup group) {
+            return allowedCorrelations.contains(group.correlationId());
+        }
+
+        @Override
+        public void completeIncomingTransfer(ReleasedPackGroup group) {
         }
     }
 

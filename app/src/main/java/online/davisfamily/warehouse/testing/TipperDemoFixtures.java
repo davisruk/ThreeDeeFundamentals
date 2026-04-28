@@ -79,6 +79,7 @@ public final class TipperDemoFixtures {
                 List.of(
                         new PackPlan("pack-a1", "bag-a", SMALL_PACK),
                         new PackPlan("pack-b1", "bag-b", MEDIUM_PACK),
+                        new PackPlan("pack-b2", "bag-b", MEDIUM_PACK),
                         new PackPlan("pack-c1", "bag-c", LONG_PACK),
                         new PackPlan("pack-d1", "bag-d", SMALL_PACK),
                         new PackPlan("pack-e1", "bag-e", MEDIUM_PACK),
@@ -95,7 +96,6 @@ public final class TipperDemoFixtures {
                 false,
                 List.of(
                         new PackPlan("pack-a2", "bag-a", SMALL_PACK),
-                        new PackPlan("pack-b2", "bag-b", MEDIUM_PACK),
                         new PackPlan("pack-c2", "bag-c", LONG_PACK),
                         new PackPlan("pack-d2", "bag-d", MEDIUM_PACK),
                         new PackPlan("pack-e2", "bag-e", SMALL_PACK),
