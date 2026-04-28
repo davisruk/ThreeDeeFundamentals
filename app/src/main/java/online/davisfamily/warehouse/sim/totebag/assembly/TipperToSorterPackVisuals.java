@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiConsumer;
 
 import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.matrices.Mat4;
@@ -27,39 +26,45 @@ public class TipperToSorterPackVisuals {
     private final TriangleRenderer tr;
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
-    private final RenderableObject toteRenderable;
-    private final ToteLoadPlan toteLoadPlan;
-    private final Map<String, Vec3> containedPackLayoutById;
     private final float rigYaw;
     private final TipperToSorterDischargeSeam dischargeSeam;
     private final Map<String, RenderableObject> packRenderablesById = new LinkedHashMap<>();
+    private final Map<String, ToteSource> toteSourcesByToteId = new LinkedHashMap<>();
 
     public TipperToSorterPackVisuals(
             TriangleRenderer tr,
             List<RenderableObject> objects,
             SelectionInspectionRegistry inspectionRegistry,
-            RenderableObject toteRenderable,
+            TipperTotePayload totePayload,
             ToteLoadPlan toteLoadPlan,
-            Map<String, Vec3> containedPackLayoutById,
             float rigYaw,
             TipperToSorterDischargeSeam dischargeSeam) {
         if (tr == null
                 || objects == null
                 || inspectionRegistry == null
-                || toteRenderable == null
+                || totePayload == null
                 || toteLoadPlan == null
-                || containedPackLayoutById == null
                 || dischargeSeam == null) {
             throw new IllegalArgumentException("Pack visual inputs must not be null");
         }
         this.tr = tr;
         this.objects = objects;
         this.inspectionRegistry = inspectionRegistry;
-        this.toteRenderable = toteRenderable;
-        this.toteLoadPlan = toteLoadPlan;
-        this.containedPackLayoutById = containedPackLayoutById;
         this.rigYaw = rigYaw;
         this.dischargeSeam = dischargeSeam;
+        registerToteSource(totePayload, toteLoadPlan);
+    }
+
+    public void registerToteSource(TipperTotePayload totePayload, ToteLoadPlan toteLoadPlan) {
+        if (totePayload == null || toteLoadPlan == null) {
+            throw new IllegalArgumentException("Tote source inputs must not be null");
+        }
+        if (!totePayload.getTote().getId().equals(toteLoadPlan.getToteId())) {
+            throw new IllegalArgumentException("Tote payload must match tote load plan");
+        }
+        toteSourcesByToteId.putIfAbsent(
+                totePayload.getTote().getId(),
+                new ToteSource(totePayload, toteLoadPlan, totePayload.getContainedPackLayoutById()));
     }
 
     public void sync(
@@ -82,25 +87,27 @@ public class TipperToSorterPackVisuals {
     }
 
     private void ensurePackRenderablesExist() {
-        for (PackPlan plan : toteLoadPlan.getPackPlans()) {
-            packRenderablesById.computeIfAbsent(plan.packId(), ignored -> {
-                RenderableObject renderable = createPackRenderable(
-                        plan.packId(),
-                        plan.dimensions(),
-                        plan.correlationId());
-                toteRenderable.addChild(renderable);
-                inspectionRegistry.register(renderable, () -> List.of(
-                        "Type: Pack",
-                        "Id: " + plan.packId(),
-                        "Correlation: " + plan.correlationId()));
-                return renderable;
-            });
+        for (ToteSource toteSource : toteSourcesByToteId.values()) {
+            for (PackPlan plan : toteSource.toteLoadPlan().getPackPlans()) {
+                packRenderablesById.computeIfAbsent(plan.packId(), ignored -> {
+                    RenderableObject renderable = createPackRenderable(
+                            plan.packId(),
+                            plan.dimensions(),
+                            plan.correlationId());
+                    toteSource.toteRenderable().addChild(renderable);
+                    inspectionRegistry.register(renderable, () -> List.of(
+                            "Type: Pack",
+                            "Id: " + plan.packId(),
+                            "Correlation: " + plan.correlationId()));
+                    return renderable;
+                });
+            }
         }
     }
 
     private void hideDetachedPacks() {
         for (RenderableObject renderable : packRenderablesById.values()) {
-            if (toteRenderable.children.contains(renderable)) {
+            if (isAttachedToAnyTote(renderable)) {
                 continue;
             }
             renderable.transformation.xTranslation = -50f;
@@ -143,26 +150,28 @@ public class TipperToSorterPackVisuals {
     private void positionRemainingPacksInTote(
             ToteTrackTipperFlowController flowController,
             Set<String> placedPackIds) {
-        for (PackPlan plan : toteLoadPlan.getPackPlans()) {
-            if (isObserved(flowController, plan.packId())) {
-                continue;
+        for (ToteSource toteSource : toteSourcesByToteId.values()) {
+            for (PackPlan plan : toteSource.toteLoadPlan().getPackPlans()) {
+                if (isObserved(flowController, plan.packId())) {
+                    continue;
+                }
+                RenderableObject renderable = packRenderablesById.get(plan.packId());
+                if (renderable == null) {
+                    continue;
+                }
+                ensureAttachedToTote(toteSource.toteRenderable(), renderable);
+                Vec3 local = toteSource.containedPackLayoutById().get(plan.packId());
+                if (local == null) {
+                    continue;
+                }
+                renderable.transformation.xTranslation = local.x;
+                renderable.transformation.yTranslation = local.y;
+                renderable.transformation.zTranslation = local.z;
+                renderable.transformation.angleX = 0f;
+                renderable.transformation.angleY = 0f;
+                renderable.transformation.angleZ = 0f;
+                placedPackIds.add(plan.packId());
             }
-            RenderableObject renderable = packRenderablesById.get(plan.packId());
-            if (renderable == null) {
-                continue;
-            }
-            ensureAttachedToTote(renderable);
-            Vec3 local = containedPackLocalFor(plan.packId());
-            if (local == null) {
-                continue;
-            }
-            renderable.transformation.xTranslation = local.x;
-            renderable.transformation.yTranslation = local.y;
-            renderable.transformation.zTranslation = local.z;
-            renderable.transformation.angleX = 0f;
-            renderable.transformation.angleY = 0f;
-            renderable.transformation.angleZ = 0f;
-            placedPackIds.add(plan.packId());
         }
     }
 
@@ -176,10 +185,16 @@ public class TipperToSorterPackVisuals {
     }
 
     private Vec3 containedPackLocalFor(String packId) {
-        return containedPackLayoutById.get(packId);
+        for (ToteSource toteSource : toteSourcesByToteId.values()) {
+            Vec3 local = toteSource.containedPackLayoutById().get(packId);
+            if (local != null) {
+                return local;
+            }
+        }
+        return null;
     }
 
-    private void ensureAttachedToTote(RenderableObject renderable) {
+    private void ensureAttachedToTote(RenderableObject toteRenderable, RenderableObject renderable) {
         if (!toteRenderable.children.contains(renderable)) {
             objects.remove(renderable);
             toteRenderable.addChild(renderable);
@@ -187,7 +202,8 @@ public class TipperToSorterPackVisuals {
     }
 
     private void detachFromToteIfNeeded(Pack pack, RenderableObject renderable, TippingDischargeTransfer transfer) {
-        if (!toteRenderable.children.contains(renderable)) {
+        RenderableObject toteRenderable = toteRenderableFor(pack.getId());
+        if (toteRenderable == null || !toteRenderable.children.contains(renderable)) {
             pack.setContainmentState(PackContainmentState.FREE);
             return;
         }
@@ -210,6 +226,10 @@ public class TipperToSorterPackVisuals {
     }
 
     private Vec3 capturePackWorldPosition(RenderableObject packRenderable) {
+        RenderableObject toteRenderable = toteRenderableFor(packRenderable.id);
+        if (toteRenderable == null) {
+            return new Vec3();
+        }
         toteRenderable.transformation.setupModel();
         Vec3 out = new Vec3();
         toteRenderable.transformation.model.transformPoint(
@@ -241,5 +261,41 @@ public class TipperToSorterPackVisuals {
             case "bag-c" -> 0xFF7ABF66;
             default -> 0xFFBBBBBB;
         };
+    }
+
+    private boolean isAttachedToAnyTote(RenderableObject renderable) {
+        for (ToteSource toteSource : toteSourcesByToteId.values()) {
+            if (toteSource.toteRenderable().children.contains(renderable)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private RenderableObject toteRenderableFor(String packId) {
+        for (ToteSource toteSource : toteSourcesByToteId.values()) {
+            for (PackPlan plan : toteSource.toteLoadPlan().getPackPlans()) {
+                if (plan.packId().equals(packId)) {
+                    return toteSource.toteRenderable();
+                }
+            }
+        }
+        return null;
+    }
+
+    private record ToteSource(
+            TipperTotePayload totePayload,
+            ToteLoadPlan toteLoadPlan,
+            Map<String, Vec3> containedPackLayoutById) {
+
+        private ToteSource {
+            if (totePayload == null || toteLoadPlan == null || containedPackLayoutById == null) {
+                throw new IllegalArgumentException("Tote source inputs must not be null");
+            }
+        }
+
+        private RenderableObject toteRenderable() {
+            return totePayload.getToteRenderable();
+        }
     }
 }

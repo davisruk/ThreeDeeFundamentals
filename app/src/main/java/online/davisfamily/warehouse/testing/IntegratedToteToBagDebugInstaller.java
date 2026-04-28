@@ -60,7 +60,8 @@ public class IntegratedToteToBagDebugInstaller {
                 tr,
                 objects,
                 subsystem.getLayout().resolveTipperEntryLayoutSpec());
-        TipperDemoFixtures.DemoTipperFeed demoTipperFeed = TipperDemoFixtures.createDemoTipperFeed(tr, sim, trackSection);
+        TipperDemoFixtures.DemoTipperFeedSet demoTipperFeedSet = TipperDemoFixtures.createDemoTipperFeedSet(tr, sim, trackSection);
+        TipperDemoFixtures.DemoTipperFeed primaryFeed = demoTipperFeedSet.primaryFeed();
 
         TipperInstallation tipperInstallation = new TipperSectionInstaller().install(
                 tr,
@@ -68,8 +69,8 @@ public class IntegratedToteToBagDebugInstaller {
                 objects,
                 inspectionRegistry,
                 trackSection,
-                demoTipperFeed.totePayload(),
-                demoTipperFeed.toteLoadPlanProvider());
+                primaryFeed.totePayload(),
+                demoTipperFeedSet.toteLoadPlanProvider());
         SortingInstallation sortingInstallation = new SortingSectionInstaller().install(
                 tr,
                 sim,
@@ -102,10 +103,17 @@ public class IntegratedToteToBagDebugInstaller {
                         pdcConveyor,
                         subsystem.getLayout()));
 
-        ToteLoadPlan demoToteLoadPlan = tipperInstallation.getToteLoadPlanProvider().getLoadPlanFor(tipperInstallation.getTote().getId());
+        for (TipperDemoFixtures.DemoTipperFeed additionalFeed : demoTipperFeedSet.additionalFeeds()) {
+            tipperToSorterSection.registerToteSource(additionalFeed.totePayload(), additionalFeed.toteLoadPlan());
+        }
+
+        ToteLoadPlan demoToteLoadPlan = primaryFeed.toteLoadPlan();
         ToteToBagFlowController flowController = new ToteToBagFlowController(
                 demoToteLoadPlan,
-                ToteToBagBatchPlan.fromToteLoadPlan(demoToteLoadPlan),
+                ToteToBagBatchPlan.fromToteLoadPlans(
+                        demoTipperFeedSet.demoTipperFeeds().stream()
+                                .map(TipperDemoFixtures.DemoTipperFeed::toteLoadPlan)
+                                .toList()),
                 pdcConveyor,
                 pcrConveyor,
                 baggingInstallation.getBaggingMachine(),
@@ -118,6 +126,13 @@ public class IntegratedToteToBagDebugInstaller {
                 (prlId, pack) -> subsystem.getLayout().prlToPcrEntryFrontDistanceFor(indexOfPrl(prls, prlId), pack));
 
         sim.addSimObject(pcrConveyor);
+        sim.addController(new DebugToteInjectorController(
+                sim,
+                objects,
+                tipperToSorterSection.getFlowController(),
+                demoTipperFeedSet.additionalFeeds().stream()
+                        .map(TipperDemoFixtures.DemoTipperFeed::totePayload)
+                        .toList()));
         sim.addController(flowController);
 
         return new IntegratedToteToBagDebugInstallation(

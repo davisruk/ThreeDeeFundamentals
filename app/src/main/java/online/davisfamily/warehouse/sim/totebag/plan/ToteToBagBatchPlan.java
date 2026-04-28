@@ -37,6 +37,23 @@ public class ToteToBagBatchPlan {
         return new ToteToBagBatchPlan(expectedPackCountsByCorrelationId);
     }
 
+    public static ToteToBagBatchPlan fromToteLoadPlans(List<ToteLoadPlan> toteLoadPlans) {
+        if (toteLoadPlans == null || toteLoadPlans.isEmpty()) {
+            throw new IllegalArgumentException("toteLoadPlans must not be empty");
+        }
+        Map<String, Integer> expectedPackCountsByCorrelationId = new LinkedHashMap<>();
+        for (ToteLoadPlan toteLoadPlan : toteLoadPlans) {
+            if (toteLoadPlan == null) {
+                throw new IllegalArgumentException("toteLoadPlans must not contain null");
+            }
+            for (String correlationId : toteLoadPlan.orderedCorrelationIds()) {
+                int totePackCount = toteLoadPlan.packCountForCorrelationId(correlationId);
+                expectedPackCountsByCorrelationId.merge(correlationId, totePackCount, Integer::sum);
+            }
+        }
+        return new ToteToBagBatchPlan(expectedPackCountsByCorrelationId);
+    }
+
     public int expectedPackCountFor(String correlationId) {
         return expectedPackCountsByCorrelationId.getOrDefault(correlationId, 0);
     }

@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.totebag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -412,6 +413,74 @@ class ToteToBagFlowControllerTest {
         assertTrue(controller.getReleasedGroups().isEmpty());
     }
 
+    @Test
+    void shouldKeepPrlAssignedAcrossToteBoundaryUntilBatchCountIsMet() {
+        PackDimensions packDimensions = new PackDimensions(0.20f, 0.10f, 0.08f);
+        ToteLoadPlan toteAPlan = new ToteLoadPlan(
+                "tote-a",
+                List.of(new PackPlan("pack-a1", "bag-a", packDimensions)));
+        ToteLoadPlan toteBPlan = new ToteLoadPlan(
+                "tote-b",
+                List.of(new PackPlan("pack-a2", "bag-a", packDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlans(List.of(toteAPlan, toteBPlan));
+
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.05d, 0.05d, 0.05d);
+        SortingMachine sortingMachine = new SortingMachine("sorter", 0.05d);
+        ConveyorOccupancyModel prlOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f);
+        ConveyorOccupancyModel pcrOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f);
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.2f);
+        PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, prlOccupancy);
+        PcrConveyor pcrConveyor = new PcrConveyor("pcr", pcrOccupancy, 0.15d);
+        TogglePackGroupReceiver downstreamReceiver = new TogglePackGroupReceiver(false);
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                toteAPlan,
+                batchPlan,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamReceiver,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl1),
+                List.of(new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d)),
+                ignored -> 0.05d,
+                (ignored, pack) -> pack.getDimensions().length(),
+                ignored -> 0.80d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcrConveyor);
+        sim.addController(controller);
+
+        sim.update(0.05d);
+
+        Pack firstPack = new Pack("pack-a1", "bag-a", packDimensions);
+        prl1.acceptPack(firstPack);
+
+        for (int i = 0; i < 120; i++) {
+            sim.update(0.05d);
+        }
+
+        assertEquals("bag-a", prl1.getAssignment().getCorrelationId());
+        assertEquals(2, prl1.getAssignment().getExpectedPackCount());
+        assertEquals(1, prl1.getAssignment().getReceivedPackCount());
+        assertEquals(PrlState.ACCUMULATING, prl1.getAssignment().getState());
+        assertTrue(controller.getReleasedGroups().isEmpty());
+
+        Pack secondPack = new Pack("pack-a2", "bag-a", packDimensions);
+        prl1.acceptPack(secondPack);
+
+        controller.update(null, 0.05d);
+
+        assertEquals("bag-a", prl1.getAssignment().getCorrelationId());
+        assertEquals(2, prl1.getAssignment().getReceivedPackCount());
+        assertEquals(PrlState.READY_TO_RELEASE, prl1.getAssignment().getState());
+        assertTrue(controller.getReleasedGroups().isEmpty());
+
+        downstreamReceiver.setAvailable(true);
+        sim.update(0.05d);
+        assertTrue(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-a")));
+    }
+
     private static class UnavailablePackGroupReceiver implements PackGroupReceiver {
         @Override
         public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
@@ -441,6 +510,57 @@ class ToteToBagFlowControllerTest {
         @Override
         public void completeIncomingTransfer(ReleasedPackGroup group) {
             throw new IllegalStateException("Receiver is unavailable");
+        }
+    }
+
+    private static final class TogglePackGroupReceiver implements PackGroupReceiver {
+        private boolean available;
+        private PackGroupReservation reservation;
+        private ReleasedPackGroup reservedGroup;
+
+        private TogglePackGroupReceiver(boolean available) {
+            this.available = available;
+        }
+
+        private void setAvailable(boolean available) {
+            this.available = available;
+        }
+
+        @Override
+        public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
+            return available;
+        }
+
+        @Override
+        public PackGroupReservation reserveIncomingGroup(ReleasedPackGroup group) {
+            if (!available) {
+                throw new IllegalStateException("Receiver is unavailable");
+            }
+            reservedGroup = group;
+            reservation = new PackGroupReservation("toggle-receiver", group.correlationId());
+            return reservation;
+        }
+
+        @Override
+        public boolean hasReservationFor(ReleasedPackGroup group) {
+            return reservation != null && reservedGroup != null && reservedGroup.correlationId().equals(group.correlationId());
+        }
+
+        @Override
+        public void beginReceiving(PackGroupReservation reservation) {
+        }
+
+        @Override
+        public boolean isReceivingGroup(ReleasedPackGroup group) {
+            return this.reservation != null && reservedGroup != null && reservedGroup.correlationId().equals(group.correlationId());
+        }
+
+        @Override
+        public void completeIncomingTransfer(ReleasedPackGroup group) {
+            if (reservedGroup != null && reservedGroup.correlationId().equals(group.correlationId())) {
+                reservedGroup = null;
+                reservation = null;
+            }
         }
     }
 

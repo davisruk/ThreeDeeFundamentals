@@ -46,9 +46,8 @@ public class TipperToSorterSection implements PackHandoffPointProvider {
                 tr,
                 objects,
                 inspectionRegistry,
-                tipperInstallation.getTotePayload().getToteRenderable(),
+                tipperInstallation.getTotePayload(),
                 toteLoadPlan,
-                tipperInstallation.getTotePayload().getContainedPackLayoutById(),
                 tipperInstallation.getTrackSection().rigYaw(),
                 dischargeSeam);
     }
@@ -72,6 +71,10 @@ public class TipperToSorterSection implements PackHandoffPointProvider {
                 flowController,
                 tipperInstallation.getTipperModule(),
                 sortingInstallation.getSortingModule());
+    }
+
+    public void registerToteSource(TipperTotePayload totePayload, ToteLoadPlan toteLoadPlan) {
+        packVisuals.registerToteSource(totePayload, toteLoadPlan);
     }
 
     public RenderableObject getPackRenderable(String packId) {

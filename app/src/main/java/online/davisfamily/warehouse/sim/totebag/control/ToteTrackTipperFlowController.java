@@ -20,7 +20,6 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.transfer.TippingDischargeTransfer;
 
 public class ToteTrackTipperFlowController implements SimulationController {
-    private final Tote tote;
     private final ToteLoadPlanProvider toteLoadPlanProvider;
     private final RouteSegment tipperSegment;
     private final float tipperStopDistance;
@@ -31,6 +30,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
     private final List<TippingDischargeTransfer> activeDischarges = new ArrayList<>();
     private float visualTipProgress;
+    private Tote activeTote;
     private boolean toteCaptured;
     private boolean toteReleased;
     private ToteLoadPlan activeToteLoadPlan;
@@ -121,7 +121,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         if (dischargeDurationSeconds <= 0d) {
             throw new IllegalArgumentException("dischargeDurationSeconds must be > 0");
         }
-        this.tote = tote;
+        this.activeTote = tote;
         this.toteLoadPlanProvider = toteLoadPlanProvider;
         this.tipperSegment = tipperSegment;
         this.tipperStopDistance = tipperStopDistance;
@@ -151,22 +151,43 @@ public class ToteTrackTipperFlowController implements SimulationController {
     }
 
     public boolean isToteCaptured() {
-        return toteCaptured && !toteReleased;
+        return activeTote != null && toteCaptured && !toteReleased;
+    }
+
+    public boolean canAcceptNextTote() {
+        return activeTote == null
+                && tippingMachine.isIdle()
+                && activeDischarges.isEmpty()
+                && !downstreamFlow.keepsTipperOccupied();
+    }
+
+    public void acceptNextTote(Tote tote) {
+        if (tote == null) {
+            throw new IllegalArgumentException("tote must not be null");
+        }
+        if (!canAcceptNextTote()) {
+            throw new IllegalStateException("Tipper is not ready to accept another tote");
+        }
+        activeTote = tote;
+        toteCaptured = false;
+        toteReleased = false;
+        activeToteLoadPlan = null;
+        visualTipProgress = 0f;
     }
 
     private void captureToteIfReady() {
-        if (toteCaptured || tote.getLastSnapshot() == null || !tippingMachine.isIdle()) {
+        if (activeTote == null || toteCaptured || activeTote.getLastSnapshot() == null || !tippingMachine.isIdle()) {
             return;
         }
-        if (tote.getLastSnapshot().currentSegment() != tipperSegment) {
+        if (activeTote.getLastSnapshot().currentSegment() != tipperSegment) {
             return;
         }
-        if (tote.getLastSnapshot().distanceAlongSegment() < tipperStopDistance) {
+        if (activeTote.getLastSnapshot().distanceAlongSegment() < tipperStopDistance) {
             return;
         }
-        tote.getRouteFollower().setDistanceAlongSegment(tipperStopDistance);
-        tote.setInteractionMode(ToteMotionState.HELD);
-        tote.snapToRouteDistance(tipperStopDistance);
+        activeTote.getRouteFollower().setDistanceAlongSegment(tipperStopDistance);
+        activeTote.setInteractionMode(ToteMotionState.HELD);
+        activeTote.snapToRouteDistance(tipperStopDistance);
         activeToteLoadPlan = resolveLoadPlanForCapturedTote();
         tippingMachine.loadTote(activeToteLoadPlan);
         toteCaptured = true;
@@ -199,7 +220,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     }
 
     private void releaseToteIfReady() {
-        if (!toteCaptured || toteReleased) {
+        if (activeTote == null || !toteCaptured || toteReleased) {
             return;
         }
         boolean machinesClear = tippingMachine.isIdle()
@@ -208,16 +229,22 @@ public class ToteTrackTipperFlowController implements SimulationController {
         if (!machinesClear) {
             return;
         }
-        tote.clearVisualTiltAngleZ();
-        tote.clearVisualOffset();
-        tote.setInteractionMode(ToteMotionState.MOVING);
+        activeTote.clearVisualTiltAngleZ();
+        activeTote.clearVisualOffset();
+        activeTote.setInteractionMode(ToteMotionState.MOVING);
         toteReleased = true;
+        toteCaptured = false;
+        activeToteLoadPlan = null;
+        activeTote = null;
     }
 
     private void syncToteVisualTilt() {
+        Tote tote = activeTote;
         if (!isToteCaptured()) {
-            tote.clearVisualTiltAngleZ();
-            tote.clearVisualOffset();
+            if (tote != null) {
+                tote.clearVisualTiltAngleZ();
+                tote.clearVisualOffset();
+            }
             return;
         }
         float angle = currentTipAngle();
@@ -265,11 +292,14 @@ public class ToteTrackTipperFlowController implements SimulationController {
     }
 
     private ToteLoadPlan resolveLoadPlanForCapturedTote() {
-        ToteLoadPlan toteLoadPlan = toteLoadPlanProvider.getLoadPlanFor(tote.getId());
-        if (toteLoadPlan == null) {
-            throw new IllegalStateException("No tote load plan available for tote " + tote.getId());
+        if (activeTote == null) {
+            throw new IllegalStateException("No active tote is available");
         }
-        if (!tote.getId().equals(toteLoadPlan.getToteId())) {
+        ToteLoadPlan toteLoadPlan = toteLoadPlanProvider.getLoadPlanFor(activeTote.getId());
+        if (toteLoadPlan == null) {
+            throw new IllegalStateException("No tote load plan available for tote " + activeTote.getId());
+        }
+        if (!activeTote.getId().equals(toteLoadPlan.getToteId())) {
             throw new IllegalArgumentException("Tote load plan must match the tote id");
         }
         return toteLoadPlan;

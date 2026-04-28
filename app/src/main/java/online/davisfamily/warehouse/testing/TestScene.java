@@ -21,7 +21,7 @@ public class TestScene extends BaseScene{
 
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions, DebugSceneOptions options) {
-		super(pane, dimensions,	CameraPosition.aboveLeft());
+		super(pane, dimensions,	CameraPosition.backRight());
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
 		activeRuntime = installScene(options.activeScene());
 	}

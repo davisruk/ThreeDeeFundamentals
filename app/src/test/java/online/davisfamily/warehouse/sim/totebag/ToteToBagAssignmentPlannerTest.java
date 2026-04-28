@@ -68,4 +68,33 @@ class ToteToBagAssignmentPlannerTest {
         assertEquals("bag-b", plans.getLast().correlationId());
         assertEquals(1, plans.getLast().expectedPackCount());
     }
+
+    @Test
+    void shouldAggregateExpectedCountsAcrossMultipleTotePlans() {
+        PackDimensions dimensions = new PackDimensions(0.08f, 0.05f, 0.04f);
+        ToteLoadPlan toteA = new ToteLoadPlan(
+                "tote-a",
+                List.of(
+                        new PackPlan("pack-a1", "bag-a", dimensions),
+                        new PackPlan("pack-b1", "bag-b", dimensions)));
+        ToteLoadPlan toteB = new ToteLoadPlan(
+                "tote-b",
+                List.of(
+                        new PackPlan("pack-a2", "bag-a", dimensions),
+                        new PackPlan("pack-c1", "bag-c", dimensions),
+                        new PackPlan("pack-b2", "bag-b", dimensions)));
+
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlans(List.of(toteA, toteB));
+        List<PrlAssignmentPlan> plans = new ToteToBagAssignmentPlanner().createPlans(
+                batchPlan,
+                List.of("prl-1", "prl-2", "prl-3"));
+
+        assertEquals(3, plans.size());
+        assertEquals("bag-a", plans.get(0).correlationId());
+        assertEquals(2, plans.get(0).expectedPackCount());
+        assertEquals("bag-b", plans.get(1).correlationId());
+        assertEquals(2, plans.get(1).expectedPackCount());
+        assertEquals("bag-c", plans.get(2).correlationId());
+        assertEquals(1, plans.get(2).expectedPackCount());
+    }
 }
