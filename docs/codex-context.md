@@ -342,9 +342,12 @@
   - the tipper should not start tipping until its downstream path, initially sorter/PDC, is ready to accept discharged packs
   - if downstream is blocked, the tipper should hold rather than force packs downstream
   - this uses the same readiness/reservation/backpressure style as the rest of the tote-to-bag system
-- Dynamic reassignment and scheduling are the next unresolved control boundary:
-  - once a PRL releases its completed group, it should be eligible for reassignment to another incomplete bag correlation
-  - full dynamic PRL reassignment is not implemented yet
+- Dynamic PRL reassignment is now implemented as local tote-to-bag behaviour:
+  - initial assignment seeds only as many bag correlations as there are PRLs
+  - once a PRL releases its completed group and returns to idle, it is eligible for reassignment to another incomplete bag correlation
+  - reassignment is arrival-driven: when a pack arrives for an unassigned batch correlation, the controller assigns the lowest-id idle PRL if one is available
+  - if no idle PRL exists for a new correlation, the controller reports a local admission failure
+- Scheduling remains the next unresolved global control boundary:
   - a slim deadlock is possible if all PRLs are reserved for incomplete bags and the next tote contains only packs for new, unassigned bags
   - tote sequencing should be guaranteed by a future scheduler rather than by PRL/PCR logic or the tipper
   - the tote-to-bag cell may later expose scheduler-facing progress/compatibility queries, but the scheduling decision belongs upstream
@@ -557,12 +560,14 @@
   - the integrated harness now uses `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
   - the debug tote fixture currently uses two totes and 10 correlations, proving more than 3 PRLs are used in the 15-lane profile and proving cross-tote bag completion
   - the fixture intentionally completes `bag-b` from tote 1 while `bag-a` remains incomplete until tote 2, so visual release is not simply PRL-id order
+  - arrival-driven dynamic PRL reassignment has now been implemented and covered by focused planner/controller tests
   - pack scale is now accepted as realistic for pharmaceutical packs; larger items are expected to go to a future manual station
-  - the latest focused controller/PCR/bagger tests passed after the deterministic-release change
+  - the latest focused planner/controller/PCR/bagger tests passed after the reassignment change
 - Next intended tote-to-bag discussion:
-  - bagging-machine / receiver cleanup
+  - the user will provide the planned steps for a 15-conveyor / 40-pack visual capacity fixture
+  - that fixture should use all 15 PRLs from tote 1, span every 3rd initial bag into tote 2, and use tote 2 to both finish the spanning bags and introduce 5 later bags for reassignment
+  - after that visual proof, return to bagging-machine / receiver cleanup
   - using the same installed-machine, local-state, explicit-seam architecture for the remaining warehouse machines
-  - dynamic PRL reassignment after completed release remains future work
   - scheduler responsibility for tote sequence remains future work after a fuller warehouse layout exists
   - keep the existing rule that one long-lived `ToteToBagFlowController` owns the transport cell and does not reset PRL state at tote boundaries
   - do not reinitialise the whole `ToteToBagFlowController` per tote

@@ -628,7 +628,12 @@ Updated recommended next sequence:
 Broader warehouse roadmap:
 
 - Apply the installed-machine approach consistently before implementing scheduler policy.
-- Tidy the bagging-machine / receiver side next.
+- The immediate next user-supplied fixture slice is a 15-conveyor / 40-pack visual capacity test for tote-to-bag:
+  - tote 1 should use all 15 PRLs
+  - every 3rd initial bag should span into tote 2
+  - tote 2 should complete those 5 spanning bags and introduce 5 more complete bags to exercise arrival-driven PRL reassignment
+  - keep that slice to fixture/visual proof changes, not tipper/controller/scheduler logic
+- After that visual proof, tidy the bagging-machine / receiver side next.
 - Then model the remaining machine families:
   - lid opening machine
   - tote strapping machine

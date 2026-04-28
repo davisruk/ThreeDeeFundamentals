@@ -204,7 +204,12 @@ Architecture discussion to resume when bagger/PCR control is revisited
   - likely shared concepts are readiness, reservation, blocked/unavailable, handoff started, and handoff completed
 - This conversation should be resumed before doing major refactoring of PCR/bagger control flow.
 - The current tote-to-bag priority is to tidy the bagging-machine / receiver side before moving on to the remaining warehouse machines.
-- Dynamic PRL reassignment and upstream tote scheduling remain future topics after the broader warehouse layout and machine state surfaces exist.
+- Arrival-driven dynamic PRL reassignment is now implemented locally in tote-to-bag.
+- Upstream tote scheduling remains a future topic after the broader warehouse layout and machine state surfaces exist.
+- Before returning to bagging receiver cleanup, the next pending fixture slice is the user-provided 15-conveyor / 40-pack visual capacity test:
+  - tote 1 should use all 15 PRLs
+  - every 3rd initial bag should span into tote 2
+  - tote 2 should complete those 5 spanning bags and introduce 5 more complete bags to exercise PRL reassignment
 
 Warehouse machine roadmap context
 

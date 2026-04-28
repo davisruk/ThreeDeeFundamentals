@@ -23,18 +23,15 @@ public class ToteToBagAssignmentPlanner {
         }
 
         List<String> correlationIds = batchPlan.orderedCorrelationIds();
-        if (correlationIds.size() > prlIdsInPriorityOrder.size()) {
-            throw new IllegalArgumentException("Not enough PRLs available for tote load plan");
-        }
 
         List<PrlAssignmentPlan> result = new ArrayList<>();
-        int prlIndex = 0;
-        for (String correlationId : correlationIds) {
+        int assignmentCount = Math.min(correlationIds.size(), prlIdsInPriorityOrder.size());
+        for (int prlIndex = 0; prlIndex < assignmentCount; prlIndex++) {
+            String correlationId = correlationIds.get(prlIndex);
             result.add(new PrlAssignmentPlan(
                     prlIdsInPriorityOrder.get(prlIndex),
                     correlationId,
                     batchPlan.expectedPackCountFor(correlationId)));
-            prlIndex++;
         }
         return result;
     }

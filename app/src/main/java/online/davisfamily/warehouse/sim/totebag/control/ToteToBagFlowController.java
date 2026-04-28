@@ -455,8 +455,7 @@ public class ToteToBagFlowController implements SimulationController {
         for (LinearLaneEntrySnapshot entry : pdcConveyor.getLaneEntries()) {
             Pack pack = entry.pack();
             observedPacksById.putIfAbsent(pack.getId(), pack);
-            PrlConveyor prl = findPrlForCorrelation(pack.getCorrelationId())
-                    .orElseThrow(() -> new IllegalStateException("No PRL assignment for correlation " + pack.getCorrelationId()));
+            PrlConveyor prl = findOrAssignPrlForCorrelation(pack.getCorrelationId());
             float diversionFrontDistance = pdcDiversionDistanceProvider.frontDistanceFor(prl.getId(), pack);
             if (entry.frontDistance() < diversionFrontDistance || !prl.accepts(pack)) {
                 continue;
@@ -616,6 +615,24 @@ public class ToteToBagFlowController implements SimulationController {
         return prlsById.values().stream()
                 .filter(prl -> correlationId.equals(prl.getAssignment().getCorrelationId()))
                 .findFirst();
+    }
+
+    private PrlConveyor findOrAssignPrlForCorrelation(String correlationId) {
+        PrlConveyor assignedPrl = findPrlForCorrelation(correlationId).orElse(null);
+        if (assignedPrl != null) {
+            return assignedPrl;
+        }
+        int expectedPackCount = batchPlan.expectedPackCountFor(correlationId);
+        if (expectedPackCount <= 0) {
+            throw new IllegalStateException("No batch assignment for correlation " + correlationId);
+        }
+        PrlConveyor idlePrl = prlsById.values().stream()
+                .sorted(Comparator.comparing(PrlConveyor::getId))
+                .filter(prl -> prl.getAssignment().getState() == PrlState.IDLE)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No idle PRL available for correlation " + correlationId));
+        idlePrl.assign(new PrlAssignmentPlan(idlePrl.getId(), correlationId, expectedPackCount));
+        return idlePrl;
     }
 
     private static List<PdcDiversionDevice> createDefaultDiversionDevices(List<PrlConveyor> prlConveyors) {

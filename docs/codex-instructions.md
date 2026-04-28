@@ -87,6 +87,10 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
 - PRL release is deterministic but no longer strictly sequential by PRL id:
   - if an earlier ready PRL cannot reserve downstream, the controller scans later ready PRLs in id order and releases the first candidate that can reserve
   - when multiple ready PRLs can reserve, the lowest PRL id still wins
+- arrival-driven dynamic PRL reassignment is now implemented:
+  - initial assignment seeds only as many bag correlations as there are PRLs
+  - if a pack arrives for an unassigned batch correlation and an idle PRL exists, the controller assigns the lowest-id idle PRL to that correlation
+  - if no idle PRL exists, the controller fails clearly; upstream scheduling must prevent that admission/deadlock case
 - pharmaceutical pack dimensions are now treated as realistic enough for this automated path:
   - small: about 7.0 x 4.5 x 3.5 cm
   - medium: about 8.0 x 5.0 x 4.0 cm
@@ -112,6 +116,7 @@ Known local state at handoff:
 - the latest user-run focused tests passed:
   `.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.totebag.PcrConveyorTest --tests online.davisfamily.warehouse.sim.totebag.BaggingMachineTest`
 - the user also confirmed the integrated visual check works after the asymmetric two-tote fixture
+- the user then implemented arrival-driven dynamic PRL reassignment; focused planner/controller/PCR/bagger tests passed
 
 ## Next Slice
 
@@ -125,12 +130,24 @@ Current proven multi-tote state:
 - `ToteToBagBatchPlan.fromToteLoadPlans(...)` aggregates expected pack counts across tote manifests
 - the integrated 15-PRL harness uses a two-tote fixture with at least one spanning correlation
 - the asymmetric fixture makes release order visible: `bag-b` completes from tote 1 and can release before `bag-a`, which completes from tote 2
+- dynamic PRL reassignment now happens on pack arrival, not by eager preassignment:
+  - active assignments stay pinned until completed release
+  - completed/idle PRLs can be reused for later bag correlations when a pack for that correlation arrives
+  - new correlations are rejected if no PRL is idle, leaving tote admission/deadlock avoidance to the future scheduler
 
-The next architectural topic is machine architecture standardisation before scheduler work.
+Immediate next user-supplied implementation plan:
+
+- the user will provide planned steps for a 15-conveyor / 40-pack visual capacity test
+- the intended fixture uses all 15 PRLs from tote 1
+- every 3rd initial bag spans into tote 2
+- tote 2 completes the 5 spanning bags and introduces 5 additional complete bags to exercise arrival-driven reassignment
+- this should remain a debug fixture/visual proof change, not a controller or scheduler change
+
+After that visual proof, the next architectural topic is machine architecture standardisation before scheduler work.
 
 Important boundary:
 
-- The controller should manage active PRL assignments, preserve them across tote boundaries, release completed groups, and eventually reuse idle PRLs for new bag correlations.
+- The controller should manage active PRL assignments, preserve them across tote boundaries, release completed groups, and reuse idle PRLs for new bag correlations on arrival.
 - The controller should not reorder totes or solve global batch scheduling.
 - A deadlock is possible if all PRLs are reserved for incomplete bag correlations and the next tote contains only packs for new, unassigned correlations.
 - That deadlock should be avoided by a future scheduler that chooses tote sequence, not by adding tote sequencing policy to PRL/PCR or tipper logic.
@@ -148,8 +165,9 @@ Current roadmap:
 4. Write a dedicated scheduler requirements document once real machine state, layout constraints, release rules, and buffer behaviour are visible.
 5. Implement tote release / scheduling and tote injection after those requirements are concrete.
 
-Dynamic PRL reassignment remains future work, but it should stay local to tote-to-bag:
+Dynamic PRL reassignment is now implemented locally in tote-to-bag:
 
 - active assignments stay pinned until completed release
-- idle PRLs may be assigned to not-yet-complete unassigned correlations
+- idle PRLs are assigned to not-yet-complete unassigned correlations when the first pack for that correlation arrives
+- if no idle PRL exists, the controller reports the local admission failure
 - tote ordering and global deadlock avoidance remain scheduler responsibilities

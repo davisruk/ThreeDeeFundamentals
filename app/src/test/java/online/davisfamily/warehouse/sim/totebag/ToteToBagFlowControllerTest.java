@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.totebag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -577,6 +578,112 @@ class ToteToBagFlowControllerTest {
         assertFalse(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-b")));
         assertEquals(PrlState.RELEASING, prl1.getAssignment().getState());
         assertEquals(PrlState.READY_TO_RELEASE, prl2.getAssignment().getState());
+    }
+
+    @Test
+    void shouldAssignIdlePrlToNewCorrelationWhenPackArrivesAfterEarlierRelease() {
+        PackDimensions packDimensions = new PackDimensions(0.20f, 0.10f, 0.08f);
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-1",
+                List.of(
+                        new PackPlan("pack-a1", "bag-a", packDimensions),
+                        new PackPlan("pack-b1", "bag-b", packDimensions),
+                        new PackPlan("pack-c1", "bag-c", packDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan);
+
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.0f);
+        PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PrlConveyor prl2 = new PrlConveyor("prl-2", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PcrConveyor pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f), 0.15d);
+        PackGroupReceiver downstreamReceiver = new SelectivePackGroupReceiver(List.of("bag-b"));
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                toteLoadPlan,
+                batchPlan,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamReceiver,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl1, prl2),
+                List.of(
+                        new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-2", "prl-2", 0d, 0.05d, 0.05d)),
+                ignored -> 0.0d,
+                (ignored, pack) -> 0.0f,
+                ignored -> 0.0d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcrConveyor);
+        sim.addController(controller);
+
+        sim.update(0.05d);
+
+        prl1.acceptPack(new Pack("pack-a1", "bag-a", packDimensions));
+        prl2.acceptPack(new Pack("pack-b1", "bag-b", packDimensions));
+
+        for (int i = 0; i < 120 && prl2.getAssignment().getState() != PrlState.IDLE; i++) {
+            sim.update(0.05d);
+        }
+
+        assertEquals(PrlState.IDLE, prl2.getAssignment().getState());
+
+        Pack packC = new Pack("pack-c1", "bag-c", packDimensions);
+        pdcConveyor.acceptIncomingPack(packC);
+        sim.update(0.05d);
+
+        assertEquals("bag-c", prl2.getAssignment().getCorrelationId());
+        assertEquals(PrlState.READY_TO_RELEASE, prl2.getAssignment().getState());
+        assertEquals(1, prl2.getAssignment().getReceivedPackCount());
+        assertEquals("bag-a", prl1.getAssignment().getCorrelationId());
+        assertTrue(prl1.getAssignment().getState() == PrlState.READY_TO_RELEASE
+                || prl1.getAssignment().getState() == PrlState.ACCUMULATING);
+    }
+
+    @Test
+    void shouldRejectNewCorrelationWhenNoPrlIsIdle() {
+        PackDimensions packDimensions = new PackDimensions(0.20f, 0.10f, 0.08f);
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-1",
+                List.of(
+                        new PackPlan("pack-a1", "bag-a", packDimensions),
+                        new PackPlan("pack-b1", "bag-b", packDimensions),
+                        new PackPlan("pack-c1", "bag-c", packDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan);
+
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.0f);
+        PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PrlConveyor prl2 = new PrlConveyor("prl-2", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PcrConveyor pcrConveyor = new PcrConveyor("pcr", new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f), 0.15d);
+        PackGroupReceiver downstreamReceiver = new SelectivePackGroupReceiver(List.of("bag-a", "bag-b", "bag-c"));
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                toteLoadPlan,
+                batchPlan,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamReceiver,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl1, prl2),
+                List.of(
+                        new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-2", "prl-2", 0d, 0.05d, 0.05d)),
+                ignored -> 0.0d,
+                (ignored, pack) -> 0.0f,
+                ignored -> 0.0d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcrConveyor);
+        sim.addController(controller);
+
+        sim.update(0.05d);
+
+        pdcConveyor.acceptIncomingPack(new Pack("pack-c1", "bag-c", packDimensions));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> sim.update(0.05d));
+        assertTrue(ex.getMessage().contains("No idle PRL available"));
+        assertTrue(ex.getMessage().contains("bag-c"));
     }
 
     private static class UnavailablePackGroupReceiver implements PackGroupReceiver {

@@ -70,6 +70,28 @@ class ToteToBagAssignmentPlannerTest {
     }
 
     @Test
+    void shouldAssignOnlyAsManyPrlsAsAreAvailableForBatchPlan() {
+        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        counts.put("bag-a", 2);
+        counts.put("bag-b", 1);
+        counts.put("bag-c", 3);
+        counts.put("bag-d", 2);
+        ToteToBagBatchPlan batchPlan = new ToteToBagBatchPlan(counts);
+
+        List<PrlAssignmentPlan> plans = new ToteToBagAssignmentPlanner().createPlans(
+                batchPlan,
+                List.of("prl-1", "prl-2"));
+
+        assertEquals(2, plans.size());
+        assertEquals("prl-1", plans.get(0).prlId());
+        assertEquals("bag-a", plans.get(0).correlationId());
+        assertEquals(2, plans.get(0).expectedPackCount());
+        assertEquals("prl-2", plans.get(1).prlId());
+        assertEquals("bag-b", plans.get(1).correlationId());
+        assertEquals(1, plans.get(1).expectedPackCount());
+    }
+
+    @Test
     void shouldAggregateExpectedCountsAcrossMultipleTotePlans() {
         PackDimensions dimensions = new PackDimensions(0.08f, 0.05f, 0.04f);
         ToteLoadPlan toteA = new ToteLoadPlan(
