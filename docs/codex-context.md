@@ -322,25 +322,42 @@
   - receiver fullness should remain outside PRL/PCR and outside the bagger's ownership policy
   - the bagger may become unavailable because its downstream receiver is full, but PRL/PCR should observe only the generic receiver seam
   - the current debug receiver auto-empty is not production tote move-on behavior
-- Real-scale / multi-tote direction has been clarified:
-  - the current small harness uses oversized packs/bags and only a few PRLs for readability
-  - before merging the branch back, a realistic proving profile should test about 15 PRLs, smaller pack dimensions, smaller bags, narrower conveyors, tighter PRL spacing, and multiple source totes
-  - changing PRL count and PRL gaps should remain a minimal layout/spec change
-  - PDC bumper alignment, PRL-to-PCR join positions, and transfer distances should derive from PRL centre positions rather than from independent harness tuning
-  - changing conveyor width can require more care because it follows from pack scale, and pack scale is expected to stabilise once realistic dimensions are chosen
+- Real-scale / multi-tote proving is now in place for the debug harness:
+  - the integrated harness uses about 15 PRLs through `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
+  - pack and bag scale have been reduced to pharmaceutical-pack proportions
+  - PDC/PRL/PCR conveyor geometry and PRL spacing are driven by layout/spec values
+  - PDC bumper alignment, PRL-to-PCR join positions, and transfer distances derive from PRL centre positions rather than independent harness tuning
+  - the harness now feeds multiple source totes through one long-lived `ToteToBagFlowController`
   - packs destined for one PRL / bag can span multiple source totes
-  - PRL assignment must therefore be driven by bag/order correlations, not by tote boundaries
-  - tote manifests describe the packs inside each tote, but a broader batch/order plan should define the total expected pack counts per bag correlation
-  - PRLs should remain assigned to an active bag correlation across tote boundaries until the required pack count is complete
-  - once a PRL releases its completed group, it can be reassigned to another incomplete bag correlation
-  - correlation ids should be globally unique or namespaced so repeated tote manifests do not collide
-- Multi-tote responsibility split:
-  - a tote injector should feed totes only when the tipper reports it can accept one
-  - the tipper should own local capture, tip, discharge, and release behaviour
-  - the tipper should not own upstream injection policy or full tote-to-bag bag planning
+  - PRL assignment is driven by bag/order correlations, not by tote boundaries
+  - tote manifests describe the packs inside each tote, while `ToteToBagBatchPlan` defines total expected pack counts per bag correlation
+  - `ToteToBagBatchPlan.fromToteLoadPlans(...)` aggregates expected counts across multiple tote manifests
+  - PRLs remain assigned to an active bag correlation across tote boundaries until the required pack count is complete
+  - the visual two-tote fixture is asymmetric so `bag-b` completes from tote 1 and can release before `bag-a`, which completes from tote 2
+  - correlation ids should remain globally unique or namespaced so repeated tote manifests do not collide
+- Multi-tote responsibility split is now proven at debug-harness level:
+  - `DebugToteInjectorController` feeds totes only when the tipper reports it can accept one
+  - `ToteTrackTipperFlowController` owns local capture, tip, discharge, and release behaviour and can accept successive totes
+  - the tipper does not own upstream injection policy or full tote-to-bag bag planning
   - the tipper should not start tipping until its downstream path, initially sorter/PDC, is ready to accept discharged packs
   - if downstream is blocked, the tipper should hold rather than force packs downstream
-  - this should use the same readiness/reservation/backpressure style as the rest of the tote-to-bag system
+  - this uses the same readiness/reservation/backpressure style as the rest of the tote-to-bag system
+- Dynamic reassignment and scheduling are the next unresolved control boundary:
+  - once a PRL releases its completed group, it should be eligible for reassignment to another incomplete bag correlation
+  - full dynamic PRL reassignment is not implemented yet
+  - a slim deadlock is possible if all PRLs are reserved for incomplete bags and the next tote contains only packs for new, unassigned bags
+  - tote sequencing should be guaranteed by a future scheduler rather than by PRL/PCR logic or the tipper
+  - the tote-to-bag cell may later expose scheduler-facing progress/compatibility queries, but the scheduling decision belongs upstream
+  - scheduler work is intentionally deferred until the full warehouse layout and machine state surfaces exist, because the rule set is expected to depend on tote release rules, buffers, route constraints, and floor-wide machine availability
+- Warehouse roadmap now favours machine architecture before scheduler implementation:
+  - first tidy the bagging-machine / receiver side
+  - then implement remaining machines using the same installed-machine, local-state, explicit-seam approach
+  - then construct a full warehouse layout with a few totes traversing all machines
+  - then write scheduler requirements and implement tote release / injection policy
+- Remaining machine families to model:
+  - lid opening machine
+  - tote strapping machine
+  - scheduler-controlled tote buffer where totes arrive and wait for release
 
 - Active scene selection has been cleaned up:
   - `SoftwareRenderer` now accepts `--scene=...`
@@ -376,12 +393,9 @@
 - The tote-to-bag / tipper-entry integration boundary has been cleaned up materially:
   - handoff boundary types now exist under `warehouse.sim.totebag.handoff`
   - `PackHandoffPoint`, `MachineHandoffPointId`, `PackHandoffPointProvider`, `PackReceiveTarget`, and `PackReleaseSource` now define the intended machine handoff vocabulary
-- `TipperEntryModule` now exposes named handoff points for:
-  - tipper pack discharge
-  - sorter pack intake
-  - sorter pack outfeed
-- Placeholder sorter-underflow conveyor ownership has been moved out of the reusable entry assembly:
-  - the reusable `TipperEntryModule` no longer owns the placeholder sorter outfeed conveyor/renderable
+- the old `TipperEntryModule` / builder shape has been removed from the active code path
+- `TipperSectionInstaller` / `TipperInstallation`, `SortingSectionInstaller` / `SortingInstallation`, and `TipperToSorterSection` now expose the installed-machine and paired-composition surfaces
+- Placeholder sorter-underflow conveyor ownership has been moved out of the reusable installed path:
   - `ToteTrackTipperDebugRig` now explicitly composes that placeholder outfeed conveyor as rig-owned proving equipment
 - The integrated tote-to-bag harness no longer routes through that placeholder conveyor:
   - `ToteToBagDebugRig` now feeds sorter output directly onto the real PDC
@@ -393,22 +407,20 @@
   - PRL render placement now follows the same derived layout rather than using a hard-coded visual z
 - The sorter-outfeed live boundary now uses the newer handoff abstraction directly:
   - `PackSink` has been removed from the active code path and deleted
-  - `ToteTrackTipperFlowController`, `TipperEntryModule`, and the rigs now use `PackReceiveTarget` for sorter outfeed handoff
+  - `ToteTrackTipperFlowController` and the rigs now use `PackReceiveTarget` for sorter outfeed handoff
   - `SorterOutfeedDebugConveyor` now implements `PackReceiveTarget` directly
-- A final structural cleanup has started to make the proven architecture more explicit in code:
-  - `TipperModule` and `SortingModule` now exist under `warehouse.sim.totebag.assembly`
-  - `TipperEntryModule` now composes and exposes those module objects via getters rather than being only one monolithic reusable type
+- The proven architecture is now explicit in code:
+  - `TipperModule` and `SortingModule` exist under `warehouse.sim.totebag.assembly`
+  - tipper and sorter installation are independent
+  - the paired path is expressed through `TipperToSorterSection`
 - Current practical state after this session:
   - isolated tipper rig still proves sorter-outfeed plugability using an explicit placeholder conveyor
   - integrated tote-to-bag rig now shows the intended physical ownership more accurately, with the real PDC running under the sorter
   - the remaining follow-up is more about further decomposition / API cleanup than about missing the intended thin-slice behaviour
 
-- The previously isolated tote-track tipper rig has now been extracted into a reusable mounted entry module:
-  - `TipperEntryModule` now lives under `warehouse.sim.totebag.assembly`
-  - `TipperEntryModuleBuilder` provides the assembly/install entry point
-  - `TipperEntryLayoutSpec` now captures the mounted entry module root pose
-- The old `ToteTrackTipperDebugRig` is now only a thin wrapper around that reusable entry module rather than owning all construction itself.
-- `ToteToBagDebugRig` now mounts the reusable tipper-entry module against the tote-to-bag core through an explicit upstream module attachment point.
+- The previously isolated tote-track tipper rig has now been folded into reusable installed tipper/sorter sections.
+- The old `ToteTrackTipperDebugRig` is now only a thin wrapper around that installed path rather than owning all construction itself.
+- `ToteToBagDebugRig` now mounts the reusable tipper/sorter path against the tote-to-bag core through explicit upstream attachment values.
 - `ToteToBagAttachmentPoint` now includes `UPSTREAM_MODULE_ROOT`.
 - `ToteToBagFlowController` can now be used in a mode where upstream tipper/sorter ownership is external and packs simply arrive onto the PDC.
 - `ToteTrackTipperFlowController` now supports an optional downstream `PackSink` so sorter-outfeed packs can be handed into the tote-to-bag PDC without collapsing controller ownership.
@@ -423,7 +435,7 @@
   - y alignment now depends on the mounted tipper-side world height being respected consistently by both route-backed tracks and straight conveyor assemblies
 - Remaining cleanup items identified from this session:
   - the upstream module mount in `ToteToBagDebugRig` still uses tuned numeric offsets and should eventually become named layout values
-  - `TipperEntryModule` is still large and still mixes assembly, visual sync, and layout/math helpers
+  - future mounted-machine cleanup should focus on whether the independent installer/install-result style needs a small shared convention
 
 - Tote-to-bag isolated tipper proving work has advanced further on `feature/tote-track-tipper-rig`.
 - `TestScene` is currently switched back to the isolated tipper rig rather than the parallel-track scene.
@@ -534,33 +546,39 @@
 - Current tote-to-bag handoff:
   - branch: `feature/tote-track-tipper-rig`
   - recent commits:
+    - `009babc Changed PRL release to be deterministic not sequential`
+    - `cc7d635 Completed bag plans spanning totes`
+    - `d44aebf started multi tote per bag work`
     - `be0c0b4 Scale tote bag rig and stabilize PCR handoff`
     - `9e6fb5e Smooth bagger intake pack visuals`
     - `a05264b Add fifteen PRL debug layout profile`
     - `369ace0 Exercise multiple PRLs in debug manifest`
     - `59b95cc Finish bagger intake pack travel`
   - the integrated harness now uses `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
-  - the debug tote manifest currently uses 10 correlations, proving more than 3 PRLs are used in the 15-lane profile
+  - the debug tote fixture currently uses two totes and 10 correlations, proving more than 3 PRLs are used in the 15-lane profile and proving cross-tote bag completion
+  - the fixture intentionally completes `bag-b` from tote 1 while `bag-a` remains incomplete until tote 2, so visual release is not simply PRL-id order
   - pack scale is now accepted as realistic for pharmaceutical packs; larger items are expected to go to a future manual station
-  - `gradle.properties` is the only known unrelated dirty file and should remain untouched
-- Next intended tote-to-bag slice:
-  - implement the tote injector and multi-tote flow now that the batch/order planning prerequisite exists
+  - the latest focused controller/PCR/bagger tests passed after the deterministic-release change
+- Next intended tote-to-bag discussion:
+  - bagging-machine / receiver cleanup
+  - using the same installed-machine, local-state, explicit-seam architecture for the remaining warehouse machines
+  - dynamic PRL reassignment after completed release remains future work
+  - scheduler responsibility for tote sequence remains future work after a fuller warehouse layout exists
+  - keep the existing rule that one long-lived `ToteToBagFlowController` owns the transport cell and does not reset PRL state at tote boundaries
   - do not reinitialise the whole `ToteToBagFlowController` per tote
   - use `ToteToBagBatchPlan` for expected pack counts by bag correlation independent of one tote manifest
-  - keep PRL assignment persistent across tote boundaries until a bag correlation is complete
-  - add a tote injector that feeds the next tote only when the tipper is ready to accept one
-  - prove the injector with multiple totes in the 15-PRL harness, including at least one correlation whose packs span totes
+  - keep PRL/PCR coupled to downstream only through `PackGroupReceiver`
+  - avoid solving global tote ordering inside the tipper or PRL/PCR controller
 - For tote-to-bag cleanup/integration follow-up:
   - keep the current tipper-entry module mounted into the tote-to-bag harness; do not regress back to placeholder upstream machine boxes
   - treat the PDC/PRL/PCR transport cell as the stable core and the mounted tipper entry as the current canonical upstream module shape
   - keep the integrated harness on the real extended PDC under the sorter; do not reintroduce the placeholder sorter-underflow conveyor into the integrated path
-  - do not implement multi-tote flow by reinitialising the whole `ToteToBagFlowController` per tote:
-    PRL/bag assignments can span totes, so grouping must become batch/order-driven instead
+  - keep multi-tote flow on one long-lived `ToteToBagFlowController`
   - real-scale proving state:
-    pack/bag scale, 15-PRL layout, and using more than 3 PRLs have now been done for the current harness; cross-tote planning and the injector remain
+    pack/bag scale, 15-PRL layout, using more than 3 PRLs, cross-tote planning, and the debug injector have now been done for the current harness
   - the next cleanup slices should likely be:
     - replace the remaining mount magic numbers in `ToteToBagDebugRig` with named layout values/spec entries
-    - continue splitting `TipperEntryModule` further now that `TipperModule` and `SortingModule` exist, so assembly, visual sync, and helper geometry/path math are not all in one class
+    - decide whether the current independent installer/install-result style needs a small shared route-mounted-machine convention
     - decide whether the explicit scene-selection path should eventually grow beyond command-line / IDE launch-profile control into a richer launcher if that becomes worthwhile
     - consider whether any remaining tipper-to-sorter path should also move from composition/controller wiring toward a more explicit transfer/handoff object where that improves reuse
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.

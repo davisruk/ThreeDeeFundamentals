@@ -79,9 +79,14 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
 - keep downstream receiver fullness and move-on policy outside `BaggingMachine`; the bagger should only react to whether its `BagReceiver` can reserve/receive a bag
 - the current debug receiver auto-empty policy is proving equipment, not production tote move-on logic
 - the integrated tote-to-bag harness now uses a 15-PRL debug profile via `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
-- the demo manifest currently uses 10 bag correlations (`bag-a` through `bag-j`) and therefore proves that the current planner/controller can use more than 3 PRLs without hard-coded lane assumptions
+- the demo manifest now uses two source totes and 10 bag correlations (`bag-a` through `bag-j`) in the 15-PRL profile
+- the multi-tote fixture is intentionally asymmetric so `bag-b` completes from tote 1 while `bag-a` remains incomplete until tote 2; this visually proves that later ready PRLs can release before earlier incomplete PRLs
 - `ToteToBagAssignmentPlannerTest` now proves assignment from a batch/order plan
 - `ToteToBagFlowControllerTest.shouldKeepPrlAssignedUntilBatchPlanPackCountIsSatisfied` proves a PRL can remain assigned while only part of the batch-level expected pack count has arrived
+- `ToteToBagFlowControllerTest.shouldKeepPrlAssignedAcrossToteBoundaryUntilBatchCountIsMet` proves a spanning bag correlation completes only after packs from multiple totes arrive
+- PRL release is deterministic but no longer strictly sequential by PRL id:
+  - if an earlier ready PRL cannot reserve downstream, the controller scans later ready PRLs in id order and releases the first candidate that can reserve
+  - when multiple ready PRLs can reserve, the lowest PRL id still wins
 - pharmaceutical pack dimensions are now treated as realistic enough for this automated path:
   - small: about 7.0 x 4.5 x 3.5 cm
   - medium: about 8.0 x 5.0 x 4.0 cm
@@ -92,6 +97,9 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
 Recent commits on `feature/tote-track-tipper-rig`:
 
 - `3f6a745 Document tote injector handoff state`
+- `d44aebf started multi tote per bag work`
+- `cc7d635 Completed bag plans spanning totes`
+- `009babc Changed PRL release to be deterministic not sequential`
 - `be0c0b4 Scale tote bag rig and stabilize PCR handoff`
 - `9e6fb5e Smooth bagger intake pack visuals`
 - `a05264b Add fifteen PRL debug layout profile`
@@ -100,32 +108,48 @@ Recent commits on `feature/tote-track-tipper-rig`:
 
 Known local state at handoff:
 
-- `gradle.properties` is dirty and unrelated; leave it untouched unless the user explicitly asks otherwise.
-- The latest uncommitted code/doc changes implement the batch/order-scoped PRL assignment prerequisite:
-  - `app/src/main/java/online/davisfamily/warehouse/sim/totebag/plan/ToteToBagBatchPlan.java`
-  - `app/src/main/java/online/davisfamily/warehouse/sim/totebag/assignment/ToteToBagAssignmentPlanner.java`
-  - `app/src/main/java/online/davisfamily/warehouse/sim/totebag/control/ToteToBagFlowController.java`
-  - `app/src/main/java/online/davisfamily/warehouse/testing/IntegratedToteToBagDebugInstaller.java`
-  - matching planner/controller tests
-- The focused test set used recently was:
-  `.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagAssignmentPlannerTest --tests online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutTest --tests online.davisfamily.warehouse.sim.totebag.PcrConveyorTest --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.totebag.BaggingMachineTest --tests online.davisfamily.warehouse.testing.DebugBagReceiverAutoEmptyControllerTest`
-  It passed after the batch/order-scoped PRL assignment changes.
+- the worktree was clean after the user committed `009babc`
+- the latest user-run focused tests passed:
+  `.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.totebag.PcrConveyorTest --tests online.davisfamily.warehouse.sim.totebag.BaggingMachineTest`
+- the user also confirmed the integrated visual check works after the asymmetric two-tote fixture
 
 ## Next Slice
 
-The next intended slice is the tote injector / multi-tote feed. Do not create multiple independent `ToteToBagFlowController` instances or reinitialise the existing controller per tote.
+The tote injector / multi-tote feed slice is now complete for the debug harness.
 
-The important architectural point is that PRL/bag assignments can span tote boundaries:
+Current proven multi-tote state:
 
-- packs for `bag-a` may appear in tote A and tote B
-- the PRL assigned to `bag-a` must remain assigned until the expected pack count for that bag is complete
-- tote boundaries must not clear or recreate PRL assignment state
-- once a PRL releases a completed group, it can be reassigned to another incomplete bag correlation
+- `DebugToteInjectorController` owns queued debug totes and feeds the next tote only when `ToteTrackTipperFlowController.canAcceptNextTote()` is true
+- `ToteTrackTipperFlowController` can release one tote and accept the next without being recreated
+- one long-lived `ToteToBagFlowController` owns the PDC/PRL/PCR transport cell and does not reset PRL assignment state at tote boundaries
+- `ToteToBagBatchPlan.fromToteLoadPlans(...)` aggregates expected pack counts across tote manifests
+- the integrated 15-PRL harness uses a two-tote fixture with at least one spanning correlation
+- the asymmetric fixture makes release order visible: `bag-b` completes from tote 1 and can release before `bag-a`, which completes from tote 2
 
-Recommended implementation sequence for the next session:
+The next architectural topic is machine architecture standardisation before scheduler work.
 
-1. Review the new `ToteToBagBatchPlan` path and the controller test proving partial arrival against a larger expected count.
-2. Add a tote injector/feed owner that owns a queue/list of totes and feeds the next tote only when the tipper reports it can accept one.
-3. Keep the tipper responsible only for local readiness / active-tote state; it should not know the full batch/order plan.
-4. Add multi-tote debug fixtures/manifests where at least one bag correlation spans totes.
-5. Use the 15-PRL profile to prove the spanning correlation completes only after packs from multiple totes arrive.
+Important boundary:
+
+- The controller should manage active PRL assignments, preserve them across tote boundaries, release completed groups, and eventually reuse idle PRLs for new bag correlations.
+- The controller should not reorder totes or solve global batch scheduling.
+- A deadlock is possible if all PRLs are reserved for incomplete bag correlations and the next tote contains only packs for new, unassigned correlations.
+- That deadlock should be avoided by a future scheduler that chooses tote sequence, not by adding tote sequencing policy to PRL/PCR or tipper logic.
+- Scheduler rules are expected to be large and dependent on the eventual full warehouse layout, tote release rules, buffer state, and machine state across the floor.
+- Do not design or implement scheduler-facing APIs prematurely unless a local machine slice genuinely needs one.
+
+Current roadmap:
+
+1. Tidy the bagging-machine / receiver side so it follows the same installed-machine, local-state, explicit-seam style as the tipper/sorter/tote-to-bag work.
+2. Implement the remaining warehouse machines using the same state architecture and installation approach:
+   - lid opening machine
+   - tote strapping machine
+   - scheduler-controlled tote buffer where totes arrive and wait for release
+3. Construct an entire warehouse layout with all machines installed and a few totes traversing it.
+4. Write a dedicated scheduler requirements document once real machine state, layout constraints, release rules, and buffer behaviour are visible.
+5. Implement tote release / scheduling and tote injection after those requirements are concrete.
+
+Dynamic PRL reassignment remains future work, but it should stay local to tote-to-bag:
+
+- active assignments stay pinned until completed release
+- idle PRLs may be assigned to not-yet-complete unassigned correlations
+- tote ordering and global deadlock avoidance remain scheduler responsibilities

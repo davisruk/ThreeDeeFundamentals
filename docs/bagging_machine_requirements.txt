@@ -155,19 +155,16 @@ Completed runtime/control slices
 - Bagger output receiver availability is handled inside the bagger / receiver boundary.
 - Receiver capacity can indirectly block upstream release because a full receiver makes the bagger unavailable through the pack-group receiver seam.
 
-Next control-flow slice
+Current PCR / bagger release state
 
-- Change PCR delivery so it is gated by bagging-machine readiness.
-- The bagger should no longer be treated as passively consuming whatever PCR has already released.
-- PCR should not become a waiting/buffer stage after PRL release.
-- Once a PRL releases packs onto PCR, they should continue moving at conveyor pace without stopping.
-- PCR capacity checking is not needed for this path:
-  - PCR only ever carries one released PRL group at a time
-  - bagging readiness is the relevant release gate
-- Practical target:
-  - bagging installation advertises readiness for the next group
-  - only then may PCR release/deliver the next group
-  - bagger intake conveyors run as part of that acceptance window
+- PRL release is now gated by the downstream `PackGroupReceiver` before a group is released toward PCR.
+- The bagger is no longer treated as a passive concrete dependency of `ToteToBagFlowController`.
+- If the bagger or its downstream bag receiver cannot reserve, upstream PRL release is blocked through the generic receiver seam.
+- PRL release selection is deterministic but not strictly sequential:
+  - if an earlier ready PRL cannot reserve downstream, a later ready PRL that can reserve may release
+  - if multiple ready PRLs can reserve, the lowest PRL id still releases first
+- PCR remains a single released-group path for the current implementation; broad PCR capacity scheduling is not the current focus.
+- Remaining bagger-side control work should avoid reintroducing concrete coupling between PRL/PCR and `BaggingMachine`.
 
 Next external-composition slice
 
@@ -185,10 +182,10 @@ Remaining visual / geometry follow-up
   - decals/text are still not required
 - Revisit whether PDC/PRL/PCR conveyor sizing should be brought closer to the bagger conveyor proportions once broader visual tuning becomes worthwhile.
 
-Architecture discussion to resume next session
+Architecture discussion to resume when bagger/PCR control is revisited
 
 - The main open question is no longer just visual transition smoothing.
-- We need to settle the seam contract between adjacent systems before finalising the PCR/FIC/SIC flow.
+- The current receiver seam is established for this thin slice, but future adjacent-machine work should continue using small contracts rather than concrete machine references.
 - Desired direction:
   - avoid concrete coupling where one machine knows named upstream/downstream machine classes
   - prefer small contracts around readiness, reservation, state query, and handoff lifecycle
@@ -206,6 +203,23 @@ Architecture discussion to resume next session
   - look for a shared seam vocabulary rather than forcing both into the same concrete type
   - likely shared concepts are readiness, reservation, blocked/unavailable, handoff started, and handoff completed
 - This conversation should be resumed before doing major refactoring of PCR/bagger control flow.
+- The current tote-to-bag priority is to tidy the bagging-machine / receiver side before moving on to the remaining warehouse machines.
+- Dynamic PRL reassignment and upstream tote scheduling remain future topics after the broader warehouse layout and machine state surfaces exist.
+
+Warehouse machine roadmap context
+
+- The same installed-machine architecture should be applied consistently before scheduler work:
+  - machine-local runtime/state
+  - controller/orchestration where needed
+  - install surface and install result
+  - explicit readiness/reservation/handoff seams
+  - scene/layout composition outside the machine
+- Remaining machine families to model after bagging receiver cleanup:
+  - lid opening machine
+  - tote strapping machine
+  - scheduler-controlled tote buffer where totes arrive and wait for release
+- A full warehouse layout with a few traversing totes should come before scheduler implementation.
+- Scheduler requirements should be documented separately once the layout exposes the real release rules, buffer rules, route constraints, and floor-wide machine-state inputs.
 
 Working method while OpenAI capacity is unstable
 
@@ -252,6 +266,7 @@ Recommended next-session starting point
    - refining the bag mesh / bag orientation
    - replacing debug receiver proving equipment with a more production-shaped external receiver when needed
    - later implementing real tote-full move-on policy outside the bagger
+   - then using the same installed-machine approach for the lid opener, tote strapper, and scheduler-controlled tote buffer
 
 
  

@@ -31,36 +31,40 @@ Practical interpretation:
 
 ## Context
 
-The current tote-to-bag work has a reusable `TipperEntryModule`, but that type still reflects its proving-harness origin.
+This document originally described why the proving-harness-era `TipperEntryModule` shape needed to be split apart.
 
-In the current code:
+Current code no longer has `TipperEntryModule` or `TipperEntryModuleBuilder`.
 
-- `TipperEntryModule` builds a short internal route section for the tipper entry
-- `TipperEntryModule` creates a demo `Tote`
-- `TipperEntryModule` creates a demo `ToteLoadPlan`
-- `TipperEntryModule` wires runtime/controller/render concerns together
-- `TipperEntryModule` still owns the cross-module tipper-to-sorter discharge seam logic
+The current code instead uses:
 
-This is acceptable for the current thin slice and for isolated proving rigs, but it is not the intended production boundary for a plug-together warehouse application.
+- externally owned tipper route section through `TipperTrackSection`
+- independent installed tipper surface through `TipperSectionInstaller` / `TipperInstallation`
+- independent installed sorter surface through `SortingSectionInstaller` / `SortingInstallation`
+- paired composition through `TipperToSorterSectionInstaller` / `TipperToSorterSection`
+- explicit cross-module visible discharge path through `TipperToSorterDischargeSeam`
+- external tote load-plan lookup through `ToteLoadPlanProvider`
+
+The historical sections below remain useful as design rationale, but follow-up work should start from the implemented installed-section shape rather than from the removed entry-module shape.
 
 ## Current Code Position After Recent Refactors
 
-The code has moved materially closer to the intended boundary, but the current reusable shape is still one composition level too coarse.
+The code has reached the intended separation baseline for this branch.
 
 Recent completed cleanup:
 
 - `TipperModule` now more clearly owns tipper-side visual sync and anchor math
 - `SortingModule` now more clearly owns sorter-side render/anchor ownership
-- `TipperEntryPackVisuals` now owns pack-renderable lifecycle and visual placement for the mounted entry section
 - `TipperToSorterDischargeSeam` now owns the visible tipper-to-sorter transfer path math
 - `TipperAssemblyFactory` now owns the mounted tipper assembly render construction
 - tote-to-bag integrated upstream mount policy now lives in `ToteToBagCoreLayoutSpec` / `ToteToBagCoreLayout` rather than being rebuilt ad hoc in the rig
+- `TipperToSorterPackVisuals` owns pack-renderable lifecycle and visual placement for the paired path, including multiple tote sources in the integrated debug harness
+- `TipperToSorterSection` is explicitly a composition helper, not the primary reusable machine abstraction
 
 Current remaining issue:
 
-- `TipperEntryModule` is still effectively a reusable "tipper plus sorter" section rather than a composition helper built from two independently mountable machines
+- no remaining blocker exists for the original tipper/sorter separation goal
 
-This means the current code is improved, but it does not yet fully support swapping the sorter for another downstream machine or station without treating the pair as a special-case reusable unit.
+Future work is now about applying the installed-machine composition style to additional machine families and deciding whether a small shared convention/interface is worth introducing.
 
 ## Transfer-Zone Pattern To Align With
 
@@ -466,23 +470,7 @@ The original mandatory separation work in this document is now largely complete.
 
 The remaining items below should be read as optional follow-up or future-machine work rather than as blockers for the tipper / sorter cleanup itself.
 
-### 1. Reframe `TipperEntryModule`
-
-Required work:
-
-- stop treating `TipperEntryModule` as the reusable machine abstraction
-- either rename it or materially document/restructure it as a composition helper for:
-  - `TipperModule`
-  - `SortingModule`
-  - `TipperToSorterDischargeSeam`
-  - any section-level visual helper/controller glue
-
-Reasoning:
-
-- the current name/shape still implies that "tipper plus sorter" is the primary reusable unit
-- that makes it harder to replace the sorter with another downstream station later
-
-### 2. Introduce A Small Independent-Machine Surface
+### 1. Consider A Small Independent-Machine Surface
 
 Required work:
 
@@ -501,12 +489,12 @@ Reasoning:
 - the upcoming machine set is broad enough that a small common composition style will help
 - a disciplined shared boundary is more valuable than a premature large abstraction hierarchy
 
-### 3. Move Scene-Level Composition Out Of The Debug Rig
+### 2. Continue Moving Scene-Level Composition Out Of The Debug Rig
 
 Required work:
 
-- extract the remaining scene-level wiring from `ToteToBagDebugRig`
-- create a builder/installer whose job is specifically to compose:
+- keep reducing remaining scene-level wiring in `ToteToBagDebugRig` when it represents reusable composition rather than debug-only visual sync
+- the current integrated installer already composes:
   - tote-to-bag core
   - mounted tipper
   - mounted sorter
@@ -515,10 +503,10 @@ Required work:
 
 Reasoning:
 
-- the debug rig should not remain the only place where the real production composition pattern exists
+- the debug rig should not become the only place where the real production composition pattern exists
 - production scenes should be able to ask for a mounted machine section without copying rig logic
 
-### 4. Make Alternate Downstream Targets First-Class
+### 3. Make Alternate Downstream Targets First-Class
 
 Required work:
 
@@ -535,7 +523,7 @@ Reasoning:
 
 - this is the concrete proof that the architecture no longer treats the sorter as part of the tipper’s identity
 
-### 5. Revisit Sorter-To-PDC Only If It Helps The Same Boundary
+### 4. Revisit Sorter-To-PDC Only If It Helps The Same Boundary
 
 Required work:
 
@@ -558,8 +546,6 @@ Owns:
 - creation/wiring of `TipperMachine`
 - creation/wiring of `TipperController`
 - creation of `TipperModule`
-- creation of `SortingModule`
-- creation of `TipperToSorterDischargePath`
 - simulation/controller/render registration
 
 Returns:
@@ -579,7 +565,6 @@ Likely contents:
 - `TipperController`
 - handoff point provider
 - `TipperModule`
-- `SortingModule`
 - renderables / inspection roots
 
 ## What Happens To Existing Types
@@ -596,7 +581,7 @@ These already align reasonably well with the intended render/mechanism ownership
 - `TipperEntryModule`
 - `TipperEntryModuleBuilder`
 
-These are currently still too close to the original proving-harness shape.
+These have been removed from the active code path.
 
 ### Extract For The Next Cleanup Slice
 
@@ -614,14 +599,14 @@ Those responsibilities should not remain in the production-facing installed mach
 
 ## Recommended Refactor Sequence
 
-The agreed recommendation is not to jump directly to the final production shape in one change. The safer sequence is:
+The original sequence below has been materially completed:
 
 1. Introduce the missing boundary types:
    - `TipperSection`
    - `TipperSectionSpec`
    - `TipperMachine`
    - `ToteLoadPlanProvider`
-2. Extract `TipperToSorterDischargePath` from the current `TipperEntryModule`
+2. Extract `TipperToSorterDischargePath` from the old `TipperEntryModule`
 3. Move tote creation and demo load-plan creation out of the reusable tipper package and into the proving rig / harness wrapper
 4. Replace the current builder shape with installer plus install result
 5. Mount the reusable tipper installation against externally created route infrastructure
@@ -630,15 +615,26 @@ The agreed recommendation is not to jump directly to the final production shape 
 Updated interpretation after later refactors/discussion:
 
 - seam extraction and internal cleanup have progressed materially
-- the next refactor priority is now independent-machine composition rather than more internal cleanup inside the current paired section
+- the installed-section baseline is in place
+- the next refactor priority is now independent-machine composition across future machine families, not more internal cleanup inside the old paired section
 
 Updated recommended next sequence:
 
-1. Reframe the current `TipperEntryModule` shape as a composition helper rather than a primary machine abstraction
-2. Introduce a small explicit independent-machine convention/surface
-3. Extract reusable scene/build composition out of `ToteToBagDebugRig`
-4. Prove one alternate downstream target for the tipper beyond sorter ownership, or at least shape the seam/install API so such a target can be plugged in cleanly
-5. Only then decide whether sorter-to-PDC also benefits from the same abstraction layer
+1. Decide whether a small explicit independent-machine convention/surface is worth introducing now.
+2. Continue extracting reusable scene/build composition out of `ToteToBagDebugRig` only when it is not debug-only visual sync.
+3. Prove one alternate downstream target for the tipper beyond sorter ownership, or at least shape the seam/install API so such a target can be plugged in cleanly.
+4. Only then decide whether sorter-to-PDC also benefits from the same abstraction layer.
+
+Broader warehouse roadmap:
+
+- Apply the installed-machine approach consistently before implementing scheduler policy.
+- Tidy the bagging-machine / receiver side next.
+- Then model the remaining machine families:
+  - lid opening machine
+  - tote strapping machine
+  - scheduler-controlled tote buffer where totes arrive and wait for release
+- Construct a full warehouse layout with a few totes traversing those machines before finalising scheduler requirements.
+- Scheduler design should consume real machine states, buffer states, route constraints, and release rules rather than forcing those abstractions prematurely.
 
 ## Important Non-Goals For This Refactor
 
