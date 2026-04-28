@@ -10,6 +10,7 @@ import online.davisfamily.warehouse.sim.totebag.assignment.PrlAssignmentPlan;
 import online.davisfamily.warehouse.sim.totebag.assignment.ToteToBagAssignmentPlanner;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 class ToteToBagAssignmentPlannerTest {
@@ -46,5 +47,25 @@ class ToteToBagAssignmentPlannerTest {
         assertEquals("prl-10", plans.getLast().prlId());
         assertEquals("bag-j", plans.getLast().correlationId());
         assertEquals(2, plans.getLast().expectedPackCount());
+    }
+
+    @Test
+    void shouldAssignExpectedCountsFromBatchPlan() {
+        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        counts.put("bag-a", 3);
+        counts.put("bag-b", 1);
+        ToteToBagBatchPlan batchPlan = new ToteToBagBatchPlan(counts);
+
+        List<PrlAssignmentPlan> plans = new ToteToBagAssignmentPlanner().createPlans(
+                batchPlan,
+                List.of("prl-1", "prl-2"));
+
+        assertEquals(2, plans.size());
+        assertEquals("prl-1", plans.getFirst().prlId());
+        assertEquals("bag-a", plans.getFirst().correlationId());
+        assertEquals(3, plans.getFirst().expectedPackCount());
+        assertEquals("prl-2", plans.getLast().prlId());
+        assertEquals("bag-b", plans.getLast().correlationId());
+        assertEquals(1, plans.getLast().expectedPackCount());
     }
 }

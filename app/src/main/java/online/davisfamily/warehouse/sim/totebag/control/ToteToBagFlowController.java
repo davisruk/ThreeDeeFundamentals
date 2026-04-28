@@ -26,6 +26,7 @@ import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReservation;
 
 public class ToteToBagFlowController implements SimulationController {
     private final ToteLoadPlan toteLoadPlan;
+    private final ToteToBagBatchPlan batchPlan;
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
     private final PdcConveyor pdcConveyor;
@@ -60,6 +61,35 @@ public class ToteToBagFlowController implements SimulationController {
             PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
         this(
                 toteLoadPlan,
+                ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan),
+                pdcConveyor,
+                pcrConveyor,
+                downstreamPackGroupReceiver,
+                assignmentPlanner,
+                prlConveyors,
+                pdcDiversionDevices,
+                pdcTransferDurationProvider,
+                pdcDiversionDistanceProvider,
+                prlToPcrTransferDurationProvider,
+                prlToPcrEntryDistanceProvider);
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            ToteToBagBatchPlan batchPlan,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
+            PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+        this(
+                toteLoadPlan,
+                batchPlan,
                 null,
                 null,
                 pdcConveyor,
@@ -76,6 +106,7 @@ public class ToteToBagFlowController implements SimulationController {
 
     public ToteToBagFlowController(
             ToteLoadPlan toteLoadPlan,
+            ToteToBagBatchPlan batchPlan,
             TippingMachine tippingMachine,
             SortingMachine sortingMachine,
             PdcConveyor pdcConveyor,
@@ -85,6 +116,7 @@ public class ToteToBagFlowController implements SimulationController {
             List<PrlConveyor> prlConveyors) {
         this(
                 toteLoadPlan,
+                batchPlan,
                 tippingMachine,
                 sortingMachine,
                 pdcConveyor,
@@ -107,10 +139,38 @@ public class ToteToBagFlowController implements SimulationController {
             PcrConveyor pcrConveyor,
             PackGroupReceiver downstreamPackGroupReceiver,
             ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors) {
+        this(
+                toteLoadPlan,
+                ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan),
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamPackGroupReceiver,
+                assignmentPlanner,
+                prlConveyors,
+                createDefaultDiversionDevices(prlConveyors),
+                ignored -> 0.45d,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
+                ignored -> 0.25d,
+                (ignoredPrlId, pack) -> pack.getDimensions().length());
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            ToteToBagBatchPlan batchPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
             double pdcTransferDurationSeconds) {
         this(
                 toteLoadPlan,
+                batchPlan,
                 tippingMachine,
                 sortingMachine,
                 pdcConveyor,
@@ -134,11 +194,40 @@ public class ToteToBagFlowController implements SimulationController {
             PackGroupReceiver downstreamPackGroupReceiver,
             ToteToBagAssignmentPlanner assignmentPlanner,
             List<PrlConveyor> prlConveyors,
+            double pdcTransferDurationSeconds) {
+        this(
+                toteLoadPlan,
+                ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan),
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamPackGroupReceiver,
+                assignmentPlanner,
+                prlConveyors,
+                createDefaultDiversionDevices(prlConveyors),
+                ignored -> pdcTransferDurationSeconds,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
+                ignored -> 0.25d,
+                (ignoredPrlId, pack) -> pack.getDimensions().length());
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            ToteToBagBatchPlan batchPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
             List<PdcDiversionDevice> pdcDiversionDevices,
             PdcTransferDurationProvider pdcTransferDurationProvider,
             double prlToPcrTransferDurationSeconds) {
         this(
                 toteLoadPlan,
+                batchPlan,
                 tippingMachine,
                 sortingMachine,
                 pdcConveyor,
@@ -164,10 +253,41 @@ public class ToteToBagFlowController implements SimulationController {
             List<PrlConveyor> prlConveyors,
             List<PdcDiversionDevice> pdcDiversionDevices,
             PdcTransferDurationProvider pdcTransferDurationProvider,
+            double prlToPcrTransferDurationSeconds) {
+        this(
+                toteLoadPlan,
+                ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan),
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamPackGroupReceiver,
+                assignmentPlanner,
+                prlConveyors,
+                pdcDiversionDevices,
+                pdcTransferDurationProvider,
+                (ignoredPrlId, pack) -> pack.getDimensions().length(),
+                ignored -> prlToPcrTransferDurationSeconds,
+                (ignoredPrlId, pack) -> pack.getDimensions().length());
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            ToteToBagBatchPlan batchPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
             PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
             PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
             PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
         if (toteLoadPlan == null
+                || batchPlan == null
                 || pdcConveyor == null
                 || pcrConveyor == null
                 || downstreamPackGroupReceiver == null
@@ -186,6 +306,7 @@ public class ToteToBagFlowController implements SimulationController {
             throw new IllegalArgumentException("tippingMachine and sortingMachine must either both be present or both be absent");
         }
         this.toteLoadPlan = toteLoadPlan;
+        this.batchPlan = batchPlan;
         this.tippingMachine = tippingMachine;
         this.sortingMachine = sortingMachine;
         this.pdcConveyor = pdcConveyor;
@@ -205,6 +326,37 @@ public class ToteToBagFlowController implements SimulationController {
         if (!pdcDiversionDevicesByPrlId.keySet().containsAll(prlsById.keySet())) {
             throw new IllegalArgumentException("Each PRL must have a matching PDC diversion device");
         }
+    }
+
+    public ToteToBagFlowController(
+            ToteLoadPlan toteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
+            PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+        this(
+                toteLoadPlan,
+                ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan),
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamPackGroupReceiver,
+                assignmentPlanner,
+                prlConveyors,
+                pdcDiversionDevices,
+                pdcTransferDurationProvider,
+                pdcDiversionDistanceProvider,
+                prlToPcrTransferDurationProvider,
+                prlToPcrEntryDistanceProvider);
     }
 
     @Override
@@ -257,7 +409,7 @@ public class ToteToBagFlowController implements SimulationController {
         if (initialized) {
             return;
         }
-        List<PrlAssignmentPlan> plans = assignmentPlanner.createPlans(toteLoadPlan, prlsById.keySet().stream().toList());
+        List<PrlAssignmentPlan> plans = assignmentPlanner.createPlans(batchPlan, prlsById.keySet().stream().toList());
         for (PrlAssignmentPlan plan : plans) {
             prlsById.get(plan.prlId()).assign(plan);
         }

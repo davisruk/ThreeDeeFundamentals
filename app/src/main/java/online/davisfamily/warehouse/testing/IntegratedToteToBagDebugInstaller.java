@@ -28,6 +28,8 @@ import online.davisfamily.warehouse.sim.totebag.device.PdcDiversionDevice;
 import online.davisfamily.warehouse.sim.totebag.handoff.SorterOutfeedToPdcReceiveTarget;
 import online.davisfamily.warehouse.sim.totebag.handoff.ToteBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
 
 public class IntegratedToteToBagDebugInstaller {
     private static final int DEBUG_TOTE_BAG_CAPACITY = 10;
@@ -100,8 +102,10 @@ public class IntegratedToteToBagDebugInstaller {
                         pdcConveyor,
                         subsystem.getLayout()));
 
+        ToteLoadPlan demoToteLoadPlan = tipperInstallation.getToteLoadPlanProvider().getLoadPlanFor(tipperInstallation.getTote().getId());
         ToteToBagFlowController flowController = new ToteToBagFlowController(
-                tipperInstallation.getToteLoadPlanProvider().getLoadPlanFor(tipperInstallation.getTote().getId()),
+                demoToteLoadPlan,
+                ToteToBagBatchPlan.fromToteLoadPlan(demoToteLoadPlan),
                 pdcConveyor,
                 pcrConveyor,
                 baggingInstallation.getBaggingMachine(),

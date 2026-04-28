@@ -51,6 +51,8 @@ Current code position:
 - completed bag output is now represented by first-class logical `Bag` objects, including logical pack contents
 - `BagDischarge` is now wired into `BaggingMachine`; bag creation, chute discharge, and receiver completion are distinct lifecycle steps
 - `ToteToBagFlowController` now depends on the generic `PackGroupReceiver` seam rather than on concrete `BaggingMachine`
+- PRL assignment planning is now batch/order-scoped through `ToteToBagBatchPlan`; single-tote `ToteLoadPlan` inputs are still supported by deriving a batch plan from the tote plan
+- `ToteToBagFlowController` now stores a batch plan separately from the currently loaded tote plan, so expected pack counts can outlive one tote manifest
 - `StoredBagReceiver` now stores received runtime `Bag` objects and supports capacity gating
 - the debug tote-to-bag harness now renders active bag discharge, uses an external stored receiver, and auto-empties that debug receiver after it has been full for a short timer
 - bag visuals now use a first-pass `BagMeshFactory` paper-bag mesh rather than a simple box, but visual fidelity still needs refinement
@@ -78,6 +80,8 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
 - the current debug receiver auto-empty policy is proving equipment, not production tote move-on logic
 - the integrated tote-to-bag harness now uses a 15-PRL debug profile via `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
 - the demo manifest currently uses 10 bag correlations (`bag-a` through `bag-j`) and therefore proves that the current planner/controller can use more than 3 PRLs without hard-coded lane assumptions
+- `ToteToBagAssignmentPlannerTest` now proves assignment from a batch/order plan
+- `ToteToBagFlowControllerTest.shouldKeepPrlAssignedUntilBatchPlanPackCountIsSatisfied` proves a PRL can remain assigned while only part of the batch-level expected pack count has arrived
 - pharmaceutical pack dimensions are now treated as realistic enough for this automated path:
   - small: about 7.0 x 4.5 x 3.5 cm
   - medium: about 8.0 x 5.0 x 4.0 cm
@@ -87,6 +91,7 @@ Continue from the position described in `docs/tipper-route-mounted-machine-archi
 
 Recent commits on `feature/tote-track-tipper-rig`:
 
+- `3f6a745 Document tote injector handoff state`
 - `be0c0b4 Scale tote bag rig and stabilize PCR handoff`
 - `9e6fb5e Smooth bagger intake pack visuals`
 - `a05264b Add fifteen PRL debug layout profile`
@@ -96,13 +101,19 @@ Recent commits on `feature/tote-track-tipper-rig`:
 Known local state at handoff:
 
 - `gradle.properties` is dirty and unrelated; leave it untouched unless the user explicitly asks otherwise.
+- The latest uncommitted code/doc changes implement the batch/order-scoped PRL assignment prerequisite:
+  - `app/src/main/java/online/davisfamily/warehouse/sim/totebag/plan/ToteToBagBatchPlan.java`
+  - `app/src/main/java/online/davisfamily/warehouse/sim/totebag/assignment/ToteToBagAssignmentPlanner.java`
+  - `app/src/main/java/online/davisfamily/warehouse/sim/totebag/control/ToteToBagFlowController.java`
+  - `app/src/main/java/online/davisfamily/warehouse/testing/IntegratedToteToBagDebugInstaller.java`
+  - matching planner/controller tests
 - The focused test set used recently was:
   `.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagAssignmentPlannerTest --tests online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutTest --tests online.davisfamily.warehouse.sim.totebag.PcrConveyorTest --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.totebag.BaggingMachineTest --tests online.davisfamily.warehouse.testing.DebugBagReceiverAutoEmptyControllerTest`
-  It passed after the latest committed change.
+  It passed after the batch/order-scoped PRL assignment changes.
 
 ## Next Slice
 
-The next intended slice is the tote injector / multi-tote feed, but do not start by simply creating multiple independent `ToteToBagFlowController` instances or reinitialising the existing controller per tote.
+The next intended slice is the tote injector / multi-tote feed. Do not create multiple independent `ToteToBagFlowController` instances or reinitialise the existing controller per tote.
 
 The important architectural point is that PRL/bag assignments can span tote boundaries:
 
@@ -113,8 +124,8 @@ The important architectural point is that PRL/bag assignments can span tote boun
 
 Recommended implementation sequence for the next session:
 
-1. Analyse the current fixed-`ToteLoadPlan` assumptions in `ToteToBagFlowController`, `ToteToBagAssignmentPlanner`, `TippingMachine`, `ToteTrackTipperFlowController`, and `IntegratedToteToBagDebugInstaller`.
-2. Introduce a minimal batch/order planning seam that can describe expected pack counts by correlation independently of any single tote manifest.
-3. Adapt PRL assignment so it is driven by that batch/order plan, while incoming packs can still arrive from the existing single-tote path initially.
-4. Only after assignment persistence is clear, add a tote injector that feeds multiple totes when the tipper reports it can accept one.
-5. Use the 15-PRL profile and multi-tote manifests to prove at least one bag correlation spans totes.
+1. Review the new `ToteToBagBatchPlan` path and the controller test proving partial arrival against a larger expected count.
+2. Add a tote injector/feed owner that owns a queue/list of totes and feeds the next tote only when the tipper reports it can accept one.
+3. Keep the tipper responsible only for local readiness / active-tote state; it should not know the full batch/order plan.
+4. Add multi-tote debug fixtures/manifests where at least one bag correlation spans totes.
+5. Use the 15-PRL profile to prove the spanning correlation completes only after packs from multiple totes arrive.

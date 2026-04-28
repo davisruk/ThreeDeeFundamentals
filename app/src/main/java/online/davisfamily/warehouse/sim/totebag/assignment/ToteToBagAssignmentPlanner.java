@@ -14,29 +14,35 @@ import java.util.List;
 import java.util.Map;
 
 public class ToteToBagAssignmentPlanner {
-    public List<PrlAssignmentPlan> createPlans(ToteLoadPlan toteLoadPlan, List<String> prlIdsInPriorityOrder) {
-        if (toteLoadPlan == null) {
-            throw new IllegalArgumentException("toteLoadPlan must not be null");
+    public List<PrlAssignmentPlan> createPlans(ToteToBagBatchPlan batchPlan, List<String> prlIdsInPriorityOrder) {
+        if (batchPlan == null) {
+            throw new IllegalArgumentException("batchPlan must not be null");
         }
         if (prlIdsInPriorityOrder == null || prlIdsInPriorityOrder.isEmpty()) {
             throw new IllegalArgumentException("prlIdsInPriorityOrder must not be empty");
         }
 
-        Map<String, List<PackPlan>> byCorrelationId = toteLoadPlan.packPlansByCorrelationId();
-        if (byCorrelationId.size() > prlIdsInPriorityOrder.size()) {
+        List<String> correlationIds = batchPlan.orderedCorrelationIds();
+        if (correlationIds.size() > prlIdsInPriorityOrder.size()) {
             throw new IllegalArgumentException("Not enough PRLs available for tote load plan");
         }
 
         List<PrlAssignmentPlan> result = new ArrayList<>();
         int prlIndex = 0;
-        for (String correlationId : toteLoadPlan.orderedCorrelationIds()) {
-            List<PackPlan> plans = byCorrelationId.get(correlationId);
+        for (String correlationId : correlationIds) {
             result.add(new PrlAssignmentPlan(
                     prlIdsInPriorityOrder.get(prlIndex),
                     correlationId,
-                    plans.size()));
+                    batchPlan.expectedPackCountFor(correlationId)));
             prlIndex++;
         }
         return result;
+    }
+
+    public List<PrlAssignmentPlan> createPlans(ToteLoadPlan toteLoadPlan, List<String> prlIdsInPriorityOrder) {
+        if (toteLoadPlan == null) {
+            throw new IllegalArgumentException("toteLoadPlan must not be null");
+        }
+        return createPlans(ToteToBagBatchPlan.fromToteLoadPlan(toteLoadPlan), prlIdsInPriorityOrder);
     }
 }

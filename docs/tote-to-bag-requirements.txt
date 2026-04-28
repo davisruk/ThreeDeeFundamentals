@@ -767,6 +767,16 @@ Recent committed progress:
   - the final pack now travels fully into the bagger intake rather than stopping partly outside the mouth
   - `BaggingModule.intakeTravelDistanceFor(PackDimensions)` provides a pack-size-aware terminal intake distance
 
+Latest uncommitted progress after the 15-PRL proving:
+- `ToteToBagBatchPlan` now represents expected pack counts by bag correlation independently of a single tote manifest
+- `ToteToBagAssignmentPlanner` can now create PRL assignment plans from `ToteToBagBatchPlan`
+- the existing single-tote assignment path still works by deriving a batch plan from `ToteLoadPlan`
+- `ToteToBagFlowController` now stores the batch plan separately from the current tote load plan
+- `IntegratedToteToBagDebugInstaller` passes an explicit batch plan for the current single demo tote
+- tests now prove:
+  - assignment expected counts can come from a batch/order plan
+  - a PRL can remain assigned and accumulating when only one of two expected packs for a correlation has arrived
+
 Current proven harness behaviour:
 - the default `TOTE_TO_BAG` scene uses the 15-PRL layout profile
 - the current single demo tote exercises PRLs 1-10
@@ -784,32 +794,29 @@ Known local workspace note:
 Last focused verification command:
 `.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagAssignmentPlannerTest --tests online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutTest --tests online.davisfamily.warehouse.sim.totebag.PcrConveyorTest --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.totebag.BaggingMachineTest --tests online.davisfamily.warehouse.testing.DebugBagReceiverAutoEmptyControllerTest`
 
-The command passed after the latest committed intake fix.
+The command passed after the latest batch/order-scoped PRL assignment changes.
 
-Next slice: injector and cross-tote planning prerequisite
+Next slice: tote injector and multi-tote proof
 
-The next slice should not start by adding multiple independent tote-to-bag controllers.
+The batch/order planning prerequisite is now in place. The next slice should add the tote injector / feed owner and prove multiple totes without adding multiple independent tote-to-bag controllers.
 
 The important requirement is that PRL/bag assignments can span tote boundaries:
 - a bag correlation may have packs in tote A and tote B
 - the PRL assigned to that correlation must persist across tote boundaries
 - tote boundaries must not reset PRL assignment state
-- expected pack counts should come from a batch/order-level plan rather than only from the currently tipped tote
+- expected pack counts now come from `ToteToBagBatchPlan` rather than only from the currently tipped tote
 - after a PRL releases a completed bag group, it can be reassigned to another incomplete correlation
 
 Recommended next-session implementation sequence:
-1. Analyse current single-tote assumptions in:
+1. Review current single-tote feed assumptions in:
    - `ToteToBagFlowController`
-   - `ToteToBagAssignmentPlanner`
    - `TippingMachine`
    - `ToteTrackTipperFlowController`
    - `IntegratedToteToBagDebugInstaller`
-2. Introduce a small batch/order planning seam that defines expected pack counts by correlation independent of one `ToteLoadPlan`.
-3. Adapt PRL assignment to use the batch/order plan while still accepting packs from the current single-tote flow.
-4. Add tests proving a PRL can stay assigned while only some expected packs have arrived.
-5. Add a tote injector that owns a queue/list of totes and feeds the next tote only when the tipper can accept one.
-6. Add a multi-tote debug manifest where at least one bag correlation spans totes.
-7. Validate this in the 15-PRL harness.
+2. Add a tote injector that owns a queue/list of totes and feeds the next tote only when the tipper can accept one.
+3. Keep one long-lived `ToteToBagFlowController` for the transport cell.
+4. Add a multi-tote debug manifest where at least one bag correlation spans totes.
+5. Validate in the 15-PRL harness that the spanning PRL remains assigned between totes and releases only after the expected batch count arrives.
 
 Design constraints for the next slice:
 - the tipper should only expose local readiness / active-tote state

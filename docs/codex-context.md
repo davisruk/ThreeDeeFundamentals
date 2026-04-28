@@ -96,6 +96,9 @@
 - `PackGroupReceiver`
   - Generic PCR/downstream pack-group receiver seam used by `ToteToBagFlowController`.
   - Keeps PRL/PCR release logic decoupled from concrete `BaggingMachine`.
+- `ToteToBagBatchPlan`
+  - Batch/order-level expected pack counts by bag correlation.
+  - Lets PRL assignment remain independent of the currently tipped `ToteLoadPlan`.
 - `BagReceiver` / `StoredBagReceiver`
   - Generic completed-bag receiver seam.
   - `StoredBagReceiver` stores received runtime `Bag` objects and can apply finite capacity.
@@ -126,6 +129,7 @@
    - run the local tip / discharge sequence
    - delegate downstream acceptance / occupancy rules through `TipperDownstreamFlow`
 8. In the tote-to-bag bagger path:
+   - `ToteToBagFlowController` initializes PRL assignment from `ToteToBagBatchPlan`, while the current tote's `ToteLoadPlan` remains the source of incoming pack sequence
    - `ToteToBagFlowController` reserves a downstream `PackGroupReceiver` before PRL release
    - PCR delivers the released group to that receiver without knowing whether it is a bagger
    - `BaggingMachine` receives the group, creates a runtime `Bag`, runs `BagDischarge`, and completes the `BagReceiver` only after discharge completes
@@ -540,11 +544,11 @@
   - pack scale is now accepted as realistic for pharmaceutical packs; larger items are expected to go to a future manual station
   - `gradle.properties` is the only known unrelated dirty file and should remain untouched
 - Next intended tote-to-bag slice:
-  - implement the planning/control prerequisite for a tote injector and multi-tote flow
+  - implement the tote injector and multi-tote flow now that the batch/order planning prerequisite exists
   - do not reinitialise the whole `ToteToBagFlowController` per tote
-  - add or adapt a batch/order-level plan so expected pack counts by bag correlation are independent of one tote manifest
-  - make PRL assignment persist across tote boundaries until a bag correlation is complete
-  - then add a tote injector that feeds the next tote only when the tipper is ready to accept one
+  - use `ToteToBagBatchPlan` for expected pack counts by bag correlation independent of one tote manifest
+  - keep PRL assignment persistent across tote boundaries until a bag correlation is complete
+  - add a tote injector that feeds the next tote only when the tipper is ready to accept one
   - prove the injector with multiple totes in the 15-PRL harness, including at least one correlation whose packs span totes
 - For tote-to-bag cleanup/integration follow-up:
   - keep the current tipper-entry module mounted into the tote-to-bag harness; do not regress back to placeholder upstream machine boxes

@@ -38,6 +38,7 @@ import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.transfer.ReleasedPackGroup;
@@ -360,6 +361,55 @@ class ToteToBagFlowControllerTest {
         assertEquals(PrlState.READY_TO_RELEASE, prl1.getAssignment().getState());
         assertTrue(controller.getReleasedGroups().isEmpty());
         assertTrue(pcrConveyor.isEmpty());
+    }
+
+    @Test
+    void shouldKeepPrlAssignedUntilBatchPlanPackCountIsSatisfied() {
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-1",
+                List.of(new PackPlan("pack-1", "bag-a", new PackDimensions(0.20f, 0.10f, 0.08f))));
+        ToteToBagBatchPlan batchPlan = new ToteToBagBatchPlan(java.util.Map.of("bag-a", 2));
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.05d, 0.05d, 0.05d);
+        SortingMachine sortingMachine = new SortingMachine("sorter", 0.05d);
+        ConveyorOccupancyModel prlOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f);
+        ConveyorOccupancyModel pcrOccupancy = new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f);
+        PdcConveyor pdcConveyor = new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.2f);
+        PrlConveyor prl1 = new PrlConveyor("prl-1", 0.15f, prlOccupancy);
+        PcrConveyor pcrConveyor = new PcrConveyor("pcr", pcrOccupancy, 0.15d);
+        BaggingMachine baggingMachine = new BaggingMachine("bagger", new BagSpec(0.34f, 0.28f, 0.22f), 0.20d, 0.20d, 0.20d, 0.20d);
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                toteLoadPlan,
+                batchPlan,
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                baggingMachine,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl1),
+                List.of(new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d)),
+                ignored -> 0.05d,
+                (ignored, pack) -> pack.getDimensions().length(),
+                ignored -> 0.80d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(tippingMachine);
+        sim.addSimObject(sortingMachine);
+        sim.addSimObject(pcrConveyor);
+        sim.addSimObject(baggingMachine);
+        sim.addController(controller);
+
+        for (int i = 0; i < 200; i++) {
+            sim.update(0.05d);
+        }
+
+        assertEquals("bag-a", prl1.getAssignment().getCorrelationId());
+        assertEquals(2, prl1.getAssignment().getExpectedPackCount());
+        assertEquals(1, prl1.getAssignment().getReceivedPackCount());
+        assertEquals(PrlState.ACCUMULATING, prl1.getAssignment().getState());
+        assertTrue(controller.getReleasedGroups().isEmpty());
     }
 
     private static class UnavailablePackGroupReceiver implements PackGroupReceiver {
