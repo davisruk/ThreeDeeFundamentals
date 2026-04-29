@@ -76,34 +76,14 @@ public final class TipperDemoFixtures {
                 trackSection,
                 "tote-1",
                 true,
-                List.of(
-                        new PackPlan("pack-a1", "bag-a", SMALL_PACK),
-                        new PackPlan("pack-b1", "bag-b", MEDIUM_PACK),
-                        new PackPlan("pack-b2", "bag-b", MEDIUM_PACK),
-                        new PackPlan("pack-c1", "bag-c", LONG_PACK),
-                        new PackPlan("pack-d1", "bag-d", SMALL_PACK),
-                        new PackPlan("pack-e1", "bag-e", MEDIUM_PACK),
-                        new PackPlan("pack-f1", "bag-f", LONG_PACK),
-                        new PackPlan("pack-g1", "bag-g", SMALL_PACK),
-                        new PackPlan("pack-h1", "bag-h", MEDIUM_PACK),
-                        new PackPlan("pack-i1", "bag-i", SMALL_PACK),
-                        new PackPlan("pack-j1", "bag-j", LONG_PACK)));
+                toteOnePackPlans());
         DemoTipperFeed secondFeed = createDemoTipperFeed(
                 tr,
                 sim,
                 trackSection,
                 "tote-2",
                 false,
-                List.of(
-                        new PackPlan("pack-a2", "bag-a", SMALL_PACK),
-                        new PackPlan("pack-c2", "bag-c", LONG_PACK),
-                        new PackPlan("pack-d2", "bag-d", MEDIUM_PACK),
-                        new PackPlan("pack-e2", "bag-e", SMALL_PACK),
-                        new PackPlan("pack-f2", "bag-f", SMALL_PACK),
-                        new PackPlan("pack-g2", "bag-g", MEDIUM_PACK),
-                        new PackPlan("pack-h2", "bag-h", LONG_PACK),
-                        new PackPlan("pack-i2", "bag-i", MEDIUM_PACK),
-                        new PackPlan("pack-j2", "bag-j", SMALL_PACK)));
+                toteTwoPackPlans());
 
         ToteLoadPlanProvider toteLoadPlanProvider = toteId -> {
             if (firstFeed.toteLoadPlan().getToteId().equals(toteId)) {
@@ -159,6 +139,54 @@ public final class TipperDemoFixtures {
         }
         ToteLoadPlanProvider toteLoadPlanProvider = candidateToteId -> toteLoadPlan.getToteId().equals(candidateToteId) ? toteLoadPlan : null;
         return new DemoTipperFeed(toteLoadPlan, totePayload, toteLoadPlanProvider);
+    }
+
+    private static List<PackPlan> toteOnePackPlans() {
+        return List.of(
+                new PackPlan("pack-a1", "bag-a", SMALL_PACK),
+                new PackPlan("pack-a2", "bag-a", SMALL_PACK),
+                new PackPlan("pack-b1", "bag-b", MEDIUM_PACK),
+                new PackPlan("pack-b2", "bag-b", MEDIUM_PACK),
+                new PackPlan("pack-c1", "bag-c", LONG_PACK),
+                new PackPlan("pack-d1", "bag-d", SMALL_PACK),
+                new PackPlan("pack-d2", "bag-d", SMALL_PACK),
+                new PackPlan("pack-e1", "bag-e", MEDIUM_PACK),
+                new PackPlan("pack-e2", "bag-e", MEDIUM_PACK),
+                new PackPlan("pack-f1", "bag-f", LONG_PACK),
+                new PackPlan("pack-g1", "bag-g", SMALL_PACK),
+                new PackPlan("pack-g2", "bag-g", SMALL_PACK),
+                new PackPlan("pack-h1", "bag-h", MEDIUM_PACK),
+                new PackPlan("pack-h2", "bag-h", MEDIUM_PACK),
+                new PackPlan("pack-i1", "bag-i", LONG_PACK),
+                new PackPlan("pack-j1", "bag-j", SMALL_PACK),
+                new PackPlan("pack-j2", "bag-j", SMALL_PACK),
+                new PackPlan("pack-k1", "bag-k", MEDIUM_PACK),
+                new PackPlan("pack-k2", "bag-k", MEDIUM_PACK),
+                new PackPlan("pack-l1", "bag-l", LONG_PACK),
+                new PackPlan("pack-m1", "bag-m", SMALL_PACK),
+                new PackPlan("pack-m2", "bag-m", SMALL_PACK),
+                new PackPlan("pack-n1", "bag-n", MEDIUM_PACK),
+                new PackPlan("pack-n2", "bag-n", MEDIUM_PACK),
+                new PackPlan("pack-o1", "bag-o", LONG_PACK));
+    }
+
+    private static List<PackPlan> toteTwoPackPlans() {
+        return List.of(
+                new PackPlan("pack-c2", "bag-c", LONG_PACK),
+                new PackPlan("pack-p1", "bag-p", SMALL_PACK),
+                new PackPlan("pack-p2", "bag-p", SMALL_PACK),
+                new PackPlan("pack-f2", "bag-f", LONG_PACK),
+                new PackPlan("pack-q1", "bag-q", MEDIUM_PACK),
+                new PackPlan("pack-q2", "bag-q", MEDIUM_PACK),
+                new PackPlan("pack-i2", "bag-i", LONG_PACK),
+                new PackPlan("pack-r1", "bag-r", LONG_PACK),
+                new PackPlan("pack-r2", "bag-r", LONG_PACK),
+                new PackPlan("pack-l2", "bag-l", LONG_PACK),
+                new PackPlan("pack-s1", "bag-s", SMALL_PACK),
+                new PackPlan("pack-s2", "bag-s", SMALL_PACK),
+                new PackPlan("pack-o2", "bag-o", LONG_PACK),
+                new PackPlan("pack-t1", "bag-t", MEDIUM_PACK),
+                new PackPlan("pack-t2", "bag-t", MEDIUM_PACK));
     }
 
     public record DemoTipperFeed(

@@ -686,6 +686,83 @@ class ToteToBagFlowControllerTest {
         assertTrue(ex.getMessage().contains("bag-c"));
     }
 
+    @Test
+    void shouldAdmitToteWhenDistinctNewCorrelationsFitIdlePrls() {
+        AdmissionFixture fixture = createAdmissionFixture();
+        fixture.controller().update(null, 0.05d);
+        fixture.prls().get(0).getAssignment().clear();
+        fixture.prls().get(1).getAssignment().clear();
+
+        ToteLoadPlan candidateTote = new ToteLoadPlan(
+                "candidate-tote",
+                List.of(
+                        new PackPlan("pack-f1", "bag-f", candidatePackDimensions()),
+                        new PackPlan("pack-g1", "bag-g", candidatePackDimensions())));
+
+        assertTrue(fixture.controller().canAdmit(candidateTote));
+    }
+
+    @Test
+    void shouldRejectToteWhenDistinctNewCorrelationsExceedIdlePrls() {
+        AdmissionFixture fixture = createAdmissionFixture();
+        fixture.controller().update(null, 0.05d);
+        fixture.prls().get(0).getAssignment().clear();
+        fixture.prls().get(1).getAssignment().clear();
+
+        ToteLoadPlan candidateTote = new ToteLoadPlan(
+                "candidate-tote",
+                List.of(
+                        new PackPlan("pack-f1", "bag-f", candidatePackDimensions()),
+                        new PackPlan("pack-g1", "bag-g", candidatePackDimensions()),
+                        new PackPlan("pack-h1", "bag-h", candidatePackDimensions())));
+
+        assertFalse(fixture.controller().canAdmit(candidateTote));
+    }
+
+    @Test
+    void shouldCountRepeatedPacksForSameNewCorrelationAsOnePrlNeed() {
+        AdmissionFixture fixture = createAdmissionFixture();
+        fixture.controller().update(null, 0.05d);
+        fixture.prls().get(0).getAssignment().clear();
+
+        ToteLoadPlan candidateTote = new ToteLoadPlan(
+                "candidate-tote",
+                List.of(
+                        new PackPlan("pack-f1", "bag-f", candidatePackDimensions()),
+                        new PackPlan("pack-f2", "bag-f", candidatePackDimensions())));
+
+        assertTrue(fixture.controller().canAdmit(candidateTote));
+    }
+
+    @Test
+    void shouldCountAlreadyAssignedCorrelationAsAlreadyCovered() {
+        AdmissionFixture fixture = createAdmissionFixture();
+        fixture.controller().update(null, 0.05d);
+        fixture.prls().get(4).getAssignment().clear();
+
+        ToteLoadPlan candidateTote = new ToteLoadPlan(
+                "candidate-tote",
+                List.of(
+                        new PackPlan("pack-a1", "bag-a", candidatePackDimensions()),
+                        new PackPlan("pack-f1", "bag-f", candidatePackDimensions())));
+
+        assertTrue(fixture.controller().canAdmit(candidateTote));
+    }
+
+    @Test
+    void shouldRejectToteWithUnknownCorrelation() {
+        AdmissionFixture fixture = createAdmissionFixture();
+        fixture.controller().update(null, 0.05d);
+        fixture.prls().get(0).getAssignment().clear();
+
+        ToteLoadPlan candidateTote = new ToteLoadPlan(
+                "candidate-tote",
+                List.of(
+                        new PackPlan("pack-z1", "bag-z", candidatePackDimensions())));
+
+        assertFalse(fixture.controller().canAdmit(candidateTote));
+    }
+
     private static class UnavailablePackGroupReceiver implements PackGroupReceiver {
         @Override
         public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
@@ -806,6 +883,64 @@ class ToteToBagFlowControllerTest {
         @Override
         public void completeIncomingTransfer(ReleasedPackGroup group) {
         }
+    }
+
+    private static AdmissionFixture createAdmissionFixture() {
+        PackDimensions packDimensions = candidatePackDimensions();
+        ToteLoadPlan currentToteLoadPlan = new ToteLoadPlan(
+                "current-tote",
+                List.of(
+                        new PackPlan("pack-a1", "bag-a", packDimensions),
+                        new PackPlan("pack-b1", "bag-b", packDimensions),
+                        new PackPlan("pack-c1", "bag-c", packDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(
+                new ToteLoadPlan(
+                        "batch-tote",
+                        List.of(
+                                new PackPlan("pack-a1", "bag-a", packDimensions),
+                                new PackPlan("pack-b1", "bag-b", packDimensions),
+                                new PackPlan("pack-c1", "bag-c", packDimensions),
+                                new PackPlan("pack-d1", "bag-d", packDimensions),
+                                new PackPlan("pack-e1", "bag-e", packDimensions),
+                                new PackPlan("pack-f1", "bag-f", packDimensions),
+                                new PackPlan("pack-g1", "bag-g", packDimensions))));
+
+        List<PrlConveyor> prls = List.of(
+                new PrlConveyor("prl-1", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f)),
+                new PrlConveyor("prl-2", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f)),
+                new PrlConveyor("prl-3", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f)),
+                new PrlConveyor("prl-4", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f)),
+                new PrlConveyor("prl-5", 0.15f, new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f)));
+
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                currentToteLoadPlan,
+                batchPlan,
+                null,
+                null,
+                new PdcConveyor("pdc", new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f), 1.0f),
+                new PcrConveyor("pcr", new ConveyorOccupancyModel(2.0f, 0.05f, 0.10f), 0.15d),
+                new UnavailablePackGroupReceiver(),
+                new ToteToBagAssignmentPlanner(),
+                prls,
+                List.of(
+                        new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-2", "prl-2", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-3", "prl-3", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-4", "prl-4", 0d, 0.05d, 0.05d),
+                        new PdcDiversionDevice("diverter-5", "prl-5", 0d, 0.05d, 0.05d)),
+                ignored -> 0.0d,
+                (ignored, pack) -> 0.0f,
+                ignored -> 0.0d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        return new AdmissionFixture(controller, prls);
+    }
+
+    private static PackDimensions candidatePackDimensions() {
+        return new PackDimensions(0.20f, 0.10f, 0.08f);
+    }
+
+    private record AdmissionFixture(ToteToBagFlowController controller, List<PrlConveyor> prls) {
     }
 
     private static Mesh anchorMesh() {

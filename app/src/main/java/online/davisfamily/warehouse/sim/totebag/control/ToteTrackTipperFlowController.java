@@ -5,6 +5,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
@@ -34,6 +35,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private boolean toteCaptured;
     private boolean toteReleased;
     private ToteLoadPlan activeToteLoadPlan;
+    private Predicate<ToteLoadPlan> toteAdmissionPredicate = ignored -> true;
 
     public ToteTrackTipperFlowController(
             Tote tote,
@@ -53,6 +55,13 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 tippingMachine,
                 new SorterTipperDownstreamFlow(sortingMachine, null),
                 dischargeDurationSeconds);
+    }
+
+    public void setToteAdmissionPredicate(Predicate<ToteLoadPlan> toteAdmissionPredicate) {
+        if (toteAdmissionPredicate == null) {
+            throw new IllegalArgumentException("toteAdmissionPredicate must not be null");
+        }
+        this.toteAdmissionPredicate = toteAdmissionPredicate;
     }
 
     public ToteTrackTipperFlowController(
@@ -189,6 +198,9 @@ public class ToteTrackTipperFlowController implements SimulationController {
         activeTote.setInteractionMode(ToteMotionState.HELD);
         activeTote.snapToRouteDistance(tipperStopDistance);
         activeToteLoadPlan = resolveLoadPlanForCapturedTote();
+        if (!toteAdmissionPredicate.test(activeToteLoadPlan)) {
+            return;
+        }
         tippingMachine.loadTote(activeToteLoadPlan);
         toteCaptured = true;
     }

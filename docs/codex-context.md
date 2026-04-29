@@ -564,11 +564,17 @@
   - pack scale is now accepted as realistic for pharmaceutical packs; larger items are expected to go to a future manual station
   - the latest focused planner/controller/PCR/bagger tests passed after the reassignment change
 - Next intended tote-to-bag discussion:
-  - the user will provide the planned steps for a 15-conveyor / 40-pack visual capacity fixture
-  - that fixture should use all 15 PRLs from tote 1, span every 3rd initial bag into tote 2, and use tote 2 to both finish the spanning bags and introduce 5 later bags for reassignment
-  - after that visual proof, return to bagging-machine / receiver cleanup
+  - the 15-conveyor / 40-pack visual capacity fixture was attempted and focused tests passed
+  - the visual run failed with `No idle PRL available for correlation bag-r`
+  - this exposed a local admission/readiness boundary: the tipper should hold a tote until the entire tote load can be accepted by current PRL state
+  - admission should allow already-assigned correlations and require one idle PRL per distinct new correlation in the candidate tote
+  - this is local tote-to-bag machine state, not full scheduler tote selection
+  - after local admission gating and visual proof, return to bagging-machine / receiver cleanup
   - using the same installed-machine, local-state, explicit-seam architecture for the remaining warehouse machines
   - scheduler responsibility for tote sequence remains future work after a fuller warehouse layout exists
+  - do not implement full scheduler policy merely to fix the current no-idle-PRL visual failure
+  - do not make PCR bag-aware yet; multi-bag PCR holding is plausible future work but brings group spacing and bagger-reservation complexity
+  - future ray-casting/debug command buttons may support manual release/exception handling; a manually released problem bag should go into an exception state and send the receiving tote to a future exception station
   - keep the existing rule that one long-lived `ToteToBagFlowController` owns the transport cell and does not reset PRL state at tote boundaries
   - do not reinitialise the whole `ToteToBagFlowController` per tote
   - use `ToteToBagBatchPlan` for expected pack counts by bag correlation independent of one tote manifest

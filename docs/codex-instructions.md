@@ -135,35 +135,51 @@ Current proven multi-tote state:
   - completed/idle PRLs can be reused for later bag correlations when a pack for that correlation arrives
   - new correlations are rejected if no PRL is idle, leaving tote admission/deadlock avoidance to the future scheduler
 
-Immediate next user-supplied implementation plan:
+Latest visual test result:
 
-- the user will provide planned steps for a 15-conveyor / 40-pack visual capacity test
-- the intended fixture uses all 15 PRLs from tote 1
-- every 3rd initial bag spans into tote 2
-- tote 2 completes the 5 spanning bags and introduces 5 additional complete bags to exercise arrival-driven reassignment
-- this should remain a debug fixture/visual proof change, not a controller or scheduler change
+- the 15-conveyor / 40-pack visual fixture was attempted
+- focused tests passed, but the visual run hit `No idle PRL available for correlation bag-r`
+- visually, some PRLs were waiting to release while the tipper had already discharged packs for new correlations
+- this should not be solved by pack ordering alone
 
-After that visual proof, the next architectural topic is machine architecture standardisation before scheduler work.
+Current next architectural topic:
+
+- introduce a local tote-to-bag admission/readiness gate before tipping a tote
+- the tipper can hold an accepted tote, but should only tip once the tote-to-bag cell can admit the tote's full load
+- admission should be conservative because the tipper cannot choose which packs fall from the tote
+- for a candidate tote load, existing assigned correlations are acceptable, but each new correlation requires one currently idle PRL
+- if the full tote cannot be admitted, the tipper should hold rather than discharge and later fail in PDC/PRL routing
+- this is local machine state / cell admission, not full scheduler tote selection
 
 Important boundary:
 
 - The controller should manage active PRL assignments, preserve them across tote boundaries, release completed groups, and reuse idle PRLs for new bag correlations on arrival.
 - The controller should not reorder totes or solve global batch scheduling.
 - A deadlock is possible if all PRLs are reserved for incomplete bag correlations and the next tote contains only packs for new, unassigned correlations.
-- That deadlock should be avoided by a future scheduler that chooses tote sequence, not by adding tote sequencing policy to PRL/PCR or tipper logic.
+- That deadlock should ultimately be avoided by a future scheduler that chooses tote sequence.
+- Before the full scheduler exists, the tote-to-bag cell should expose/use local admission state so the tipper holds a tote that cannot yet be safely tipped.
 - Scheduler rules are expected to be large and dependent on the eventual full warehouse layout, tote release rules, buffer state, and machine state across the floor.
-- Do not design or implement scheduler-facing APIs prematurely unless a local machine slice genuinely needs one.
+- Do not implement the full scheduler prematurely unless a local machine slice genuinely needs one.
+
+Deferred considerations from the latest discussion:
+
+- PCR could eventually become more bag-aware and hold multiple bag groups, but this is intentionally deferred because it creates harder spacing, group-boundary, and bagger-reservation rules.
+- The current one-released-group-in-flight PCR policy remains the conservative baseline.
+- Future ray-casting / debug command buttons may support manual release or exception handling.
+- If a manual release is used to break a deadlock, the affected bag should enter an exception state and the receiving tote should later visit an exception station.
+- Those command/exception behaviours should be documented and designed later; they should not be mixed into the immediate local admission gate slice.
 
 Current roadmap:
 
-1. Tidy the bagging-machine / receiver side so it follows the same installed-machine, local-state, explicit-seam style as the tipper/sorter/tote-to-bag work.
-2. Implement the remaining warehouse machines using the same state architecture and installation approach:
+1. Add local tote-to-bag admission gating so the tipper only tips when the full tote load can be accepted by current PRL state.
+2. Tidy the bagging-machine / receiver side so it follows the same installed-machine, local-state, explicit-seam style as the tipper/sorter/tote-to-bag work.
+3. Implement the remaining warehouse machines using the same state architecture and installation approach:
    - lid opening machine
    - tote strapping machine
    - scheduler-controlled tote buffer where totes arrive and wait for release
-3. Construct an entire warehouse layout with all machines installed and a few totes traversing it.
-4. Write a dedicated scheduler requirements document once real machine state, layout constraints, release rules, and buffer behaviour are visible.
-5. Implement tote release / scheduling and tote injection after those requirements are concrete.
+4. Construct an entire warehouse layout with all machines installed and a few totes traversing it.
+5. Write a dedicated scheduler requirements document once real machine state, layout constraints, release rules, and buffer behaviour are visible.
+6. Implement tote release / scheduling and tote injection after those requirements are concrete.
 
 Dynamic PRL reassignment is now implemented locally in tote-to-bag:
 

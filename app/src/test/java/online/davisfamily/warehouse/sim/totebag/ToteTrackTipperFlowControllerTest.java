@@ -18,6 +18,7 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
@@ -111,6 +112,81 @@ class ToteTrackTipperFlowControllerTest {
         }
 
         assertTrue(sawSecondCapture);
+    }
+
+    @Test
+    void shouldHoldToteUntilAdmissionAllowsTipping() {
+        RouteSegment infeedSegment = new RouteSegment(
+                "infeed",
+                new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(2f, 0f, 0f), false));
+        RouteSegment tipperSegment = new RouteSegment(
+                "tipper",
+                new LinearSegment3(new Vec3(2f, 0f, 0f), new Vec3(3.25f, 0f, 0f), false));
+        RouteSegment exitSegment = new RouteSegment(
+                "exit",
+                new LinearSegment3(new Vec3(3.25f, 0f, 0f), new Vec3(5f, 0f, 0f), false));
+        infeedSegment.connectTo(tipperSegment);
+        tipperSegment.connectTo(exitSegment);
+
+        PackDimensions packDimensions = new PackDimensions(0.20f, 0.10f, 0.08f);
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(
+                "tote-a",
+                List.of(new PackPlan("pack-a1", "bag-a", packDimensions)));
+        ToteLoadPlanProvider toteLoadPlanProvider = toteId -> toteLoadPlan.getToteId().equals(toteId) ? toteLoadPlan : null;
+
+        Tote toteA = createTote("tote-a", infeedSegment);
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.20d, 0.10d, 0.10d);
+        SortingMachine sortingMachine = new SortingMachine("sorter", 0.10d);
+        ToteTrackTipperFlowController controller = new ToteTrackTipperFlowController(
+                toteA,
+                toteLoadPlanProvider,
+                tipperSegment,
+                0.625f,
+                -1.02f,
+                tippingMachine,
+                sortingMachine,
+                0.20d);
+        controller.setToteAdmissionPredicate(ignored -> false);
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addTrackableObject(toteA);
+        sim.addSimObject(tippingMachine);
+        sim.addSimObject(sortingMachine);
+        sim.addController(controller);
+
+        boolean sawHeldWhileBlocked = false;
+        for (int i = 0; i < 80; i++) {
+            sim.update(0.05d);
+            if (controller.isToteCaptured()) {
+                sawHeldWhileBlocked = true;
+                break;
+            }
+            if (toteA.getInteractionMode() == ToteMotionState.HELD
+                    && tippingMachine.getActiveToteId() == null
+                    && toteA.getLastSnapshot() != null
+                    && toteA.getLastSnapshot().currentSegment() == tipperSegment) {
+                sawHeldWhileBlocked = true;
+                break;
+            }
+        }
+
+        assertTrue(sawHeldWhileBlocked);
+        assertFalse(controller.isToteCaptured());
+        assertEquals(null, tippingMachine.getActiveToteId());
+
+        controller.setToteAdmissionPredicate(ignored -> true);
+
+        boolean sawCaptureAfterAdmission = false;
+        for (int i = 0; i < 120; i++) {
+            sim.update(0.05d);
+            if (controller.isToteCaptured()) {
+                sawCaptureAfterAdmission = true;
+                assertEquals("tote-a", tippingMachine.getActiveToteId());
+                break;
+            }
+        }
+
+        assertTrue(sawCaptureAfterAdmission);
     }
 
     private static Tote createTote(String toteId, RouteSegment infeedSegment) {

@@ -14,10 +14,12 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
@@ -403,6 +405,35 @@ public class ToteToBagFlowController implements SimulationController {
 
     public List<PrlToPcrTransfer> getActivePrlToPcrTransfers() {
         return List.copyOf(activePrlToPcrTransfers);
+    }
+
+    public boolean canAdmit(ToteLoadPlan candidateToteLoadPlan) {
+        if (candidateToteLoadPlan == null) {
+            throw new IllegalArgumentException("candidateToteLoadPlan must not be null");
+        }
+        initializeIfNeeded();
+
+        Set<String> distinctCorrelationIds = new LinkedHashSet<>();
+        for (PackPlan packPlan : candidateToteLoadPlan.getPackPlans()) {
+            distinctCorrelationIds.add(packPlan.correlationId());
+        }
+
+        int idlePrlCount = (int) prlsById.values().stream()
+                .filter(prl -> prl.getAssignment().getState() == PrlState.IDLE)
+                .count();
+        for (String correlationId : distinctCorrelationIds) {
+            if (findPrlForCorrelation(correlationId).isPresent()) {
+                continue;
+            }
+            if (batchPlan.expectedPackCountFor(correlationId) <= 0) {
+                return false;
+            }
+            idlePrlCount--;
+            if (idlePrlCount < 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void initializeIfNeeded() {

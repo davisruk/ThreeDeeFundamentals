@@ -32,7 +32,7 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
 
 public class IntegratedToteToBagDebugInstaller {
-    private static final int DEBUG_TOTE_BAG_CAPACITY = 10;
+    private static final int DEBUG_TOTE_BAG_CAPACITY = 25;
 
     public IntegratedToteToBagDebugInstallation install(
             TriangleRenderer tr,
@@ -124,6 +124,8 @@ public class IntegratedToteToBagDebugInstaller {
                 (prlId, pack) -> subsystem.getLayout().pdcDiversionFrontDistanceFor(indexOfPrl(prls, prlId), pack),
                 prlId -> subsystem.getLayout().prlToPcrTransferDurationFor(indexOfPrl(prls, prlId)),
                 (prlId, pack) -> subsystem.getLayout().prlToPcrEntryFrontDistanceFor(indexOfPrl(prls, prlId), pack));
+
+        tipperToSorterSection.getFlowController().setToteAdmissionPredicate(flowController::canAdmit);
 
         sim.addSimObject(pcrConveyor);
         sim.addController(new DebugToteInjectorController(
