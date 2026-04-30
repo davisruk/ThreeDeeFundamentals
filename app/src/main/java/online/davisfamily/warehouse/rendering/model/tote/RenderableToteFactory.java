@@ -2,11 +2,8 @@ package online.davisfamily.warehouse.rendering.model.tote;
 
 import java.util.List;
 
-import online.davisfamily.threedee.behaviour.Behaviour;
-import online.davisfamily.threedee.behaviour.transformation.PingPongRotationBehaviour;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation;
-import online.davisfamily.threedee.matrices.Mat4.ObjectTransformation.Axis;
 import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.RenderableObject.FORWARD_DIRECTION;
@@ -14,6 +11,8 @@ import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 
 public class RenderableToteFactory {
+	private static final String LEFT_LID_SUFFIX = "_LeftLid";
+	private static final String RIGHT_LID_SUFFIX = "_RightLid";
 
 	public static RenderableObject createRenderableTote(String id, TriangleRenderer tr, ToteGeometry tote, boolean selectable) {
 		OneColourStrategyImpl blueColour = new OneColourStrategyImpl(0xFF0000FF);
@@ -76,17 +75,13 @@ public class RenderableToteFactory {
 			    new Mat4()
 			);
 
-		Behaviour openClose = isLeft ? 
-				new PingPongRotationBehaviour(Axis.Z, 0f, 255f, 90f):
-				new PingPongRotationBehaviour(Axis.Z, -255f, 0f, 90f);
-		String id = isLeft? parentId +"_LeftLid":parentId +"_RightLid";
-		return RenderableObject.createWithBehaviours(
+		String id = isLeft ? parentId + LEFT_LID_SUFFIX : parentId + RIGHT_LID_SUFFIX;
+		return RenderableObject.create(
 			id,
 			tr,
 			lidMesh, // mesh
 			tLid, // transform
 			colour,
-			List.of(openClose),
 			true
 		);
 		

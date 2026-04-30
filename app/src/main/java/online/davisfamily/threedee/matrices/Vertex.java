@@ -39,61 +39,62 @@ public class Vertex {
 		return out;
 	}
 
-	// mutable Objects for clipTriangleNear
-	// stops rampant object creation for
-	// complex scenes
-	private static Vertex[] in = new Vertex[3];
-	private static Vertex[] out = new Vertex[3];
-	private static Vertex[] verts = new Vertex[3];
 	private static ClippedTriangles ct = new ClippedTriangles();
 	private static Vertex[] t1 = new Vertex[3];
 	private static Vertex[] t2 = new Vertex[3];
-	private static Vertex ab = new Vertex();
-	private static Vertex ac = new Vertex();
-	private static Vertex bc = new Vertex();
+	private static Vertex[] poly = new Vertex[4];
+	private static Vertex i01 = new Vertex();
+	private static Vertex i12 = new Vertex();
+	private static Vertex i20 = new Vertex();
 
 	// clip triangle to near on Z plane
 	// empty result == exclude all vertices
 	// returns 2 triangles if 2 vertices cross the Z plane 
 	public static ClippedTriangles clipTriangleNear(Vertex v0, Vertex v1, Vertex v2, float near) {
-		in[0] = in[1] = in[2] = out[0] = out[1] = out[2] = null; 
-		int inCount = 0, outCount = 0;
-		verts[0] = v0; verts[1] = v1; verts[2] = v2;
-		for (Vertex v: verts) {
-			if (Vertex.isInsideNear(v, near)) in[inCount++] = v;
-			else out[outCount++] = v;
-		}
-		
 		ct.t1 = null; ct.t2 = null;
-		if (inCount == 0) return ct; // none inside
-		if (inCount == 3) {
-			t1[0] = v0; t1[1] = v1; t1[2]=v2; // all inside
-			ct.t1 = t1;
-			return ct;
+		int polyCount = 0;
+
+		boolean in0 = Vertex.isInsideNear(v0, near);
+		boolean in1 = Vertex.isInsideNear(v1, near);
+		boolean in2 = Vertex.isInsideNear(v2, near);
+
+		if (in0) {
+			poly[polyCount++] = v0;
 		}
-		
-		// 1 vertex inside so clip to ab & ac
-		if (inCount == 1) {
-			Vertex a = in[0];
-			Vertex b = out[0];
-			Vertex c = out[1];
-			ab = Vertex.intersectNear(a,b, near, ab);
-			ac = Vertex.intersectNear(a,c, near, ac);
-			t1[0] = a; t1[1] = ab; t1[2]=ac;			
-			ct.t1 = t1;
+		if (in0 != in1) {
+			poly[polyCount++] = Vertex.intersectNear(v0, v1, near, i01);
+		}
+
+		if (in1) {
+			poly[polyCount++] = v1;
+		}
+		if (in1 != in2) {
+			poly[polyCount++] = Vertex.intersectNear(v1, v2, near, i12);
+		}
+
+		if (in2) {
+			poly[polyCount++] = v2;
+		}
+		if (in2 != in0) {
+			poly[polyCount++] = Vertex.intersectNear(v2, v0, near, i20);
+		}
+
+		if (polyCount < 3) {
 			return ct;
 		}
 
-		// 2 vertex inside so clip to ac & bc
-		Vertex a = in[0];
-		Vertex b = in[1];
-		Vertex c = out[0];
-		ac = Vertex.intersectNear(a,c, near, ac);
-		bc = Vertex.intersectNear(b,c, near, bc);
-		t1[0] = a; t1[1] = b; t1[2]=bc;
-		t2[0] = a; t2[1] = bc; t2[2]=ac;
+		t1[0] = poly[0];
+		t1[1] = poly[1];
+		t1[2] = poly[2];
 		ct.t1 = t1;
-		ct.t2 = t2;
+
+		if (polyCount == 4) {
+			t2[0] = poly[0];
+			t2[1] = poly[2];
+			t2[2] = poly[3];
+			ct.t2 = t2;
+		}
+
 		return ct;
 	}	
 }

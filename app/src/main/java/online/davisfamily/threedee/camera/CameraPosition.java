@@ -27,4 +27,8 @@ public class CameraPosition {
 		return new CameraPosition(new Vec3(-2.535f, 3.190f, 2.305f), 0.818f, -0.554f);
 	}
 
+	public static CameraPosition backRight(){
+		return new CameraPosition(new Vec3(4.666f, 3.190f, -6.161f), 3.672f, -0.502f);
+	}
+
 }

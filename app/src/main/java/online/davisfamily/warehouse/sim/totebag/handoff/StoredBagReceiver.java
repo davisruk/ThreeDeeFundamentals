@@ -1,0 +1,117 @@
+package online.davisfamily.warehouse.sim.totebag.handoff;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
+
+public class StoredBagReceiver implements BagReceiver {
+    private final String id;
+    private final int capacity;
+    private final List<Bag> receivedBags = new ArrayList<>();
+
+    private Bag activeBag;
+    private BagReservation activeReservation;
+    private boolean receiving;
+
+    public StoredBagReceiver(String id) {
+        this(id, Integer.MAX_VALUE);
+    }
+
+    public StoredBagReceiver(String id, int capacity) {
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("id must not be blank");
+        }
+        if (capacity <= 0) {
+            throw new IllegalArgumentException("capacity must be > 0");
+        }
+        this.id = id;
+        this.capacity = capacity;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    @Override
+    public boolean canReserveIncomingBag(Bag bag) {
+        return bag != null
+                && activeReservation == null
+                && receivedBags.size() < capacity;
+    }
+
+    @Override
+    public BagReservation reserveIncomingBag(Bag bag) {
+        if (!canReserveIncomingBag(bag)) {
+            throw new IllegalStateException("Bag receiver cannot reserve incoming bag");
+        }
+        activeBag = bag;
+        activeReservation = new BagReservation(id, bag.getCorrelationId());
+        return activeReservation;
+    }
+
+    @Override
+    public boolean hasReservationFor(Bag bag) {
+        return bag != null
+                && activeReservation != null
+                && bag.getCorrelationId().equals(activeReservation.correlationId());
+    }
+
+    @Override
+    public void beginReceiving(BagReservation reservation) {
+        validateActiveReservation(reservation);
+        receiving = true;
+    }
+
+    @Override
+    public void completeReceiving(BagReservation reservation) {
+        validateActiveReservation(reservation);
+        receivedBags.add(activeBag);
+        activeBag = null;
+        activeReservation = null;
+        receiving = false;
+    }
+
+    public BagReservation getActiveReservation() {
+        return activeReservation;
+    }
+
+    public boolean isReceiving() {
+        return receiving;
+    }
+
+    public List<Bag> getReceivedBags() {
+        return Collections.unmodifiableList(receivedBags);
+    }
+
+    public int getCapacity() {
+        return capacity;
+    }
+
+    public boolean isFull() {
+        return receivedBags.size() >= capacity;
+    }
+
+    public boolean removeReceivedBag(Bag bag) {
+        if (bag == null) {
+            throw new IllegalArgumentException("bag must not be null");
+        }
+        return receivedBags.remove(bag);
+    }
+
+    public List<String> getCompletedCorrelationIds() {
+        return receivedBags.stream()
+                .map(Bag::getCorrelationId)
+                .toList();
+    }
+
+    private void validateActiveReservation(BagReservation reservation) {
+        if (reservation == null) {
+            throw new IllegalArgumentException("reservation must not be null");
+        }
+        if (activeReservation == null || !activeReservation.equals(reservation)) {
+            throw new IllegalStateException("Reservation does not match the receiver's active reservation");
+        }
+    }
+}

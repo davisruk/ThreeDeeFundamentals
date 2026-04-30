@@ -1,7 +1,12 @@
 package online.davisfamily.warehouse.sim.transfer;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
+import online.davisfamily.warehouse.sim.transfer.mechanism.TransferZoneMechanism;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class TransferZone {
@@ -16,6 +21,7 @@ public class TransferZone {
     private final GuideSide targetOpenSide;
     private final float centrePoint;
     private final TransferMotionConfig motionConfig;
+    private final List<TransferZoneMechanism> mechanisms = new ArrayList<>();
 
     public TransferZone(
             String id,
@@ -114,5 +120,16 @@ public class TransferZone {
 
     public RouteSegment getRouteSegment() {
         return sourceSegment;
+    }
+
+    public void addMechanism(TransferZoneMechanism mechanism) {
+        if (mechanism == null) {
+            throw new IllegalArgumentException("mechanism must not be null");
+        }
+        mechanisms.add(mechanism);
+    }
+
+    public List<TransferZoneMechanism> getMechanisms() {
+        return Collections.unmodifiableList(mechanisms);
     }
 }

@@ -10,6 +10,8 @@ import javax.swing.JRootPane;
 
 import online.davisfamily.threedee.camera.Camera;
 import online.davisfamily.threedee.camera.CameraPosition;
+import online.davisfamily.threedee.debug.Inspectable;
+import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.keyboard.CommandBindings;
 import online.davisfamily.threedee.input.keyboard.InputState;
@@ -57,6 +59,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 
 	// debug variables
 	protected DebugUtils debug;
+	protected final SelectionInspectionRegistry inspectionRegistry = new SelectionInspectionRegistry();
 	
 	protected final SelectionManager selectionManager = new SelectionManager();
 	protected final ScenePicker scenePicker = new ScenePicker();
@@ -81,7 +84,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 		KeyBindings.installKeyBindings(root, this.inputState);
 		CommandBindings.installCommandBindings(root, this.inputState);
 		this.bl = new BresenhamLineUtilities(pixels, vd.width, new CohenSutherlandLineClipper(vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1));
-		this.debug = new DebugUtils(bl,camera,vd, selectionManager);
+		this.debug = new DebugUtils(bl,camera,vd, selectionManager, inspectionRegistry);
 		this.tr = new TriangleRenderer(pixels, vd.width, vd.vpMinX, vd.vpMinY, vd.vpMaxXExclusive-1, vd.vpMaxYExclusive-1, this.bl, inputState, debug);
 		this.vp = new Mat4();
 	}
@@ -176,6 +179,10 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	
 	public RenderableObject getSelectedObject() {
 		return selectionManager.getSelected();
+	}
+
+	protected void registerInspectable(RenderableObject renderable, Inspectable inspectable) {
+		inspectionRegistry.register(renderable, inspectable);
 	}
 	
 	@Override

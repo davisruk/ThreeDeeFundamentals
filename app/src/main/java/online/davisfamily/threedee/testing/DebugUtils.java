@@ -4,8 +4,10 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.List;
 
 import online.davisfamily.threedee.camera.Camera;
+import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.deprecated.Path3;
 import online.davisfamily.threedee.deprecated.PathFollowerBehaviour;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
@@ -23,12 +25,14 @@ public class DebugUtils {
 	private Camera camera;
 	private ViewDimensions vd;
 	private SelectionManager selectionManager;
+	private SelectionInspectionRegistry inspectionRegistry;
 	
-	public DebugUtils(BresenhamLineUtilities lineUtilities, Camera cam, ViewDimensions dimensions, SelectionManager sm) {
+	public DebugUtils(BresenhamLineUtilities lineUtilities, Camera cam, ViewDimensions dimensions, SelectionManager sm, SelectionInspectionRegistry inspectionRegistry) {
 		bl = lineUtilities;
 		camera = cam;
 		vd = dimensions;
 		selectionManager = sm;
+		this.inspectionRegistry = inspectionRegistry;
 	}
 	
 	// tested
@@ -190,9 +194,10 @@ public class DebugUtils {
 	        int x = 10;
 	        int y = 20;
 	        int line = 18;
+	        int panelWidth = 420;
 	        
 	        g.setColor(new Color(0, 0, 0, 170));
-	        g.fillRoundRect(5, 5, 260, 320, 10, 10);
+	        g.fillRoundRect(5, 5, panelWidth, 520, 10, 10);
 	        g.setColor(Color.WHITE);
 	        
 	        g.drawString(String.format("Pos:   (%.3f, %.3f, %.3f)",
@@ -245,6 +250,19 @@ public class DebugUtils {
 	        String s = selectionManager.getSelected() == null ? "None" : selectionManager.getSelected().id;
 	        g.drawString("Selected object: " + s, x, y);
 	        y += line;
+	        
+	        List<String> inspectionLines = inspectionRegistry.describe(selectionManager.getSelected());
+	        if (!inspectionLines.isEmpty()) {
+	        	g.drawString("Inspection:", x, y);
+	        	y += line;
+	        	for (String inspectionLine : inspectionLines) {
+	        		g.drawString(inspectionLine, x, y);
+	        		y += line;
+	        		if (y > 500) {
+	        			break;
+	        		}
+	        	}
+	        }
 
 	    } finally {
 	        g.dispose();
