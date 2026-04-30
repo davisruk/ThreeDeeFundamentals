@@ -170,6 +170,38 @@ class BaggingMachineTest {
         assertTrue(baggingMachine.canReserveIncomingGroup(group));
     }
 
+    @Test
+    void shouldAcceptSecondGroupWhileFirstBagIsDischarging() {
+        RecordingBagReceiver receiver = new RecordingBagReceiver("receiver");
+        BaggingMachine baggingMachine = new BaggingMachine(
+                "bagger",
+                new BagSpec(0.34f, 0.28f, 0.22f),
+                0.05d,
+                0.05d,
+                0.05d,
+                0.15d,
+                receiver);
+        ReleasedPackGroup firstGroup = releasedGroup("bag-a");
+        ReleasedPackGroup secondGroup = releasedGroup("bag-b");
+
+        baggingMachine.startBagging(firstGroup);
+        baggingMachine.completeIncomingTransfer(firstGroup);
+        for (int i = 0; i < 3; i++) {
+            baggingMachine.update(null, 0.05d);
+        }
+
+        assertEquals(BaggingMachineState.DISCHARGING, baggingMachine.getState());
+        assertNotNull(baggingMachine.getActiveDischarge());
+        assertTrue(baggingMachine.canReserveIncomingGroup(secondGroup));
+
+        baggingMachine.startBagging(secondGroup);
+        baggingMachine.completeIncomingTransfer(secondGroup);
+
+        assertEquals(secondGroup, baggingMachine.getCurrentGroup());
+        assertNotNull(baggingMachine.getActiveDischarge());
+        assertEquals(List.of(), receiver.getCompletedCorrelationIds());
+    }
+
     private static ReleasedPackGroup releasedGroup(String correlationId) {
         Pack pack = new Pack(
                 "pack-1",

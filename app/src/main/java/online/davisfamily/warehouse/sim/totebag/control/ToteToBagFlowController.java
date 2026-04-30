@@ -45,7 +45,6 @@ public class ToteToBagFlowController implements SimulationController {
     private final PdcDiversionDistanceProvider pdcDiversionDistanceProvider;
     private final PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider;
     private final PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider;
-    private PackGroupReservation baggingReservation;
     private boolean initialized;
     private boolean toteLoaded;
 
@@ -561,14 +560,11 @@ public class ToteToBagFlowController implements SimulationController {
         Optional<PrlConveyor> readyPrl = prlsById.values().stream()
                 .filter(PrlConveyor::isReadyToRelease)
                 .sorted(Comparator.comparing(PrlConveyor::getId))
-                .filter(prl -> downstreamPackGroupReceiver.canReserveIncomingGroup(prl.peekReadyGroup()))
                 .findFirst();
         if (readyPrl.isEmpty()) {
             return;
         }
 
-        ReleasedPackGroup candidate = readyPrl.get().peekReadyGroup();
-        baggingReservation = downstreamPackGroupReceiver.reserveIncomingGroup(candidate);
         ReleasedPackGroup releasedGroup = readyPrl.get().releaseGroup();
         pcrConveyor.startReceivingGroup(releasedGroup);
         releasedGroups.add(releasedGroup);
@@ -619,9 +615,12 @@ public class ToteToBagFlowController implements SimulationController {
         if (!pcrConveyor.isGroupFullyAccepted(groupAtOutfeed)) {
             return;
         }
-        if (downstreamPackGroupReceiver.hasReservationFor(groupAtOutfeed)) {
-            downstreamPackGroupReceiver.beginReceiving(baggingReservation);
-            baggingReservation = null;
+        if (!downstreamPackGroupReceiver.isReceivingGroup(groupAtOutfeed)) {
+            if (!downstreamPackGroupReceiver.canReserveIncomingGroup(groupAtOutfeed)) {
+                return;
+            }
+            PackGroupReservation reservation = downstreamPackGroupReceiver.reserveIncomingGroup(groupAtOutfeed);
+            downstreamPackGroupReceiver.beginReceiving(reservation);
         }
 
         if (!downstreamPackGroupReceiver.isReceivingGroup(groupAtOutfeed)) {

@@ -11,7 +11,9 @@ import online.davisfamily.warehouse.sim.totebag.control.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.ArrayDeque;
 import java.util.List;
+import java.util.Queue;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.StatefulSimObject;
@@ -34,14 +36,28 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
     private final List<CompletedBag> completedBags = new ArrayList<>();
     private final List<Bag> completedRuntimeBags = new ArrayList<>();
 
+    private static final class PendingDischarge {
+        private final Bag completedRuntimeBag;
+        private final CompletedBag completedBag;
+
+        private PendingDischarge(Bag completedRuntimeBag, CompletedBag completedBag) {
+            this.completedRuntimeBag = completedRuntimeBag;
+            this.completedBag = completedBag;
+        }
+    }
+
     private BaggingMachineState state = BaggingMachineState.IDLE;
     private ReleasedPackGroup reservedGroup;
     private PackGroupReservation activeReservation;
     private ReleasedPackGroup currentGroup;
     private boolean incomingTransferComplete;
     private double timeInStateSeconds;
-    private Bag activeRuntimeBag;
+    private BaggingMachineState intakeState = BaggingMachineState.IDLE;
+    private final Queue<PendingDischarge> pendingDischarges = new ArrayDeque<>();
     private BagDischarge activeDischarge;
+    private boolean dischargeAwaitingReceiver;
+    private boolean dischargeWithoutReceiverActive;
+    private double dischargeTimeInStateSeconds;
 
     public BaggingMachine(
             String id,
@@ -90,35 +106,46 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
 
     @Override
     public void update(SimulationContext context, double dtSeconds) {
-        if (state == BaggingMachineState.IDLE || currentGroup == null) {
-            return;
+        boolean dischargeWasActiveAtStart = activeDischarge != null || dischargeWithoutReceiverActive;
+
+        if (currentGroup != null) {
+            timeInStateSeconds += dtSeconds;
+            switch (intakeState) {
+                case RECEIVING -> {
+                    if (incomingTransferComplete) {
+                        transitionIntakeWhenElapsed(BaggingMachineState.DROPPING, receivingDurationSeconds);
+                    }
+                }
+                case DROPPING -> transitionIntakeWhenElapsed(BaggingMachineState.SEALING, droppingDurationSeconds);
+                case SEALING -> {
+                    if (timeInStateSeconds >= sealingDurationSeconds) {
+                        prepareBagForDischarge();
+                    }
+                }
+                case IDLE -> {
+                }
+                case WAITING_FOR_RECEIVER -> {
+                }
+                case DISCHARGING -> {
+                }
+            }
         }
 
-        timeInStateSeconds += dtSeconds;
-        switch (state) {
-            case RECEIVING -> {
-                if (incomingTransferComplete) {
-                    transitionWhenElapsed(BaggingMachineState.DROPPING, receivingDurationSeconds);
+        if (activeDischarge == null && !dischargeWithoutReceiverActive) {
+            tryStartNextPendingDischarge();
+        }
+
+        if (dischargeWasActiveAtStart) {
+            if (activeDischarge != null) {
+                activeDischarge.advance(dtSeconds);
+                if (activeDischarge.isComplete()) {
+                    completeActiveDischarge();
                 }
-            }
-            case DROPPING -> transitionWhenElapsed(BaggingMachineState.SEALING, droppingDurationSeconds);
-            case SEALING -> {
-                if (timeInStateSeconds >= sealingDurationSeconds) {
-                    prepareBagForDischarge();
-                }
-            }
-            case WAITING_FOR_RECEIVER -> tryStartReceiverDischarge();
-            case DISCHARGING -> {
-                if (activeDischarge != null) {
-                    activeDischarge.advance(dtSeconds);
-                    if (activeDischarge.isComplete()) {
-                        completeActiveDischarge();
-                    }
-                } else if (timeInStateSeconds >= dischargingDurationSeconds) {
+            } else if (dischargeWithoutReceiverActive) {
+                dischargeTimeInStateSeconds += dtSeconds;
+                if (dischargeTimeInStateSeconds >= dischargingDurationSeconds) {
                     completeBagWithoutReceiver();
                 }
-            }
-            case IDLE -> {
             }
         }
     }
@@ -129,7 +156,11 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
     }
 
     public boolean isAvailable() {
-        return state == BaggingMachineState.IDLE && reservedGroup == null && currentGroup == null;
+        return state == BaggingMachineState.IDLE
+                && reservedGroup == null
+                && currentGroup == null
+                && activeDischarge == null
+                && !dischargeWithoutReceiverActive;
     }
 
     public void startBagging(ReleasedPackGroup group) {
@@ -139,8 +170,10 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
     @Override
     public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
         return group != null
-                && isAvailable()
-                && canReserveOutputBagFor(group);
+                && reservedGroup == null
+                && currentGroup == null
+                && (state == BaggingMachineState.IDLE || state == BaggingMachineState.DISCHARGING)
+                && (state == BaggingMachineState.DISCHARGING || canReserveOutputBagFor(group));
     }
 
     @Override
@@ -174,7 +207,11 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         for (Pack pack : currentGroup.packs()) {
             pack.setState(Pack.PackMotionState.HELD);
         }
-        state = BaggingMachineState.RECEIVING;
+        intakeState = BaggingMachineState.RECEIVING;
+        state = activeDischarge != null || dischargeWithoutReceiverActive
+                ? BaggingMachineState.DISCHARGING
+                : BaggingMachineState.RECEIVING;
+        refreshState();
         incomingTransferComplete = false;
         timeInStateSeconds = 0d;
     }
@@ -233,9 +270,9 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         return Collections.unmodifiableList(completedRuntimeBags);
     }
 
-    private void transitionWhenElapsed(BaggingMachineState nextState, double durationSeconds) {
+    private void transitionIntakeWhenElapsed(BaggingMachineState nextState, double durationSeconds) {
         if (timeInStateSeconds >= durationSeconds) {
-            state = nextState;
+            intakeState = nextState;
             timeInStateSeconds = 0d;
         }
     }
@@ -257,51 +294,77 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
             pack.setState(Pack.PackMotionState.CONSUMED);
         }
 
-        activeRuntimeBag = buildRuntimeBag(currentGroup);
-        state = BaggingMachineState.WAITING_FOR_RECEIVER;
+        pendingDischarges.add(new PendingDischarge(
+                buildRuntimeBag(currentGroup),
+                buildCompletedBag(currentGroup)));
+        reservedGroup = null;
+        activeReservation = null;
+        currentGroup = null;
+        incomingTransferComplete = false;
+        intakeState = BaggingMachineState.IDLE;
         timeInStateSeconds = 0d;
-        tryStartReceiverDischarge();
+        dischargeAwaitingReceiver = false;
+        refreshState();
+        tryStartNextPendingDischarge();
     }
 
-    private void tryStartReceiverDischarge() {
-        if (bagReceiver != null) {
-            if (!bagReceiver.canReserveIncomingBag(activeRuntimeBag)) {
+    private void tryStartNextPendingDischarge() {
+        if (!pendingDischarges.isEmpty() && activeDischarge == null && !dischargeWithoutReceiverActive) {
+            PendingDischarge nextPending = pendingDischarges.peek();
+            if (bagReceiver != null) {
+                if (!bagReceiver.canReserveIncomingBag(nextPending.completedRuntimeBag)) {
+                    dischargeAwaitingReceiver = true;
+                    refreshState();
+                    return;
+                }
+                BagReservation reservation = bagReceiver.reserveIncomingBag(nextPending.completedRuntimeBag);
+                bagReceiver.beginReceiving(reservation);
+                activeDischarge = new BagDischarge(nextPending.completedRuntimeBag, reservation, dischargingDurationSeconds);
+                dischargeAwaitingReceiver = false;
+                refreshState();
                 return;
             }
-            BagReservation reservation = bagReceiver.reserveIncomingBag(activeRuntimeBag);
-            bagReceiver.beginReceiving(reservation);
-            activeDischarge = new BagDischarge(activeRuntimeBag, reservation, dischargingDurationSeconds);
-            state = BaggingMachineState.DISCHARGING;
-            timeInStateSeconds = 0d;
-            return;
-        }
 
-        state = BaggingMachineState.DISCHARGING;
-        timeInStateSeconds = 0d;
+            dischargeWithoutReceiverActive = true;
+            dischargeTimeInStateSeconds = 0d;
+            refreshState();
+        }
     }
 
     private void completeActiveDischarge() {
+        PendingDischarge completedPending = pendingDischarges.remove();
         BagDischarge completedDischarge = activeDischarge;
         bagReceiver.completeReceiving(completedDischarge.getReservation());
         completedRuntimeBags.add(completedDischarge.getBag());
-        completeCurrentGroup();
+        completedBags.add(completedPending.completedBag);
+        completedCorrelationIds.add(completedPending.completedBag.correlationId());
         activeDischarge = null;
+        refreshState();
     }
 
     private void completeBagWithoutReceiver() {
-        completedRuntimeBags.add(activeRuntimeBag);
-        completeCurrentGroup();
+        PendingDischarge completedPending = pendingDischarges.remove();
+        completedRuntimeBags.add(completedPending.completedRuntimeBag);
+        completedBags.add(completedPending.completedBag);
+        completedCorrelationIds.add(completedPending.completedBag.correlationId());
+        dischargeWithoutReceiverActive = false;
+        dischargeTimeInStateSeconds = 0d;
+        refreshState();
     }
 
-    private void completeCurrentGroup() {
-        CompletedBag completedBag = buildCompletedBag(currentGroup);
-        completedBags.add(completedBag);
-        completedCorrelationIds.add(completedBag.correlationId());
-        currentGroup = null;
-        activeReservation = null;
-        incomingTransferComplete = false;
-        activeRuntimeBag = null;
+    private void refreshState() {
+        if (currentGroup != null) {
+            state = intakeState;
+            return;
+        }
+        if (activeDischarge != null || dischargeWithoutReceiverActive) {
+            state = BaggingMachineState.DISCHARGING;
+            return;
+        }
+        if (dischargeAwaitingReceiver || !pendingDischarges.isEmpty()) {
+            state = BaggingMachineState.WAITING_FOR_RECEIVER;
+            return;
+        }
         state = BaggingMachineState.IDLE;
-        timeInStateSeconds = 0d;
     }
 }
