@@ -24,6 +24,16 @@ public final class RenderableTrackFactory {
             WarehouseSegmentMetadata metadata,
             TrackSpec spec,
             TrackAppearance appearance) {
+        return createRenderableTrack(tr, routeSegment, metadata, spec, appearance, null);
+    }
+
+    public static RenderableObject createRenderableTrack(
+            TriangleRenderer tr,
+            RouteSegment routeSegment,
+            WarehouseSegmentMetadata metadata,
+            TrackSpec spec,
+            TrackAppearance appearance,
+            ConveyorRuntimeState rollerRuntimeState) {
 
         RouteTrackLayout layout = RouteTrackLayoutFactory.create(routeSegment, metadata);
         ObjectTransformation identity =
@@ -56,7 +66,13 @@ public final class RenderableTrackFactory {
                     isTransfer);
 
             if (spec.hasRollerDrive() && sharedRollerMesh != null && built.rollerTransforms != null) {
-                addRollers(tr, deckObject, sharedRollerMesh, built.rollerTransforms, appearance.rollerColour);
+                addRollers(
+                        tr,
+                        deckObject,
+                        sharedRollerMesh,
+                        built.rollerTransforms,
+                        appearance.rollerColour,
+                        rollerRuntimeState);
             }
 
             parts.add(deckObject);
@@ -204,14 +220,15 @@ public final class RenderableTrackFactory {
         float yaw = Vec3.yawFromDirection(
                 routeSegment.getGeometry().sampleOrientationDirectionByDistance(distanceAlongSegment))
                 + (float) (Math.PI / 2.0);
-        float rollerY = spec.deckTopY - spec.conveyorReturnDepth + ConveyorMeshFactory.getWrapRadius(spec);
+        Vec3 samplePoint = routeSegment.getGeometry().sampleByDistance(distanceAlongSegment);
+        float rollerY = samplePoint.y + spec.deckTopY - spec.conveyorReturnDepth + ConveyorMeshFactory.getWrapRadius(spec);
         ObjectTransformation transform = new ObjectTransformation(
                 0f,
                 yaw,
                 0f,
-                routeSegment.getGeometry().sampleByDistance(distanceAlongSegment).x,
+                samplePoint.x,
                 rollerY,
-                routeSegment.getGeometry().sampleByDistance(distanceAlongSegment).z,
+                samplePoint.z,
                 new Mat4());
         Behaviour spin = new SpinBehaviour(0f, 0f, 3f);
         return RenderableObject.createWithBehaviours(id, tr, rollerMesh, transform, colour, false, spin);
@@ -222,8 +239,11 @@ public final class RenderableTrackFactory {
             RenderableObject parent,
             Mesh rollerMesh,
             List<ObjectTransformation> rollerTransforms,
-            online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy colour) {
-    	Behaviour spin = new SpinBehaviour(0f,0f,1f);
+            online.davisfamily.threedee.rendering.appearance.ColourPickerStrategy colour,
+            ConveyorRuntimeState rollerRuntimeState) {
+    	Behaviour spin = rollerRuntimeState == null
+    			? new SpinBehaviour(0f,0f,1f)
+    			: new ConveyorRollerSpinBehaviour(0f,0f,1f, rollerRuntimeState);
         List<RenderableObject> rollers = new ArrayList<>();
         int i=0;
         for (ObjectTransformation t : rollerTransforms) {

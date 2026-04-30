@@ -249,6 +249,10 @@ public class RenderableObject {
 	public void addChild(RenderableObject child) {
 		children.add(child);
 	}
+
+	public void removeChild(RenderableObject child) {
+		children.remove(child);
+	}
 	
 	public void addAllChildren(List<RenderableObject> moreChildren) {
 		children.addAll(moreChildren);

@@ -3,7 +3,8 @@
 ## System Overview
 
 - Plain Java simulation and software-rendered 3D engine built as a Gradle project.
-- The current runnable example is temporarily a straight conveyor proof scene used to validate reusable conveyor visuals in isolation.
+- The current default runnable example is the tote-to-bag debug harness.
+- Scene selection is now explicit via a `--scene=...` command-line switch parsed by `DebugSceneOptions`; the default remains the tote-to-bag harness.
 - The codebase mixes a generic engine layer (`threedee`) with a warehouse-specific example layer (`warehouse`).
 - Main concepts visible in code:
   - route-based movement over connected path segments
@@ -16,6 +17,7 @@
 
 - Main application entry point: `app/src/main/java/online/davisfamily/threedee/SoftwareRenderer.java`
 - Active example scene: `app/src/main/java/online/davisfamily/warehouse/testing/TestScene.java`
+- Scene-selection support: `app/src/main/java/online/davisfamily/warehouse/testing/DebugSceneOptions.java`
 - Warehouse layout and simulation setup: `app/src/main/java/online/davisfamily/warehouse/testing/WarehouseTrackFactory.java`
 - Per-frame simulation orchestration: `app/src/main/java/online/davisfamily/threedee/scene/BaseScene.java`
 - Route-follow movement: `app/src/main/java/online/davisfamily/threedee/behaviour/routing/RouteFollower.java`
@@ -63,17 +65,54 @@
 - `RouteTrackFactory` / warehouse track rendering classes
   - Build conveyor/track render meshes from route definitions plus warehouse `TrackSpec`.
 - `StraightConveyorFactory`
-  - Builds a fixed straight conveyor assembly in local space with top run, bottom return, end wraps, end rollers, and looping markers.
+  - Builds a fixed straight conveyor assembly in local space with top run, bottom return, end wraps, end rollers, looping belt markers, and roller end-cap markers.
+  - Conveyor visual speed is now explicit via `ConveyorVisualSpeed` rather than always being a single raw speed value.
 - `StraightConveyorMarkerBehaviour`
   - Drives belt markers around the fixed straight conveyor assembly in local space rather than deriving motion from route geometry.
 - `SteeringConveyorMechanism`
   - First concrete transfer-zone mechanism implementation; owns one governing state and can drive one-or-more renderable parts together.
+  - Can now be built with an explicit initial outcome/pose so always-branch/fixed steering cases do not need a separate mechanism type.
+- `TipperTrackSection`
+  - Externally owned mounted route section used by the installed tipper.
+- `TipperSectionInstaller` / `TipperInstallation`
+  - Production-facing installed tipper surface.
+  - Own mounted tipper runtime/render wiring but not route creation or tote load-plan ownership.
+- `SortingSectionInstaller` / `SortingInstallation`
+  - Production-facing installed sorter surface.
+- `TipperToSorterSection`
+  - Explicit composition helper for the paired `tipper -> sorter` path.
+- `ToteLoadPlanProvider`
+  - External provider keyed by tote id for active tipper load plans.
+- `TipperDownstreamFlow`
+  - Small downstream-capacity boundary used by the tipper controller to decide discharge acceptance and tote-release readiness.
+- `IntegratedToteToBagDebugInstaller` / `IntegratedToteToBagDebugInstallation`
+  - Harness-level integrated composition surface for the tote-to-bag debug path.
+  - Own construction/wiring of the tote-to-bag core, upstream mounted tipper/sorter path, and tote-to-bag flow controller for the debug harness.
+- `SorterOutfeedToPdcReceiveTarget`
+  - Named handoff target that maps sorter outfeed directly onto the tote-to-bag PDC entry position.
+- `BaggingModule` / `BaggingSectionInstaller` / `BaggingInstallation`
+  - Installed bagging-machine surface.
+  - Owns bagger render assembly, machine runtime installation, and the installed downstream bag receiver.
+- `PackGroupReceiver`
+  - Generic PCR/downstream pack-group receiver seam used by `ToteToBagFlowController`.
+  - Keeps PRL/PCR release logic decoupled from concrete `BaggingMachine`.
+- `ToteToBagBatchPlan`
+  - Batch/order-level expected pack counts by bag correlation.
+  - Lets PRL assignment remain independent of the currently tipped `ToteLoadPlan`.
+- `BagReceiver` / `StoredBagReceiver`
+  - Generic completed-bag receiver seam.
+  - `StoredBagReceiver` stores received runtime `Bag` objects and can apply finite capacity.
+- `BagDischarge`
+  - Active bagger-outfeed lifecycle object used by `BaggingMachine`.
+  - Separates bag creation, chute discharge movement, and receiver completion.
+- `BagMeshFactory`
+  - First-pass paper-bag mesh factory for completed bag visuals.
 
 ## Core Execution Flow
 
-1. `SoftwareRenderer.main()` creates a `TestScene` and starts a thread that computes `dt` and calls `scene.renderFrame(dt)`.
+1. `SoftwareRenderer.main()` parses `DebugSceneOptions`, creates a `TestScene`, and starts a thread that computes `dt` and calls `scene.renderFrame(dt)`.
 2. `BaseScene.renderFrame()` updates camera/input state, clears buffers, and delegates scene-specific rendering.
-3. `TestScene.executeChildRenderOperations()` calls `drawObject(objects, dtSeconds, lightDirection)`.
+3. `TestScene` installs one explicit scene/harness based on `DebugSceneKind`; `executeChildRenderOperations()` syncs that runtime and then calls `drawObject(objects, dtSeconds, lightDirection)`.
 4. `BaseScene.drawObject()` performs:
    - `sim.update(dtSeconds)`
    - `RenderableObject.update(dtSeconds)` for all renderables
@@ -84,7 +123,19 @@
    - dispatch queued events
    - update controllers
 6. The warehouse tote advances through its route, updates its render transform, may trigger sensors, and may enter transfer state.
-7. After simulation completes for the frame, rendering uses the latest transforms.
+7. In the tipper path, the shared tipper controller can:
+   - capture the tote on the mounted tipper section
+   - resolve the tote load plan through `ToteLoadPlanProvider`
+   - run the local tip / discharge sequence
+   - delegate downstream acceptance / occupancy rules through `TipperDownstreamFlow`
+8. In the tote-to-bag bagger path:
+   - `ToteToBagFlowController` initializes PRL assignment from `ToteToBagBatchPlan`, while the current tote's `ToteLoadPlan` remains the source of incoming pack sequence
+   - PRL release into PCR is gated by PCR availability and current PCR work-in-flight, not by bagger reservation
+   - PCR stages one released group and only reserves the downstream `PackGroupReceiver` when the group reaches PCR outfeed and the receiver can accept intake
+   - `BaggingMachine` receives the group, creates a runtime `Bag`, runs `BagDischarge`, and completes the `BagReceiver` only after discharge completes
+   - `BaggingMachine` now tracks intake/bagging work separately from active output discharge, so a later PCR group can start intake while an earlier bag is still discharging when the bagger intake side is clear
+   - downstream bag receiver capacity can still make the bagger intake unavailable, but it no longer prevents PRL release into an empty PCR
+9. After simulation completes for the frame, rendering uses the latest transforms.
 
 ## Movement and Routing Model
 
@@ -177,6 +228,8 @@
 - conveyor/track layout rules
 - transfer zones and transfer machines
 - transfer-zone-mounted mechanisms
+- mounted tipper / sorter machine installations
+- tote-load-plan providers
 - guide openings and clearances
 - warehouse track rendering specs and mesh generation
 
@@ -241,13 +294,177 @@
   - this is the main reason the work pivoted toward a fixed straight conveyor assembly rather than continuing to derive conveyor visuals from route spans
 - The current straight conveyor proof is intentionally visual-first:
   - it is now much closer to the intended conveyor look than the procedural route-derived attempt
-  - there is still a very minor marker disappearance right at the belt/roller tangent in some frames, likely a tiny depth/coplanar or culling edge case
+  - there is still a very minor marker disappearance right at the belt/roller tangent in some frames, likely a tiny depth/coplanar edge case
   - that issue is considered minor and intentionally deferred for now
+- A renderer bug affecting clipped conveyor faces was diagnosed and fixed:
+  - the main issue was not mesh winding in the straight conveyor geometry
+  - the real fault was near-plane triangle clipping rebuilding clipped triangles without preserving vertex order
+  - that could flip winding on clipped output triangles and trigger incorrect backface culling, especially on the straight conveyor proof
+  - `Vertex.clipTriangleNear(...)` now reconstructs clipped triangles by walking original triangle edges in order
+  - backface culling is also now performed in view space rather than from projected integer screen-space winding
+  - projected screen coordinates are now carried as floats deeper into rasterisation, which also improved stability slightly
 - The current document reflects observed code structure and runtime behaviour.
   - It is not a design proposal and does not describe unimplemented intended architecture.
 
 ## Latest Session Update
 
+- Bagging-machine runtime/control work progressed materially:
+  - `BagDischarge` is now wired into `BaggingMachine`
+  - bag creation, chute discharge, and receiver completion are separate lifecycle steps
+  - `BaggingMachine` now has `WAITING_FOR_RECEIVER` when the downstream bag receiver cannot reserve
+  - `ToteToBagFlowController` now depends on `PackGroupReceiver` rather than concrete `BaggingMachine`
+  - `PackGroupReceiver` now includes receive-state and transfer-completion callbacks needed by PCR handoff
+  - `StoredBagReceiver` now stores runtime `Bag` objects and supports finite capacity
+  - the debug receiver is capacity-limited and auto-empties after being full for a short timer via `DebugBagReceiverAutoEmptyController`
+  - active bag discharge is rendered down the chute and received bags are rendered in a simple tote-style debug receiver
+  - `BagMeshFactory` now provides a first-pass tall/narrow paper-bag mesh; it is better than the former box but still not final visual fidelity
+- Current bagger architecture guidance:
+  - PRL/PCR should remain coupled only to `PackGroupReceiver`
+  - receiver fullness should remain outside PRL/PCR and outside the bagger's ownership policy
+  - PRL release should observe PCR availability; PCR-to-bagger handoff should observe only the generic `PackGroupReceiver` seam
+  - the bagger may become intake-unavailable because its downstream receiver is full, but that should stage the current group at PCR outfeed rather than blocking release into an otherwise empty PCR
+  - the bagger has separate intake/bagging and output-discharge state; output discharge does not by itself make the intake side unavailable
+  - the current debug receiver auto-empty is not production tote move-on behavior
+- Real-scale / multi-tote proving is now in place for the debug harness:
+  - the integrated harness uses about 15 PRLs through `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
+  - pack and bag scale have been reduced to pharmaceutical-pack proportions
+  - PDC/PRL/PCR conveyor geometry and PRL spacing are driven by layout/spec values
+  - PDC bumper alignment, PRL-to-PCR join positions, and transfer distances derive from PRL centre positions rather than independent harness tuning
+  - the harness now feeds multiple source totes through one long-lived `ToteToBagFlowController`
+  - packs destined for one PRL / bag can span multiple source totes
+  - PRL assignment is driven by bag/order correlations, not by tote boundaries
+  - tote manifests describe the packs inside each tote, while `ToteToBagBatchPlan` defines total expected pack counts per bag correlation
+  - `ToteToBagBatchPlan.fromToteLoadPlans(...)` aggregates expected counts across multiple tote manifests
+  - PRLs remain assigned to an active bag correlation across tote boundaries until the required pack count is complete
+  - the visual two-tote fixture is asymmetric so `bag-b` completes from tote 1 and can release before `bag-a`, which completes from tote 2
+  - correlation ids should remain globally unique or namespaced so repeated tote manifests do not collide
+- Multi-tote responsibility split is now proven at debug-harness level:
+  - `DebugToteInjectorController` feeds totes only when the tipper reports it can accept one
+  - `ToteTrackTipperFlowController` owns local capture, tip, discharge, and release behaviour and can accept successive totes
+  - the tipper does not own upstream injection policy or full tote-to-bag bag planning
+  - the tipper should not start tipping until its downstream path, initially sorter/PDC, is ready to accept discharged packs
+  - if downstream is blocked, the tipper should hold rather than force packs downstream
+  - this uses the same readiness/reservation/backpressure style as the rest of the tote-to-bag system
+- Dynamic PRL reassignment is now implemented as local tote-to-bag behaviour:
+  - initial assignment seeds only as many bag correlations as there are PRLs
+  - once a PRL releases its completed group and returns to idle, it is eligible for reassignment to another incomplete bag correlation
+  - reassignment is arrival-driven: when a pack arrives for an unassigned batch correlation, the controller assigns the lowest-id idle PRL if one is available
+  - if no idle PRL exists for a new correlation, the controller reports a local admission failure
+- Scheduling remains the next unresolved global control boundary:
+  - a slim deadlock is possible if all PRLs are reserved for incomplete bags and the next tote contains only packs for new, unassigned bags
+  - tote sequencing should be guaranteed by a future scheduler rather than by PRL/PCR logic or the tipper
+  - the tote-to-bag cell may later expose scheduler-facing progress/compatibility queries, but the scheduling decision belongs upstream
+  - scheduler work is intentionally deferred until the full warehouse layout and machine state surfaces exist, because the rule set is expected to depend on tote release rules, buffers, route constraints, and floor-wide machine availability
+- Warehouse roadmap now favours machine architecture before scheduler implementation:
+  - the current bagging-machine / receiver control cleanup is largely complete for this branch
+  - next implement remaining machines using the same installed-machine, local-state, explicit-seam approach
+  - then construct a full warehouse layout with a few totes traversing all machines
+  - then write scheduler requirements and implement tote release / injection policy
+- Remaining machine families to model:
+  - lid opening machine
+  - tote strapping machine
+  - scheduler-controlled tote buffer where totes arrive and wait for release
+
+- Active scene selection has been cleaned up:
+  - `SoftwareRenderer` now accepts `--scene=...`
+  - `DebugSceneKind`, `DebugSceneOptions`, and `DebugSceneRuntime` now define the explicit scene-selection path
+  - `TestScene` no longer depends on comment/uncomment switching between harnesses
+- The tote-to-bag integrated debug path now has an explicit harness-level composition surface:
+  - `IntegratedToteToBagDebugInstaller` now owns the integrated tote-to-bag debug composition wiring that previously lived inline in `ToteToBagDebugRig`
+  - `IntegratedToteToBagDebugInstallation` now exposes the installed integrated debug package
+  - `ToteToBagDebugRig` is now thinner and primarily retains debug-facing visual sync and inspection responsibilities
+- The sorter-outfeed to PDC live boundary is now represented by a named handoff target:
+  - `SorterOutfeedToPdcReceiveTarget` now implements `PackReceiveTarget`
+  - the integrated tote-to-bag path no longer uses an anonymous inline receive-target class for sorter-outfeed to PDC wiring
+
+- The tipper / sorter separation work has now reached the intended architectural baseline:
+  - `TipperEntryModule` and `TipperEntryModuleBuilder` have been removed
+  - `TipperTrackSection` / `TipperTrackSectionInstaller` now own the externally-created mounted route section
+  - `TipperSectionInstaller` / `TipperInstallation` now define the production-facing installed tipper surface
+  - `SortingSectionInstaller` / `SortingInstallation` now define the production-facing installed sorter surface
+  - `TipperToSorterSection` is now the explicit paired composition helper
+- Tote load-plan ownership has been moved behind `ToteLoadPlanProvider`:
+  - demo tote/load fixtures still exist only under `warehouse.testing`
+  - the installed tipper path no longer treats demo tote content as intrinsic machine ownership
+- Local tipper sequencing and downstream occupancy concerns are now separated:
+  - `ToteTrackTipperFlowController` now owns the shared tipper-side capture / tip / discharge sequence
+  - downstream-specific acceptance / release state is now represented through `TipperDownstreamFlow`
+  - `SorterTipperDownstreamFlow` implements the sorter-backed path
+  - a debug-only immediate receive implementation under `warehouse.testing` proves the alternate downstream path
+- The branch now proves both:
+  - `tipper -> sorter`
+  - `tipper -> non-sorter debug-only receive target`
+- The current code should therefore be treated as a repeatable mounted-machine composition pattern for future machines rather than as a still-unfinished tipper / sorter untangling exercise.
+
+- The tote-to-bag / tipper-entry integration boundary has been cleaned up materially:
+  - handoff boundary types now exist under `warehouse.sim.totebag.handoff`
+  - `PackHandoffPoint`, `MachineHandoffPointId`, `PackHandoffPointProvider`, `PackReceiveTarget`, and `PackReleaseSource` now define the intended machine handoff vocabulary
+- the old `TipperEntryModule` / builder shape has been removed from the active code path
+- `TipperSectionInstaller` / `TipperInstallation`, `SortingSectionInstaller` / `SortingInstallation`, and `TipperToSorterSection` now expose the installed-machine and paired-composition surfaces
+- Placeholder sorter-underflow conveyor ownership has been moved out of the reusable installed path:
+  - `ToteTrackTipperDebugRig` now explicitly composes that placeholder outfeed conveyor as rig-owned proving equipment
+- The integrated tote-to-bag harness no longer routes through that placeholder conveyor:
+  - `ToteToBagDebugRig` now feeds sorter output directly onto the real PDC
+  - the integrated PDC has been extended upstream so it physically occupies the sorter-underflow span in the integrated harness
+- Tote-to-bag core x/z layout has been decoupled and cleaned up further:
+  - PCR x placement is no longer implicitly tied to `pdcCenterX`
+  - `ToteToBagCoreLayoutSpec` now carries an independent `pcrCenterX`
+  - PRL-to-PDC and PRL-to-PCR z spacing is now derived from a single `prlGap` layout value rather than from ad hoc fixed absolute z positions
+  - PRL render placement now follows the same derived layout rather than using a hard-coded visual z
+- The sorter-outfeed live boundary now uses the newer handoff abstraction directly:
+  - `PackSink` has been removed from the active code path and deleted
+  - `ToteTrackTipperFlowController` and the rigs now use `PackReceiveTarget` for sorter outfeed handoff
+  - `SorterOutfeedDebugConveyor` now implements `PackReceiveTarget` directly
+- The proven architecture is now explicit in code:
+  - `TipperModule` and `SortingModule` exist under `warehouse.sim.totebag.assembly`
+  - tipper and sorter installation are independent
+  - the paired path is expressed through `TipperToSorterSection`
+- Current practical state after this session:
+  - isolated tipper rig still proves sorter-outfeed plugability using an explicit placeholder conveyor
+  - integrated tote-to-bag rig now shows the intended physical ownership more accurately, with the real PDC running under the sorter
+  - the remaining follow-up is more about further decomposition / API cleanup than about missing the intended thin-slice behaviour
+
+- The previously isolated tote-track tipper rig has now been folded into reusable installed tipper/sorter sections.
+- The old `ToteTrackTipperDebugRig` is now only a thin wrapper around that installed path rather than owning all construction itself.
+- `ToteToBagDebugRig` now mounts the reusable tipper/sorter path against the tote-to-bag core through explicit upstream attachment values.
+- `ToteToBagAttachmentPoint` now includes `UPSTREAM_MODULE_ROOT`.
+- `ToteToBagFlowController` can now be used in a mode where upstream tipper/sorter ownership is external and packs simply arrive onto the PDC.
+- `ToteTrackTipperFlowController` now supports an optional downstream `PackSink` so sorter-outfeed packs can be handed into the tote-to-bag PDC without collapsing controller ownership.
+- The active `TestScene` is now back on the tote-to-bag debug harness after the integration and alignment fixes.
+- Two route-track rendering bugs were fixed while integrating the mounted tipper module:
+  - `RenderableTrackFactory.createConveyorEndRoller(...)` now includes the sampled route point `y` when placing route-backed conveyor end rollers
+  - `TrackBuilder` now includes sampled route point `y` when building route-backed deck meshes, guide meshes, and roller transforms
+- Those two fixes were validated against both the oval and parallel route scenes before leaving them in place.
+- The integrated tipper-entry module discharge path now correctly converts local tipper anchors into world space before constructing the discharge polyline, fixing the earlier “flying packs to a stray point” behaviour seen after initial integration.
+- The integrated tote-to-bag seam is now visually aligned closely enough for the current thin slice:
+  - sorter-outfeed to PDC x/z alignment is attachment-driven
+  - y alignment now depends on the mounted tipper-side world height being respected consistently by both route-backed tracks and straight conveyor assemblies
+- Remaining cleanup items identified from this session:
+  - the upstream module mount in `ToteToBagDebugRig` still uses tuned numeric offsets and should eventually become named layout values
+  - future mounted-machine cleanup should focus on whether the independent installer/install-result style needs a small shared convention
+
+- Tote-to-bag isolated tipper proving work has advanced further on `feature/tote-track-tipper-rig`.
+- `TestScene` is currently switched back to the isolated tipper rig rather than the parallel-track scene.
+- The isolated tipper rig now includes a reusable contained-pack tote layout helper:
+  - `ContainedPackLayout` lives under `warehouse.sim.totebag.layout`
+  - tote-contained packs now use deterministic tote-local layered placement rather than hash-scattered overlap
+- The isolated sorter/outfeed visual proof has been materially refined:
+  - the sorter now reads as a bridge-like machine over a straight conveyor rather than as a single block
+  - the hopper is hollow/open rather than solid
+  - the conveyor is now anchored under the sorter from a named sorter-local anchor point rather than from hand-tuned rotated offsets
+  - sorter queue visuals now read as a vertical drop path above the conveyor entry
+  - packs are now inserted onto the sorter outfeed conveyor near the under-hopper point rather than at the conveyor start
+  - sorter outfeed conveyor speed and visual speed are now intentionally kept aligned in the rig
+- Several small commits now capture the current isolated tipper progression:
+  - `e53bf5e` Add reusable tote pack layout helper
+  - `944e94f` Refine tipper rig sorter visuals
+  - `ead4a2c` Refine sorter outfeed bridge and handoff
+  - `22cff62` Refine sorter through-flow visuals
+- An architectural direction was clarified for later integration:
+  - the tipper should follow the same general integration conventions as mounted transfer machines
+  - however, it should not be forced into transfer-zone-specific semantics when its responsibilities differ
+  - the preferred direction is a broader route-mounted-machine convention, with current transfer machines as one family and the tipper as another
+  - the tote/route side should be treated as the primary integration boundary to stabilise first, because the tipper is conceptually a specialised track section that captures/holds/releases a tote before handing packs into conveyor-local transport
 - `RouteSegment` has been cleaned back to generic routing concerns only.
 - Warehouse-specific per-segment data now lives in `WarehouseSegmentMetadata`.
 - Builder ownership has been split:
@@ -292,30 +509,111 @@
   - `StraightConveyorMarkerBehaviour` drives those markers in local space around the straight conveyor assembly
   - this proof scene is now the active `TestScene` wiring via `WarehouseTrackFactory.setupStraightConveyorTest(...)`
   - the proof visually validates the preferred direction: fixed conveyor assemblies rather than route-derived conveyor geometry
+- Straight conveyor reuse and detail were pushed further:
+  - roller end-cap marker strips were added so roller rotation is readable as the conveyor runs
+  - the straight conveyor assembly was tested at much smaller scales and still reads acceptably for compact transfer-machine use
+  - `StraightConveyorFactory` is now the practical reusable assembly API for both standalone tests and transfer-zone-mounted machines
+- The steering transfer mechanism now uses the reusable conveyor assembly rather than ad hoc local meshes:
+  - `WarehouseTrackFactory` mounts two compact straight conveyor child assemblies side by side under the steering mechanism root
+  - those child conveyors sit on a thin shared base that rotates with the mechanism
+  - spacing, height, and footprint were tuned against the current transfer-zone visuals in the parallel track scene
+- The oval bottom conveyor has been switched away from the old route-derived conveyor visual path:
+  - the bottom run now renders plain support/guides plus a mounted `StraightConveyorFactory` assembly aligned to the segment
+  - this keeps the preferred fixed-conveyor direction in the main oval route scene rather than only in the standalone proof scene
+- Conveyor visual speed is now explicitly modelled separately from transport speed:
+  - `StraightConveyorFactory` now takes a `ConveyorVisualSpeed` configuration rather than a single raw speed
+  - the oval bottom conveyor is currently configured to match tote/transport speed
+  - the compact steering conveyors keep an independent fixed visual speed because matching tote speed looked visually wrong at that scale
+- Steering mechanism initial pose can now be specified:
+  - `SteeringConveyorMechanism` accepts an explicit initial outcome/pose
+  - always-transfer/fixed-steering cases can now reuse the same mechanism type rather than introducing a specialised duplicate
+  - the current parallel-track setup uses this by starting always-transfer steering mechanisms already in branch pose
+- A wireframe-debug rendering issue was diagnosed and fixed:
+  - filled triangles were largely correct, but wireframe mode showed long stray edge spans on clipped geometry
+  - the wireframe path was drawing triangle edges after only near-plane clipping, without full frustum clipping in clip space
+  - `TriangleRenderer` now clips wireframe edges against the full homogeneous view frustum before projecting to screen space
+  - this made the wireframe debug view materially more trustworthy for long conveyor spans and other clipped geometry
 - The current straight conveyor proof has these known characteristics:
   - the belt is thinner and tangentially aligned to the roller/wrap geometry
   - two markers are phase-shifted so one should normally be visible on the top run and one on the bottom run
   - the marker spans across the width of the belt by design
+- A clipping/culling investigation was completed:
+  - disappearing belt faces in the straight conveyor proof were initially suspected to be a winding problem
+  - runtime testing and screenshots showed the more important symptom was clipped triangles being rebuilt with incorrect winding
+  - `Vertex.clipTriangleNear(...)` was fixed to preserve edge order when reconstructing clipped triangles
+  - `TriangleRenderer` now culls in view space instead of using projected integer screen-space winding
+  - the straight conveyor proof, oval scene, and parallel scene all appeared materially more stable after the fix
 
 ## Next Session Guidance
 
+- Session focus:
+  - read `docs/tote-to-bag-requirements.txt` before starting tote-to-bag work so the current agreed direction, completed phases, and next slice are understood from the document rather than inferred from stale context
+  - do not make code or document changes unless the user explicitly directs that work in the current session
+- Current tote-to-bag handoff:
+  - branch: `feature/tote-track-tipper-rig`
+  - recent commits:
+    - `009babc Changed PRL release to be deterministic not sequential`
+    - `cc7d635 Completed bag plans spanning totes`
+    - `d44aebf started multi tote per bag work`
+    - `be0c0b4 Scale tote bag rig and stabilize PCR handoff`
+    - `9e6fb5e Smooth bagger intake pack visuals`
+    - `a05264b Add fifteen PRL debug layout profile`
+    - `369ace0 Exercise multiple PRLs in debug manifest`
+    - `59b95cc Finish bagger intake pack travel`
+  - the integrated harness now uses `ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults()`
+  - the debug tote fixture currently uses two totes and 10 correlations, proving more than 3 PRLs are used in the 15-lane profile and proving cross-tote bag completion
+  - the fixture intentionally completes `bag-b` from tote 1 while `bag-a` remains incomplete until tote 2, so visual release is not simply PRL-id order
+  - arrival-driven dynamic PRL reassignment has now been implemented and covered by focused planner/controller tests
+  - local tote admission gating has been implemented so a tote is held until its full load can be accepted by current PRL assignment/idle state
+  - PRL release is now gated by PCR availability; PCR-to-bagger handoff is gated by bagger/receiver intake availability
+  - `BaggingMachine` can overlap a new intake group with a previous bag's output discharge by tracking intake/bagging state separately from discharge state
+  - pack scale is now accepted as realistic for pharmaceutical packs; larger items are expected to go to a future manual station
+  - the latest focused planner/controller/PCR/bagger tests passed after the current bagger/PCR release changes
+- Current tote-to-bag state:
+  - the 15-conveyor / 40-pack visual capacity fixture now runs with local admission gating
+  - the branch has moved past the earlier `No idle PRL available for correlation bag-r` visual failure
+  - PRL release into PCR no longer reserves the bagger up front
+  - PCR keeps the one-group-in-flight policy and waits at outfeed if the bagger intake side cannot reserve
+  - controller tests should prefer event/contract assertions over transient PRL state assertions after arbitrary update counts
+  - using the same installed-machine, local-state, explicit-seam architecture for the remaining warehouse machines
+  - scheduler responsibility for tote sequence remains future work after a fuller warehouse layout exists
+  - do not implement full scheduler policy in the tote-to-bag controller
+  - do not make PCR bag-aware yet; multi-bag PCR holding is plausible future work but brings group spacing and bagger-reservation complexity
+  - future ray-casting/debug command buttons may support manual release/exception handling; a manually released problem bag should go into an exception state and send the receiving tote to a future exception station
+  - keep the existing rule that one long-lived `ToteToBagFlowController` owns the transport cell and does not reset PRL state at tote boundaries
+  - do not reinitialise the whole `ToteToBagFlowController` per tote
+  - use `ToteToBagBatchPlan` for expected pack counts by bag correlation independent of one tote manifest
+  - keep PRL/PCR coupled to downstream only through `PackGroupReceiver`
+  - avoid solving global tote ordering inside the tipper or PRL/PCR controller
+- For tote-to-bag cleanup/integration follow-up:
+  - keep the current tipper-entry module mounted into the tote-to-bag harness; do not regress back to placeholder upstream machine boxes
+  - treat the PDC/PRL/PCR transport cell as the stable core and the mounted tipper entry as the current canonical upstream module shape
+  - keep the integrated harness on the real extended PDC under the sorter; do not reintroduce the placeholder sorter-underflow conveyor into the integrated path
+  - keep multi-tote flow on one long-lived `ToteToBagFlowController`
+  - real-scale proving state:
+    pack/bag scale, 15-PRL layout, using more than 3 PRLs, cross-tote planning, and the debug injector have now been done for the current harness
+  - the next cleanup slices should likely be:
+    - replace the remaining mount magic numbers in `ToteToBagDebugRig` with named layout values/spec entries
+    - decide whether the current independent installer/install-result style needs a small shared route-mounted-machine convention
+    - decide whether the explicit scene-selection path should eventually grow beyond command-line / IDE launch-profile control into a richer launcher if that becomes worthwhile
+    - consider whether any remaining tipper-to-sorter path should also move from composition/controller wiring toward a more explicit transfer/handoff object where that improves reuse
 - Keep using the `conveyer` branch for ongoing conveyor work; `master` should remain unchanged.
-- Treat the current straight conveyor proof as the canonical direction for conveyor visuals.
-  - Reuse the single straight conveyor assembly model for transfer-focused machines.
+- Treat the straight conveyor assembly as the canonical direction for conveyor visuals.
+  - Reuse the single straight conveyor assembly model for transfer-focused machines and fixed conveyor-backed runs.
   - Do not continue investing in route-derived/procedural conveyor-span rendering for transfer devices.
 - The intended modelling direction now appears to be:
   - tracks remain procedural warehouse infrastructure
   - conveyors are reusable straight assemblies
   - transfer-zone mechanisms arrange and animate one or more child conveyor assemblies under a parent mechanism/envelope transform
-- The next practical step should be to adapt transfer mechanisms to use the straight conveyor assembly:
-  - replace the current ad hoc steering conveyor visuals in `WarehouseTrackFactory` with child instances of the reusable straight conveyor model
-  - keep one governing mechanism state with one-or-more child conveyor renderables
-  - for popup-style devices, treat the work as procedural placement of standard conveyor modules across a parent envelope, not procedural generation of each conveyor’s belt geometry
+- The next practical step should be to continue propagating the reusable conveyor assembly into the remaining conveyor-backed scenes and machine types:
+  - keep replacing any remaining route-derived or ad hoc conveyor visuals with mounted `StraightConveyorFactory` assemblies where appropriate
+  - continue treating popup/steering devices as procedural placement of standard conveyor modules across a parent envelope, not procedural generation of each conveyor's belt geometry
 - Suggested sequence for the next session:
-  - keep the standalone straight conveyor test available while reusing its geometry/animation pieces
-  - refactor the straight conveyor proof into a reusable assembly API suitable for both standalone tests and transfer-zone mechanisms
-  - switch the steering mechanism to mount one or more of those straight conveyor assemblies
-  - once that works, use `setupParallelTracks(...)` as the best place to test transfer-focused machine visuals and decision-driven steering behaviour again
-- The current active runnable scene is intentionally no longer the tote/oval route demo:
-  - `TestScene` is currently wired to the straight conveyor proof scene so conveyor visual work can be assessed in isolation
-  - a future session can switch back to route/transfer-focused tests once the reusable conveyor assembly is being consumed by the transfer mechanisms
+  - keep the standalone straight conveyor test available as a sizing/debug reference, but continue validating real usage in the oval and parallel route scenes
+  - review whether any remaining conveyor-backed track visuals should now become mounted fixed assemblies rather than route-derived spans
+  - decide whether additional transfer-machine variants can be expressed as `SteeringConveyorMechanism` plus initial-outcome/strategy configuration rather than new mechanism classes
+  - perform hot path analysis on the render loop and identify opportunities to reduce immutable-object creation / transient allocation inside per-frame rendering code
+- The current default runnable scene is the tote-to-bag integration harness:
+  - `TestScene` now selects scenes explicitly via `DebugSceneKind`
+  - `TOTE_TO_BAG` remains the default when no `--scene=...` switch is supplied
+  - `setupOvalTrack(...)` and `setupParallelTracks(...)` remain the best focused scenes for validating shared route-track rendering changes outside tote-to-bag

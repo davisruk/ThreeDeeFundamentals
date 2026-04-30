@@ -1,0 +1,288 @@
+Bagging Machine
+
+Requirements
+
+- Internals do not need to be simulated or rendered physically.
+- Machine receives packs from the PCR conveyor.
+- Packs should transfer from the PCR conveyor onto a first intake conveyor.
+- First intake conveyor characteristics:
+  - sloped in `+y` direction
+  - short, but long enough to carry 2 or 3 packs
+- Packs then transfer onto a second intake conveyor.
+- Second intake conveyor characteristics:
+  - not sloped
+  - even shorter than the first intake conveyor, could carry 1 or 2 packs
+- Actual intake into the machine can be a "black hole".
+- Second intake conveyor can butt up against the black-hole intake.
+- The black-hole intake on the bagging machine emits bags onto a connected chute.
+- Intake conveyors and chute can be considered fixed relative to the machine body; positioning them independently of the machine body is not required.
+- Bags slide down the chute and into a tote.
+- Bag visual shape should look similar to the example in `C:\misc\img\bag.png`.
+- The first bag mesh only needs the basic bag shape; decals / text are not required for the current slice.
+- Tote should be considered a receiver; it is not part of the bagging machine construct.
+- Tote should be on a conveyor.
+- Tote should move on when full. That will be governed by a controller later, but for the test / debug rig this can initially be driven by the number of bags in the rig.
+- Bagging machine should follow the same architectural principles as the existing tipping / sorting machines for:
+  - building / scene placement
+  - install surface and install result
+  - state management and state reporting / querying
+
+Additional clarified requirements
+
+- The two intake conveyors and the chute are part of the bagging machine installation.
+- The downstream tote conveyor remains external to the bagging machine installation.
+- Bags should follow the same convention as packs for runtime ownership and rendering:
+  - after bag creation they are first-class moving simulation objects
+  - once received into a tote they can become children of the tote for rendering while the tote lid is open
+- Packs should remain visibly moving on the two intake conveyors until they reach the black-hole intake.
+- The chute should carry one completed bag at a time for the first slice.
+- The bagging machine should act as the readiness boundary for the next PCR delivery:
+  - intake conveyors should only run when a new group is being delivered
+  - PCR may stage one complete released group at outfeed while the bagger intake side is unavailable
+  - PCR-to-bagger handoff should begin when the bagger intake side can reserve/receive the group, not only when the whole bagger is `IDLE`
+  - output discharge does not by itself block intake; the bagger can accept a new group while a previous bag is still discharging when its intake/bagging side is clear
+  - in practical control terms, PCR handoff is driven by bagger intake readiness, while PRL release into PCR is driven by PCR availability
+
+Architectural Direction
+
+- Treat the bagging machine as an installed machine family in the same general style as the existing tipper and sorter.
+- Keep machine-owned concerns out of the debug rig from the start.
+- Expected ownership split:
+  - `BaggingMachine`: machine-local runtime/state
+  - `BaggingModule`: machine-owned renderables, intake conveyors, chute, anchor math
+  - `BaggingSectionInstaller` / `BaggingInstallation`: install surface and install result
+  - external tote receiver / tote conveyor: composed outside the bagging installation
+- External boundaries should be explicit:
+  - PCR should hand off into a bagging intake boundary
+  - the chute exit should become the machine-owned downstream bag release point
+- Machine internals should remain timed/stateful abstractions rather than physics-based simulation.
+- The current debug-rig bagger box should be treated as temporary and replaced by a proper installed bagging module.
+
+Recommended implementation sequence
+
+1. First slice:
+   - introduce `BaggingModule`
+   - introduce `BaggingSectionInstaller` / `BaggingInstallation`
+   - replace the inline bagging-machine render box in the debug rig with an installed bagging module
+   - keep the current logical `BaggingMachine` runtime behavior bridged behind that new boundary
+2. Second slice:
+   - introduce first-class `Bag` runtime objects
+   - make the bagger emit bags onto the chute / downstream receiver path
+   - gate PCR-to-bagger handoff by bagging-machine intake readiness while keeping PRL release gated by PCR availability
+3. Later slice:
+   - add external tote receiver controller logic for full-tote move-on / replacement
+   - integrate with future lid-opening / lid-closing machine work
+
+Current code position
+
+- The first structural bagging-machine slice is now in place.
+- `BaggingModule` now exists under `warehouse.sim.totebag.assembly`.
+- `BaggingSectionInstaller` / `BaggingInstallation` now exist and are used by the integrated tote-to-bag debug path.
+- The integrated tote-to-bag debug installer now installs the bagger as a machine-owned assembly instead of constructing only a simple inline bagger box in the debug rig.
+- The current `BaggingMachine` runtime has intentionally been left as the existing logical/timed consumer for now and is merely bridged behind the new installed-machine boundary.
+- The bagging machine currently owns:
+  - machine body renderable
+  - first intake conveyor renderable
+  - second intake conveyor renderable
+  - chute renderable
+  - explicit visible intake and outfeed mouth geometry
+- Intake-side placement has started moving away from ad hoc local tuning:
+  - first intake conveyor start is now derived from the PCR outfeed anchor with a small gap/drop policy
+  - second intake conveyor start is derived from the first conveyor end
+  - machine body x placement is now derived from the second conveyor end plus a small face offset
+- The intake and outfeed mouth geometry is now explicitly visible on the bagging machine rather than relying only on hidden handoff points.
+- The current bagger visual is intentionally still a thin-slice proving assembly:
+  - acceptable for continued architecture work
+  - not yet intended as final machine fidelity
+- The PCR-to-bagger intake side now has an explicit readiness/reservation seam:
+  - `PackGroupReceiver`
+  - `PackGroupReservation`
+  - controller-driven reservation at PCR outfeed, after the group has been released into PCR and is ready to hand off
+  - bagger receive started from PCR outfeed handoff rather than by the bagger knowing concrete upstream machinery
+- The PRL/PCR flow controller now depends on the `PackGroupReceiver` seam rather than on concrete `BaggingMachine`.
+  - PRL release is now based on PCR availability, not bagger reservation.
+  - PCR-to-bagger handoff is affected by downstream readiness only through that seam.
+  - Receiver fullness is hidden behind bagger/receiver availability; PRL/PCR should not inspect the bagger's downstream bag receiver directly.
+- The bagger-to-receiver side now has a generic runtime-bag receiver seam:
+  - `BagReceiver`
+  - `BagReservation`
+  - `RecordingBagReceiver`
+  - `StoredBagReceiver`
+  - `BaggingInstallation` exposes the installed receiver for debug/test composition
+- First-class logical bags now exist:
+  - `Bag`
+  - logical pack contents are retained as `PackPlan` entries
+  - the bag carries motion and containment state
+  - bagged packs are logical contents and do not need individual renderables inside the bag
+- `BaggingMachine` now creates runtime `Bag` objects from completed pack groups and passes those bags to the receiver seam.
+- `BagDischarge` now exists and is wired into `BaggingMachine`:
+  - it holds a `Bag`, `BagReservation`, duration, elapsed time, and progress
+  - it marks the bag moving while discharge is active
+  - it marks the bag received / in receiver when the discharge completes
+- receiver completion is now delayed until the active discharge completes
+- `BaggingMachine` now has a `WAITING_FOR_RECEIVER` state:
+  - if the output receiver cannot reserve a bag after the bag has been created, the completed bag waits on the output side
+  - if the output receiver is already full while the bagger is idle, the bagger does not advertise pack-intake availability for a new group
+  - once a previous bag has entered active output discharge, the intake side may accept the next group while discharge continues
+- The debug harness now proves an external receiver path:
+  - `StoredBagReceiver` stores received runtime `Bag` objects
+  - the debug receiver has finite capacity
+  - a debug-only auto-empty controller clears the receiver after it has been full for a short timer
+  - the receiver is rendered as a simple tote-style receiver in the harness
+- `BagMeshFactory` now provides a first-pass paper-bag mesh:
+  - tall/narrow symbolic paper-bag shape
+  - folded top and side creases
+  - no decals or writing
+  - still accepted as an early visual that needs later refinement
+
+Current known issues / accepted temporary state
+
+- Intake-side and outfeed-side geometry is now acceptable for the current slice, but not yet final.
+- The current bagger openings are sized and aligned well enough to continue, but may still need later visual refinement.
+- Conveyor height matching between the bagger-owned conveyors and the tote-to-bag PDC/PRL/PCR conveyors has been intentionally deferred.
+- The debug receiver visual is still proving equipment:
+  - placement is acceptable for the current harness but not production-quality
+  - the auto-empty timer is a debug policy, not real tote move-on logic
+- The first bag mesh is better than a box but still needs visual refinement.
+- The current PCR-to-FIC / FIC-to-SIC pack transitions are improved but still not final.
+- Those remaining transition issues should be treated as acceptable temporary state for commit:
+  - they exposed a deeper seam/control question rather than just a local visual bug
+  - the correct fix depends on decisions about machine-to-machine contracts, readiness/reservation semantics, and how existing transfer-zone architecture should participate
+
+What is still left
+
+Completed runtime/control slices
+
+- `BagDischarge` is wired into `BaggingMachine`.
+- Bag creation, discharge movement, and receiver completion are distinct lifecycle steps.
+- PRL release into PCR is gated by PCR availability, not through a concrete bagger reference.
+- PCR-to-bagger handoff is gated through the generic `PackGroupReceiver` seam.
+- `BaggingMachine` tracks intake/bagging and output discharge separately, allowing a later intake group to begin while a previous bag is still discharging when the intake side is clear.
+- Bagger output receiver availability is handled inside the bagger / receiver boundary.
+- Receiver capacity can block PCR-to-bagger handoff because a full receiver can make the bagger intake unavailable through the pack-group receiver seam; it should not by itself prevent PRL release into an empty PCR.
+
+Current PCR / bagger release state
+
+- PRL release is now gated by PCR availability and the one-group-in-flight PCR policy.
+- The bagger is no longer treated as a passive concrete dependency of `ToteToBagFlowController`.
+- If the bagger or its downstream bag receiver cannot reserve, the current PCR group remains staged at PCR outfeed until handoff can begin.
+- PRL release selection is deterministic:
+  - if multiple ready PRLs can release into the empty PCR path, the lowest PRL id releases first
+- PCR remains a single released-group path for the current implementation; broad PCR capacity scheduling is not the current focus.
+- Remaining bagger-side control work should avoid reintroducing concrete coupling between PRL/PCR and `BaggingMachine`.
+
+Next external-composition slice
+
+- Replace the debug-only receiver proving equipment with a more realistic external tote receiver path when production behaviour is needed.
+- Keep that receiver external to the bagging installation.
+- Move-on/replacement policy should remain outside the bagger.
+- The current `DebugBagReceiverAutoEmptyController` is only a test-rig stand-in for that later controller.
+
+Remaining visual / geometry follow-up
+
+- Refine bagger intake and outfeed geometry only after the runtime/control slices above are established.
+- Improve the basic bag mesh shape:
+  - current `BagMeshFactory` is a first-pass tall/narrow paper-bag silhouette
+  - references used during the latest session were `C:\misc\img\better_bag.jpg` and `C:\misc\img\cartoon-bag.png`
+  - decals/text are still not required
+- Revisit whether PDC/PRL/PCR conveyor sizing should be brought closer to the bagger conveyor proportions once broader visual tuning becomes worthwhile.
+
+Architecture discussion to resume when bagger/PCR control is revisited
+
+- The main open question is no longer just visual transition smoothing.
+- The current receiver seam is established for this thin slice, but future adjacent-machine work should continue using small contracts rather than concrete machine references.
+- Desired direction:
+  - avoid concrete coupling where one machine knows named upstream/downstream machine classes
+  - prefer small contracts around readiness, reservation, state query, and handoff lifecycle
+  - keep machine-local state ownership inside each machine rather than having neighbours drive internal state directly
+- Wider-system concern noted:
+  - downstream receivers such as totes can become full
+  - something external to the bagger must determine fullness and trigger hold/release or move-on behaviour
+  - route/graph topology may mean there are multiple possible downstream systems rather than one fixed neighbour
+- Existing transfer-zone subsystem was reviewed and should be taken seriously as its own architecture:
+  - it already has state, controller, sensors, events, strategies, and mechanisms
+  - it is currently route/tote-transfer oriented, not a generic mounted-machine seam abstraction
+  - we should not casually "turn transfer zones into machines"
+- Current recommendation:
+  - keep machine architecture and transfer-zone architecture distinct for now
+  - look for a shared seam vocabulary rather than forcing both into the same concrete type
+  - likely shared concepts are readiness, reservation, blocked/unavailable, handoff started, and handoff completed
+- The current PCR/bagger control flow has been updated for the present branch:
+  - PRL release to PCR is local-PCR-state driven
+  - PCR-to-bagger transfer is downstream-intake driven
+  - bagger intake and output discharge can overlap
+- Avoid broad refactoring of PCR/bagger control unless a new production requirement demands it.
+- The current tote-to-bag priority is now branch closure and then moving on to the remaining warehouse machines.
+- Arrival-driven dynamic PRL reassignment is now implemented locally in tote-to-bag.
+- Upstream tote scheduling remains a future topic after the broader warehouse layout and machine state surfaces exist.
+- Local admission gating has been implemented for the current tote-to-bag control slice:
+  - the 15-conveyor / 40-pack fixture exposed `No idle PRL available for correlation bag-r`
+  - the tipper should hold a tote until the tote-to-bag cell can admit the entire tote load
+  - this is now treated as local cell admission rather than a bagger-side workaround
+- PCR may later become bag-aware and hold multiple bag groups, but that is not the next fix because it needs group spacing and bagger reservation rules.
+- Future manual/debug command buttons may support exception release, but that should create explicit exception state and route the receiving tote to a future exception station rather than treating the flow as normal.
+
+Warehouse machine roadmap context
+
+- The same installed-machine architecture should be applied consistently before scheduler work:
+  - machine-local runtime/state
+  - controller/orchestration where needed
+  - install surface and install result
+  - explicit readiness/reservation/handoff seams
+  - scene/layout composition outside the machine
+- Remaining machine families to model after bagging receiver cleanup:
+  - lid opening machine
+  - tote strapping machine
+  - scheduler-controlled tote buffer where totes arrive and wait for release
+- A full warehouse layout with a few traversing totes should come before scheduler implementation.
+- Scheduler requirements should be documented separately once the layout exposes the real release rules, buffer rules, route constraints, and floor-wide machine-state inputs.
+
+Working method while OpenAI capacity is unstable
+
+- Use medium reasoning to define architecture direction and exact implementation slices.
+- Use fast reasoning only to implement one explicitly scoped slice at a time.
+- Keep slices small enough that they can be safely reverted to `HEAD` and retried.
+- Do not commit incomplete or unsafe intermediate states.
+- A slice brief should state:
+  - goal
+  - allowed files
+  - required behaviour
+  - non-goals
+  - verification command
+  - stop conditions
+- Fast implementation should stop rather than broaden the task if the brief conflicts with the code or requires architectural decisions.
+- Behaviour-changing slices should include or update focused tests where practical.
+
+Bagger-to-receiver seam direction
+
+- The downstream receiver is represented as a generic runtime-bag receiver, not as a tote-specific dependency.
+- The bagger should only know whether a downstream receiver can reserve and receive a bag.
+- The bagger should not decide when a tote is full or when a tote should be released.
+- Fullness, hold/release, and route move-on behaviour belong outside the bagger, likely in a receiver/controller/transfer-zone strategy depending on the eventual topology.
+- Completed contract/domain slices:
+  - `CompletedBagReceiver` / `CompletedBagReservation` were introduced and then renamed to `BagReceiver` / `BagReservation`
+  - `RecordingBagReceiver` exists for debug/test composition
+  - first-class logical `Bag` objects now exist
+  - `BagDischarge` exists as the next transfer lifecycle primitive
+  - transfer-zone classes have not been modified
+
+Recommended next-session starting point
+
+1. Read this document first.
+2. Treat the installed bagger boundary as established for the current thin slice.
+3. Do not push tote receiver ownership back into the bagging machine.
+4. Treat the current PRL/PCR/bagger control contracts as established unless focused regression or visual checks expose a real bug.
+5. Re-read the current transfer-zone classes before deciding whether bagger/PCR flow should reuse concepts from them or remain a separate adjacent-machine seam.
+6. Prefer event/contract-based controller tests for this area; avoid assertions on transient PRL states after arbitrary update counts.
+7. Treat the bagger-to-receiver seam as established:
+   - bagger output uses `BagDischarge`
+   - receiver completion is delayed until discharge completion
+   - tote/receiver fullness stays outside the bagger
+8. Continue with:
+   - final focused/broader regression and visual checks for the current feature branch
+   - then using the same installed-machine approach for the lid opener, tote strapper, and scheduler-controlled tote buffer
+   - replacing debug receiver proving equipment with a more production-shaped external receiver only when there is a clear production-shaped target
+   - later implementing real tote-full move-on policy outside the bagger
+
+
+ 

@@ -15,6 +15,7 @@ import javax.swing.SwingUtilities;
 import online.davisfamily.threedee.dimensions.ViewDimensions;
 import online.davisfamily.threedee.input.mouse.MouseHandler;
 import online.davisfamily.threedee.scene.Scene;
+import online.davisfamily.warehouse.testing.DebugSceneOptions;
 import online.davisfamily.warehouse.testing.TestScene;
 
 
@@ -32,7 +33,7 @@ public class SoftwareRenderer extends JPanel {
 	private Scene scene;
 	private BufferStrategy bufferStrategy;
 	
-	public SoftwareRenderer (int width, int height, int minX, int minY, int maxX, int maxY) throws AWTException{
+	public SoftwareRenderer (int width, int height, int minX, int minY, int maxX, int maxY, DebugSceneOptions sceneOptions) throws AWTException{
 		this.width = width;
 		this.height = height;
 
@@ -51,7 +52,7 @@ public class SoftwareRenderer extends JPanel {
 		root = frame.getRootPane();
 
 		ViewDimensions vd = new ViewDimensions(width, height, minX, minY, maxX, maxY);
-		scene = new TestScene(root, vd);
+		scene = new TestScene(root, vd, sceneOptions);
 		MouseHandler mh = new MouseHandler(scene, canvas);
 		canvas.addMouseListener(mh);
 		canvas.addMouseMotionListener(mh);
@@ -72,7 +73,8 @@ public class SoftwareRenderer extends JPanel {
 			try {
 				int w = 960, h = 540;
 				int minX = 0, minY = 0, maxX = w, maxY = h;
-				SoftwareRenderer renderer = new SoftwareRenderer(w,h, minX, minY, maxX, maxY);
+				DebugSceneOptions sceneOptions = DebugSceneOptions.parse(args);
+				SoftwareRenderer renderer = new SoftwareRenderer(w,h, minX, minY, maxX, maxY, sceneOptions);
 				boolean running = true;
 				new Thread(() -> {
 					long last = System.nanoTime();

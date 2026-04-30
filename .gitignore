@@ -12,6 +12,8 @@ hs_err_pid*
 # Gradle
 ########################################
 .gradle/
+.gradle-local/
+.gradle-user-home/
 build/
 
 # Gradle cache (if using Kotlin DSL)
