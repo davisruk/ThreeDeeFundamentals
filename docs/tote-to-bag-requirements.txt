@@ -301,12 +301,14 @@ The integrated sorter-outfeed boundary is now named rather than being represente
 Completed bagging-machine seam slices
 The bagging-machine side is now being brought into the same explicit-seam style.
 - `BaggingModule`, `BaggingSectionInstaller`, and `BaggingInstallation` install the bagger as a machine-owned assembly
-- PCR-to-bagger intake uses a `PackGroupReceiver` / `PackGroupReservation` seam so PRL/PCR release can be gated by downstream pack-receiver readiness
+- PCR-to-bagger intake uses a `PackGroupReceiver` / `PackGroupReservation` seam so PCR outfeed handoff can be gated by downstream pack-receiver readiness
+- PRL release into PCR is gated by PCR availability and current PCR work-in-flight, not by bagger reservation
 - `ToteToBagFlowController` now depends on `PackGroupReceiver`, not concrete `BaggingMachine`
 - the downstream bag output side uses a generic `BagReceiver` / `BagReservation` seam rather than a tote-specific dependency
 - first-class logical `Bag` objects now retain the pack contents for each completed bag
 - `BaggingMachine` now creates runtime `Bag` objects and passes those to the receiver seam
 - `BagDischarge` is now wired into `BaggingMachine`; bag creation, chute discharge, and receiver completion are distinct lifecycle steps
+- `BaggingMachine` can overlap intake of a later group with output discharge of an earlier bag when intake/bagging state is clear
 - `StoredBagReceiver` now stores received runtime bags and supports capacity gating
 - the debug harness now renders active bag discharge, renders received bags in a simple tote-style receiver, and auto-empties that receiver after a short full timer
 - `BagMeshFactory` now provides a first-pass paper-bag mesh rather than a plain box
@@ -446,7 +448,9 @@ Completed real-scale / multi-tote sequence
 5. Adapted PRL assignment so assignments persist across totes until completed release.
 6. Added a debug tote injector that feeds multiple totes based on tipper readiness.
 7. Adapted tipper flow to operate on whichever tote is currently accepted rather than one fixed tote instance.
-8. Ran visual proof with multiple totes feeding shared PRL assignments and verified bagger/receiver backpressure still gates upstream release indirectly.
+8. Added local full-tote admission gating so the tipper holds a tote until the tote-to-bag cell can accept all correlations in that tote.
+9. Ran visual proof with multiple totes feeding shared PRL assignments, 15 PRLs, and the 40-pack capacity fixture.
+10. Updated PRL/PCR/bagger control so PRL release is based on PCR availability and PCR-to-bagger handoff waits for bagger intake readiness.
 
 Deferred scheduler work
 - Dynamic PRL reassignment after completed release is now implemented locally in `ToteToBagFlowController`.
@@ -456,8 +460,8 @@ Deferred scheduler work
 - A slim deadlock remains possible if every PRL is reserved for an incomplete bag and the next tote contains only packs for new, unassigned bags.
 - Tote sequence must therefore be guaranteed by a future scheduler.
 - The scheduler should choose a tote that can advance currently assigned correlations or can introduce new correlations only when there is idle PRL capacity.
-- Before the full scheduler exists, the tote-to-bag cell still needs a local admission gate so the tipper does not tip a tote whose complete contents cannot currently be accepted.
-- The visual 15-PRL / 40-pack fixture exposed this boundary by throwing `No idle PRL available for correlation bag-r` after the tipper had already discharged packs while PRLs were still waiting to release.
+- Before the full scheduler exists, the tote-to-bag cell now uses a local admission gate so the tipper does not tip a tote whose complete contents cannot currently be accepted.
+- The earlier visual 15-PRL / 40-pack failure `No idle PRL available for correlation bag-r` is the motivating case for that local admission rule.
 - A future tote-to-bag cell API may expose a scheduler-facing query such as whether a candidate tote can make progress, but the scheduling decision should remain outside the tipper and outside `ToteToBagFlowController`.
 - Scheduler requirements are expected to be large because they depend on tote release rules, buffer state, routing constraints, machine availability, and the state of the broader warehouse floor.
 - Do not make scheduler API design the next implementation slice unless a concrete machine/layout slice forces the issue.
@@ -760,9 +764,9 @@ The active branch is `feature/tote-track-tipper-rig`.
 
 Recent committed progress:
 - `009babc Changed PRL release to be deterministic not sequential`
-  - PRL release now scans ready PRLs in deterministic id order and skips ready PRLs that cannot reserve downstream
-  - if multiple ready PRLs can reserve, the lowest PRL id still releases first
-  - tests cover both the blocked-earlier-PRL case and the deterministic-priority case
+  - PRL release now scans ready PRLs in deterministic id order
+  - if multiple ready PRLs can release into the empty PCR path, the lowest PRL id releases first
+  - downstream bagger readiness is now handled later at PCR outfeed rather than as a PRL-release filter
 - `cc7d635 Completed bag plans spanning totes`
   - the integrated debug harness now feeds multiple totes through one long-lived tote-to-bag flow controller
   - the multi-tote fixture proves a spanning bag correlation completes only after packs from more than one tote arrive
@@ -802,10 +806,12 @@ Latest committed progress after the 15-PRL proving:
   - assignment expected counts can come from a batch/order plan
   - a PRL can remain assigned and accumulating when only one of two expected packs for a correlation has arrived
   - a PRL can remain assigned across a tote boundary until the batch-level count is met
-  - a later ready PRL can release when an earlier ready PRL cannot reserve downstream
-  - release priority remains deterministic when multiple ready PRLs can reserve
+  - PRL release into PCR is based on PCR availability rather than bagger availability
+  - PCR-to-bagger handoff waits at PCR outfeed until downstream intake can reserve/receive the group
+  - release priority remains deterministic when multiple ready PRLs can release into the empty PCR path
   - a released/idle PRL can be reassigned on arrival of a pack for a new batch correlation
   - a new correlation is rejected clearly when no PRL is idle
+  - bagger intake can overlap with output discharge when the intake side is clear
 
 Current proven harness behaviour:
 - the default `TOTE_TO_BAG` scene uses the 15-PRL layout profile
@@ -820,23 +826,23 @@ Current proven harness behaviour:
 - larger packs should be handled later by a manual-station path, not by complicating the current automated PRL/bagger flow
 
 Known local workspace note:
-- the user committed the latest multi-tote and deterministic-release work; the arrival-driven reassignment changes are local at this handoff unless committed separately
+- the user has committed the latest tote-to-bag feature work through local admission gating, PRL/PCR release split, and bagger intake/discharge overlap
 - no unrelated local dirty state was observed at the time this handoff was updated
 
 Last focused verification command:
 `.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagAssignmentPlannerTest --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.totebag.PcrConveyorTest --tests online.davisfamily.warehouse.sim.totebag.BaggingMachineTest`
 
-The command passed after the arrival-driven dynamic PRL reassignment changes.
+Focused controller/bagger tests have passed after replacing brittle transient-state assertions with event/contract-based checks.
 
-Next slice: local tote-to-bag admission gate
+Current branch closure / next slice
 
-The tote injector, multi-tote proof, deterministic non-sequential release, and arrival-driven dynamic PRL reassignment are now in place. Scheduler remains a known future topic, but it should not be the immediate next implementation focus.
+The tote injector, multi-tote proof, deterministic PRL release, arrival-driven dynamic PRL reassignment, local admission gating, and bagger/PCR handoff split are now in place. Scheduler remains a known future topic, but it should not be the immediate next implementation focus.
 
-The 15-conveyor / 40-pack visual fixture was attempted:
+The 15-conveyor / 40-pack visual fixture has been exercised after the local admission and bagger/PCR changes:
 - focused tests passed
-- the visual run failed with `No idle PRL available for correlation bag-r`
-- the user observed PRLs waiting for release while the tipper had already discharged packs for later new correlations
-- this should be fixed with machine state / local admission gating, not by artificial bag sequencing alone
+- the visual run behaves as expected
+- PRL release into PCR is no longer blocked by bagger intake availability
+- PCR keeps one group in flight and stages at outfeed until bagger intake can reserve/receive
 
 The important scheduler boundary remains:
 - active PRL assignments persist across tote boundaries
@@ -850,35 +856,29 @@ Deadlock boundary:
 - that condition should be prevented by scheduler tote ordering rather than by embedding global scheduling policy inside the tipper or `ToteToBagFlowController`
 
 Recommended next-session discussion / implementation sequence:
-1. Add a local tote-to-bag admission gate:
-   - evaluate the entire accepted/candidate tote load before tipping
-   - allow already-assigned correlations
-   - require one idle PRL for each distinct new correlation
-   - hold the tote at the tipper until the full tote can be admitted
-   - do not reorder totes or implement global scheduling
-2. Re-run the 15-conveyor / 40-pack visual capacity fixture.
-3. Tidy the bagging-machine / receiver side:
-   - preserve `PackGroupReceiver` and `BagReceiver` seams
-   - keep receiver fullness and tote move-on outside `BaggingMachine`
-   - replace or reshape debug receiver proving equipment only when the next slice has a clear production-shaped target
-4. Use the installed-machine pattern consistently for the remaining warehouse machines:
+1. Finish branch closure:
+   - focused regression set
+   - broader trusted test suite
+   - final visual check of the integrated 15-PRL / 40-pack scenario
+2. Use the installed-machine pattern consistently for the remaining warehouse machines:
    - machine-local runtime/state
    - controller/orchestration where needed
    - install surface and install result
    - explicit handoff/readiness/reservation seams
    - scene/layout composition outside the machine
-5. Add the remaining machine requirements before implementation:
+3. Add the remaining machine requirements before implementation:
    - lid opening machine
    - tote strapping machine
    - scheduler-controlled tote buffer where totes arrive and wait for release
-6. Build toward a full warehouse layout with all machines and a few totes traversing it.
-7. Write scheduler requirements after that layout exposes the real release rules and machine-state inputs.
+4. Build toward a full warehouse layout with all machines and a few totes traversing it.
+5. Write scheduler requirements after that layout exposes the real release rules and machine-state inputs.
 
 Design constraints for the next slice:
 - the tipper should only expose local readiness / active-tote state
 - the tote injector should decide when to feed a tote selected by upstream scheduling
 - the tipper should not know the full tote-to-bag plan
-- PRL/PCR should remain coupled to downstream only through `PackGroupReceiver`
-- receiver fullness should continue to affect PRL release only indirectly through bagger availability
+- PRL release should remain based on PCR availability
+- PCR-to-bagger handoff should remain coupled to downstream only through `PackGroupReceiver`
+- receiver fullness should continue to affect PCR-to-bagger handoff through bagger intake availability, not PRL release into an empty PCR
 
 

@@ -38,8 +38,10 @@ Additional clarified requirements
 - The chute should carry one completed bag at a time for the first slice.
 - The bagging machine should act as the readiness boundary for the next PCR delivery:
   - intake conveyors should only run when a new group is being delivered
-  - PCR and the bagger intake path should not deliver the next group until the bagging machine returns to `IDLE`
-  - in practical control terms, PCR timing should be driven by bagging machine readiness rather than the bagger passively accepting whatever PCR already released
+  - PCR may stage one complete released group at outfeed while the bagger intake side is unavailable
+  - PCR-to-bagger handoff should begin when the bagger intake side can reserve/receive the group, not only when the whole bagger is `IDLE`
+  - output discharge does not by itself block intake; the bagger can accept a new group while a previous bag is still discharging when its intake/bagging side is clear
+  - in practical control terms, PCR handoff is driven by bagger intake readiness, while PRL release into PCR is driven by PCR availability
 
 Architectural Direction
 
@@ -66,7 +68,7 @@ Recommended implementation sequence
 2. Second slice:
    - introduce first-class `Bag` runtime objects
    - make the bagger emit bags onto the chute / downstream receiver path
-   - gate PCR release timing by bagging-machine readiness
+   - gate PCR-to-bagger handoff by bagging-machine intake readiness while keeping PRL release gated by PCR availability
 3. Later slice:
    - add external tote receiver controller logic for full-tote move-on / replacement
    - integrate with future lid-opening / lid-closing machine work
@@ -95,10 +97,11 @@ Current code position
 - The PCR-to-bagger intake side now has an explicit readiness/reservation seam:
   - `PackGroupReceiver`
   - `PackGroupReservation`
-  - controller-driven reservation before PRL release
+  - controller-driven reservation at PCR outfeed, after the group has been released into PCR and is ready to hand off
   - bagger receive started from PCR outfeed handoff rather than by the bagger knowing concrete upstream machinery
 - The PRL/PCR flow controller now depends on the `PackGroupReceiver` seam rather than on concrete `BaggingMachine`.
-  - PRL release is affected by downstream readiness only through that seam.
+  - PRL release is now based on PCR availability, not bagger reservation.
+  - PCR-to-bagger handoff is affected by downstream readiness only through that seam.
   - Receiver fullness is hidden behind bagger/receiver availability; PRL/PCR should not inspect the bagger's downstream bag receiver directly.
 - The bagger-to-receiver side now has a generic runtime-bag receiver seam:
   - `BagReceiver`
@@ -118,8 +121,9 @@ Current code position
   - it marks the bag received / in receiver when the discharge completes
 - receiver completion is now delayed until the active discharge completes
 - `BaggingMachine` now has a `WAITING_FOR_RECEIVER` state:
-  - if the output receiver cannot reserve a bag after the bag has been created, the bagger waits without becoming available for another pack group
+  - if the output receiver cannot reserve a bag after the bag has been created, the completed bag waits on the output side
   - if the output receiver is already full while the bagger is idle, the bagger does not advertise pack-intake availability for a new group
+  - once a previous bag has entered active output discharge, the intake side may accept the next group while discharge continues
 - The debug harness now proves an external receiver path:
   - `StoredBagReceiver` stores received runtime `Bag` objects
   - the debug receiver has finite capacity
@@ -151,18 +155,19 @@ Completed runtime/control slices
 
 - `BagDischarge` is wired into `BaggingMachine`.
 - Bag creation, discharge movement, and receiver completion are distinct lifecycle steps.
-- PRL/PCR release is gated through the generic `PackGroupReceiver` seam, not through a concrete bagger reference.
+- PRL release into PCR is gated by PCR availability, not through a concrete bagger reference.
+- PCR-to-bagger handoff is gated through the generic `PackGroupReceiver` seam.
+- `BaggingMachine` tracks intake/bagging and output discharge separately, allowing a later intake group to begin while a previous bag is still discharging when the intake side is clear.
 - Bagger output receiver availability is handled inside the bagger / receiver boundary.
-- Receiver capacity can indirectly block upstream release because a full receiver makes the bagger unavailable through the pack-group receiver seam.
+- Receiver capacity can block PCR-to-bagger handoff because a full receiver can make the bagger intake unavailable through the pack-group receiver seam; it should not by itself prevent PRL release into an empty PCR.
 
 Current PCR / bagger release state
 
-- PRL release is now gated by the downstream `PackGroupReceiver` before a group is released toward PCR.
+- PRL release is now gated by PCR availability and the one-group-in-flight PCR policy.
 - The bagger is no longer treated as a passive concrete dependency of `ToteToBagFlowController`.
-- If the bagger or its downstream bag receiver cannot reserve, upstream PRL release is blocked through the generic receiver seam.
-- PRL release selection is deterministic but not strictly sequential:
-  - if an earlier ready PRL cannot reserve downstream, a later ready PRL that can reserve may release
-  - if multiple ready PRLs can reserve, the lowest PRL id still releases first
+- If the bagger or its downstream bag receiver cannot reserve, the current PCR group remains staged at PCR outfeed until handoff can begin.
+- PRL release selection is deterministic:
+  - if multiple ready PRLs can release into the empty PCR path, the lowest PRL id releases first
 - PCR remains a single released-group path for the current implementation; broad PCR capacity scheduling is not the current focus.
 - Remaining bagger-side control work should avoid reintroducing concrete coupling between PRL/PCR and `BaggingMachine`.
 
@@ -202,14 +207,18 @@ Architecture discussion to resume when bagger/PCR control is revisited
   - keep machine architecture and transfer-zone architecture distinct for now
   - look for a shared seam vocabulary rather than forcing both into the same concrete type
   - likely shared concepts are readiness, reservation, blocked/unavailable, handoff started, and handoff completed
-- This conversation should be resumed before doing major refactoring of PCR/bagger control flow.
-- The current tote-to-bag priority is to tidy the bagging-machine / receiver side before moving on to the remaining warehouse machines.
+- The current PCR/bagger control flow has been updated for the present branch:
+  - PRL release to PCR is local-PCR-state driven
+  - PCR-to-bagger transfer is downstream-intake driven
+  - bagger intake and output discharge can overlap
+- Avoid broad refactoring of PCR/bagger control unless a new production requirement demands it.
+- The current tote-to-bag priority is now branch closure and then moving on to the remaining warehouse machines.
 - Arrival-driven dynamic PRL reassignment is now implemented locally in tote-to-bag.
 - Upstream tote scheduling remains a future topic after the broader warehouse layout and machine state surfaces exist.
-- Before returning to bagging receiver cleanup, the next pending tote-to-bag control slice is local admission gating:
+- Local admission gating has been implemented for the current tote-to-bag control slice:
   - the 15-conveyor / 40-pack fixture exposed `No idle PRL available for correlation bag-r`
   - the tipper should hold a tote until the tote-to-bag cell can admit the entire tote load
-  - this should be solved before revisiting bagger/receiver cleanup so the bagger side is not asked to hide an upstream admission issue
+  - this is now treated as local cell admission rather than a bagger-side workaround
 - PCR may later become bag-aware and hold multiple bag groups, but that is not the next fix because it needs group spacing and bagger reservation rules.
 - Future manual/debug command buttons may support exception release, but that should create explicit exception state and route the receiving tote to a future exception station rather than treating the flow as normal.
 
@@ -262,18 +271,18 @@ Recommended next-session starting point
 1. Read this document first.
 2. Treat the installed bagger boundary as established for the current thin slice.
 3. Do not push tote receiver ownership back into the bagging machine.
-4. Start from the architecture discussion above, not from transition tweaking in isolation.
+4. Treat the current PRL/PCR/bagger control contracts as established unless focused regression or visual checks expose a real bug.
 5. Re-read the current transfer-zone classes before deciding whether bagger/PCR flow should reuse concepts from them or remain a separate adjacent-machine seam.
-6. Treat the current intake-transition issues as symptoms of the unresolved seam contract, not just as local animation defects.
+6. Prefer event/contract-based controller tests for this area; avoid assertions on transient PRL states after arbitrary update counts.
 7. Treat the bagger-to-receiver seam as established:
    - bagger output uses `BagDischarge`
    - receiver completion is delayed until discharge completion
    - tote/receiver fullness stays outside the bagger
 8. Continue with:
-   - refining the bag mesh / bag orientation
-   - replacing debug receiver proving equipment with a more production-shaped external receiver when needed
-   - later implementing real tote-full move-on policy outside the bagger
+   - final focused/broader regression and visual checks for the current feature branch
    - then using the same installed-machine approach for the lid opener, tote strapper, and scheduler-controlled tote buffer
+   - replacing debug receiver proving equipment with a more production-shaped external receiver only when there is a clear production-shaped target
+   - later implementing real tote-full move-on policy outside the bagger
 
 
  
