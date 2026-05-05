@@ -119,9 +119,10 @@ The DSP simulation shall model a simplified set of stations to provide context f
 
 ### 4.6 Manual Merge Point
 
-- CPC totes may pass through this station
-- Manual items are inserted into patient bags
+- CPC totes may pass through this station **after P2P**
+- Manual items are inserted into patient bags post-automation
 - Represents consolidation of manual and automated flows
+- Manual items are prepared earlier and staged until CPC arrives
 
 ---
 
@@ -146,8 +147,8 @@ CPF  → OSR → P2P → Dispatch
 CPC  → OSR
       → (3rd Party Station, if required)
       → (Sortable / Preparation Station, if required)
-      → (Manual Merge Point, if required)
       → P2P
+      → (Manual Merge Point, if required)
       → Dispatch
 
 CPNA → OSR
@@ -246,7 +247,123 @@ Key principle:
 
 ---
 
-## 7. Scheduler Responsibilities
+## 7. Product Classification Model
+
+The simulation shall distinguish between **message data** and **product handling data**.
+
+A 12N instruction defines the tote and the items to be processed, but product handling behaviour shall be derived from product classification data.
+
+---
+
+### 7.1 Product Handling Categories
+
+Each product shall be assigned one primary handling category:
+
+| Category | Meaning | Typical Route Impact |
+|---|---|---|
+| Automated | Can be handled without human intervention | No additional station required |
+| Sortable | Cannot be labelled or handled fully automatically, but can remain in the CPC flow | Requires Sortable / Preparation Station |
+| Manual | Cannot remain in the automated CPC flow | Requires CPNA / Manual Station |
+
+These categories shall be mutually exclusive.
+
+---
+
+### 7.2 3rd Party Attribute
+
+A product may additionally be flagged as **3rd Party**.
+
+3rd Party is a source / fulfilment characteristic, not a tote type.
+
+A 3rd Party product may be:
+
+- Automated
+- Sortable
+- Manual
+
+Route impact:
+
+- Any tote containing a 3rd Party product shall require the 3rd Party Station
+- Sortable 3rd Party products may remain in CPC flow
+- Manual 3rd Party products shall be handled via CPNA
+
+---
+
+### 7.3 Source of Classification
+
+The 12N message shall not be treated as the source of truth for product handling classification.
+
+Instead, the simulation shall use product master data keyed by `productId`.
+
+Example:
+
+```java
+record ProductHandlingRules(
+    String productId,
+    ProductHandlingCategory category,
+    boolean thirdParty
+) {}
+
+enum ProductHandlingCategory {
+    AUTOMATED,
+    SORTABLE,
+    MANUAL
+}
+```
+
+---
+
+### 7.4 Deriving Route Requirements
+
+When a 12N is received, the simulation shall derive route requirements by looking up each item in product master data.
+
+Example:
+
+```java
+for (Item item : tote.items()) {
+    ProductHandlingRules rules = productRules.get(item.productId());
+
+    if (rules.thirdParty()) {
+        route.requiresThirdPartyStation = true;
+    }
+
+    if (rules.category() == ProductHandlingCategory.SORTABLE) {
+        route.requiresSortablePreparation = true;
+    }
+
+    if (rules.category() == ProductHandlingCategory.MANUAL) {
+        route.requiresManualStation = true;
+    }
+}
+```
+
+---
+
+### 7.5 Consistency Rules
+
+The simulation shall enforce the following consistency rules:
+
+- A product cannot be both Sortable and Manual
+- A Manual product shall not remain solely in CPC flow
+- A Sortable product shall not require CPNA unless explicitly converted to Manual by test scenario data
+- 3rd Party does not imply Manual
+- 3rd Party does not imply Sortable
+
+---
+
+### 7.6 Classification Examples
+
+| Product Scenario | Category | 3rd Party | Expected Flow |
+|---|---|---:|---|
+| Standard automated pack | Automated | No | CPF or CPC → P2P |
+| Product cannot be auto-labelled but can stay inline | Sortable | No | CPC → Sortable / Prep → P2P |
+| 3rd Party item that can stay inline | Sortable | Yes | CPC → 3rd Party → Sortable / Prep → P2P |
+| 3rd Party item requiring offline handling | Manual | Yes | CPNA → 3rd Party → Manual Station |
+| Non-sortable manual item | Manual | No | CPNA → Manual Station |
+
+---
+
+## 8. Scheduler Responsibilities
 
 The scheduler is responsible for:
 
@@ -311,7 +428,7 @@ Sheets shall be released in ascending order:
 
 Manual items are handled separately from automated items, but may need to be combined with automated items before dispatch.
 
-The simulation shall model this as a **bag-content merge**, not as a physical tote merge.
+The simulation shall model this as a **post-P2P bag-content merge**, not as a physical tote merge.
 
 ---
 
@@ -324,11 +441,13 @@ When released from OSR, a CPNA tote shall travel to the manual station.
 At the manual station, the simulation shall:
 
 - process the manual item instructions
+- pick and label items
 - create patient-level manual bag contents
 - associate those contents with:
   - `notionalToteId`
   - `patientId`
   - `storeId`
+- store the prepared manual items until required
 - mark the CPNA tote as complete
 
 The CPNA tote itself does not merge with another tote.
@@ -337,31 +456,33 @@ The CPNA tote itself does not merge with another tote.
 
 ### 6.3 Manual Bag Content Store
 
-The simulation shall maintain a logical store of prepared manual bag contents.
+The simulation shall maintain a logical store of prepared manual items.
 
 Example structure:
 
 ```text
-ManualBagContentStore:
+ManualItemStore:
   notionalToteId
     patientId
       manualItems[]
       status
 ```
 
-This store acts as the hand-off point between CPNA processing and CPC consolidation.
+This store acts as the staging area between CPNA processing and CPC consolidation.
 
 ---
 
-### 6.4 CPC Manual Merge
+### 6.4 CPC Post-P2P Manual Merge
 
 A CPC tote may require manual items to be added to one or more patient bags.
 
-When a CPC tote reaches the manual merge point, the simulation shall:
+When a CPC tote reaches the manual merge point (after P2P), the simulation shall:
 
 - identify required manual contents by `notionalToteId` and `patientId`
-- retrieve the prepared manual contents
-- add them to the corresponding patient bag
+- retrieve the prepared manual items
+- open or access the completed patient bag
+- add manual items to the bag
+- reseal or mark the bag as complete
 - mark the manual contents as consumed
 
 After this step, the patient bag shall contain both automated and manual items.
@@ -383,7 +504,8 @@ In this case:
 ### 6.6 Manual Integration Principles
 
 - Manual items are prepared by CPNA totes
-- CPC totes perform mixed-order consolidation
+- Manual items are staged until CPC arrives
+- CPC totes perform final consolidation after P2P
 - Totes do not physically merge
 - Patient bag contents may merge
 - The Notional Tote ID provides the correlation between CPNA and CPC work
