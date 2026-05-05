@@ -1,661 +1,658 @@
-# DSP OSR Scheduler Requirements (Simulation)
+# DSP Simulation Requirements (Consolidated)
 
-## 1. Purpose
+This document defines the requirements for a simulation of the DSP (Dispensing Support Pharmacy) warehouse, consolidating:
 
-This document defines the requirements and rules for a simulation scheduler responsible for releasing totes from an OSR (Order Storage and Retrieval) buffer in a manner broadly aligned with a modern DSP (Dispensing Support Pharmacy) environment.
-
-The simulation is driven by simplified **12N messages** which represent executable tote instructions derived from upstream systems.
-
----
-
-## 2. Core Concepts
-
-### 2.1 Notional Tote
-
-A **Notional Tote** is a logical grouping of work representing a single store delivery batch.
-
-- It is a **correlation identifier**, not a physical object.
-- Multiple physical totes may belong to a single Notional Tote.
-- It is used to:
-  - Link related totes
-  - Manage dependencies
-  - Support reconciliation of results
-
-### 2.2 Physical Tote
-
-A **Physical Tote** is the unit of work operated on by the simulation.
-
-Each physical tote is derived from a 12N instruction and has:
-
-- A Notional Tote ID
-- A Tote Type
-- A Sheet Number
-- A Service Centre
-
-The scheduler operates exclusively on **physical totes**.
-
-### 2.3 12N Message (Simplified)
-
-Each 12N message represents a single physical tote instruction.
-
-Minimum required fields:
-
-- `notionalToteId`
-- `physicalToteId`
-- `toteType`
-- `sheetNumber`
-- `serviceCentreId`
-
-Optional fields:
-
-- dependencies
-- storeId
+- TDP-182 (logical model)
+- CPAS Interface Specification (message & order model)
+- KNAPP General Specification PD (physical flow, stations, start logic)
 
 ---
 
-## 3. Tote Types
+# 1. Terminology Standardisation
 
-The simulation shall support the following tote types:
+Multiple source documents use different terms for similar or overlapping concepts. This simulation shall adopt a single consistent vocabulary and map all known equivalents.
 
-| Tote Type | Description | Leaves DSP |
-|----------|-------------|------------|
-| CPF | Full tote (automated flow) | Yes |
-| CPC | Constituent tote (mixed items) | Yes |
-| CPNA | Manual tote | Yes |
+## 1.1 Standard Terms Used in This Document
 
-Notes:
-- CPNA totes may represent manual-only work or standalone dispatch units.
-- CPC totes represent the primary outbound flow for mixed items.
-
----
-
-## 4. Stations Overview
-
-The DSP simulation shall model a simplified set of stations to provide context for tote routing and processing. These stations do not need to model detailed behaviour, but must support routing decisions and sequencing.
-
-### 4.1 OSR (Order Storage and Retrieval)
-
-- Acts as the buffer for all incoming totes
-- Scheduler releases totes from OSR
-- No processing occurs here
+| Standard Term | Equivalent Terms | Source | Meaning |
+|--------------|-----------------|--------|--------|
+| **Notional Tote** | Order Group, POG | TDP-182 | Logical grouping of items for a store / dispatch |
+| **Physical Tote (Load Unit)** | Tote, Load Unit | KNAPP | Physical container moving through system |
+| **Order Type: ADAPTED** | ASSOCIATED (historical overlap), Adapted Order | Interface / TDP | Pre-processing / staging of items |
+| **Order Type: ASSOCIATED** | ASSOCIATED (in some contexts), Constituent | Interface / TDP | Main consolidation order |
+| **Order Type: FULL_PACK** | FULL_PACK | TDP | Fully automated order |
+| **Order Type: EMPTY** | Empty Tote Order | Interface | Order that creates a tote at AV02 |
+| **Manual Flow** | MANUAL_FLOW | TDP | Manual processing path |
 
 ---
 
-### 4.2 Automated Line / P2P (Pack-to-Patient)
+## 1.2 Important Clarifications
 
-- Handles fully automatable items
-- Creates patient bags for automated packs
-- Final stage for CPF totes
+### ASSOCIATED vs ASSOCIATED
 
----
+- In TDP-182, **ASSOCIATED** often refers to a tote carrying mixed or constituent items
+- In the Interface Spec, this behaviour aligns most closely with **ASSOCIATED orders**
 
-### 4.3 3rd Party Station
+Simulation rule:
 
-- Handles picking of 3rd party stock
-- Always requires human interaction
-- May feed either:
-  - CPC (sortable flow)
-  - CPNA (manual flow)
+> ASSOCIATED (TDP term) shall be treated as ASSOCIATED (order type) unless explicitly modelling tote subtype
 
 ---
 
-### 4.4 Sortable / Preparation Station
+### FULL_PACK vs FULL_PACK
 
-- Handles items that cannot be labelled automatically
-- Applies labels or performs verification
-- Items remain within CPC flow
-- Does not create separate totes
+- FULL_PACK (TDP) = Full Pack
 
----
+Simulation rule:
 
-### 4.5 Manual Station
-
-- Handles non-sortable manual items
-- Processes CPNA totes
-- Produces patient-level bag contents
-- Feeds CPC merge or standalone dispatch
+> FULL_PACK shall be represented as FULL_PACK
 
 ---
 
-### 4.6 Manual Merge Point
+### MANUAL_FLOW vs MANUAL
 
-- CPC totes may pass through this station **after P2P**
-- Manual items are inserted into patient bags post-automation
-- Represents consolidation of manual and automated flows
-- Manual items are prepared earlier and staged until CPC arrives
+- MANUAL_FLOW represents manual tote flow
 
----
+Simulation rule:
 
-### 4.7 Dispatch / Exit
-
-- Final stage of the DSP
-- Completed totes leave the system
-- Tote types that may exit:
-  - CPF
-  - CPC
-  - CPNA (manual-only cases)
+> MANUAL_FLOW shall be represented as MANUAL flow, not an order type
 
 ---
 
-## 5. Routing Matrix
+### EMPTY
 
-The following matrix defines the typical routing paths for each tote type within the DSP simulation.
+- Only defined in Interface + KNAPP
+- Not present in TDP-182
 
-```
-CPF  → OSR → P2P → Dispatch
+Simulation rule:
 
-CPC  → OSR
-      → (3rd Party Station, if required)
-      → (Sortable / Preparation Station, if required)
-      → P2P
-      → (Manual Merge Point, if required)
-      → Dispatch
-
-CPNA → OSR
-      → Manual Station
-      → (Manual Merge Point, optional)
-      → Dispatch
-```
-
-### 5.1 Routing Rules
-
-- CPF totes follow a fully automated path with no manual intervention
-- CPC totes may visit zero or more optional stations depending on item requirements
-- CPNA totes always visit the Manual Station
-- Manual Merge Point is only visited when CPC requires manual item consolidation
-- Stations in parentheses are conditional and depend on tote contents
+> EMPTY is a first-class order type and must not be conflated with ASSOCIATED
 
 ---
 
-## 6. Route Requirements as Data
+## 1.3 Naming Convention Rules
 
-Each tote shall carry a set of **route requirements** derived from its contents. The scheduler and routing engine shall use these requirements to determine which stations the tote must visit.
+To avoid ambiguity, the simulation shall use the following conventions consistently:
 
-### 6.1 Data Structure (Example)
+- **Use OrderType for behaviour**
+  - Allowed values: `ADAPTED`, `ASSOCIATED`, `FULL_PACK`, `EMPTY`
+
+- **Use MANUAL_FLOW to describe manual processing paths**
+  - This is a flow characteristic, not an OrderType
+
+- **Use Physical Tote / Load Unit for the container**
+  - Do not encode order lifecycle behaviour in the tote name
+  - `ToteType` describes physical carrier role / capability only
+
+- **Do NOT use legacy terms in the main model**
+  - Disallowed in code and requirements: `CPC`, `CPF`, `CPNA`
+  - These may appear only in the terminology mapping table for reference
+
+- **Mapping guidance (for reference only)**
+  - `CPC` → `ASSOCIATED`
+  - `CPF` → `FULL_PACK`
+  - `CPNA` → `MANUAL_FLOW`
+
+- **Separation of concerns**
+  - *OrderType* defines how work starts and flows
+  - *Product classification* (AUTOMATED / SORTABLE / MANUAL) defines routing
+  - *Route requirements* define which stations are visited
+
+These rules are mandatory for all subsequent sections of this document.
+
+---
+
+# 2. Core Concepts
+
+## 1.1 Notional Tote
+
+A **Notional Tote** is a logical grouping of items that belong together for a store (and typically multiple patients).
+
+It is used to:
+- group work across systems
+- correlate multiple physical processes
+- enable consolidation of items into dispatchable units
+
+Key properties:
+
+- May span multiple physical totes
+- May involve multiple order types
+- Is the primary correlation key across flows
+
+---
+
+## 1.2 Physical Tote (Load Unit)
+
+A **Load Unit (Tote)** is a physical container used in the warehouse.
+
+From KNAPP:
+- A load unit consists of container + contents + identifiers
+- The authoritative `ToteType` model is defined in section 2.
+
+---
+
+# 2. Order vs Tote Model
+
+This section clarifies the distinction between **OrderType** (process intent) and **ToteType** (physical carrier), and defines how they interact.
+
+## 2.1 Definitions
+
+- **OrderType** defines *what work is performed* and *how it flows through the system*.
+- **ToteType** defines *the physical container* used to carry items through the system.
 
 ```java
-record ToteRouteRequirements(
-    boolean requiresThirdPartyStation,
-    boolean requiresSortablePreparation,
-    boolean requiresManualMerge,
-    boolean requiresManualStation,
-    boolean isDispatchable
-) {}
-```
-
-### 6.2 Default by Tote Type
-
-| Tote Type | 3rd Party | Sortable Prep | Manual Station | Manual Merge | Dispatch |
-|---|---:|---:|---:|---:|---:|
-| CPF  | No  | No  | No  | No  | Yes |
-| CPC  | Opt | Opt | No  | Opt | Yes |
-| CPNA | Opt | No  | Yes | No  | Yes |
-
-Notes:
-- "Opt" (Optional) means the requirement is driven by tote contents.
-
-### 6.3 Derivation Rules (Example)
-
-```java
-if (toteType == ToteType.CPC) {
-    requiresThirdPartyStation = hasThirdPartyItems;
-    requiresSortablePreparation = hasSortableItems;
-    requiresManualMerge = hasManualDependencies;
+enum OrderType {
+    ADAPTED,
+    EMPTY,
+    ASSOCIATED,
+    FULL_PACK
 }
 
-if (toteType == ToteType.CPNA) {
-    requiresManualStation = true;
-    requiresThirdPartyStation = hasThirdPartyItems;
-}
-
-if (toteType == ToteType.CPF) {
-    // no additional requirements
+// Physical/container classification (capability/role)
+enum ToteType {
+    ASSOCIATED,   // carrier for mixed/consolidated flows
+    FULL_PACK,    // carrier for fully automated flows
+    MANUAL_FLOW   // carrier for manual-only handling
 }
 ```
 
-### 6.4 Example Instance
+## 2.2 Responsibilities
 
-```json
-{
-  "notionalToteId": "TOTE66",
-  "physicalToteId": "PHYS123",
-  "toteType": "CPC",
-  "sheetNumber": 1,
-  "routeRequirements": {
-    "requiresThirdPartyStation": true,
-    "requiresSortablePreparation": true,
-    "requiresManualMerge": false,
-    "requiresManualStation": false,
-    "isDispatchable": true
-  }
-}
-```
+### OrderType controls:
+- Start location (OSR vs AV02)
+- Dependencies (e.g. ADAPTED completion)
+- High-level routing behaviour
+- Lifecycle (creation, processing, completion)
 
-### 6.5 Routing Interpretation
+### ToteType controls:
+- Physical movement through stations
+- What kinds of items can be carried
+- Eligibility for manual merge / stations
+- Capacity and queueing behaviour
 
-The routing engine shall translate requirements into a path:
+## 2.3 Relationship
+
+- Orders may **create** or **use** totes
+- Totes are **allocated to orders** during execution
 
 ```text
-CPC with 3rd party + sortable:
-OSR → 3rd Party Station → Sortable / Preparation Station → P2P → Dispatch
+Order ──creates/uses──► Tote
 ```
 
-Key principle:
+## 2.4 Typical (Non-Strict) Mapping
 
-- `toteType` defines the **broad flow**
-- `routeRequirements` refine the **exact path**
+| OrderType   | Typical ToteType |
+|-------------|------------------|
+| ADAPTED     | (no dedicated tote; staging flow) |
+| ASSOCIATED  | ASSOCIATED |
+| FULL_PACK   | FULL_PACK |
+| EMPTY       | ASSOCIATED (after allocation) |
 
----
+> Note: This mapping is **not enforced**; OrderType and ToteType are intentionally decoupled.
 
-## 7. Product Classification Model
+## 2.5 Lifecycle Examples
 
-The simulation shall distinguish between **message data** and **product handling data**.
+### ASSOCIATED
+```text
+OSR → retrieve tote → process → dispatch
+```
 
-A 12N instruction defines the tote and the items to be processed, but product handling behaviour shall be derived from product classification data.
+### EMPTY
+```text
+AV02 → allocate empty tote → process (as ASSOCIATED) → dispatch
+```
 
----
+### ADAPTED
+```text
+OSR → process items → stage → complete (no tote dependency)
+```
 
-### 7.1 Product Handling Categories
+## 2.6 Design Rules
 
-Each product shall be assigned one primary handling category:
-
-| Category | Meaning | Typical Route Impact |
-|---|---|---|
-| Automated | Can be handled without human intervention | No additional station required |
-| Sortable | Cannot be labelled or handled fully automatically, but can remain in the CPC flow | Requires Sortable / Preparation Station |
-| Manual | Cannot remain in the automated CPC flow | Requires CPNA / Manual Station |
-
-These categories shall be mutually exclusive.
-
----
-
-### 7.2 3rd Party Attribute
-
-A product may additionally be flagged as **3rd Party**.
-
-3rd Party is a source / fulfilment characteristic, not a tote type.
-
-A 3rd Party product may be:
-
-- Automated
-- Sortable
-- Manual
-
-Route impact:
-
-- Any tote containing a 3rd Party product shall require the 3rd Party Station
-- Sortable 3rd Party products may remain in CPC flow
-- Manual 3rd Party products shall be handled via CPNA
+- Do not conflate OrderType with ToteType
+- Do not enforce 1:1 mapping
+- Model EMPTY as a start mechanism that **creates** a tote
+- Treat ADAPTED as a process stage, not a tote-driven flow
 
 ---
 
-### 7.3 Source of Classification
+# 3. Order Types (Authoritative Model)
 
-The 12N message shall not be treated as the source of truth for product handling classification.
-
-Instead, the simulation shall use product master data keyed by `productId`.
-
-Example:
+From Interface Spec + KNAPP:
 
 ```java
-record ProductHandlingRules(
-    String productId,
-    ProductHandlingCategory category,
-    boolean thirdParty
-) {}
+enum OrderType {
+    ADAPTED,     // 02
+    EMPTY,       // 03
+    ASSOCIATED,  // 04
+    FULL_PACK    // 05
+}
+```
 
-enum ProductHandlingCategory {
+---
+
+## 2.1 Critical Behaviour
+
+### ADAPTED
+- Prepares items (sorting / staging)
+- Must complete before ASSOCIATED / EMPTY
+
+### ASSOCIATED
+- Main consolidation flow
+- Starts from OSR
+- Combines:
+  - adapted items
+  - automated items
+  - 3rd party items
+
+### FULL_PACK
+- Fully automated flow
+- Starts from OSR
+- No complex consolidation
+
+### EMPTY (CRITICAL)
+
+From KNAPP:
+- Starts at AV02
+- Allocates a physical empty tote
+
+Definition:
+
+> EMPTY ORDER = an order that creates a tote and then behaves like an associated order
+
+Key rules:
+
+- Starts WITHOUT a tote
+- Requires empty tote supply at AV02
+- After start → behaves like ASSOCIATED
+
+---
+
+# 3. Order Start Model
+
+## 3.1 Start Locations
+
+```java
+enum StartLocation {
+    OSR,
+    AV02
+}
+```
+
+### Mapping
+
+| Order Type | Start Location |
+|------------|----------------|
+| ADAPTED    | OSR |
+| ASSOCIATED | OSR |
+| FULL_PACK  | OSR |
+| EMPTY      | AV02 |
+
+---
+
+## 3.2 Start Behaviour
+
+### OSR Start
+- Tote already exists
+- Retrieved from buffer
+
+### AV02 Start
+- Tote must be created
+- Empty tote allocated
+
+Simulation rule:
+
+```java
+if (order.type == EMPTY) {
+    allocateEmptyTote();
+}
+```
+
+---
+
+# 4. Product Classification Model
+
+## 4.1 Categories
+
+```java
+enum ProductCategory {
     AUTOMATED,
     SORTABLE,
     MANUAL
 }
 ```
 
+Rules:
+- Mutually exclusive
+
 ---
 
-### 7.4 Deriving Route Requirements
-
-When a 12N is received, the simulation shall derive route requirements by looking up each item in product master data.
-
-Example:
+## 4.2 3rd Party Attribute
 
 ```java
-for (Item item : tote.items()) {
-    ProductHandlingRules rules = productRules.get(item.productId());
+boolean isThirdParty;
+```
 
-    if (rules.thirdParty()) {
-        route.requiresThirdPartyStation = true;
-    }
+Orthogonal to category
 
-    if (rules.category() == ProductHandlingCategory.SORTABLE) {
-        route.requiresSortablePreparation = true;
-    }
+---
 
-    if (rules.category() == ProductHandlingCategory.MANUAL) {
-        route.requiresManualStation = true;
-    }
+## 4.3 Source of Truth
+
+- Derived from product master data (NOT 12N)
+
+---
+
+# 5. Routing Model
+
+## 5.1 Item-driven Routing
+
+Stations are driven by item requirements.
+
+---
+
+## 5.2 Stations
+
+From KNAPP:
+
+- OSR Buffer
+- 3rd Party Area
+- Adapting Area
+- P2P
+- Error Handling
+- Dispatch
+- AV02 (order start)
+
+---
+
+## 5.3 Routing Rules
+
+### 3rd Party
+
+```java
+if (item.isThirdParty()) {
+    route.requiresThirdParty = true;
+}
+```
+
+### Sortable
+
+```java
+if (item.category == SORTABLE) {
+    route.requiresSortable = true;
+}
+```
+
+### Manual
+
+```java
+if (item.category == MANUAL) {
+    route.requiresManual = true;
 }
 ```
 
 ---
 
-### 7.5 Consistency Rules
+# 6. Manual Integration Flow (Corrected)
 
-The simulation shall enforce the following consistency rules:
-
-- A product cannot be both Sortable and Manual
-- A Manual product shall not remain solely in CPC flow
-- A Sortable product shall not require CPNA unless explicitly converted to Manual by test scenario data
-- 3rd Party does not imply Manual
-- 3rd Party does not imply Sortable
-
----
-
-### 7.6 Classification Examples
-
-| Product Scenario | Category | 3rd Party | Expected Flow |
-|---|---|---:|---|
-| Standard automated pack | Automated | No | CPF or CPC → P2P |
-| Product cannot be auto-labelled but can stay inline | Sortable | No | CPC → Sortable / Prep → P2P |
-| 3rd Party item that can stay inline | Sortable | Yes | CPC → 3rd Party → Sortable / Prep → P2P |
-| 3rd Party item requiring offline handling | Manual | Yes | CPNA → 3rd Party → Manual Station |
-| Non-sortable manual item | Manual | No | CPNA → Manual Station |
-
----
-
-## 8. Scheduler Responsibilities
-
-The scheduler is responsible for:
-
-- Selecting which tote to release from OSR
-- Enforcing service centre ordering
-- Respecting tote-type priorities
-- Ensuring dependencies are satisfied
-- Avoiding starvation and deadlock
-- Respecting downstream capacity constraints
-
----
-
-## 5. Release Strategy
-
-### 5.1 Service Centre Priority
-
-Totes shall be grouped by `serviceCentreId`.
-
-The scheduler shall process service centres in a defined priority order:
-
-```
-ServiceCentrePriority = [SC1, SC2, SC3, ...]
-```
-
-All release decisions shall first respect this ordering.
-
----
-
-### 5.2 Tote Type Priority
-
-Within a service centre, totes shall be released in the following order:
-
-```
-CPNA → CPF → CPC
-```
-
-Rationale:
-- Manual work should be completed early where required
-- Fully automated work can proceed independently
-- CPC totes may depend on other work
-
----
-
-### 5.3 Sheet Ordering
-
-For totes belonging to the same:
-
-- Notional Tote
-- Tote Type
-
-Sheets shall be released in ascending order:
-
-```
-001 → 002 → 003
-```
-
----
-
-## 6. Manual Integration Flow
-
-### 6.1 Purpose
-
-Manual items are handled separately from automated items, but may need to be combined with automated items before dispatch.
-
-The simulation shall model this as a **post-P2P bag-content merge**, not as a physical tote merge.
-
----
-
-### 6.2 Manual Tote Processing
-
-A CPNA tote represents manual work for one or more patients.
-
-When released from OSR, a CPNA tote shall travel to the manual station.
-
-At the manual station, the simulation shall:
-
-- process the manual item instructions
-- pick and label items
-- create patient-level manual bag contents
-- associate those contents with:
-  - `notionalToteId`
-  - `patientId`
-  - `storeId`
-- store the prepared manual items until required
-- mark the CPNA tote as complete
-
-The CPNA tote itself does not merge with another tote.
-
----
-
-### 6.3 Manual Bag Content Store
-
-The simulation shall maintain a logical store of prepared manual items.
-
-Example structure:
+## 6.1 MANUAL_FLOW Flow
 
 ```text
-ManualItemStore:
-  notionalToteId
-    patientId
-      manualItems[]
-      status
+MANUAL_FLOW → Manual Station → Items prepared → Stored
 ```
 
-This store acts as the staging area between CPNA processing and CPC consolidation.
+## 6.2 ASSOCIATED / EMPTY Flow
 
----
-
-### 6.4 CPC Post-P2P Manual Merge
-
-A CPC tote may require manual items to be added to one or more patient bags.
-
-When a CPC tote reaches the manual merge point (after P2P), the simulation shall:
-
-- identify required manual contents by `notionalToteId` and `patientId`
-- retrieve the prepared manual items
-- open or access the completed patient bag
-- add manual items to the bag
-- reseal or mark the bag as complete
-- mark the manual contents as consumed
-
-After this step, the patient bag shall contain both automated and manual items.
-
----
-
-### 6.5 Manual-Only Dispatch
-
-If a CPNA tote represents manual-only work that does not need to merge into a CPC tote, it may be treated as a standalone dispatch tote.
-
-In this case:
-
-- the CPNA tote completes manual processing
-- its patient bags are considered dispatch-ready
-- no CPC dependency is required
-
----
-
-### 6.6 Manual Integration Principles
-
-- Manual items are prepared by CPNA totes
-- Manual items are staged until CPC arrives
-- CPC totes perform final consolidation after P2P
-- Totes do not physically merge
-- Patient bag contents may merge
-- The Notional Tote ID provides the correlation between CPNA and CPC work
-
----
-
-## 7. Dependency Rules
-
-### 6.1 General
-
-Totes may define dependencies on other totes.
-
-Dependencies are always scoped within the same Notional Tote.
-
----
-
-### 6.2 CPC Dependency Rule
-
-A CPC tote may depend on CPNA work.
-
-A CPC tote may be released only if:
-
-- Required CPNA work is complete, OR
-- The system allows CPC to proceed to a manual station later
-
----
-
-### 6.3 Dependency Representation
-
-Dependencies should be explicitly modelled:
-
-```
-Dependency:
-  - notionalToteId
-  - requiredToteType
-  - requiredSheetNumber
-  - dependencyType
+```text
+→ P2P
+→ Manual Merge (POST-P2P)
+→ Dispatch
 ```
 
-Example dependency types:
+## 6.3 Rules
 
-- `MUST_COMPLETE_BEFORE_RELEASE`
-- `MUST_COMPLETE_BEFORE_DISPATCH`
-
----
-
-## 7. Capacity Constraints
-
-A tote shall only be released if downstream capacity exists.
-
-Examples:
-
-- CPNA requires manual station availability
-- CPF requires automated line availability
-- CPC requires route availability
-
-If capacity is not available, the tote shall remain in OSR.
+- Manual items prepared BEFORE merge
+- Merge occurs AFTER P2P
+- Totes do NOT merge
+- Bags DO merge
 
 ---
 
-## 8. Starvation Avoidance
+# 7. Empty Orders in Flow
 
-The scheduler shall prevent indefinite blocking of lower-priority totes.
+## 7.1 Behaviour
 
-Rule:
-
-- If a tote exceeds a defined `MaxWaitTime`, it may be released out of priority order
-- Provided its route is available
-
----
-
-## 9. Ordering Guarantees
-
-The scheduler shall **not** assume that:
-
-- 12N messages arrive in execution order
-- Release order matches message arrival order
-
-Instead:
-
+```text
+EMPTY → AV02 → allocate tote → behave like ASSOCIATED
 ```
-ReleaseOrder = ServiceCentrePriority
-             + ToteTypePriority
-             + DependencyState
-             + Capacity
-             + StarvationRules
+
+## 7.2 Constraints
+
+- Not buffered in OSR
+- Requires physical tote supply
+
+---
+
+# 8. Order Dependencies
+
+From KNAPP:
+
+- Adapted must complete first
+- Associated / Empty depend on Adapted
+
+---
+
+# 9. Scheduler Requirements
+
+## 9.1 Ordering Dimensions
+
+The scheduler shall consider multiple independent ordering dimensions:
+
+### Service Centre Ordering
+
+- Orders are grouped by **Service Centre**
+- Service Centres shall be processed in a deterministic sequence
+- Example strategy:
+
+```text
+Round-robin across service centres
+or
+Priority-based ordering
 ```
 
 ---
 
-## 10. Notional Tote Behaviour
+### Sheet Ordering
 
-The Notional Tote shall act as a coordination object only.
+- Each Notional Tote may be split into **multiple sheets**
+- Sheets must be processed in sequence:
 
-It shall:
-
-- Track all associated physical totes
-- Track dependency completion
-- Enable grouping and reconciliation
-
-It shall **not**:
-
-- Be scheduled directly
-- Move through the system
-
----
-
-## 11. Example
-
-```
-Notional Tote: TOTE66
-
-Totes:
-  CPNA / 001
-  CPF  / 001
-  CPC  / 001
-
-Release sequence:
-  1. CPNA / 001
-  2. CPF  / 001
-  3. CPC  / 001 (after CPNA complete or routable)
+```text
+Sheet 1 → Sheet 2 → Sheet 3
 ```
 
----
-
-## 12. Key Principles
-
-- The scheduler operates on **physical totes**, not logical groupings
-- The Notional Tote provides **correlation and dependency context**
-- Release order is **dynamic**, not fixed
-- Capacity and dependencies take precedence over arrival order
+- A later sheet must not be released before an earlier sheet
 
 ---
 
-## 13. Summary
+## 9.2 Dependency Types
 
-This model provides a simplified but realistic abstraction of DSP behaviour:
+Dependencies shall be explicitly modelled.
 
-- Logical grouping via Notional Tote
-- Execution via 12N-derived physical totes
-- Dynamic release controlled by a scheduler
-- Inline and offline manual processing paths
+### Types of Dependency
 
-The goal is to simulate **flow behaviour**, not replicate proprietary KNAPP algorithms.
+```java
+enum DependencyType {
+    ADAPTED_COMPLETION,
+    SHEET_SEQUENCE,
+    SERVICE_CENTRE_ORDER,
+    MANUAL_READY
+}
+```
 
-This model provides a simplified but realistic abstraction of DSP behaviour:
+### Rules
 
-- Logical grouping via Notional Tote
-- Execution via 12N-derived physical totes
-- Dynamic release controlled by a scheduler
+- ASSOCIATED / EMPTY orders depend on ADAPTED completion
+- Sheets depend on previous sheet completion
+- Manual merge depends on manual items being ready
 
-The goal is to simulate **flow behaviour**, not replicate proprietary KNAPP algorithms.
+---
 
+## 9.3 Starvation / Deadlock Avoidance
+
+The scheduler shall prevent starvation and deadlock.
+
+### Starvation Avoidance
+
+- No Service Centre shall be indefinitely blocked
+- Implement fairness:
+
+```text
+Max consecutive releases per Service Centre
+```
+
+---
+
+### Deadlock Avoidance
+
+Deadlock scenarios:
+
+- Waiting for manual items that are never scheduled
+- Waiting for downstream capacity while upstream is blocked
+
+Mitigation:
+
+- Detect circular wait conditions
+- Allow override release after timeout
+
+---
+
+## 9.4 Capacity Constraints (Detailed)
+
+Each station shall define capacity:
+
+```java
+class StationCapacity {
+    int maxInProgress;
+    int queueLimit;
+}
+```
+
+### Behaviour
+
+- If queue is full → block upstream release
+- If processing full → hold at previous station
+
+### Stations to model capacity for:
+
+- 3rd Party Station
+- Sortable / Preparation
+- Manual Station
+- P2P
+
+---
+
+## 9.5 Release Strategy
+
+Release priority:
+
+1. ADAPTED
+2. ASSOCIATED / EMPTY
+3. FULL_PACK
+
+Within priority:
+
+- Service Centre ordering
+- Sheet ordering
+- FIFO
+
+---
+
+# 10. Renderable Lifecycle / Performance Constraint
+
+The scheduler may load a full day of order and pack data. A production-scale run may contain around 110,000 packs, but only a small fraction should be represented by active renderables at any point in time.
+
+Simulation rule:
+
+> Loaded order/item data is not the same thing as active simulation objects or renderable objects.
+
+## 10.1 Lifecycle Rules
+
+- Orders waiting in OSR are data only.
+- Packs inside unreleased OSR orders are data only.
+- A physical tote renderable is created when:
+  - an OSR order is released, or
+  - an EMPTY order allocates a tote at AV02.
+- Pack renderables are created only for packs in released / active totes.
+- Pack renderables are visible only when:
+  - the containing tote lid is open, or
+  - the pack has left tote containment and is moving through active machine flow.
+- When the tote lid is closed, contained pack renderables should be hidden or skipped rather than evaluated.
+- Once packs enter a bag / bagger black-box stage, individual pack renderables may be hidden, retired, or returned to a pool while logical pack contents remain in domain state.
+- Bag renderables represent bagged contents; bagged packs do not normally need individual renderables.
+
+## 10.2 Visibility Flag
+
+Renderable objects should support a cheap visibility flag or equivalent mechanism.
+
+Rules:
+
+- Hidden renderables must be skipped early in update/render traversal.
+- Visibility should be toggled for common state changes such as tote lid open/closed.
+- Avoid repeated allocation and destruction inside the main tick loop where a stable renderable can be hidden and later shown.
+- Do not create renderables for all loaded order data up front.
+
+This rule applies to:
+
+- totes
+- contained packs
+- free-moving packs
+- bags
+- optional debug labels / overlays
+
+---
+
+# 11. Key Principles
+
+1. Notional Tote = logical grouping
+2. Order Type defines start + behaviour
+3. EMPTY = creation of tote
+4. Routing = item-driven
+5. Manual merge = post-P2P
+6. MANUAL_FLOW prepares, ASSOCIATED consolidates
+
+---
+
+# 12. Final Model Summary
+
+```text
+Order arrives
+
+IF EMPTY:
+    start at AV02
+    allocate tote
+ELSE:
+    retrieve from OSR
+
+Process:
+    Adapted → complete
+    Associated/Empty → flow
+
+Routing:
+    3rd Party / Sortable / Manual
+
+P2P:
+    create bags
+
+Manual Merge:
+    add manual items
+
+Dispatch
+```
+
+---
+
+This model aligns:
+- Logical (TDP-182)
+- Interface (order types)
+- Physical (KNAPP system behaviour)
