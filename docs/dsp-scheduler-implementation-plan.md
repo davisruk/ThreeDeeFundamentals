@@ -52,17 +52,17 @@ Allowed files:
 - Create files under `app/src/main/java/online/davisfamily/warehouse/sim/dsp/model/`
 - Create `app/src/test/java/online/davisfamily/warehouse/sim/dsp/model/DspOrderModelTest.java`
 
-Add:
+Create exactly:
 
-- `OrderType`: `ADAPTED`, `EMPTY`, `ASSOCIATED`, `FULL_PACK`
-- `ToteType`: `ASSOCIATED`, `FULL_PACK`, `MANUAL_FLOW`
-- `ProductCategory`: `AUTOMATED`, `SORTABLE`, `MANUAL`
-- `StartLocation`: `OSR`, `AV02`
-- `StationType`: `OSR`, `AV02`, `THIRD_PARTY`, `ADAPTING`, `MANUAL`, `P2P`, `MANUAL_MERGE`, `DISPATCH`
-- `DependencyType`: `ADAPTED_COMPLETION`, `SHEET_SEQUENCE`, `SERVICE_CENTRE_ORDER`, `MANUAL_READY`
-- `ProductMasterRecord(productId, ProductCategory category, boolean thirdParty)`
-- `DspOrderItem(itemId, productId, quantity)`
-- `NotionalToteOrder(orderId, notionalToteId, serviceCentreId, sheetNumber, OrderType orderType, List<DspOrderItem> items, long sequenceNumber)`
+- `OrderType.java`: enum values `ADAPTED`, `EMPTY`, `ASSOCIATED`, `FULL_PACK`
+- `ToteType.java`: enum values `ASSOCIATED`, `FULL_PACK`, `MANUAL_FLOW`
+- `ProductCategory.java`: enum values `AUTOMATED`, `SORTABLE`, `MANUAL`
+- `StartLocation.java`: enum values `OSR`, `AV02`
+- `StationType.java`: enum values `OSR`, `AV02`, `THIRD_PARTY`, `ADAPTING`, `MANUAL`, `P2P`, `MANUAL_MERGE`, `DISPATCH`
+- `DependencyType.java`: enum values `ADAPTED_COMPLETION`, `SHEET_SEQUENCE`, `SERVICE_CENTRE_ORDER`, `MANUAL_READY`
+- `ProductMasterRecord.java`: `public record ProductMasterRecord(String productId, ProductCategory category, boolean thirdParty)`
+- `DspOrderItem.java`: `public record DspOrderItem(String itemId, String productId, int quantity)`
+- `NotionalToteOrder.java`: `public record NotionalToteOrder(String orderId, String notionalToteId, String serviceCentreId, int sheetNumber, OrderType orderType, List<DspOrderItem> items, long sequenceNumber)`
 
 Validation:
 
@@ -71,6 +71,17 @@ Validation:
 - `quantity` must be positive.
 - `sheetNumber` must be `>= 1`.
 - `sequenceNumber` must be `>= 0`.
+- Record constructors must use `List.copyOf(items)` for defensive copying.
+- Do not introduce Lombok.
+- Do not add dependencies.
+
+Test methods:
+
+- `shouldRejectBlankIdentifiers()`
+- `shouldRejectNullCategoryAndOrderType()`
+- `shouldRejectEmptyOrderItems()`
+- `shouldRejectInvalidQuantitySheetAndSequence()`
+- `shouldDefensivelyCopyOrderItems()`
 
 Expected output:
 
@@ -91,19 +102,19 @@ Allowed files:
 - Create files under `app/src/main/java/online/davisfamily/warehouse/sim/dsp/routing/`
 - Create `app/src/test/java/online/davisfamily/warehouse/sim/dsp/routing/DspRouteDeriverTest.java`
 
-Add:
+Create exactly:
 
-- `ProductMasterRepository`
+- `ProductMasterRepository.java`
   - `Optional<ProductMasterRecord> findByProductId(String productId)`
-- `InMemoryProductMasterRepository`
-- `RouteRequirements`
-  - `requiresThirdParty`
-  - `requiresSortable`
-  - `requiresManual`
-  - `requiresP2p`
-  - `requiresManualMerge`
-  - `StartLocation startLocation`
-- `DspRouteDeriver`
+- `InMemoryProductMasterRepository.java`
+  - constructor: `public InMemoryProductMasterRepository(List<ProductMasterRecord> products)`
+  - store records by `productId` in insertion order
+  - copy inputs defensively
+- `RouteRequirements.java`
+  - `public record RouteRequirements(boolean requiresThirdParty, boolean requiresSortable, boolean requiresManual, boolean requiresP2p, boolean requiresManualMerge, StartLocation startLocation)`
+- `DspRouteDeriver.java`
+  - constructor: `public DspRouteDeriver(ProductMasterRepository productMasterRepository)`
+  - method: `public RouteRequirements derive(NotionalToteOrder order)`
 
 Rules:
 
@@ -115,6 +126,16 @@ Rules:
 - `MANUAL` product sets `requiresManual`.
 - Manual items on `ASSOCIATED`/`EMPTY` set `requiresManualMerge`.
 - Missing product master data throws `IllegalArgumentException`.
+- `ADAPTED` may require third-party/sortable/manual stations according to item data, but does not require P2P.
+- Do not create station path lists yet; only return the booleans in `RouteRequirements`.
+
+Test methods:
+
+- `shouldStartEmptyOrdersAtAv02AndOthersAtOsr()`
+- `shouldRequireP2pForAssociatedAndEmptyOrdersOnly()`
+- `shouldDeriveThirdPartySortableAndManualRequirementsFromProductMaster()`
+- `shouldRequireManualMergeForAssociatedOrEmptyOrdersWithManualItems()`
+- `shouldRejectMissingProductMasterData()`
 
 Expected output:
 
@@ -134,31 +155,42 @@ Allowed files:
 - Create files under `app/src/main/java/online/davisfamily/warehouse/sim/dsp/scheduler/`
 - Create `app/src/test/java/online/davisfamily/warehouse/sim/dsp/scheduler/DspSchedulerStateTest.java`
 
-Add:
+Create exactly:
 
-- `StationCapacity(int maxInProgress, int queueLimit)`
-- `StationSnapshot(StationType stationType, int inProgress, int queued)`
-- `StationAdmissionSnapshot`
-  - station type
-  - capacity snapshot
-  - optional admission flag/reason for station-specific checks
-- `DspOrderStatus`: `WAITING`, `RELEASED`, `COMPLETED`, `BLOCKED`
-- `DspSchedulerOrderState`
-  - wraps `NotionalToteOrder`
-  - stores `RouteRequirements`
-  - stores status
-- `WarehouseSchedulerSnapshot`
-  - order states
-  - station/admission snapshots
-  - completed adapted notional tote IDs
-  - manual-ready notional tote IDs
-  - active service centre ID, if one is already open
+- `StationCapacity.java`
+  - `public record StationCapacity(int maxInProgress, int queueLimit)`
+  - method: `public boolean canAccept(StationSnapshot snapshot)`
+- `StationSnapshot.java`
+  - `public record StationSnapshot(StationType stationType, int inProgress, int queued)`
+- `StationAdmissionSnapshot.java`
+  - `public record StationAdmissionSnapshot(StationType stationType, StationCapacity capacity, StationSnapshot snapshot, boolean admissionOpen, String blockedReason)`
+  - method: `public boolean canAccept()`
+- `DspOrderStatus.java`
+  - enum values `WAITING`, `RELEASED`, `COMPLETED`, `BLOCKED`
+- `DspSchedulerOrderState.java`
+  - `public record DspSchedulerOrderState(NotionalToteOrder order, RouteRequirements routeRequirements, DspOrderStatus status)`
+  - method: `public DspSchedulerOrderState withStatus(DspOrderStatus status)`
+- `WarehouseSchedulerSnapshot.java`
+  - `public record WarehouseSchedulerSnapshot(List<DspSchedulerOrderState> orderStates, Map<StationType, StationAdmissionSnapshot> stationAdmissions, Set<String> completedAdaptedNotionalToteIds, Set<String> manualReadyNotionalToteIds, Optional<String> activeServiceCentreId)`
 
 Capacity rules:
 
 - A station accepts if `inProgress < maxInProgress` or `queued < queueLimit`.
 - If both processing and queue are full, upstream release is blocked.
 - Invalid negative capacities or counts throw.
+- `StationAdmissionSnapshot.canAccept()` returns false when `admissionOpen` is false, even if capacity exists.
+- `blockedReason` may be blank only when `admissionOpen` is true.
+- `WarehouseSchedulerSnapshot` must defensively copy all collections using `List.copyOf`, `Map.copyOf`, and `Set.copyOf`.
+- Do not store references to controllers, renderables, simulation objects, or mutable command queues in scheduler snapshots.
+- Do not add thread classes in this step.
+
+Test methods:
+
+- `shouldAcceptWhenProcessingOrQueueCapacityExists()`
+- `shouldRejectWhenProcessingAndQueueAreFull()`
+- `shouldRejectWhenStationAdmissionIsClosed()`
+- `shouldRejectInvalidCapacityAndSnapshotCounts()`
+- `shouldDefensivelyCopySchedulerSnapshotCollections()`
 
 Expected output:
 
@@ -179,10 +211,13 @@ Allowed files:
 - Extend files under `app/src/main/java/online/davisfamily/warehouse/sim/dsp/scheduler/`
 - Create `app/src/test/java/online/davisfamily/warehouse/sim/dsp/scheduler/DspDependencyEvaluatorTest.java`
 
-Add:
+Create exactly:
 
-- `DependencyBlock(DependencyType type, String reason)`
-- `DspDependencyEvaluator`
+- `DependencyBlock.java`
+  - `public record DependencyBlock(DependencyType type, String reason)`
+- `DspDependencyEvaluator.java`
+  - constructor: no args
+  - method: `public List<DependencyBlock> findBlocks(DspSchedulerOrderState candidate, WarehouseSchedulerSnapshot snapshot)`
 
 Rules:
 
@@ -190,6 +225,19 @@ Rules:
 - Sheet `n > 1` is blocked by `SHEET_SEQUENCE` until sheet `n - 1` for the same notional tote is completed or released according to scheduler state.
 - Orders requiring manual merge are blocked by `MANUAL_READY` until their `notionalToteId` is manual-ready.
 - `ADAPTED` and `FULL_PACK` do not require adapted completion.
+- Return an empty list when unblocked.
+- Use `List.copyOf` for returned block lists if building a mutable intermediate list.
+- Sheet sequence check should look at orders with the same `notionalToteId` and `sheetNumber == candidate.order().sheetNumber() - 1`.
+- Treat previous sheet as satisfied when that previous sheet state is `RELEASED` or `COMPLETED`.
+- Do not mutate the snapshot or candidate.
+
+Test methods:
+
+- `shouldBlockAssociatedAndEmptyUntilAdaptedComplete()`
+- `shouldNotBlockAdaptedOrFullPackOnAdaptedCompletion()`
+- `shouldBlockLaterSheetUntilPreviousSheetReleasedOrCompleted()`
+- `shouldBlockManualMergeUntilManualReady()`
+- `shouldReturnAllApplicableDependencyBlocks()`
 
 Expected output:
 
@@ -208,14 +256,16 @@ Allowed files:
 - Extend files under `app/src/main/java/online/davisfamily/warehouse/sim/dsp/scheduler/`
 - Create `app/src/test/java/online/davisfamily/warehouse/sim/dsp/scheduler/ServiceCentreWindowPolicyTest.java`
 
-Add:
+Create exactly:
 
-- `ServiceCentrePriority`
-  - configured ordered list of service centre IDs
-- `ServiceCentreWindowPolicy`
-  - tracks active service centre
-  - selects next service centre by configured priority order
-  - does not interleave service centres
+- `ServiceCentrePriority.java`
+  - `public record ServiceCentrePriority(List<String> serviceCentreIds)`
+  - constructor must reject null/blank ids and duplicate ids
+  - use `List.copyOf`
+- `ServiceCentreWindowPolicy.java`
+  - constructor: `public ServiceCentreWindowPolicy(ServiceCentrePriority priority)`
+  - method: `public Optional<String> activeWindowFor(WarehouseSchedulerSnapshot snapshot)`
+  - method: `public boolean isOrderInActiveWindow(DspSchedulerOrderState orderState, WarehouseSchedulerSnapshot snapshot)`
 
 Rules:
 
@@ -224,6 +274,19 @@ Rules:
 - The active service centre is complete only when it has no unreleased orders left.
 - If the active service centre has unreleased work but all candidates are blocked, return no release decision.
 - Do not skip to another service centre because of temporary dependency or capacity blocks.
+- The policy must be stateless; active service centre is supplied by `WarehouseSchedulerSnapshot.activeServiceCentreId()`.
+- If the snapshot has an active service centre with unreleased work, return it even if no candidate is currently releasable.
+- If the snapshot active service centre has no unreleased work, select the next service centre by configured priority.
+- Unreleased means status `WAITING` or `BLOCKED`.
+- Ignore service centres not present in `ServiceCentrePriority`.
+
+Test methods:
+
+- `shouldChooseFirstPriorityServiceCentreWithUnreleasedWork()`
+- `shouldKeepActiveServiceCentreUntilItsWorkIsReleased()`
+- `shouldMoveToNextServiceCentreAfterActiveWindowCompletes()`
+- `shouldNotSkipBlockedActiveServiceCentre()`
+- `shouldRejectDuplicateOrBlankServiceCentreIds()`
 
 Expected output:
 
@@ -244,20 +307,22 @@ Allowed files:
 - Extend files under `app/src/main/java/online/davisfamily/warehouse/sim/dsp/scheduler/`
 - Create `app/src/test/java/online/davisfamily/warehouse/sim/dsp/scheduler/DspReleaseSchedulerTest.java`
 
-Add:
+Create exactly:
 
-- `ReleaseDecision`
-  - selected order ID
-  - service centre ID
-  - start location
-  - required route
-- `SchedulerCommand`
-  - first concrete command: `ReleaseOrderCommand(orderId, serviceCentreId, startLocation)`
-- `BlockedDecision`
-  - active service centre ID
-  - candidate order IDs
-  - dependency/capacity block reasons
-- `DspReleaseScheduler`
+- `SchedulerCommand.java`
+  - marker interface: `public interface SchedulerCommand {}`
+- `ReleaseOrderCommand.java`
+  - `public record ReleaseOrderCommand(String orderId, String serviceCentreId, StartLocation startLocation) implements SchedulerCommand`
+- `ReleaseDecision.java`
+  - `public record ReleaseDecision(String orderId, String serviceCentreId, StartLocation startLocation, RouteRequirements routeRequirements, ReleaseOrderCommand command)`
+- `BlockedDecision.java`
+  - `public record BlockedDecision(String activeServiceCentreId, List<String> candidateOrderIds, List<String> blockReasons)`
+- `SchedulerEvaluation.java`
+  - `public record SchedulerEvaluation(Optional<ReleaseDecision> releaseDecision, Optional<BlockedDecision> blockedDecision)`
+  - static factories: `release(ReleaseDecision decision)`, `blocked(BlockedDecision decision)`, `nothingToRelease()`
+- `DspReleaseScheduler.java`
+  - constructor: `public DspReleaseScheduler(ServiceCentreWindowPolicy windowPolicy, DspDependencyEvaluator dependencyEvaluator)`
+  - method: `public SchedulerEvaluation evaluate(WarehouseSchedulerSnapshot snapshot)`
 
 Release priority inside the active service-centre window:
 
@@ -281,6 +346,26 @@ Rules:
 - If the active service centre has work but none is eligible, return blocked decision.
 - The scheduler must not directly mark live machine/controller state.
 - Any status transition in the pure domain model must happen through an explicit snapshot/state copy operation, not by mutating live simulation objects.
+- `SchedulerEvaluation.release(...)` must contain a release decision and no blocked decision.
+- `SchedulerEvaluation.blocked(...)` must contain a blocked decision and no release decision.
+- `SchedulerEvaluation.nothingToRelease()` must contain neither.
+- Capacity blocking should inspect station admissions required by `RouteRequirements`:
+  - `requiresThirdParty` -> `StationType.THIRD_PARTY`
+  - `requiresSortable` -> `StationType.ADAPTING`
+  - `requiresManual` -> `StationType.MANUAL`
+  - `requiresP2p` -> `StationType.P2P`
+  - `requiresManualMerge` -> `StationType.MANUAL_MERGE`
+- If a required station has no `StationAdmissionSnapshot`, treat it as blocked with a clear reason.
+- Build `blockReasons` as simple strings; do not introduce a hierarchy beyond `DependencyBlock`.
+
+Test methods:
+
+- `shouldReleaseHighestPriorityEligibleOrderInActiveServiceCentre()`
+- `shouldUseSheetSequenceThenSequenceNumberThenOrderIdAsTieBreakers()`
+- `shouldReturnBlockedDecisionWhenActiveServiceCentreHasOnlyBlockedWork()`
+- `shouldReturnNothingWhenNoServiceCentreHasUnreleasedWork()`
+- `shouldBlockWhenRequiredStationHasNoAdmissionSnapshot()`
+- `shouldEmitReleaseCommandWithoutMutatingSnapshotState()`
 
 Expected output:
 
@@ -301,31 +386,45 @@ Allowed files:
 - Create files under `app/src/main/java/online/davisfamily/warehouse/sim/dsp/p2p/`
 - Create `app/src/test/java/online/davisfamily/warehouse/sim/dsp/p2p/P2pAdmissionAdapterTest.java`
 
-Add:
+Create exactly:
 
-- `P2pAdmission`
+- `P2pAdmission.java`
   - `P2pAdmissionResult canAdmit(NotionalToteOrder order, P2pAdmissionSnapshot snapshot)`
-- `P2pAdmissionSnapshot`
-  - P2P cell id
-  - idle PRL count
-  - active bag correlations
-  - known/admissible bag correlations
-  - PCR available for a new release
-- `P2pAdmissionResult`
-  - accepted flag
-  - rejection reason
-- `StaticP2pAdmission`
-  - test implementation returning configured result
-- `P2pCapacityStationAdapter`
-  - exposes P2P as a capacity/admission check for the scheduler
+- `P2pAdmissionSnapshot.java`
+  - `public record P2pAdmissionSnapshot(String p2pCellId, int idlePrlCount, Set<String> activeBagCorrelations, Set<String> admissibleKnownCorrelations, boolean pcrAvailableForNewRelease)`
+- `P2pAdmissionResult.java`
+  - `public record P2pAdmissionResult(boolean accepted, String rejectionReason)`
+  - static factories: `accepted()`, `rejected(String reason)`
+- `StaticP2pAdmission.java`
+  - constructor: `public StaticP2pAdmission(P2pAdmissionResult result)`
+- `P2pCapacityStationAdapter.java`
+  - constructor: `public P2pCapacityStationAdapter(P2pAdmission p2pAdmission, P2pAdmissionSnapshot p2pSnapshot, StationCapacity capacity, StationSnapshot stationSnapshot)`
+  - method: `public StationAdmissionSnapshot admissionFor(NotionalToteOrder order)`
 
 Do not wire to `ToteToBagFlowController` yet.
+
+Validation:
+
+- `P2pAdmissionSnapshot` rejects blank cell id and negative idle PRL count.
+- `P2pAdmissionSnapshot` defensively copies sets.
+- `P2pAdmissionResult.rejected(...)` requires a non-blank reason.
+- `P2pCapacityStationAdapter.admissionFor(...)` returns a `StationAdmissionSnapshot` for `StationType.P2P`.
+- P2P admission is open only when both capacity can accept and `P2pAdmissionResult.accepted()` is true.
+- The adapter must not store or call live tote-to-bag controllers.
 
 Expected output:
 
 - Tests prove P2P can block release independently of generic station capacity.
 - Tests prove P2P admission uses snapshot data, not live tote-to-bag controller access.
 - Scheduler can depend on a small thread-ready interface rather than tote-to-bag internals.
+
+Test methods:
+
+- `shouldOpenP2pAdmissionWhenCapacityAndP2pAdmissionAllow()`
+- `shouldCloseP2pAdmissionWhenCapacityIsFull()`
+- `shouldCloseP2pAdmissionWhenP2pRejectsOrder()`
+- `shouldDefensivelyCopyP2pAdmissionSnapshotSets()`
+- `shouldRejectInvalidP2pSnapshotAndResultInputs()`
 
 Ask user to run:
 
@@ -359,6 +458,13 @@ Verify:
 - After `SC-A` fully releases, `SC-B` can release.
 - Scheduler decisions are generated from immutable snapshots.
 - Release decisions produce commands; command application is left to the caller/simulation thread.
+
+Test methods:
+
+- `shouldHoldLaterServiceCentreWhileActiveServiceCentreIsBlocked()`
+- `shouldReleaseActiveServiceCentreInDependencyAndSheetOrder()`
+- `shouldMoveToNextServiceCentreAfterActiveServiceCentreCompletes()`
+- `shouldProduceCommandsWithoutApplyingSimulationSideEffects()`
 
 Ask user to run:
 
