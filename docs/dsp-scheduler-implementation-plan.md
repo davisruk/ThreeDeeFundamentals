@@ -2,9 +2,9 @@
 
 ## Summary
 
-Implement the scheduler in a new branch from `master`, starting with a pure domain scheduler that can be tested without visuals, renderables, live P2P integration, or real JSON imports.
+Implement the scheduler in a new branch from `master`, starting with a pure domain scheduler that can be tested without visuals, renderables, live P2P integration, real JSON imports, or a separate scheduler thread.
 
-The first branch establishes the order model, routing derivation, dependency checks, service-centre windowing, station capacity checks, and release decisions. Later branches can adapt this into OSR/AV02/debug tote injection and eventually product/12N JSON loading.
+The first branch establishes the order model, routing derivation, dependency checks, service-centre windowing, station capacity checks, immutable scheduler snapshots, and release decisions/commands. Later branches can adapt this into OSR/AV02/debug tote injection, a possible scheduler thread, and eventually product/12N JSON loading.
 
 Branch strategy:
 
@@ -23,6 +23,27 @@ Assumption: `master` contains the latest tote-to-bag/P2P work.
 - V1 blocked service-centre rule: if the active service centre is blocked, release nothing from later service centres until the block clears.
 - V1 P2P integration: model as a station capacity/admission concept only; do not call live `ToteToBagFlowController.canAdmit(...)` until a later integration branch.
 - V1 JSON loading: out of scope until sample product master and 12N schemas are supplied.
+- V1 threading: run synchronously in tests, but use immutable input snapshots and explicit output commands so the scheduler can later move to a separate thread.
+- Scheduler boundary: the scheduler must not directly mutate machine/controller state, create renderables, inject totes, or call live mutable controller APIs.
+
+## Thread-Ready Boundary
+
+The scheduler should be designed around this boundary:
+
+```text
+WarehouseSchedulerSnapshot -> DspReleaseScheduler -> SchedulerCommand / BlockedDecision
+```
+
+Rules:
+
+- Machine/controllers own live mutable simulation state on the simulation thread.
+- The scheduler reads immutable snapshots only.
+- The scheduler emits commands/decisions only.
+- The simulation thread applies commands at safe points.
+- V1 may build snapshots directly in tests, but production integration should later gather snapshots from controllers before invoking the scheduler.
+- Availability exposed to the scheduler should be snapshot data, not direct live methods such as `machine.isAvailable()` where that would read mutable controller state.
+
+The eventual threaded version should consume published immutable snapshots and publish scheduler commands back to a simulation-thread command queue. That is not part of this first branch.
 
 ## Step 1: Domain Enums And Value Objects
 
@@ -117,16 +138,21 @@ Add:
 
 - `StationCapacity(int maxInProgress, int queueLimit)`
 - `StationSnapshot(StationType stationType, int inProgress, int queued)`
+- `StationAdmissionSnapshot`
+  - station type
+  - capacity snapshot
+  - optional admission flag/reason for station-specific checks
 - `DspOrderStatus`: `WAITING`, `RELEASED`, `COMPLETED`, `BLOCKED`
 - `DspSchedulerOrderState`
   - wraps `NotionalToteOrder`
   - stores `RouteRequirements`
   - stores status
-- `DspSchedulerSnapshot`
+- `WarehouseSchedulerSnapshot`
   - order states
-  - station snapshots
+  - station/admission snapshots
   - completed adapted notional tote IDs
   - manual-ready notional tote IDs
+  - active service centre ID, if one is already open
 
 Capacity rules:
 
@@ -137,6 +163,7 @@ Capacity rules:
 Expected output:
 
 - Tests prove capacity acceptance/full behavior.
+- Tests prove scheduler snapshots are immutable copies of their input lists/sets.
 - This step does not decide release order yet.
 
 Ask user to run:
@@ -224,6 +251,8 @@ Add:
   - service centre ID
   - start location
   - required route
+- `SchedulerCommand`
+  - first concrete command: `ReleaseOrderCommand(orderId, serviceCentreId, startLocation)`
 - `BlockedDecision`
   - active service centre ID
   - candidate order IDs
@@ -248,13 +277,15 @@ Rules:
 - Exclude released/completed orders.
 - Exclude dependency-blocked orders.
 - Exclude capacity-blocked orders.
-- Return a release decision for the first eligible order.
+- Return a release decision and matching `ReleaseOrderCommand` for the first eligible order.
 - If the active service centre has work but none is eligible, return blocked decision.
-- Marking an order released is explicit; the scheduler should not mutate state unless called through a clear method such as `markReleased(orderId)`.
+- The scheduler must not directly mark live machine/controller state.
+- Any status transition in the pure domain model must happen through an explicit snapshot/state copy operation, not by mutating live simulation objects.
 
 Expected output:
 
 - Tests prove priority order, sheet order, FIFO tie-break, capacity blocking, dependency blocking, and service-centre window holding.
+- Tests prove the scheduler emits a command rather than applying a release side effect.
 - This is the main green point for the domain scheduler branch.
 
 Ask user to run:
@@ -273,9 +304,18 @@ Allowed files:
 Add:
 
 - `P2pAdmission`
-  - `boolean canAdmit(NotionalToteOrder order)`
+  - `P2pAdmissionResult canAdmit(NotionalToteOrder order, P2pAdmissionSnapshot snapshot)`
+- `P2pAdmissionSnapshot`
+  - P2P cell id
+  - idle PRL count
+  - active bag correlations
+  - known/admissible bag correlations
+  - PCR available for a new release
+- `P2pAdmissionResult`
+  - accepted flag
+  - rejection reason
 - `StaticP2pAdmission`
-  - test implementation returning configured true/false
+  - test implementation returning configured result
 - `P2pCapacityStationAdapter`
   - exposes P2P as a capacity/admission check for the scheduler
 
@@ -284,7 +324,8 @@ Do not wire to `ToteToBagFlowController` yet.
 Expected output:
 
 - Tests prove P2P can block release independently of generic station capacity.
-- Scheduler can depend on a small interface rather than tote-to-bag internals.
+- Tests prove P2P admission uses snapshot data, not live tote-to-bag controller access.
+- Scheduler can depend on a small thread-ready interface rather than tote-to-bag internals.
 
 Ask user to run:
 
@@ -316,6 +357,8 @@ Verify:
 - Manual-ready unlocks manual merge.
 - Sheet 2 does not release before sheet 1.
 - After `SC-A` fully releases, `SC-B` can release.
+- Scheduler decisions are generated from immutable snapshots.
+- Release decisions produce commands; command application is left to the caller/simulation thread.
 
 Ask user to run:
 
@@ -337,9 +380,11 @@ After `feature/dsp-scheduler-domain` is green and committed:
    - Add scheduler-driven OSR/AV02 release sources.
    - Replace or wrap `DebugToteInjectorController` with scheduler-selected releases.
    - Create tote renderables only at release time.
+   - Apply `ReleaseOrderCommand`s on the simulation thread.
 
 2. `feature/dsp-scheduler-p2p-live-admission`
-   - Implement `P2pAdmission` using existing `ToteToBagFlowController.canAdmit(ToteLoadPlan)`.
+   - Add a simulation-thread snapshot adapter over the existing tote-to-bag local state.
+   - Avoid calling live `ToteToBagFlowController` state from a scheduler thread.
    - Add an adapter from scheduler order/tote data to `ToteLoadPlan`.
 
 3. `feature/dsp-scheduler-json-loading`
@@ -350,10 +395,17 @@ After `feature/dsp-scheduler-domain` is green and committed:
    - Add cheap visibility/skipping support to `RenderableObject`.
    - Apply it to totes, contained packs, free packs, and bags.
 
+5. `feature/dsp-scheduler-thread`
+   - Move scheduler evaluation to a separate thread only after synchronous snapshot/command integration is proven.
+   - Publish immutable `WarehouseSchedulerSnapshot`s to the scheduler thread.
+   - Publish `SchedulerCommand`s back to a simulation-thread command queue.
+   - Keep all live simulation mutations on the simulation thread.
+
 ## Assumptions
 
 - `master` is the correct base branch.
 - The first scheduler branch is domain-only and fixture-driven.
 - Service centres must not be mixed during release.
 - A blocked active service centre blocks later service centres.
-- JSON import, live visual injection, live P2P admission, database decisions, deadlock override timers, and command-button/manual exception handling are later branches.
+- The scheduler is thread-ready in v1 but not threaded.
+- JSON import, live visual injection, live P2P admission, database decisions, scheduler threading, deadlock override timers, and command-button/manual exception handling are later branches.
