@@ -54,7 +54,7 @@ Verification:
 
 ### `feature/dsp-scheduler-osr-integration`
 
-Status: next.
+Status: next; detailed plan drafted.
 
 Detailed implementation doc:
 
@@ -62,11 +62,15 @@ Detailed implementation doc:
 
 Purpose:
 
-- Add scheduler-driven OSR/AV02 release sources.
+- Add scheduler-driven release for queued debug OSR totes after the existing bootstrap tote.
 - Add a simulation-thread command application path for `ReleaseOrderCommand`.
-- Replace or wrap debug tote injection so tote release is selected by scheduler decisions.
-- Create tote renderables only at release time.
+- Replace/wrap debug queued tote injection so queued tote release is selected by scheduler decisions.
+- Add scheduler-controlled queued tote renderables to the scene only at release time.
 - Keep scheduler evaluation synchronous for this branch; do not add a scheduler thread yet.
+
+Explicit non-goal:
+
+- Do not remove the current primary/bootstrap tote special case from `TipperSectionInstaller` / `TipperToSorterSection` in this branch.
 
 ### `feature/dsp-scheduler-p2p-live-admission`
 
