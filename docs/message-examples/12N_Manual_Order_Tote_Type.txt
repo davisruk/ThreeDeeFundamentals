@@ -1,0 +1,140 @@
+{
+  "header": {
+    "orderIdLength": 14,
+    "sheetNumberLength": 3,
+    "orderId": "TOTE0007171306",
+    "sheetNumber": "001"
+  },
+  "toteIdentifier": {
+    "identifier": "T",
+    "payloadLength": 2,
+    "payload": "01"
+  },
+  "transportContainer": {
+    "identifier": "C",
+    "payloadLength": 8,
+    "payload": "93002701"
+  },
+  "orderPriority": {
+    "identifier": "U",
+    "payloadLength": 3,
+    "payload": "999"
+  },
+  "departureTime": {
+    "identifier": "e",
+    "payloadLength": 14,
+    "payload": "20250626190827"
+  },
+  "serviceCentre": {
+    "identifier": "E",
+    "payloadLength": 3,
+    "payload": "104"
+  },
+  "orderDetail": {
+    "numberOfOrderLines": 7,
+    "orderLineReferenceNumberLength": 12,
+    "orderLineTypeLength": 2,
+    "pharmacyIdLength": 7,
+    "patientIdLength": 30,
+    "prescriptionIdLength": 20,
+    "productIdLength": 12,
+    "numPacksLength": 4,
+    "numPillsLength": 4,
+    "refOrderIdLength": 14,
+    "refSheetNumLength": 3,
+    "packsPickedLength": 4,
+    "orderLines": [
+      {
+        "orderLineNumber": "000243560347",
+        "orderLineType": "01",
+        "pharmacyId": "0005984",
+        "patientId": "                  NP2083436219",
+        "prescriptionId": "   20021300000211641",
+        "productId": "        6881",
+        "numberOfPacks": "0001",
+        "numberOfPills": "0000",
+        "referenceSheetNumber": "001",
+        "numberOfPacksPicked": "0001",
+        "referenceOrderId": "TOTE0007170196"
+      },
+      {
+        "orderLineNumber": "000243560348",
+        "orderLineType": "01",
+        "pharmacyId": "0005984",
+        "patientId": "                  NP2083426792",
+        "prescriptionId": "   20021300000211616",
+        "productId": "       21338",
+        "numberOfPacks": "0001",
+        "numberOfPills": "0000",
+        "referenceSheetNumber": "001",
+        "numberOfPacksPicked": "0001",
+        "referenceOrderId": "TOTE0007170197"
+      },
+      {
+        "orderLineNumber": "000243560345",
+        "orderLineType": "01",
+        "pharmacyId": "0005984",
+        "patientId": "                       7251492",
+        "prescriptionId": "   20021300000211637",
+        "productId": "       12021",
+        "numberOfPacks": "0001",
+        "numberOfPills": "0000",
+        "referenceSheetNumber": "001",
+        "numberOfPacksPicked": "0001",
+        "referenceOrderId": "TOTE0007170197"
+      },
+      {
+        "orderLineNumber": "000243560346",
+        "orderLineType": "01",
+        "pharmacyId": "0005984",
+        "patientId": "                       7251492",
+        "prescriptionId": "   20021300000211637",
+        "productId": "       12021",
+        "numberOfPacks": "0001",
+        "numberOfPills": "0000",
+        "referenceSheetNumber": "001",
+        "numberOfPacksPicked": "0001",
+        "referenceOrderId": "TOTE0007170197"
+      },
+      {
+        "orderLineNumber": "000243560342",
+        "orderLineType": "01",
+        "pharmacyId": "0005984",
+        "patientId": "                     129300747",
+        "prescriptionId": "   20021300000211757",
+        "productId": "        9121",
+        "numberOfPacks": "0001",
+        "numberOfPills": "0000",
+        "referenceSheetNumber": "001",
+        "numberOfPacksPicked": "0001",
+        "referenceOrderId": "TOTE0007170196"
+      },
+      {
+        "orderLineNumber": "000243560343",
+        "orderLineType": "01",
+        "pharmacyId": "0005984",
+        "patientId": "                     129300747",
+        "prescriptionId": "   20021300000211757",
+        "productId": "        2040",
+        "numberOfPacks": "0001",
+        "numberOfPills": "0000",
+        "referenceSheetNumber": "001",
+        "numberOfPacksPicked": "0001",
+        "referenceOrderId": "TOTE0007170196"
+      },
+      {
+        "orderLineNumber": "000243560344",
+        "orderLineType": "01",
+        "pharmacyId": "0005984",
+        "patientId": "                     129300747",
+        "prescriptionId": "   20021300000211757",
+        "productId": "       14917",
+        "numberOfPacks": "0001",
+        "numberOfPills": "0000",
+        "referenceSheetNumber": "001",
+        "numberOfPacksPicked": "0001",
+        "referenceOrderId": "TOTE0007170196"
+      }
+    ]
+  }
+}
