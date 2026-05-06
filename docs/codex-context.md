@@ -85,8 +85,8 @@ The next planned major work is the DSP/OSR scheduler.
 
 Read:
 
-1. `docs/dsp_osr_scheduler_requirements.md`
-2. `docs/dsp-scheduler-implementation-plan.md`
+1. `docs/scheduler/dsp_osr_scheduler_requirements.md`
+2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 
 Current scheduler decisions:
 
@@ -106,11 +106,11 @@ git switch master
 git switch -c feature/dsp-scheduler-domain
 ```
 
-Follow `docs/dsp-scheduler-implementation-plan.md` step by step.
+Follow `docs/scheduler/dsp-scheduler-implementation-plan.md` step by step.
 
 ## DSP Model Notes
 
-Use the terminology in `docs/dsp_osr_scheduler_requirements.md`.
+Use the terminology in `docs/scheduler/dsp_osr_scheduler_requirements.md`.
 
 Important distinctions:
 

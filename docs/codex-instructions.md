@@ -7,8 +7,8 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. `docs/dsp_osr_scheduler_requirements.md`
-3. `docs/dsp-scheduler-implementation-plan.md`
+2. `docs/scheduler/dsp_osr_scheduler_requirements.md`
+3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 
 Read these domain documents when touching their areas:
 
@@ -89,7 +89,7 @@ Current scheduler decisions:
   - if the active service centre is blocked, hold the window rather than skipping ahead
 - Model P2P as a station/admission boundary in the scheduler domain first; live `ToteToBagFlowController.canAdmit(...)` integration is a later branch.
 
-Follow the detailed plan in `docs/dsp-scheduler-implementation-plan.md`.
+Follow the detailed plan in `docs/scheduler/dsp-scheduler-implementation-plan.md`.
 
 ## Deferred Direction
 
