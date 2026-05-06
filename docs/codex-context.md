@@ -87,6 +87,7 @@ Read:
 
 1. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+3. The branch-specific plan referenced by the scheduler roadmap
 
 Current scheduler decisions:
 
@@ -106,7 +107,7 @@ git switch master
 git switch -c feature/dsp-scheduler-domain
 ```
 
-Follow `docs/scheduler/dsp-scheduler-implementation-plan.md` step by step.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow the branch-specific detailed plan step by step.
 
 ## DSP Model Notes
 

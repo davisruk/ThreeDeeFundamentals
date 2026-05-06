@@ -9,6 +9,7 @@ Read these documents before starting:
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+4. The branch-specific plan referenced by the scheduler roadmap
 
 Read these domain documents when touching their areas:
 
@@ -89,7 +90,7 @@ Current scheduler decisions:
   - if the active service centre is blocked, hold the window rather than skipping ahead
 - Model P2P as a station/admission boundary in the scheduler domain first; live `ToteToBagFlowController.canAdmit(...)` integration is a later branch.
 
-Follow the detailed plan in `docs/scheduler/dsp-scheduler-implementation-plan.md`.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow the detailed plan for the current branch.
 
 ## Deferred Direction
 
