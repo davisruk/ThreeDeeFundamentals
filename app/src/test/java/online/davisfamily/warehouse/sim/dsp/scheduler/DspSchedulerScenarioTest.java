@@ -13,6 +13,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
@@ -24,10 +25,21 @@ class DspSchedulerScenarioTest {
     @Test
     void shouldHoldLaterServiceCentreWhileActiveServiceCentreIsBlocked() {
         DspReleaseScheduler scheduler = scheduler();
+        DspSchedulerOrderState associated = orderState(
+                order(
+                        "sc-a-associated",
+                        "notional-a",
+                        "SC-A",
+                        1,
+                        OrderType.ASSOCIATED,
+                        1,
+                        line("sc-a-associated-adapted", "0006515", DspOrderLineType.ADAPTED)),
+                route(false, false, false, true, false),
+                DspOrderStatus.WAITING);
         WarehouseSchedulerSnapshot snapshot = snapshot(
                 List.of(
                         orderState(order("sc-a-adapted", "notional-a", "SC-A", 1, OrderType.ADAPTED, 0), route(false, false, false, false, false), DspOrderStatus.WAITING),
-                        orderState(order("sc-a-associated", "notional-a", "SC-A", 1, OrderType.ASSOCIATED, 1), route(false, false, false, true, false), DspOrderStatus.WAITING),
+                        associated,
                         orderState(order("sc-b-full", "notional-b", "SC-B", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
                 Set.of(),
@@ -41,7 +53,7 @@ class DspSchedulerScenarioTest {
         WarehouseSchedulerSnapshot blockedSnapshot = snapshot(
                 List.of(
                         orderState(order("sc-a-adapted", "notional-a", "SC-A", 1, OrderType.ADAPTED, 0), route(false, false, false, false, false), DspOrderStatus.RELEASED),
-                        orderState(order("sc-a-associated", "notional-a", "SC-A", 1, OrderType.ASSOCIATED, 1), route(false, false, false, true, false), DspOrderStatus.WAITING),
+                        associated,
                         orderState(order("sc-b-full", "notional-b", "SC-B", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
                 Set.of(),
@@ -59,8 +71,22 @@ class DspSchedulerScenarioTest {
     void shouldReleaseActiveServiceCentreInDependencyAndSheetOrder() {
         DspReleaseScheduler scheduler = scheduler();
         NotionalToteOrder adapted = order("sc-a-adapted", "notional-a", "SC-A", 1, OrderType.ADAPTED, 0);
-        NotionalToteOrder associatedSheet1 = order("sc-a-associated-1", "notional-a", "SC-A", 1, OrderType.ASSOCIATED, 1);
-        NotionalToteOrder associatedSheet2 = order("sc-a-associated-2", "notional-a", "SC-A", 2, OrderType.ASSOCIATED, 2);
+        NotionalToteOrder associatedSheet1 = order(
+                "sc-a-associated-1",
+                "notional-a",
+                "SC-A",
+                1,
+                OrderType.ASSOCIATED,
+                1,
+                line("sc-a-associated-1-adapted", "0006515", DspOrderLineType.ADAPTED));
+        NotionalToteOrder associatedSheet2 = order(
+                "sc-a-associated-2",
+                "notional-a",
+                "SC-A",
+                2,
+                OrderType.ASSOCIATED,
+                2,
+                line("sc-a-associated-2-adapted", "0006515", DspOrderLineType.ADAPTED));
 
         WarehouseSchedulerSnapshot step1 = snapshot(
                 List.of(
@@ -78,7 +104,9 @@ class DspSchedulerScenarioTest {
                         orderState(associatedSheet1, route(false, false, false, true, false), DspOrderStatus.WAITING),
                         orderState(associatedSheet2, route(false, false, false, true, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of(),
+                Set.of(
+                        PreparedLineKey.forDispatchLine(associatedSheet1, associatedSheet1.items().getFirst()),
+                        PreparedLineKey.forDispatchLine(associatedSheet2, associatedSheet2.items().getFirst())),
                 Optional.of("SC-A"));
         assertEquals("sc-a-associated-1", scheduler.evaluate(step2).releaseDecision().get().orderId());
 
@@ -88,9 +116,57 @@ class DspSchedulerScenarioTest {
                         orderState(associatedSheet1, route(false, false, false, true, false), DspOrderStatus.RELEASED),
                         orderState(associatedSheet2, route(false, false, false, true, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of(),
+                Set.of(
+                        PreparedLineKey.forDispatchLine(associatedSheet1, associatedSheet1.items().getFirst()),
+                        PreparedLineKey.forDispatchLine(associatedSheet2, associatedSheet2.items().getFirst())),
                 Optional.of("SC-A"));
         assertEquals("sc-a-associated-2", scheduler.evaluate(step3).releaseDecision().get().orderId());
+    }
+
+    @Test
+    void shouldReleaseOnlyAssociatedOrderWhosePreparedLinesAreReadyFromMixedPharmacyAdaptedWork() {
+        DspReleaseScheduler scheduler = scheduler();
+        NotionalToteOrder adapted = order(
+                "sc-a-adapted",
+                "prep-a",
+                "SC-A",
+                1,
+                OrderType.ADAPTED,
+                0,
+                line("adapted-line-a", "0006515", DspOrderLineType.ADAPTED),
+                line("adapted-line-b", "0006461", DspOrderLineType.ADAPTED));
+        NotionalToteOrder associatedReady = order(
+                "sc-a-associated-ready",
+                "dispatch-a",
+                "SC-A",
+                1,
+                OrderType.ASSOCIATED,
+                1,
+                line("shared-line-a", "0006515", DspOrderLineType.ADAPTED));
+        NotionalToteOrder associatedBlocked = order(
+                "sc-a-associated-blocked",
+                "dispatch-b",
+                "SC-A",
+                1,
+                OrderType.ASSOCIATED,
+                2,
+                line("shared-line-b", "0006461", DspOrderLineType.ADAPTED));
+
+        WarehouseSchedulerSnapshot snapshot = snapshot(
+                List.of(
+                        orderState(adapted, route(false, false, false, false, false), DspOrderStatus.COMPLETED),
+                        orderState(associatedReady, route(false, false, false, true, false), DspOrderStatus.WAITING),
+                        orderState(associatedBlocked, route(false, false, false, true, false), DspOrderStatus.WAITING),
+                        orderState(order("sc-b-full", "dispatch-c", "SC-B", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
+                stationAdmissions(admission(StationType.P2P, true, "")),
+                Set.of(PreparedLineKey.forDispatchLine(associatedReady, associatedReady.items().getFirst())),
+                Optional.of("SC-A"));
+
+        SchedulerEvaluation evaluation = scheduler.evaluate(snapshot);
+
+        assertTrue(evaluation.releaseDecision().isPresent());
+        assertEquals("sc-a-associated-ready", evaluation.releaseDecision().get().orderId());
+        assertEquals("SC-A", evaluation.releaseDecision().get().serviceCentreId());
     }
 
     @Test
@@ -182,15 +258,28 @@ class DspSchedulerScenarioTest {
             String serviceCentreId,
             int sheetNumber,
             OrderType orderType,
-            long sequenceNumber) {
+            long sequenceNumber,
+            DspOrderItem... items) {
         return new NotionalToteOrder(
                 orderId,
                 notionalToteId,
                 serviceCentreId,
                 sheetNumber,
                 orderType,
-                List.of(new DspOrderItem("item-" + orderId, "product-1", 1)),
+                items.length == 0 ? List.of(new DspOrderItem("item-" + orderId, "product-1", 1)) : List.of(items),
                 sequenceNumber);
+    }
+
+    private static DspOrderItem line(String itemId, String pharmacyId, DspOrderLineType lineType) {
+        return new DspOrderItem(
+                itemId,
+                "product-" + itemId,
+                1,
+                pharmacyId,
+                lineType,
+                "prepared-" + itemId,
+                1,
+                0);
     }
 
     private static RouteRequirements route(

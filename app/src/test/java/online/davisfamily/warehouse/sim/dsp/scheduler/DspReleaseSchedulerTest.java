@@ -14,6 +14,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
@@ -76,10 +77,18 @@ class DspReleaseSchedulerTest {
     @Test
     void shouldReturnBlockedDecisionWhenActiveServiceCentreHasOnlyBlockedWork() {
         DspReleaseScheduler scheduler = scheduler(List.of("sc-1", "sc-2"));
+        DspSchedulerOrderState assocA = orderState(
+                order("assoc-a", "notional-a", "sc-1", 1, OrderType.ASSOCIATED, 0, line("assoc-a-adapted", DspOrderLineType.ADAPTED)),
+                route(false, false, false, true, false),
+                DspOrderStatus.WAITING);
+        DspSchedulerOrderState assocB = orderState(
+                order("assoc-b", "notional-b", "sc-1", 1, OrderType.ASSOCIATED, 0, line("assoc-b-adapted", DspOrderLineType.ADAPTED)),
+                route(false, false, false, true, false),
+                DspOrderStatus.BLOCKED);
         WarehouseSchedulerSnapshot snapshot = snapshot(
                 List.of(
-                        orderState(order("assoc-a", "notional-a", "sc-1", 1, OrderType.ASSOCIATED, 0), route(false, false, false, true, false), DspOrderStatus.WAITING),
-                        orderState(order("assoc-b", "notional-b", "sc-1", 1, OrderType.ASSOCIATED, 0), route(false, false, false, true, false), DspOrderStatus.BLOCKED),
+                        assocA,
+                        assocB,
                         orderState(order("full-c", "notional-c", "sc-2", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
                 Set.of(),
@@ -201,15 +210,28 @@ class DspReleaseSchedulerTest {
             String serviceCentreId,
             int sheetNumber,
             OrderType orderType,
-            long sequenceNumber) {
+            long sequenceNumber,
+            DspOrderItem... items) {
         return new NotionalToteOrder(
                 orderId,
                 notionalToteId,
                 serviceCentreId,
                 sheetNumber,
                 orderType,
-                List.of(new DspOrderItem("item-" + orderId, "product-1", 1)),
+                items.length == 0 ? List.of(new DspOrderItem("item-" + orderId, "product-1", 1)) : List.of(items),
                 sequenceNumber);
+    }
+
+    private static DspOrderItem line(String itemId, DspOrderLineType lineType) {
+        return new DspOrderItem(
+                itemId,
+                "product-" + itemId,
+                1,
+                "0006515",
+                lineType,
+                "prepared-" + itemId,
+                1,
+                0);
     }
 
     private static RouteRequirements route(
