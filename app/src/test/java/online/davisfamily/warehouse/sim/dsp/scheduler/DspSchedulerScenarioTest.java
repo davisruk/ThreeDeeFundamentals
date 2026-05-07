@@ -31,7 +31,6 @@ class DspSchedulerScenarioTest {
                         orderState(order("sc-b-full", "notional-b", "SC-B", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
                 Set.of(),
-                Set.of(),
                 Optional.of("SC-A"));
 
         SchedulerEvaluation evaluation = scheduler.evaluate(snapshot);
@@ -45,7 +44,6 @@ class DspSchedulerScenarioTest {
                         orderState(order("sc-a-associated", "notional-a", "SC-A", 1, OrderType.ASSOCIATED, 1), route(false, false, false, true, false), DspOrderStatus.WAITING),
                         orderState(order("sc-b-full", "notional-b", "SC-B", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of(),
                 Set.of(),
                 Optional.of("SC-A"));
 
@@ -71,7 +69,6 @@ class DspSchedulerScenarioTest {
                         orderState(associatedSheet2, route(false, false, false, true, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
                 Set.of(),
-                Set.of(),
                 Optional.of("SC-A"));
         assertEquals("sc-a-adapted", scheduler.evaluate(step1).releaseDecision().get().orderId());
 
@@ -81,7 +78,6 @@ class DspSchedulerScenarioTest {
                         orderState(associatedSheet1, route(false, false, false, true, false), DspOrderStatus.WAITING),
                         orderState(associatedSheet2, route(false, false, false, true, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of("notional-a"),
                 Set.of(),
                 Optional.of("SC-A"));
         assertEquals("sc-a-associated-1", scheduler.evaluate(step2).releaseDecision().get().orderId());
@@ -92,7 +88,6 @@ class DspSchedulerScenarioTest {
                         orderState(associatedSheet1, route(false, false, false, true, false), DspOrderStatus.RELEASED),
                         orderState(associatedSheet2, route(false, false, false, true, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of("notional-a"),
                 Set.of(),
                 Optional.of("SC-A"));
         assertEquals("sc-a-associated-2", scheduler.evaluate(step3).releaseDecision().get().orderId());
@@ -106,7 +101,6 @@ class DspSchedulerScenarioTest {
                         orderState(order("sc-a-done", "notional-a", "SC-A", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.COMPLETED),
                         orderState(order("sc-b-next", "notional-b", "SC-B", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(),
-                Set.of(),
                 Set.of(),
                 Optional.of("SC-A"));
 
@@ -127,7 +121,6 @@ class DspSchedulerScenarioTest {
         WarehouseSchedulerSnapshot snapshot = snapshot(
                 List.of(waitingOrder),
                 stationAdmissions(),
-                Set.of(),
                 Set.of(),
                 Optional.of("SC-A"));
 
@@ -150,14 +143,12 @@ class DspSchedulerScenarioTest {
     private static WarehouseSchedulerSnapshot snapshot(
             List<DspSchedulerOrderState> orderStates,
             Map<StationType, StationAdmissionSnapshot> stationAdmissions,
-            Set<String> completedAdaptedNotionalToteIds,
-            Set<String> manualReadyNotionalToteIds,
+            Set<PreparedLineKey> preparedLineKeys,
             Optional<String> activeServiceCentreId) {
         return new WarehouseSchedulerSnapshot(
                 orderStates,
                 stationAdmissions,
-                completedAdaptedNotionalToteIds,
-                manualReadyNotionalToteIds,
+                preparedLineKeys,
                 activeServiceCentreId);
     }
 

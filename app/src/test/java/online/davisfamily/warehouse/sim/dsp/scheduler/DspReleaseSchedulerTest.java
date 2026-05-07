@@ -31,7 +31,6 @@ class DspReleaseSchedulerTest {
                         orderState(order("assoc", "notional-assoc", "sc-1", 1, OrderType.ASSOCIATED, 0), route(false, false, false, true, false), DspOrderStatus.WAITING),
                         orderState(order("adapted", "notional-adapted", "sc-1", 1, OrderType.ADAPTED, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of("notional-assoc"),
                 Set.of(),
                 Optional.empty());
 
@@ -52,7 +51,6 @@ class DspReleaseSchedulerTest {
                         orderState(order("order-a", "notional-a", "sc-1", 1, OrderType.FULL_PACK, 7), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 Map.of(),
                 Set.of(),
-                Set.of(),
                 Optional.empty());
         assertEquals("order-a", scheduler.evaluate(sheetSnapshot).releaseDecision().get().orderId());
 
@@ -62,7 +60,6 @@ class DspReleaseSchedulerTest {
                         orderState(order("order-a", "notional-b", "sc-1", 1, OrderType.FULL_PACK, 2), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 Map.of(),
                 Set.of(),
-                Set.of(),
                 Optional.empty());
         assertEquals("order-a", scheduler.evaluate(sequenceSnapshot).releaseDecision().get().orderId());
 
@@ -71,7 +68,6 @@ class DspReleaseSchedulerTest {
                         orderState(order("order-b", "notional-a", "sc-1", 1, OrderType.FULL_PACK, 2), route(false, false, false, false, false), DspOrderStatus.WAITING),
                         orderState(order("order-a", "notional-b", "sc-1", 1, OrderType.FULL_PACK, 2), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 Map.of(),
-                Set.of(),
                 Set.of(),
                 Optional.empty());
         assertEquals("order-a", scheduler.evaluate(orderIdSnapshot).releaseDecision().get().orderId());
@@ -86,7 +82,6 @@ class DspReleaseSchedulerTest {
                         orderState(order("assoc-b", "notional-b", "sc-1", 1, OrderType.ASSOCIATED, 0), route(false, false, false, true, false), DspOrderStatus.BLOCKED),
                         orderState(order("full-c", "notional-c", "sc-2", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.WAITING)),
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of(),
                 Set.of(),
                 Optional.of("sc-1"));
 
@@ -107,7 +102,6 @@ class DspReleaseSchedulerTest {
                 List.of(orderState(order("done", "notional-a", "sc-1", 1, OrderType.FULL_PACK, 0), route(false, false, false, false, false), DspOrderStatus.COMPLETED)),
                 Map.of(),
                 Set.of(),
-                Set.of(),
                 Optional.empty());
 
         SchedulerEvaluation evaluation = scheduler.evaluate(snapshot);
@@ -122,7 +116,6 @@ class DspReleaseSchedulerTest {
         WarehouseSchedulerSnapshot snapshot = snapshot(
                 List.of(orderState(order("manual", "notional-a", "sc-1", 1, OrderType.FULL_PACK, 0), route(false, false, true, false, false), DspOrderStatus.WAITING)),
                 Map.of(),
-                Set.of(),
                 Set.of(),
                 Optional.empty());
 
@@ -147,7 +140,6 @@ class DspReleaseSchedulerTest {
         WarehouseSchedulerSnapshot snapshot = snapshot(
                 originalOrderStates,
                 stationAdmissions(admission(StationType.P2P, true, "")),
-                Set.of("notional-a"),
                 Set.of(),
                 Optional.empty());
 
@@ -170,14 +162,12 @@ class DspReleaseSchedulerTest {
     private static WarehouseSchedulerSnapshot snapshot(
             List<DspSchedulerOrderState> orderStates,
             Map<StationType, StationAdmissionSnapshot> stationAdmissions,
-            Set<String> completedAdaptedNotionalToteIds,
-            Set<String> manualReadyNotionalToteIds,
+            Set<PreparedLineKey> preparedLineKeys,
             Optional<String> activeServiceCentreId) {
         return new WarehouseSchedulerSnapshot(
                 orderStates,
                 stationAdmissions,
-                completedAdaptedNotionalToteIds,
-                manualReadyNotionalToteIds,
+                preparedLineKeys,
                 activeServiceCentreId);
     }
 

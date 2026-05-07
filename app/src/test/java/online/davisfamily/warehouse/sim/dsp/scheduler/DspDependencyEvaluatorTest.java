@@ -74,13 +74,13 @@ class DspDependencyEvaluatorTest {
                 route(true, true),
                 DspOrderStatus.WAITING);
 
-        WarehouseSchedulerSnapshot blockedSnapshot = snapshot(List.of(candidate), Set.of("notional-a"), Set.of());
+        WarehouseSchedulerSnapshot blockedSnapshot = snapshot(List.of(candidate), Set.of());
         List<DependencyBlock> blocked = evaluator.findBlocks(candidate, blockedSnapshot);
 
         assertEquals(1, blocked.size());
         assertEquals(DependencyType.MANUAL_READY, blocked.getFirst().type());
 
-        WarehouseSchedulerSnapshot readySnapshot = snapshot(List.of(candidate), Set.of("notional-a"), Set.of("notional-a"));
+        WarehouseSchedulerSnapshot readySnapshot = snapshot(List.of(candidate), Set.of());
         assertTrue(evaluator.findBlocks(candidate, readySnapshot).isEmpty());
     }
 
@@ -105,18 +105,16 @@ class DspDependencyEvaluatorTest {
     }
 
     private static WarehouseSchedulerSnapshot snapshot(List<DspSchedulerOrderState> orderStates) {
-        return snapshot(orderStates, Set.of(), Set.of());
+        return snapshot(orderStates, Set.of());
     }
 
     private static WarehouseSchedulerSnapshot snapshot(
             List<DspSchedulerOrderState> orderStates,
-            Set<String> completedAdaptedNotionalToteIds,
-            Set<String> manualReadyNotionalToteIds) {
+            Set<PreparedLineKey> preparedLineKeys) {
         return new WarehouseSchedulerSnapshot(
                 orderStates,
                 Map.of(),
-                completedAdaptedNotionalToteIds,
-                manualReadyNotionalToteIds,
+                preparedLineKeys,
                 Optional.empty());
     }
 

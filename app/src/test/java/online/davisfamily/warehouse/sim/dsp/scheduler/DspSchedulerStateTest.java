@@ -16,6 +16,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
@@ -72,6 +73,64 @@ class DspSchedulerStateTest {
     }
 
     @Test
+    void shouldCreatePreparedLineKeyFromPreparedLineReferenceFields() {
+        DspOrderItem preparedLine = new DspOrderItem(
+                " line-1 ",
+                " product-1 ",
+                1,
+                "0006515",
+                DspOrderLineType.ADAPTED,
+                " target-order-1 ",
+                2,
+                0);
+
+        PreparedLineKey key = PreparedLineKey.forPreparedLine(preparedLine);
+
+        assertEquals("target-order-1", key.targetOrderId());
+        assertEquals(2, key.targetSheetNumber());
+        assertEquals("line-1", key.orderLineNumber());
+        assertEquals(DspOrderLineType.ADAPTED, key.lineType());
+    }
+
+    @Test
+    void shouldCreatePreparedLineKeyFromDispatchOrderAndLine() {
+        NotionalToteOrder dispatchOrder = new NotionalToteOrder(
+                "order-1",
+                "notional-1",
+                "sc-1",
+                3,
+                OrderType.ASSOCIATED,
+                List.of(new DspOrderItem(
+                        "line-1",
+                        "product-1",
+                        1,
+                        "0006515",
+                        DspOrderLineType.MANUAL,
+                        "target-order-9",
+                        1,
+                        0)),
+                0);
+
+        PreparedLineKey key = PreparedLineKey.forDispatchLine(dispatchOrder, dispatchOrder.items().getFirst());
+
+        assertEquals("order-1", key.targetOrderId());
+        assertEquals(3, key.targetSheetNumber());
+        assertEquals("line-1", key.orderLineNumber());
+        assertEquals(DspOrderLineType.MANUAL, key.lineType());
+    }
+
+    @Test
+    void shouldRejectInvalidPreparedLineKeyFields() {
+        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("", 1, "line-1", DspOrderLineType.ADAPTED));
+        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("order-1", 0, "line-1", DspOrderLineType.ADAPTED));
+        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("order-1", 1, " ", DspOrderLineType.ADAPTED));
+        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("order-1", 1, "line-1", null));
+        assertThrows(IllegalArgumentException.class, () -> PreparedLineKey.forPreparedLine(null));
+        assertThrows(IllegalArgumentException.class, () -> PreparedLineKey.forDispatchLine(null, validOrderState().order().items().getFirst()));
+        assertThrows(IllegalArgumentException.class, () -> PreparedLineKey.forDispatchLine(validOrderState().order(), null));
+    }
+
+    @Test
     void shouldDefensivelyCopySchedulerSnapshotCollections() {
         List<DspSchedulerOrderState> orderStates = new ArrayList<>();
         orderStates.add(validOrderState());
@@ -84,16 +143,13 @@ class DspSchedulerStateTest {
                 true,
                 ""));
 
-        Set<String> completedAdapted = new LinkedHashSet<>();
-        completedAdapted.add("notional-a");
-        Set<String> manualReady = new LinkedHashSet<>();
-        manualReady.add("notional-b");
+        Set<PreparedLineKey> preparedLineKeys = new LinkedHashSet<>();
+        preparedLineKeys.add(new PreparedLineKey("order-a", 1, "line-a", DspOrderLineType.ADAPTED));
 
         WarehouseSchedulerSnapshot snapshot = new WarehouseSchedulerSnapshot(
                 orderStates,
                 stationAdmissions,
-                completedAdapted,
-                manualReady,
+                preparedLineKeys,
                 Optional.of("sc-1"));
 
         orderStates.add(validOrderState().withStatus(DspOrderStatus.RELEASED));
@@ -103,21 +159,17 @@ class DspSchedulerStateTest {
                 new StationSnapshot(StationType.MANUAL, 0, 0),
                 true,
                 ""));
-        completedAdapted.add("notional-c");
-        manualReady.add("notional-d");
+        preparedLineKeys.add(new PreparedLineKey("order-b", 1, "line-b", DspOrderLineType.MANUAL));
 
         assertEquals(1, snapshot.orderStates().size());
         assertEquals(1, snapshot.stationAdmissions().size());
-        assertEquals(Set.of("notional-a"), snapshot.completedAdaptedNotionalToteIds());
-        assertEquals(Set.of("notional-b"), snapshot.manualReadyNotionalToteIds());
+        assertEquals(Set.of(new PreparedLineKey("order-a", 1, "line-a", DspOrderLineType.ADAPTED)), snapshot.preparedLineKeys());
         assertThrows(UnsupportedOperationException.class,
                 () -> snapshot.orderStates().add(validOrderState()));
         assertThrows(UnsupportedOperationException.class,
                 () -> snapshot.stationAdmissions().put(StationType.MANUAL, stationAdmissions.get(StationType.MANUAL)));
         assertThrows(UnsupportedOperationException.class,
-                () -> snapshot.completedAdaptedNotionalToteIds().add("notional-x"));
-        assertThrows(UnsupportedOperationException.class,
-                () -> snapshot.manualReadyNotionalToteIds().add("notional-y"));
+                () -> snapshot.preparedLineKeys().add(new PreparedLineKey("order-x", 1, "line-x", DspOrderLineType.FULL_PACK)));
     }
 
     private static DspSchedulerOrderState validOrderState() {

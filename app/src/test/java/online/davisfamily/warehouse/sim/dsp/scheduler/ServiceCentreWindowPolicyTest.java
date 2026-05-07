@@ -89,7 +89,6 @@ class ServiceCentreWindowPolicyTest {
                 orderStates,
                 Map.of(),
                 Set.of(),
-                Set.of(),
                 activeServiceCentreId);
     }
 

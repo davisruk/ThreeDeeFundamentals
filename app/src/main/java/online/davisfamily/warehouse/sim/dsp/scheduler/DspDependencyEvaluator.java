@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import online.davisfamily.warehouse.sim.dsp.model.DependencyType;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 
 public class DspDependencyEvaluator {
@@ -31,11 +33,20 @@ public class DspDependencyEvaluator {
         if (orderType != OrderType.ASSOCIATED && orderType != OrderType.EMPTY) {
             return;
         }
-        String notionalToteId = candidate.order().notionalToteId();
-        if (!snapshot.completedAdaptedNotionalToteIds().contains(notionalToteId)) {
+        DspOrderItem firstMissingAdaptedLine = candidate.order().items().stream()
+                .filter(line -> line.lineType() == DspOrderLineType.ADAPTED)
+                .filter(line -> !snapshot.preparedLineKeys().contains(PreparedLineKey.forDispatchLine(candidate.order(), line)))
+                .findFirst()
+                .orElse(null);
+        if (firstMissingAdaptedLine != null) {
             blocks.add(new DependencyBlock(
                     DependencyType.ADAPTED_COMPLETION,
-                    "Adapted work is not complete for notional tote " + notionalToteId));
+                    "Adapted work is not complete for order "
+                            + candidate.order().orderId()
+                            + " sheet "
+                            + candidate.order().sheetNumber()
+                            + " line "
+                            + firstMissingAdaptedLine.itemId()));
         }
     }
 
@@ -72,11 +83,20 @@ public class DspDependencyEvaluator {
         if (!candidate.routeRequirements().requiresManualMerge()) {
             return;
         }
-        String notionalToteId = candidate.order().notionalToteId();
-        if (!snapshot.manualReadyNotionalToteIds().contains(notionalToteId)) {
+        DspOrderItem firstMissingManualLine = candidate.order().items().stream()
+                .filter(line -> line.lineType() == DspOrderLineType.MANUAL)
+                .filter(line -> !snapshot.preparedLineKeys().contains(PreparedLineKey.forDispatchLine(candidate.order(), line)))
+                .findFirst()
+                .orElse(null);
+        if (firstMissingManualLine != null) {
             blocks.add(new DependencyBlock(
                     DependencyType.MANUAL_READY,
-                    "Manual work is not ready for notional tote " + notionalToteId));
+                    "Manual work is not ready for order "
+                            + candidate.order().orderId()
+                            + " sheet "
+                            + candidate.order().sheetNumber()
+                            + " line "
+                            + firstMissingManualLine.itemId()));
         }
     }
 }
