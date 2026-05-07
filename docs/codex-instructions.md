@@ -73,14 +73,17 @@ Architectural boundaries to maintain:
 
 ## Current Direction
 
-The next major topic is the DSP/OSR scheduler. The first scheduler branch should be domain-first and fixture-driven.
+The next scheduler branch is `feature/dsp-scheduler-p2p-live-admission`.
+
+Completed scheduler work:
+
+- `feature/dsp-scheduler-domain`
+- `feature/dsp-scheduler-line-readiness`
+- `feature/dsp-scheduler-osr-integration`
 
 Current scheduler decisions:
 
 - Branch from `master` unless the user says otherwise.
-- Start with a pure scheduler/domain implementation under a new DSP scheduler package.
-- Do not wire the scheduler into visuals or `DebugToteInjectorController` in the first branch.
-- Do not load product master or 12N JSON in the first branch; use in-memory fixtures.
 - Treat product master data as the source of product classification.
 - Keep `OrderType` and `ToteType` distinct:
   - `OrderType` controls start location, dependencies, routing intent, and lifecycle
@@ -88,19 +91,18 @@ Current scheduler decisions:
 - Process service centres as whole release windows:
   - do not mix totes from different service centres, except naturally at the last/first boundary
   - if the active service centre is blocked, hold the window rather than skipping ahead
-- Model P2P as a station/admission boundary in the scheduler domain first; live `ToteToBagFlowController.canAdmit(...)` integration is a later branch.
+- P2P admission now needs to become candidate-specific because `ToteToBagFlowController.canAdmit(...)` depends on the candidate tote load plan.
+- Keep scheduler evaluation synchronous for the P2P live-admission branch; do not introduce a scheduler thread yet.
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow the detailed plan for the current branch.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/dsp-scheduler-p2p-live-admission-plan.md`.
 
 ## Deferred Direction
 
-After the domain scheduler is proven:
+After live P2P admission is proven:
 
-1. Add scheduler-driven OSR/AV02 release sources.
-2. Wire scheduler-selected releases into the debug tote injector.
-3. Add live P2P admission via the existing tote-to-bag `canAdmit(...)` boundary.
-4. Add product master / 12N JSON loading after schema samples are supplied.
-5. Add renderable lifecycle/visibility optimization so loaded order data does not create active renderables up front.
+1. Add product master / 12N JSON loading after schema samples are supplied.
+2. Add renderable lifecycle/visibility optimization so loaded order data does not create active renderables up front.
+3. Consider scheduler threading only after synchronous snapshot/command integration remains stable.
 
 Known future machine work still exists, but is lower priority than understanding scheduler impact:
 

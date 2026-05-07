@@ -1,6 +1,6 @@
 # DSP Scheduler OSR Integration Plan
 
-Status: drafted. Implement on `feature/dsp-scheduler-osr-integration`.
+Status: complete and green.
 
 ## Summary
 

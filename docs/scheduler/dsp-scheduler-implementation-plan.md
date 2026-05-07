@@ -70,7 +70,7 @@ Purpose:
 
 ### `feature/dsp-scheduler-osr-integration`
 
-Status: planned after `feature/dsp-scheduler-line-readiness`; detailed plan drafted.
+Status: complete and green.
 
 Detailed implementation doc:
 
@@ -90,7 +90,7 @@ Explicit non-goal:
 
 ### `feature/dsp-scheduler-p2p-live-admission`
 
-Status: planned.
+Status: planned; detailed plan drafted.
 
 Detailed implementation doc:
 
@@ -102,6 +102,7 @@ Purpose:
 - Avoid calling live `ToteToBagFlowController` state from a scheduler thread.
 - Add an adapter from scheduler order/tote data to `ToteLoadPlan`.
 - Feed live P2P admission into scheduler station admission snapshots.
+- Add candidate-specific station admission resolution so P2P can evaluate the actual candidate tote instead of using one static station-wide answer.
 
 ### `feature/dsp-scheduler-json-loading`
 
