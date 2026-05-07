@@ -113,8 +113,7 @@ Create exactly:
 Rules:
 
 - `EMPTY` starts at `AV02`; all other order types start at `OSR`.
-- `ASSOCIATED` and `EMPTY` require `P2P`.
-- `FULL_PACK` does not require `P2P`.
+- `ASSOCIATED`, `EMPTY`, and `FULL_PACK` require `P2P`.
 - Third-party product sets `requiresThirdParty`.
 - `SORTABLE` product sets `requiresSortable`.
 - `MANUAL` product sets `requiresManual`.
@@ -126,7 +125,7 @@ Rules:
 Test methods:
 
 - `shouldStartEmptyOrdersAtAv02AndOthersAtOsr()`
-- `shouldRequireP2pForAssociatedAndEmptyOrdersOnly()`
+- `shouldRequireP2pForAssociatedEmptyAndFullPackOrdersOnly()`
 - `shouldDeriveThirdPartySortableAndManualRequirementsFromProductMaster()`
 - `shouldRequireManualMergeForAssociatedOrEmptyOrdersWithManualItems()`
 - `shouldRejectMissingProductMasterData()`

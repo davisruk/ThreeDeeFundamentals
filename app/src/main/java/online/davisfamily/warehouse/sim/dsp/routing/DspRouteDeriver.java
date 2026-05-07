@@ -39,7 +39,9 @@ public class DspRouteDeriver {
             }
         }
 
-        boolean requiresP2p = order.orderType() == OrderType.ASSOCIATED || order.orderType() == OrderType.EMPTY;
+        boolean requiresP2p = order.orderType() == OrderType.ASSOCIATED
+                || order.orderType() == OrderType.EMPTY
+                || order.orderType() == OrderType.FULL_PACK;
         boolean requiresManualMerge = requiresManual
                 && (order.orderType() == OrderType.ASSOCIATED || order.orderType() == OrderType.EMPTY);
         StartLocation startLocation = order.orderType() == OrderType.EMPTY ? StartLocation.AV02 : StartLocation.OSR;

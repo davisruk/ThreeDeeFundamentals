@@ -30,14 +30,14 @@ class DspRouteDeriverTest {
     }
 
     @Test
-    void shouldRequireP2pForAssociatedAndEmptyOrdersOnly() {
+    void shouldRequireP2pForAssociatedEmptyAndFullPackOrdersOnly() {
         DspRouteDeriver deriver = newDeriver(
                 new ProductMasterRecord("product-1", ProductCategory.AUTOMATED, false));
 
         assertTrue(deriver.derive(order(OrderType.ASSOCIATED, item("product-1"))).requiresP2p());
         assertTrue(deriver.derive(order(OrderType.EMPTY, item("product-1"))).requiresP2p());
+        assertTrue(deriver.derive(order(OrderType.FULL_PACK, item("product-1"))).requiresP2p());
         assertFalse(deriver.derive(order(OrderType.ADAPTED, item("product-1"))).requiresP2p());
-        assertFalse(deriver.derive(order(OrderType.FULL_PACK, item("product-1"))).requiresP2p());
     }
 
     @Test

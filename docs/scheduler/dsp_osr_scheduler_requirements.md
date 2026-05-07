@@ -248,7 +248,8 @@ enum OrderType {
 ### FULL_PACK
 - Fully automated flow
 - Starts from OSR
-- No complex consolidation
+- Goes through P2P as the main automated tote-to-bag flow
+- No manual merge or adapted-line consolidation
 
 ### EMPTY (CRITICAL)
 
