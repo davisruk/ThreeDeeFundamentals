@@ -1,5 +1,7 @@
 # DSP Scheduler Domain Plan
 
+Status: complete and merged. Historical note: the original notional-tote-level adapted/manual readiness fields in this plan were superseded by `docs/scheduler/dsp-scheduler-line-readiness-plan.md`, which replaced them with `PreparedLineKey` line-level readiness in `WarehouseSchedulerSnapshot`.
+
 ## Summary
 
 This is the detailed implementation plan for `feature/dsp-scheduler-domain`.

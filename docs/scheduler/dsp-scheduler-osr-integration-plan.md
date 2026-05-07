@@ -274,7 +274,7 @@ Catalog rules:
 Test methods:
 
 - `shouldCreateSchedulerOrderStateForEachFeed()`
-- `shouldMarkAdaptedCompleteForAssociatedDebugOrders()`
+- `shouldCreateImmediatelyReleasableDebugDispatchOrders()`
 - `shouldCreateP2pRouteRequirementsForDebugOrders()`
 - `shouldCreateReleaseCatalogForFeedsWithoutCreatingAdditionalPayloads()`
 

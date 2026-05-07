@@ -54,7 +54,7 @@ Verification:
 
 ### `feature/dsp-scheduler-line-readiness`
 
-Status: in progress.
+Status: complete and green.
 
 Detailed implementation doc:
 

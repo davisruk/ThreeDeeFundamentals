@@ -1,6 +1,6 @@
 # DSP Scheduler Line Readiness Plan
 
-Status: in progress on `feature/dsp-scheduler-line-readiness`.
+Status: complete and merged to `master`.
 
 ## Summary
 
@@ -18,9 +18,9 @@ This branch moves readiness dependencies from notional-tote-level sets to prepar
 
 Progress:
 
-- Steps 1-6 implemented.
-- Step 7 updates the written architecture to match the implemented scheduler domain.
-- Step 8 is final focused DSP verification for the branch.
+- Steps 1-8 implemented.
+- Focused DSP verification passed before merge.
+- This plan is retained as the completed implementation record.
 
 Branch strategy:
 
