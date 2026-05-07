@@ -1,12 +1,21 @@
 package online.davisfamily.warehouse.testing;
 
 import java.util.List;
+import java.util.Map;
 
 import online.davisfamily.threedee.debug.SelectionInspectionRegistry;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspDependencyEvaluator;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspReleaseScheduler;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentrePriority;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentreWindowPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assembly.SortingInstallation;
@@ -30,9 +39,14 @@ import online.davisfamily.warehouse.sim.totebag.handoff.ToteBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
+import online.davisfamily.warehouse.testing.scheduler.DspDebugSchedulerFixtureAdapter;
+import online.davisfamily.warehouse.testing.scheduler.ScheduledDebugToteInjectorController;
+import online.davisfamily.warehouse.testing.scheduler.ScheduledTipperToteReleaseCatalog;
+import online.davisfamily.warehouse.testing.scheduler.TipperFlowScheduledToteReleaseTarget;
 
 public class IntegratedToteToBagDebugInstaller {
     private static final int DEBUG_TOTE_BAG_CAPACITY = 25;
+    private static final String DEBUG_SERVICE_CENTRE_ID = "SC-DEBUG";
 
     public IntegratedToteToBagDebugInstallation install(
             TriangleRenderer tr,
@@ -127,14 +141,32 @@ public class IntegratedToteToBagDebugInstaller {
 
         tipperToSorterSection.getFlowController().setToteAdmissionPredicate(flowController::canAdmit);
 
+        DspDebugSchedulerFixtureAdapter schedulerFixtureAdapter = new DspDebugSchedulerFixtureAdapter();
+        StationAdmissionSnapshot p2pAdmission = new StationAdmissionSnapshot(
+                StationType.P2P,
+                new StationCapacity(1, 100),
+                new StationSnapshot(StationType.P2P, 0, 0),
+                true,
+                "");
+        var runtimeState = schedulerFixtureAdapter.createRuntimeState(
+                demoTipperFeedSet.additionalFeeds(),
+                Map.of(StationType.P2P, p2pAdmission),
+                DEBUG_SERVICE_CENTRE_ID);
+        ScheduledTipperToteReleaseCatalog releaseCatalog = schedulerFixtureAdapter.createReleaseCatalog(
+                demoTipperFeedSet.additionalFeeds());
+        DspReleaseScheduler scheduler = new DspReleaseScheduler(
+                new ServiceCentreWindowPolicy(new ServiceCentrePriority(List.of(DEBUG_SERVICE_CENTRE_ID))),
+                new DspDependencyEvaluator());
+
         sim.addSimObject(pcrConveyor);
-        sim.addController(new DebugToteInjectorController(
-                sim,
-                objects,
-                tipperToSorterSection.getFlowController(),
-                demoTipperFeedSet.additionalFeeds().stream()
-                        .map(TipperDemoFixtures.DemoTipperFeed::totePayload)
-                        .toList()));
+        sim.addController(new ScheduledDebugToteInjectorController(
+                scheduler,
+                runtimeState,
+                releaseCatalog,
+                new TipperFlowScheduledToteReleaseTarget(
+                        sim,
+                        objects,
+                        tipperToSorterSection.getFlowController())));
         sim.addController(flowController);
 
         return new IntegratedToteToBagDebugInstallation(
