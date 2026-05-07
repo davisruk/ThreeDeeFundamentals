@@ -343,6 +343,32 @@ Orthogonal to category
 
 ---
 
+# 4A. 12N Line-Level Destination And Prepared Work
+
+The 12N examples show that destination and preparation readiness must be modelled at line level.
+
+Rules:
+
+- `pharmacyId` is an order-line field, not an order-level field.
+- Final dispatch totes/bags must not contain bags for different pharmacies.
+- `ASSOCIATED`, `EMPTY`, and `FULL_PACK` dispatch orders must therefore be pharmacy-pure when their order lines are considered together.
+- Manual tote order examples are always pharmacy-pure.
+- `ADAPTED` tote orders are preparation batches and may contain lines for multiple pharmacies.
+- `ADAPTED` must not be treated as a notional-tote-pure dispatch carrier.
+- Prepared adapted/manual lines reference their target dispatch work using `referenceOrderId` and `referenceSheetNumber`.
+- Scheduler readiness for adapted/manual work must be based on prepared target lines, not on a whole adapted notional tote being complete.
+
+Implication:
+
+```text
+serviceCentreId = release-window grouping
+pharmacyId = final dispatch/store purity, line-level
+notionalToteId = dispatch/consolidation grouping
+adapted/manual order = preparation source, may unlock target dispatch lines
+```
+
+---
+
 # 5. Routing Model
 
 ## 5.1 Item-driven Routing

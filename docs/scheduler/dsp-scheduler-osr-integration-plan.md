@@ -260,8 +260,8 @@ Mapping rules:
 - `orderType = ASSOCIATED`
 - `sequenceNumber` is the feed list index.
 - `RouteRequirements(false, false, false, true, false, StartLocation.OSR)`
-- Since this debug slice is not modelling adapted work, initial `completedAdaptedNotionalToteIds` must include every generated notional tote id.
-- Initial `manualReadyNotionalToteIds` is empty.
+- Since this debug slice is not modelling adapted/manual preparation, generated debug dispatch lines must either use `DspOrderLineType.FULL_PACK` or have matching entries in the initial `preparedLineKeys` set.
+- Initial `preparedLineKeys` may be empty only when every generated debug dispatch line is immediately releasable without adapted/manual preparation.
 - Initial `activeServiceCentreId` is empty.
 
 Catalog rules:

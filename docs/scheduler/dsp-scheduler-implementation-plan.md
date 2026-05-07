@@ -52,9 +52,25 @@ Verification:
 .\gradlew test --tests online.davisfamily.warehouse.sim.dsp.*
 ```
 
-### `feature/dsp-scheduler-osr-integration`
+### `feature/dsp-scheduler-line-readiness`
 
 Status: next; detailed plan drafted.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-scheduler-line-readiness-plan.md`
+
+Purpose:
+
+- Correct the scheduler domain so 12N line-level `pharmacyId` and prepared-line references are represented.
+- Enforce pharmacy purity for dispatch orders: `ASSOCIATED`, `EMPTY`, and `FULL_PACK`.
+- Keep `ADAPTED` as a mixed-pharmacy preparation batch flow.
+- Replace notional-tote-level adapted/manual readiness with target-order line readiness.
+- Keep this branch domain-only; do not add OSR release integration.
+
+### `feature/dsp-scheduler-osr-integration`
+
+Status: planned after `feature/dsp-scheduler-line-readiness`; detailed plan drafted.
 
 Detailed implementation doc:
 
@@ -134,6 +150,9 @@ Purpose:
 
 - `master` is the integration base for scheduler branches.
 - Service centres must not be mixed during release.
+- Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
+- Adapted preparation orders may contain lines for multiple pharmacies.
+- Manual tote order examples are pharmacy-pure and should unlock target dispatch work through line readiness.
 - A blocked active service centre blocks later service centres.
 - Scheduler v1 is thread-ready but not threaded.
 - JSON import, live visual injection, live P2P admission, database decisions, scheduler threading, deadlock override timers, and command-button/manual exception handling are split into later branches.
