@@ -518,9 +518,9 @@ enum DependencyType {
 
 ### Rules
 
-- ASSOCIATED / EMPTY orders depend on ADAPTED completion
+- ASSOCIATED / EMPTY orders depend on required adapted prepared lines becoming ready
 - Sheets depend on previous sheet completion
-- Manual merge depends on manual items being ready
+- Manual merge depends on required manual prepared lines being ready
 
 ---
 

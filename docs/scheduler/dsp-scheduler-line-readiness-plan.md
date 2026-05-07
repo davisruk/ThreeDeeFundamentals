@@ -1,6 +1,6 @@
 # DSP Scheduler Line Readiness Plan
 
-Status: drafted. Implement on `feature/dsp-scheduler-line-readiness`.
+Status: in progress on `feature/dsp-scheduler-line-readiness`.
 
 ## Summary
 
@@ -15,6 +15,12 @@ The current scheduler domain treats adapted/manual readiness as notional-tote-le
 - Prepared lines reference their target dispatch order through `referenceOrderId` and `referenceSheetNumber`.
 
 This branch moves readiness dependencies from notional-tote-level sets to prepared line readiness keys. It does not add JSON loading, OSR release integration, scheduler threading, live P2P admission, or controller changes.
+
+Progress:
+
+- Steps 1-6 implemented.
+- Step 7 updates the written architecture to match the implemented scheduler domain.
+- Step 8 is final focused DSP verification for the branch.
 
 Branch strategy:
 
@@ -310,7 +316,7 @@ Expected implementation:
 
 - No production routing behavior should need to change.
 - `DspRouteDeriver` should still derive route requirements from product master records and order type.
-- Update test helper item construction to use either the old 3-argument constructor or explicit line metadata.
+- The existing legacy 3-argument `DspOrderItem` constructor is sufficient for routing tests unless a future test needs explicit line metadata.
 
 Expected output:
 

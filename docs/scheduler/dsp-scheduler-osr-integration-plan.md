@@ -54,8 +54,8 @@ Create exactly:
   - method: `public WarehouseSchedulerSnapshot snapshot()`
   - method: `public void markReleased(String orderId)`
   - method: `public void replaceStationAdmission(StationAdmissionSnapshot stationAdmission)`
-  - method: `public void markAdaptedComplete(String notionalToteId)`
-  - method: `public void markManualReady(String notionalToteId)`
+  - method: `public void addPreparedLineKey(PreparedLineKey preparedLineKey)`
+  - method: `public void addPreparedLineKeys(Set<PreparedLineKey> preparedLineKeys)`
 
 Rules:
 
@@ -73,7 +73,7 @@ Test methods:
 - `shouldMarkWaitingOrderReleasedAndSetActiveServiceCentre()`
 - `shouldRejectUnknownOrCompletedOrderRelease()`
 - `shouldReplaceStationAdmissionByStationType()`
-- `shouldTrackAdaptedCompleteAndManualReadySets()`
+- `shouldTrackPreparedLineKeys()`
 
 Expected output:
 

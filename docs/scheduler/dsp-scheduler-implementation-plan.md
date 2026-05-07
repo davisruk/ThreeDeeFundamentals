@@ -54,7 +54,7 @@ Verification:
 
 ### `feature/dsp-scheduler-line-readiness`
 
-Status: next; detailed plan drafted.
+Status: in progress.
 
 Detailed implementation doc:
 
@@ -153,6 +153,7 @@ Purpose:
 - Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
 - Adapted preparation orders may contain lines for multiple pharmacies.
 - Manual tote order examples are pharmacy-pure and should unlock target dispatch work through line readiness.
+- Prepared-line readiness is keyed by target order id, target sheet, line id, and line type.
 - A blocked active service centre blocks later service centres.
 - Scheduler v1 is thread-ready but not threaded.
 - JSON import, live visual injection, live P2P admission, database decisions, scheduler threading, deadlock override timers, and command-button/manual exception handling are split into later branches.
