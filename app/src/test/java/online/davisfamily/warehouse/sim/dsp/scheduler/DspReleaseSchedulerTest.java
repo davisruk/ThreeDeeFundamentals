@@ -162,10 +162,48 @@ class DspReleaseSchedulerTest {
         assertEquals(StartLocation.OSR, evaluation.releaseDecision().get().command().startLocation());
     }
 
+    @Test
+    void shouldUseCandidateAwareStationAdmissionResolver() {
+        DspReleaseScheduler scheduler = scheduler(
+                List.of("sc-1"),
+                (stationType, candidate, snapshot) -> {
+                    if (stationType != StationType.P2P) {
+                        return snapshot.stationAdmissions().get(stationType);
+                    }
+                    if ("assoc-a".equals(candidate.order().orderId())) {
+                        return admission(StationType.P2P, false, "P2P blocked for assoc-a");
+                    }
+                    return admission(StationType.P2P, true, "");
+                });
+        WarehouseSchedulerSnapshot snapshot = snapshot(
+                List.of(
+                        orderState(order("assoc-a", "notional-a", "sc-1", 1, OrderType.ASSOCIATED, 0), route(false, false, false, true, false), DspOrderStatus.WAITING),
+                        orderState(order("assoc-b", "notional-b", "sc-1", 1, OrderType.ASSOCIATED, 1), route(false, false, false, true, false), DspOrderStatus.WAITING)),
+                stationAdmissions(admission(StationType.P2P, true, "")),
+                Set.of(),
+                Optional.empty());
+
+        SchedulerEvaluation evaluation = scheduler.evaluate(snapshot);
+
+        assertTrue(evaluation.releaseDecision().isPresent());
+        assertFalse(evaluation.blockedDecision().isPresent());
+        assertEquals("assoc-b", evaluation.releaseDecision().get().orderId());
+        assertEquals("assoc-b", evaluation.releaseDecision().get().command().orderId());
+    }
+
     private static DspReleaseScheduler scheduler(List<String> serviceCentrePriority) {
         return new DspReleaseScheduler(
                 new ServiceCentreWindowPolicy(new ServiceCentrePriority(serviceCentrePriority)),
                 new DspDependencyEvaluator());
+    }
+
+    private static DspReleaseScheduler scheduler(
+            List<String> serviceCentrePriority,
+            StationAdmissionResolver stationAdmissionResolver) {
+        return new DspReleaseScheduler(
+                new ServiceCentreWindowPolicy(new ServiceCentrePriority(serviceCentrePriority)),
+                new DspDependencyEvaluator(),
+                stationAdmissionResolver);
     }
 
     private static WarehouseSchedulerSnapshot snapshot(

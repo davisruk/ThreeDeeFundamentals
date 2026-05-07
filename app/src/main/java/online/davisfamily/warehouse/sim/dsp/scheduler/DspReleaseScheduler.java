@@ -14,16 +14,28 @@ import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 public class DspReleaseScheduler {
     private final ServiceCentreWindowPolicy windowPolicy;
     private final DspDependencyEvaluator dependencyEvaluator;
+    private final StationAdmissionResolver stationAdmissionResolver;
 
     public DspReleaseScheduler(ServiceCentreWindowPolicy windowPolicy, DspDependencyEvaluator dependencyEvaluator) {
+        this(windowPolicy, dependencyEvaluator, new SnapshotStationAdmissionResolver());
+    }
+
+    public DspReleaseScheduler(
+            ServiceCentreWindowPolicy windowPolicy,
+            DspDependencyEvaluator dependencyEvaluator,
+            StationAdmissionResolver stationAdmissionResolver) {
         if (windowPolicy == null) {
             throw new IllegalArgumentException("windowPolicy must not be null");
         }
         if (dependencyEvaluator == null) {
             throw new IllegalArgumentException("dependencyEvaluator must not be null");
         }
+        if (stationAdmissionResolver == null) {
+            throw new IllegalArgumentException("stationAdmissionResolver must not be null");
+        }
         this.windowPolicy = windowPolicy;
         this.dependencyEvaluator = dependencyEvaluator;
+        this.stationAdmissionResolver = stationAdmissionResolver;
     }
 
     public SchedulerEvaluation evaluate(WarehouseSchedulerSnapshot snapshot) {
@@ -79,14 +91,15 @@ public class DspReleaseScheduler {
         dependencyEvaluator.findBlocks(candidate, snapshot).stream()
                 .map(DependencyBlock::reason)
                 .forEach(reasons::add);
-        addCapacityBlockReasons(candidate.routeRequirements(), snapshot, reasons);
+        addCapacityBlockReasons(candidate, snapshot, reasons);
         return List.copyOf(reasons);
     }
 
     private void addCapacityBlockReasons(
-            RouteRequirements routeRequirements,
+            DspSchedulerOrderState candidate,
             WarehouseSchedulerSnapshot snapshot,
             List<String> reasons) {
+        RouteRequirements routeRequirements = candidate.routeRequirements();
         Set<StationType> requiredStations = new LinkedHashSet<>();
         if (routeRequirements.requiresThirdParty()) {
             requiredStations.add(StationType.THIRD_PARTY);
@@ -105,7 +118,7 @@ public class DspReleaseScheduler {
         }
 
         for (StationType stationType : requiredStations) {
-            StationAdmissionSnapshot admission = snapshot.stationAdmissions().get(stationType);
+            StationAdmissionSnapshot admission = stationAdmissionResolver.admissionFor(stationType, candidate, snapshot);
             if (admission == null) {
                 reasons.add("Missing station admission snapshot for " + stationType);
                 continue;
