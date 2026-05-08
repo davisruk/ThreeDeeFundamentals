@@ -1,6 +1,6 @@
 # Renderable Visibility Lifecycle Plan
 
-Status: drafted. Implement on `feature/renderable-visibility-lifecycle`.
+Status: complete and green. Implemented on `feature/renderable-visibility-lifecycle` and merged to `master`.
 
 ## Summary
 
@@ -9,6 +9,17 @@ Detailed implementation plan for `feature/renderable-visibility-lifecycle`.
 This branch adds a cheap renderable visibility mechanism and applies it narrowly to current tote/pack visual paths. The goal is to prepare for production-scale scheduler data where loaded orders and packs must not imply active render/update/pick work.
 
 Do not add scheduler rules, JSON loading, database storage, scheduler threading, command panels, or broad scene rewrites in this branch.
+
+Completed notes:
+
+- `RenderableObject` now has visibility, defaulting to visible.
+- Hidden renderables are skipped during update, draw, and scene picking.
+- `PackRenderableVisibility` centralises pack visual show/hide/reset behaviour.
+- `Tote` now exposes `areLidsOpen()` for visual containment decisions.
+- Integrated tipper-to-sorter pack visuals hide contained packs while lids are closed and show active/free packs.
+- Legacy tipper-to-receiver pack visuals use visibility rather than off-screen hiding.
+- Downstream tote-to-bag debug positioning explicitly shows packs when placing them on visible PDC/PRL/PCR/bagger paths.
+- No scheduler rules or JSON/renderable preloading were introduced.
 
 ## Key Decisions
 

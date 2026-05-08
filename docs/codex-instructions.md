@@ -73,7 +73,7 @@ Architectural boundaries to maintain:
 
 ## Current Direction
 
-The next scheduler-adjacent branch is `feature/renderable-visibility-lifecycle`.
+The next scheduler-adjacent branch is `feature/machine-wait-queues`.
 
 Completed scheduler work:
 
@@ -83,6 +83,7 @@ Completed scheduler work:
 - `feature/dsp-scheduler-p2p-live-admission`
 - `feature/dsp-scheduler-debug-observability`
 - `feature/dsp-scheduler-json-loading`
+- `feature/renderable-visibility-lifecycle`
 
 Current scheduler decisions:
 
@@ -94,17 +95,22 @@ Current scheduler decisions:
 - Process service centres as whole release windows:
   - do not mix totes from different service centres, except naturally at the last/first boundary
   - if the active service centre is blocked, hold the window rather than skipping ahead
-- P2P admission is candidate-specific because `ToteToBagFlowController.canAdmit(...)` depends on the candidate tote load plan.
+- P2P admission is candidate-specific because tote processing depends on the candidate tote load plan.
 - Scheduler evaluation remains synchronous; do not introduce a scheduler thread yet.
 - Scheduler decisions are observable in the existing selection inspection overlay. The current integrated debug target is `tipper_slide`; longer term, composite machine selection should route child hits back to the root renderable.
 - Product master and 12N JSON loading now produce existing DSP domain/runtime objects without creating renderables or changing scheduling behavior.
-- The next slice should add renderable visibility/lifecycle support so loaded/hidden visual data can be skipped cheaply before larger scheduler visualisation.
+- Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
+- The next slice is a machine wait queue architecture correction:
+  - scheduler release admission should answer whether a tote can enter station waiting space
+  - machine processing admission should remain local to the machine/controller
+  - for P2P, queue capacity should gate scheduler release, while `ToteToBagFlowController.canAdmit(...)` remains the local tipper processing gate
+  - this is being done mid DSP scheduler work before adding further scheduler behaviour
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/renderable-visibility-lifecycle-plan.md`.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/machine-wait-queues-plan.md`.
 
 ## Deferred Direction
 
-After renderable visibility/lifecycle is proven:
+After machine wait queues are proven:
 
 1. Consider scheduler threading only after synchronous snapshot/command integration remains stable.
 

@@ -91,26 +91,30 @@ Read:
 
 Current scheduler decisions:
 
-- The next scheduler-adjacent branch is `feature/renderable-visibility-lifecycle`.
-- Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, and JSON loading.
+- The next scheduler-adjacent branch is `feature/machine-wait-queues`.
+- Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, and renderable visibility/lifecycle.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
 - Product master and 12N JSON loading produces domain/runtime data only; loaded data does not create renderables.
-- Renderable visibility/lifecycle support is next so hidden or not-yet-released visuals can be skipped cheaply before larger scheduler visualisation.
+- Renderable visibility/lifecycle support is complete. Hidden renderables are skipped early in update/draw/pick, and current pack visual paths use visibility to hide contained or inactive packs.
 - Service centres are processed as whole release windows.
 - Totes from different service centres should not be mixed, except naturally when one service centre finishes and the next begins.
 - If the active service centre is blocked by dependencies or capacity, hold the active window rather than skipping to the next service centre.
 - The scheduler should model P2P as an admission/capacity boundary first.
-- Live P2P admission is candidate-specific and already uses `ToteToBagFlowController.canAdmit(...)` through the debug integration path.
+- A queue architecture correction is needed before further scheduler behaviour:
+  - release admission should mean there is station input waiting space
+  - machine processing admission should remain local to the downstream machine
+  - for P2P, scheduler release should be based on input queue capacity
+  - `ToteToBagFlowController.canAdmit(...)` should remain the local tipper processing gate
 
 Next branch:
 
 ```powershell
 git switch master
-git switch -c feature/renderable-visibility-lifecycle
+git switch -c feature/machine-wait-queues
 ```
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/renderable-visibility-lifecycle-plan.md` step by step.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/machine-wait-queues-plan.md` step by step.
 
 ## DSP Model Notes
 
@@ -156,6 +160,13 @@ Current performance direction:
 - Add a cheap visibility flag or equivalent mechanism before broad visual scale-up.
 - Hidden renderables should be skipped early in update/render traversal.
 - Avoid allocation/destruction churn inside the main tick loop.
+
+Implemented visibility support:
+
+- `RenderableObject` has a visibility flag.
+- Hidden renderables skip update, draw, and picking.
+- `Tote.areLidsOpen()` supports contained pack render decisions.
+- `PackRenderableVisibility` controls current pack renderable show/hide/reset behavior.
 
 ## Remaining Machine Work
 

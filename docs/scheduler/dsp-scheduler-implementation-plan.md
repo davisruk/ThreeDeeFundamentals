@@ -151,7 +151,7 @@ Notes:
 
 ### `feature/renderable-visibility-lifecycle`
 
-Status: planned; detailed plan drafted.
+Status: complete and green.
 
 Detailed implementation doc:
 
@@ -162,6 +162,35 @@ Purpose:
 - Add cheap visibility/skipping support to `RenderableObject`.
 - Apply it to totes, contained packs, free packs, and bags.
 - Ensure loaded order/pack data does not imply active renderable creation.
+
+Notes:
+
+- `RenderableObject` visibility now skips update, draw, and picking.
+- Pack visual paths use `PackRenderableVisibility` rather than off-screen translation for hidden/reset state.
+- `Tote.areLidsOpen()` now drives contained pack visibility in the integrated tipper-to-sorter path.
+- Downstream debug positioning explicitly shows active packs after they leave the tipper/sorter area.
+
+### `feature/machine-wait-queues`
+
+Status: planned; detailed plan drafted.
+
+Detailed implementation doc:
+
+- `docs/scheduler/machine-wait-queues-plan.md`
+
+Purpose:
+
+- Correct the scheduler/machine architecture exposed during renderable visibility visual checks.
+- Separate "can enter station waiting space" from "can this machine process the tote now".
+- Add a small machine wait queue primitive with manually configured capacity.
+- Apply it first to the debug P2P/tipper input path.
+- Change scheduler release admission for the debug P2P path to queue capacity, while keeping `ToteToBagFlowController.canAdmit(...)` as the local tipper processing gate.
+
+Notes:
+
+- This work is intentionally inserted mid DSP scheduler implementation before further scheduler behaviour.
+- Do not continue deep scheduler release logic until machine queue admission is explicit.
+- Do not reintroduce ad hoc two-slot state inside `ToteTrackTipperFlowController`; use the wait queue abstraction.
 
 ### `feature/dsp-scheduler-thread`
 
