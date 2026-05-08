@@ -9,11 +9,13 @@ import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackAppearance;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.p2p.P2pStationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspDependencyEvaluator;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspReleaseScheduler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentrePriority;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentreWindowPolicy;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.SnapshotStationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
@@ -40,7 +42,9 @@ import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
 import online.davisfamily.warehouse.testing.scheduler.DspDebugSchedulerFixtureAdapter;
+import online.davisfamily.warehouse.testing.scheduler.DebugP2pAdmissionSnapshotFactory;
 import online.davisfamily.warehouse.testing.scheduler.ScheduledDebugToteInjectorController;
+import online.davisfamily.warehouse.testing.scheduler.ScheduledReleaseP2pAdmission;
 import online.davisfamily.warehouse.testing.scheduler.ScheduledTipperToteReleaseCatalog;
 import online.davisfamily.warehouse.testing.scheduler.TipperFlowScheduledToteReleaseTarget;
 
@@ -142,9 +146,10 @@ public class IntegratedToteToBagDebugInstaller {
         tipperToSorterSection.getFlowController().setToteAdmissionPredicate(flowController::canAdmit);
 
         DspDebugSchedulerFixtureAdapter schedulerFixtureAdapter = new DspDebugSchedulerFixtureAdapter();
+        StationCapacity p2pCapacity = new StationCapacity(1, 100);
         StationAdmissionSnapshot p2pAdmission = new StationAdmissionSnapshot(
                 StationType.P2P,
-                new StationCapacity(1, 100),
+                p2pCapacity,
                 new StationSnapshot(StationType.P2P, 0, 0),
                 true,
                 "");
@@ -154,9 +159,18 @@ public class IntegratedToteToBagDebugInstaller {
                 DEBUG_SERVICE_CENTRE_ID);
         ScheduledTipperToteReleaseCatalog releaseCatalog = schedulerFixtureAdapter.createReleaseCatalog(
                 demoTipperFeedSet.additionalFeeds());
+        DebugP2pAdmissionSnapshotFactory p2pSnapshotFactory = new DebugP2pAdmissionSnapshotFactory(
+                "debug-p2p",
+                flowController);
         DspReleaseScheduler scheduler = new DspReleaseScheduler(
                 new ServiceCentreWindowPolicy(new ServiceCentrePriority(List.of(DEBUG_SERVICE_CENTRE_ID))),
-                new DspDependencyEvaluator());
+                new DspDependencyEvaluator(),
+                new P2pStationAdmissionResolver(
+                        new SnapshotStationAdmissionResolver(),
+                        new ScheduledReleaseP2pAdmission(releaseCatalog, flowController),
+                        p2pSnapshotFactory::snapshot,
+                        p2pCapacity,
+                        p2pSnapshotFactory::stationSnapshot));
 
         sim.addSimObject(pcrConveyor);
         sim.addController(new ScheduledDebugToteInjectorController(
