@@ -56,6 +56,7 @@ public class Tote implements TrackableObject {
 	private float visualTiltAngleZRadians = 0f;
 	private final Vec3 visualOffset = new Vec3();
 	private boolean visualOffsetActive = false;
+	private boolean lidsOpen = false;
 	
 	public Tote(String id, RouteFollower routeFollower, RenderableObject renderable, Vec3 offsets, float yawOffsetRadians) {
 		super();
@@ -83,11 +84,17 @@ public class Tote implements TrackableObject {
 	}
 
 	public void openLids() {
+		lidsOpen = true;
 		applyLidBehaviour(LEFT_LID_OPEN_DEGREES, RIGHT_LID_OPEN_DEGREES);
 	}
 
 	public void closeLids() {
+		lidsOpen = false;
 		applyLidBehaviour(LID_CLOSED_DEGREES, LID_CLOSED_DEGREES);
+	}
+
+	public boolean areLidsOpen() {
+		return lidsOpen;
 	}
 
 	@Override

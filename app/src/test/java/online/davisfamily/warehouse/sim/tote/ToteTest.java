@@ -1,5 +1,6 @@
 package online.davisfamily.warehouse.sim.tote;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -16,18 +17,35 @@ import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 class ToteTest {
 
     @Test
+    void shouldReportLidsClosedByDefault() {
+        Tote tote = tote();
+
+        assertFalse(tote.areLidsOpen());
+    }
+
+    @Test
+    void shouldReportLidsOpenAfterOpening() {
+        Tote tote = tote();
+
+        tote.openLids();
+
+        assertTrue(tote.areLidsOpen());
+    }
+
+    @Test
+    void shouldReportLidsClosedAfterClosing() {
+        Tote tote = tote();
+        tote.openLids();
+
+        tote.closeLids();
+
+        assertFalse(tote.areLidsOpen());
+    }
+
+    @Test
     void shouldOpenAndCloseRenderableLidsFromTote() {
-        RenderableObject toteRenderable = RenderableToteFactory.createRenderableTote(
-                "tote",
-                null,
-                new ToteGeometry(),
-                true);
-        Tote tote = new Tote(
-                "tote",
-                new RouteFollower("tote", routeSegment(), 0f, 1.0d),
-                toteRenderable,
-                new Vec3(),
-                0f);
+        Tote tote = tote();
+        RenderableObject toteRenderable = tote.getRenderable();
 
         RenderableObject leftLid = findChild(toteRenderable, "tote_LeftLid");
         RenderableObject rightLid = findChild(toteRenderable, "tote_RightLid");
@@ -47,6 +65,20 @@ class ToteTest {
         return new RouteSegment(
                 "route",
                 new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(1f, 0f, 0f), false));
+    }
+
+    private Tote tote() {
+        RenderableObject toteRenderable = RenderableToteFactory.createRenderableTote(
+                "tote",
+                null,
+                new ToteGeometry(),
+                true);
+        return new Tote(
+                "tote",
+                new RouteFollower("tote", routeSegment(), 0f, 1.0d),
+                toteRenderable,
+                new Vec3(),
+                0f);
     }
 
     private RenderableObject findChild(RenderableObject parent, String id) {
