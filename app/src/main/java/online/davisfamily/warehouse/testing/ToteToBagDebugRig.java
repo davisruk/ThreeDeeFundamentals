@@ -42,6 +42,7 @@ import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.transfer.PdcTransfer;
 import online.davisfamily.warehouse.sim.totebag.transfer.PrlToPcrTransfer;
+import online.davisfamily.warehouse.sim.totebag.assembly.PackRenderableVisibility;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.layout.ToteToBagCoreLayoutSpec;
 import online.davisfamily.warehouse.sim.tote.Tote;
@@ -187,7 +188,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
         for (Pack pack : flowController.getObservedPacks()) {
             if (pack.getState() == Pack.PackMotionState.CONSUMED) {
-                positionPack(pack, -50f, -50f, -50f);
+                hidePack(pack);
             }
         }
 
@@ -201,7 +202,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
 
         for (Pack pack : flowController.getObservedPacks()) {
             if (pack.getState() == Pack.PackMotionState.STAGED) {
-                positionPack(pack, -50f, -50f, -50f);
+                hidePack(pack);
             }
         }
 
@@ -328,6 +329,15 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         renderable.transformation.angleX = angleX;
         renderable.transformation.angleY = angleY;
         renderable.transformation.angleZ = angleZ;
+        PackRenderableVisibility.show(renderable);
+    }
+
+    private void hidePack(Pack pack) {
+        RenderableObject renderable = tipperToSorterSection.getPackRenderable(pack.getId());
+        if (renderable == null) {
+            return;
+        }
+        PackRenderableVisibility.hideAndResetPose(renderable);
     }
 
     private void positionActivePdcTransfer(PdcTransfer transfer) {
