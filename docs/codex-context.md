@@ -81,7 +81,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The next planned major work is the DSP/OSR scheduler.
+The active major work is the DSP/OSR scheduler.
 
 Read:
 
@@ -91,23 +91,25 @@ Read:
 
 Current scheduler decisions:
 
-- First branch is domain-first and fixture-driven.
-- No visual/debug-scene integration in the first scheduler branch.
-- No product master or 12N JSON loading in the first scheduler branch.
+- The next branch is `feature/dsp-scheduler-json-loading`.
+- Completed branches: domain, line readiness, OSR integration, live P2P admission, and debug observability.
+- Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
+- The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
+- Product master and 12N JSON loading should produce domain data only; loaded data must not create renderables.
 - Service centres are processed as whole release windows.
 - Totes from different service centres should not be mixed, except naturally when one service centre finishes and the next begins.
 - If the active service centre is blocked by dependencies or capacity, hold the active window rather than skipping to the next service centre.
 - The scheduler should model P2P as an admission/capacity boundary first.
-- Live integration with `ToteToBagFlowController.canAdmit(...)` is a later branch.
+- Live P2P admission is candidate-specific and already uses `ToteToBagFlowController.canAdmit(...)` through the debug integration path.
 
-Planned first branch:
+Next branch:
 
 ```powershell
 git switch master
-git switch -c feature/dsp-scheduler-domain
+git switch -c feature/dsp-scheduler-json-loading
 ```
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow the branch-specific detailed plan step by step.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/dsp-scheduler-json-loading-plan.md` step by step.
 
 ## DSP Model Notes
 

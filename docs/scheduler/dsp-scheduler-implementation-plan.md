@@ -106,7 +106,7 @@ Purpose:
 
 ### `feature/dsp-scheduler-debug-observability`
 
-Status: planned; detailed plan drafted.
+Status: complete and green.
 
 Detailed implementation doc:
 
@@ -120,9 +120,16 @@ Purpose:
 - Avoid breakpoints as the primary way to verify scheduler behavior.
 - Do not add command buttons, Swing panels, scheduler threading, JSON loading, or new scheduling rules in this branch.
 
+Notes:
+
+- Scheduler debug state is exposed through `SchedulerDebugState` / `SchedulerDebugSnapshot`.
+- `SchedulerDebugInspectable` formats the latest scheduler evaluation/application result for the existing inspection overlay.
+- The integrated debug scene currently registers scheduler inspection against `tipper_slide`, because that is the reliable selectable part of the tipper assembly.
+- Longer term, the tipper assembly should route selectable children to a common root selection target.
+
 ### `feature/dsp-scheduler-json-loading`
 
-Status: planned.
+Status: planned; detailed plan drafted.
 
 Detailed implementation doc:
 

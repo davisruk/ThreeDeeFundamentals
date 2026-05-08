@@ -1,6 +1,6 @@
 # DSP Scheduler Debug Observability Plan
 
-Status: drafted. Implement on `feature/dsp-scheduler-debug-observability`.
+Status: complete and green. Implemented on `feature/dsp-scheduler-debug-observability` and merged to `master`.
 
 ## Summary
 
@@ -17,6 +17,7 @@ Do not add command buttons, Swing side panels, scheduler threading, JSON loading
 - Do not make the scheduler evaluate twice just to display diagnostics.
 - Capture the last scheduler evaluation and last release application result during `ScheduledDebugToteInjectorController.update(...)`.
 - Register the scheduler inspection against an existing integrated debug renderable so it can be selected in the scene.
+- The practical visual target is currently `tipper_slide`; the tipper assembly root is not reliably selectable because it is an anchor renderable and its selectable children are not all routed to the root.
 - Keep the current framebuffer inspection overlay; do not start the broader command-panel work from `docs/selectable-object-command-panel.md`.
 
 Branch strategy:
