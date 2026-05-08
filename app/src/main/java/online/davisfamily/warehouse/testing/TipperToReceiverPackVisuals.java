@@ -13,6 +13,7 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
+import online.davisfamily.warehouse.sim.totebag.assembly.PackRenderableVisibility;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperModule;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
@@ -85,9 +86,10 @@ public class TipperToReceiverPackVisuals {
                                 plan.dimensions().length(),
                                 plan.dimensions().height(),
                                 plan.dimensions().width()),
-                        new Mat4.ObjectTransformation(0f, 0f, 0f, -50f, -50f, -50f, new Mat4()),
+                        new Mat4.ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
                         new OneColourStrategyImpl(colourForCorrelation(plan.correlationId())),
                         true);
+                PackRenderableVisibility.hideAndResetPose(renderable);
                 toteRenderable.addChild(renderable);
                 inspectionRegistry.register(renderable, () -> List.of(
                         "Type: Pack",
@@ -103,12 +105,7 @@ public class TipperToReceiverPackVisuals {
             if (toteRenderable.children.contains(renderable)) {
                 continue;
             }
-            renderable.transformation.xTranslation = -50f;
-            renderable.transformation.yTranslation = -50f;
-            renderable.transformation.zTranslation = -50f;
-            renderable.transformation.angleX = 0f;
-            renderable.transformation.angleY = 0f;
-            renderable.transformation.angleZ = 0f;
+            PackRenderableVisibility.hideAndResetPose(renderable);
         }
     }
 
@@ -134,6 +131,7 @@ public class TipperToReceiverPackVisuals {
             renderable.transformation.angleX = 0f;
             renderable.transformation.angleY = 0f;
             renderable.transformation.angleZ = 0f;
+            PackRenderableVisibility.show(renderable);
             placedPackIds.add(plan.packId());
         }
     }
@@ -162,6 +160,7 @@ public class TipperToReceiverPackVisuals {
             renderable.transformation.angleX = transfer.getSpinAngleX();
             renderable.transformation.angleY = rigYaw + transfer.getSpinAngleY();
             renderable.transformation.angleZ = transfer.getSpinAngleZ();
+            PackRenderableVisibility.show(renderable);
             placedPackIds.add(transfer.getPack().getId());
         }
     }
