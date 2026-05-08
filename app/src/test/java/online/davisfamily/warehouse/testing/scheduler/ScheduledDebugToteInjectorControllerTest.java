@@ -2,7 +2,6 @@ package online.davisfamily.warehouse.testing.scheduler;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -160,6 +159,93 @@ class ScheduledDebugToteInjectorControllerTest {
                 () -> controller.update(new SimulationContext(), 0.1d));
 
         assertTrue(exception.getMessage().contains("bad target state"));
+    }
+
+    @Test
+    void shouldExposeLastSchedulerReleaseDecisionForDebugging() {
+        DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingOrder("order-1", "sc-1")));
+        SchedulerDebugState debugState = new SchedulerDebugState();
+        ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
+                scheduler("sc-1"),
+                runtimeState,
+                new ScheduledTipperToteReleaseCatalog(List.of(release("order-1", "tote-1", new AtomicInteger()))),
+                new TestReleaseTarget(true, SchedulerCommandApplicationResult.appliedResult()),
+                debugState);
+
+        controller.update(new SimulationContext(), 0.1d);
+
+        SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals(Optional.of("sc-1"), snapshot.activeServiceCentreId());
+        assertEquals(List.of("order-1"), snapshot.waitingOrderIds());
+        assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
+        assertEquals(Optional.of("order-1"), snapshot.lastAppliedOrderId());
+        assertEquals(Optional.empty(), snapshot.blockedServiceCentreId());
+        assertEquals(List.of(), snapshot.blockedCandidateOrderIds());
+        assertEquals(List.of(), snapshot.blockedReasons());
+    }
+
+    @Test
+    void shouldExposeBlockedDecisionForDebugging() {
+        DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingOrder("order-1", "sc-1")), false);
+        SchedulerDebugState debugState = new SchedulerDebugState();
+        ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
+                scheduler("sc-1"),
+                runtimeState,
+                new ScheduledTipperToteReleaseCatalog(List.of(release("order-1", "tote-1", new AtomicInteger()))),
+                new TestReleaseTarget(true, SchedulerCommandApplicationResult.appliedResult()),
+                debugState);
+
+        controller.update(new SimulationContext(), 0.1d);
+
+        SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals(Optional.of("sc-1"), snapshot.activeServiceCentreId());
+        assertEquals(List.of("order-1"), snapshot.waitingOrderIds());
+        assertEquals(Optional.empty(), snapshot.releaseOrderId());
+        assertEquals(Optional.of("sc-1"), snapshot.blockedServiceCentreId());
+        assertEquals(List.of("order-1"), snapshot.blockedCandidateOrderIds());
+        assertFalse(snapshot.blockedReasons().isEmpty());
+    }
+
+    @Test
+    void shouldExposeDeferredReleaseResultForDebugging() {
+        DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingOrder("order-1", "sc-1")));
+        SchedulerDebugState debugState = new SchedulerDebugState();
+        ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
+                scheduler("sc-1"),
+                runtimeState,
+                new ScheduledTipperToteReleaseCatalog(List.of(release("order-1", "tote-1", new AtomicInteger()))),
+                new TestReleaseTarget(true, SchedulerCommandApplicationResult.deferredResult("later")),
+                debugState);
+
+        controller.update(new SimulationContext(), 0.1d);
+
+        SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
+        assertEquals(Optional.of("order-1"), snapshot.lastDeferredOrderId());
+        assertEquals(Optional.of("later"), snapshot.lastDeferredReason());
+        assertEquals(Optional.empty(), snapshot.lastAppliedOrderId());
+        assertEquals(Optional.empty(), snapshot.lastRejectedOrderId());
+    }
+
+    @Test
+    void shouldExposeRejectedReleaseResultForDebugging() {
+        DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingOrder("order-1", "sc-1")));
+        SchedulerDebugState debugState = new SchedulerDebugState();
+        ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
+                scheduler("sc-1"),
+                runtimeState,
+                new ScheduledTipperToteReleaseCatalog(List.of(release("order-1", "tote-1", new AtomicInteger()))),
+                new TestReleaseTarget(true, SchedulerCommandApplicationResult.rejectedResult("bad target state")),
+                debugState);
+
+        assertThrows(IllegalStateException.class, () -> controller.update(new SimulationContext(), 0.1d));
+
+        SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
+        assertEquals(Optional.of("order-1"), snapshot.lastRejectedOrderId());
+        assertEquals(Optional.of("bad target state"), snapshot.lastRejectedReason());
+        assertEquals(Optional.empty(), snapshot.lastAppliedOrderId());
+        assertEquals(Optional.empty(), snapshot.lastDeferredOrderId());
     }
 
     private static DspReleaseScheduler scheduler(String... serviceCentres) {
