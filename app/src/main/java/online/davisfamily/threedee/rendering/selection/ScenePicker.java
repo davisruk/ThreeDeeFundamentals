@@ -55,6 +55,9 @@ public class ScenePicker {
 	}
 
 	private void recursivePick(RenderableObject ro, Mat4 parentModel, PickRay ray, PickHit bestHit) {
+		if (!ro.isVisible()) {
+			return;
+		}
 		ro.transformation.setupModel();
 		worldModel.set(parentModel != null ? parentModel : Mat4.identity());
 		worldModel.mutableMultiply(ro.transformation.model);

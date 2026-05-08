@@ -33,6 +33,7 @@ public class RenderableObject {
 	// RayPicking metadata
 	public boolean selectable;
 	public RenderableObject selectionTarget;
+	private boolean visible;
 	
 	// use below to determine forward direction
 	public float yawOffsetRadians;
@@ -67,6 +68,7 @@ public class RenderableObject {
         this.children = childObjects != null ? new ArrayList<>(childObjects) : new ArrayList<>();
         this.behaviours = behaviourObjects != null ? new ArrayList<>(behaviourObjects) : new ArrayList<>();
         this.selectable = selectable;
+        this.visible = true;
         this.id = id;
     }
 
@@ -259,6 +261,9 @@ public class RenderableObject {
 	}
 	
 	public void update(double dtSeconds) {
+		if (!visible) {
+			return;
+		}
 		for (Behaviour b: behaviours)
 			b.update(this, dtSeconds);
 		
@@ -267,6 +272,9 @@ public class RenderableObject {
 	}
 	
 	public void draw(Camera cam, Mat4 perspective, float[]zBuffer, DirectionalLight lightDirection, Mat4 parentModel, SelectionManager selectionManager) {
+	    if (!visible) {
+	    	return;
+	    }
 	    transformation.setupModel();
 
 	    Mat4 worldModel = new Mat4();
@@ -293,8 +301,16 @@ public class RenderableObject {
 		return selectable;
 	}
 
+	public boolean isVisible() {
+		return visible;
+	}
+
 	public void setSelectable(boolean selectable) {
 		this.selectable = selectable;
+	}
+
+	public void setVisible(boolean visible) {
+		this.visible = visible;
 	}
 
 	public RenderableObject getSelectionTarget() {
