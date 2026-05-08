@@ -183,7 +183,13 @@ public class IntegratedToteToBagDebugInstaller {
                         objects,
                         tipperToSorterSection.getFlowController()));
         SchedulerDebugInspectable schedulerInspectable = new SchedulerDebugInspectable(scheduledInjectorController);
-        inspectionRegistry.register(tipperInstallation.getTipperModule().getAssemblyRenderable(), () -> {
+        RenderableObject schedulerInspectionTarget = RenderableObject.traverseAndExtractAllWithIdStartingWith(
+                tipperInstallation.getTipperModule().getAssemblyRenderable(),
+                "tipper_slide",
+                new java.util.ArrayList<>()).stream()
+                .findFirst()
+                .orElse(tipperInstallation.getTipperModule().getAssemblyRenderable());
+        inspectionRegistry.register(schedulerInspectionTarget, () -> {
             List<String> lines = new java.util.ArrayList<>();
             lines.add("Type: Tipper");
             lines.add("State: " + tipperInstallation.getTipperModule().getTippingMachine().getState());
