@@ -79,7 +79,10 @@ public class TipperToSorterPackVisuals {
         sortingModule.syncQueuedPackVisuals(
                 packRenderablesById,
                 placedPackIds,
-                (pack, renderable) -> detachFromToteIfNeeded(pack, renderable, null));
+                (pack, renderable) -> {
+                    detachFromToteIfNeeded(pack, renderable, null);
+                    PackRenderableVisibility.show(renderable);
+                });
     }
 
     public RenderableObject getPackRenderable(String packId) {
@@ -94,6 +97,7 @@ public class TipperToSorterPackVisuals {
                             plan.packId(),
                             plan.dimensions(),
                             plan.correlationId());
+                    PackRenderableVisibility.hideAndResetPose(renderable);
                     toteSource.toteRenderable().addChild(renderable);
                     inspectionRegistry.register(renderable, () -> List.of(
                             "Type: Pack",
@@ -110,12 +114,7 @@ public class TipperToSorterPackVisuals {
             if (isAttachedToAnyTote(renderable)) {
                 continue;
             }
-            renderable.transformation.xTranslation = -50f;
-            renderable.transformation.yTranslation = -50f;
-            renderable.transformation.zTranslation = -50f;
-            renderable.transformation.angleX = 0f;
-            renderable.transformation.angleY = 0f;
-            renderable.transformation.angleZ = 0f;
+            PackRenderableVisibility.hideAndResetPose(renderable);
         }
     }
 
@@ -143,6 +142,7 @@ public class TipperToSorterPackVisuals {
             renderable.transformation.angleX = 0f;
             renderable.transformation.angleY = rigYaw;
             renderable.transformation.angleZ = 0f;
+            PackRenderableVisibility.show(renderable);
             placedPackIds.add(transfer.getPack().getId());
         }
     }
@@ -170,6 +170,11 @@ public class TipperToSorterPackVisuals {
                 renderable.transformation.angleX = 0f;
                 renderable.transformation.angleY = 0f;
                 renderable.transformation.angleZ = 0f;
+                if (toteSource.totePayload().getTote().areLidsOpen()) {
+                    PackRenderableVisibility.show(renderable);
+                } else {
+                    PackRenderableVisibility.hide(renderable);
+                }
                 placedPackIds.add(plan.packId());
             }
         }
@@ -249,7 +254,7 @@ public class TipperToSorterPackVisuals {
                         dimensions.length(),
                         dimensions.height(),
                         dimensions.width()),
-                new ObjectTransformation(0f, 0f, 0f, -50f, -50f, -50f, new Mat4()),
+                new ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
                 new OneColourStrategyImpl(colourForCorrelation(correlationId)),
                 true);
     }
