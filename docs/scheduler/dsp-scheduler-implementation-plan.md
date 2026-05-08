@@ -129,7 +129,7 @@ Notes:
 
 ### `feature/dsp-scheduler-json-loading`
 
-Status: planned; detailed plan drafted.
+Status: complete and green.
 
 Detailed implementation doc:
 
@@ -141,9 +141,17 @@ Purpose:
 - Keep product classification sourced from product master data.
 - Revisit whether a database is useful after measuring in-memory loading and query shape.
 
+Notes:
+
+- Jackson databind is available through the Gradle version catalog.
+- `online.davisfamily.warehouse.sim.dsp.io` now contains product master loaders, raw 12N DTOs, 12N dispatch/preparation mappers, `LoadedDspData`, and `LoadedDspSchedulerRuntimeFactory`.
+- 12N dispatch messages become existing `NotionalToteOrder` / `DspOrderItem` objects.
+- Manual/adapted 12N preparation messages produce prepared `DspOrderItem`s and `PreparedLineKey`s, not dispatch orders.
+- Loaded data remains domain/runtime state only; no renderables are created by JSON loading.
+
 ### `feature/renderable-visibility-lifecycle`
 
-Status: planned.
+Status: planned; detailed plan drafted.
 
 Detailed implementation doc:
 

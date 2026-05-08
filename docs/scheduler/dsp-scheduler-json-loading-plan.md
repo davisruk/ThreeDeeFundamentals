@@ -1,6 +1,6 @@
 # DSP Scheduler JSON Loading Plan
 
-Status: drafted. Implement on `feature/dsp-scheduler-json-loading`.
+Status: complete and green. Implemented on `feature/dsp-scheduler-json-loading` and merged to `master`.
 
 ## Summary
 

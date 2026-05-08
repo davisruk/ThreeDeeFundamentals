@@ -91,11 +91,12 @@ Read:
 
 Current scheduler decisions:
 
-- The next branch is `feature/dsp-scheduler-json-loading`.
-- Completed branches: domain, line readiness, OSR integration, live P2P admission, and debug observability.
+- The next scheduler-adjacent branch is `feature/renderable-visibility-lifecycle`.
+- Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, and JSON loading.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
-- Product master and 12N JSON loading should produce domain data only; loaded data must not create renderables.
+- Product master and 12N JSON loading produces domain/runtime data only; loaded data does not create renderables.
+- Renderable visibility/lifecycle support is next so hidden or not-yet-released visuals can be skipped cheaply before larger scheduler visualisation.
 - Service centres are processed as whole release windows.
 - Totes from different service centres should not be mixed, except naturally when one service centre finishes and the next begins.
 - If the active service centre is blocked by dependencies or capacity, hold the active window rather than skipping to the next service centre.
@@ -106,10 +107,10 @@ Next branch:
 
 ```powershell
 git switch master
-git switch -c feature/dsp-scheduler-json-loading
+git switch -c feature/renderable-visibility-lifecycle
 ```
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/dsp-scheduler-json-loading-plan.md` step by step.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/renderable-visibility-lifecycle-plan.md` step by step.
 
 ## DSP Model Notes
 

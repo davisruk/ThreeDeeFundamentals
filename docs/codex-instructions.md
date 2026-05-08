@@ -73,7 +73,7 @@ Architectural boundaries to maintain:
 
 ## Current Direction
 
-The next scheduler branch is `feature/dsp-scheduler-json-loading`.
+The next scheduler-adjacent branch is `feature/renderable-visibility-lifecycle`.
 
 Completed scheduler work:
 
@@ -82,6 +82,7 @@ Completed scheduler work:
 - `feature/dsp-scheduler-osr-integration`
 - `feature/dsp-scheduler-p2p-live-admission`
 - `feature/dsp-scheduler-debug-observability`
+- `feature/dsp-scheduler-json-loading`
 
 Current scheduler decisions:
 
@@ -96,16 +97,16 @@ Current scheduler decisions:
 - P2P admission is candidate-specific because `ToteToBagFlowController.canAdmit(...)` depends on the candidate tote load plan.
 - Scheduler evaluation remains synchronous; do not introduce a scheduler thread yet.
 - Scheduler decisions are observable in the existing selection inspection overlay. The current integrated debug target is `tipper_slide`; longer term, composite machine selection should route child hits back to the root renderable.
-- The next scheduler slice should load product master and 12N JSON into the existing DSP domain model without creating renderables or changing scheduling behavior.
+- Product master and 12N JSON loading now produce existing DSP domain/runtime objects without creating renderables or changing scheduling behavior.
+- The next slice should add renderable visibility/lifecycle support so loaded/hidden visual data can be skipped cheaply before larger scheduler visualisation.
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/dsp-scheduler-json-loading-plan.md`.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/renderable-visibility-lifecycle-plan.md`.
 
 ## Deferred Direction
 
-After JSON loading is proven:
+After renderable visibility/lifecycle is proven:
 
-1. Add renderable lifecycle/visibility optimization so loaded order data does not create active renderables up front.
-2. Consider scheduler threading only after synchronous snapshot/command integration remains stable.
+1. Consider scheduler threading only after synchronous snapshot/command integration remains stable.
 
 Known future machine work still exists, but is lower priority than understanding scheduler impact:
 
