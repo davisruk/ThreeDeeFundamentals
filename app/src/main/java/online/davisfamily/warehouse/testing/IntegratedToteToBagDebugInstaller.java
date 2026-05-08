@@ -46,6 +46,7 @@ import online.davisfamily.warehouse.testing.scheduler.DebugP2pAdmissionSnapshotF
 import online.davisfamily.warehouse.testing.scheduler.ScheduledDebugToteInjectorController;
 import online.davisfamily.warehouse.testing.scheduler.ScheduledReleaseP2pAdmission;
 import online.davisfamily.warehouse.testing.scheduler.ScheduledTipperToteReleaseCatalog;
+import online.davisfamily.warehouse.testing.scheduler.SchedulerDebugInspectable;
 import online.davisfamily.warehouse.testing.scheduler.TipperFlowScheduledToteReleaseTarget;
 
 public class IntegratedToteToBagDebugInstaller {
@@ -173,14 +174,24 @@ public class IntegratedToteToBagDebugInstaller {
                         p2pSnapshotFactory::stationSnapshot));
 
         sim.addSimObject(pcrConveyor);
-        sim.addController(new ScheduledDebugToteInjectorController(
+        ScheduledDebugToteInjectorController scheduledInjectorController = new ScheduledDebugToteInjectorController(
                 scheduler,
                 runtimeState,
                 releaseCatalog,
                 new TipperFlowScheduledToteReleaseTarget(
                         sim,
                         objects,
-                        tipperToSorterSection.getFlowController())));
+                        tipperToSorterSection.getFlowController()));
+        SchedulerDebugInspectable schedulerInspectable = new SchedulerDebugInspectable(scheduledInjectorController);
+        inspectionRegistry.register(tipperInstallation.getTipperModule().getAssemblyRenderable(), () -> {
+            List<String> lines = new java.util.ArrayList<>();
+            lines.add("Type: Tipper");
+            lines.add("State: " + tipperInstallation.getTipperModule().getTippingMachine().getState());
+            lines.add("Remaining packs: " + tipperInstallation.getTipperModule().getTippingMachine().getRemainingPackCount());
+            lines.addAll(schedulerInspectable.describe());
+            return List.copyOf(lines);
+        });
+        sim.addController(scheduledInjectorController);
         sim.addController(flowController);
 
         return new IntegratedToteToBagDebugInstallation(
