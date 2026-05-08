@@ -1,6 +1,6 @@
 # DSP Scheduler P2P Live Admission Plan
 
-Status: drafted. Implement on `feature/dsp-scheduler-p2p-live-admission`.
+Status: complete and green.
 
 ## Summary
 

@@ -90,7 +90,7 @@ Explicit non-goal:
 
 ### `feature/dsp-scheduler-p2p-live-admission`
 
-Status: planned; detailed plan drafted.
+Status: complete and green.
 
 Detailed implementation doc:
 
@@ -103,6 +103,22 @@ Purpose:
 - Add an adapter from scheduler order/tote data to `ToteLoadPlan`.
 - Feed live P2P admission into scheduler station admission snapshots.
 - Add candidate-specific station admission resolution so P2P can evaluate the actual candidate tote instead of using one static station-wide answer.
+
+### `feature/dsp-scheduler-debug-observability`
+
+Status: planned; detailed plan drafted.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-scheduler-debug-observability-plan.md`
+
+Purpose:
+
+- Make scheduler-driven debug scenes visibly attributable to scheduler decisions.
+- Capture the last scheduler evaluation and release application result from the debug injector.
+- Display active service centre, waiting orders, release decisions, blocked candidates, and blocked reasons through the existing selection inspection overlay.
+- Avoid breakpoints as the primary way to verify scheduler behavior.
+- Do not add command buttons, Swing panels, scheduler threading, JSON loading, or new scheduling rules in this branch.
 
 ### `feature/dsp-scheduler-json-loading`
 
@@ -157,4 +173,4 @@ Purpose:
 - Prepared-line readiness is keyed by target order id, target sheet, line id, and line type.
 - A blocked active service centre blocks later service centres.
 - Scheduler v1 is thread-ready but not threaded.
-- JSON import, live visual injection, live P2P admission, database decisions, scheduler threading, deadlock override timers, and command-button/manual exception handling are split into later branches.
+- JSON import, richer visual injection, database decisions, scheduler threading, deadlock override timers, and command-button/manual exception handling are split into later branches.

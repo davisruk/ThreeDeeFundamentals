@@ -73,13 +73,14 @@ Architectural boundaries to maintain:
 
 ## Current Direction
 
-The next scheduler branch is `feature/dsp-scheduler-p2p-live-admission`.
+The next scheduler branch is `feature/dsp-scheduler-debug-observability`.
 
 Completed scheduler work:
 
 - `feature/dsp-scheduler-domain`
 - `feature/dsp-scheduler-line-readiness`
 - `feature/dsp-scheduler-osr-integration`
+- `feature/dsp-scheduler-p2p-live-admission`
 
 Current scheduler decisions:
 
@@ -91,14 +92,15 @@ Current scheduler decisions:
 - Process service centres as whole release windows:
   - do not mix totes from different service centres, except naturally at the last/first boundary
   - if the active service centre is blocked, hold the window rather than skipping ahead
-- P2P admission now needs to become candidate-specific because `ToteToBagFlowController.canAdmit(...)` depends on the candidate tote load plan.
-- Keep scheduler evaluation synchronous for the P2P live-admission branch; do not introduce a scheduler thread yet.
+- P2P admission is candidate-specific because `ToteToBagFlowController.canAdmit(...)` depends on the candidate tote load plan.
+- Scheduler evaluation remains synchronous; do not introduce a scheduler thread yet.
+- The next debug slice should make scheduler decisions observable in the existing selection inspection overlay before further scheduler expansion.
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/dsp-scheduler-p2p-live-admission-plan.md`.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/dsp-scheduler-debug-observability-plan.md`.
 
 ## Deferred Direction
 
-After live P2P admission is proven:
+After scheduler debug observability is proven:
 
 1. Add product master / 12N JSON loading after schema samples are supplied.
 2. Add renderable lifecycle/visibility optimization so loaded order data does not create active renderables up front.
