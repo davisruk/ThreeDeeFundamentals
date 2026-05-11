@@ -76,4 +76,22 @@ class MachineWaitQueueTest {
 
         assertThrows(IllegalStateException.class, () -> queue.enqueue("tote-b"));
     }
+
+    @Test
+    void shouldCreateImmutableSnapshot() {
+        MachineWaitQueue queue = new MachineWaitQueue("tipper-input", 2);
+        queue.enqueue("tote-a");
+
+        MachineWaitQueueSnapshot snapshot = queue.snapshot();
+
+        assertEquals("tipper-input", snapshot.id());
+        assertEquals(2, snapshot.capacity());
+        assertEquals(List.of("tote-a"), snapshot.toteIds());
+        assertTrue(snapshot.canAccept());
+
+        queue.enqueue("tote-b");
+
+        assertEquals(List.of("tote-a"), snapshot.toteIds());
+        assertTrue(snapshot.canAccept());
+    }
 }

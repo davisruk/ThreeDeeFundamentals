@@ -53,4 +53,8 @@ public class MachineWaitQueue {
     public List<String> toteIds() {
         return List.copyOf(toteIds);
     }
+
+    public MachineWaitQueueSnapshot snapshot() {
+        return new MachineWaitQueueSnapshot(id, capacity, toteIds());
+    }
 }
