@@ -200,7 +200,7 @@ Notes:
 
 ### `feature/dsp-scheduler-thread`
 
-Status: planned. Implement next after `feature/machine-wait-queues`.
+Status: complete and green.
 
 Detailed implementation doc:
 
@@ -222,6 +222,12 @@ Notes:
   - worker threads return decisions/results
   - the simulation thread applies all mutations
 - Rendering remains on the current thread model in this branch. Render-thread separation is deferred, but this boundary should make that later split easier.
+- `SchedulerEvaluationSource` is the fallback boundary.
+- `SynchronousSchedulerEvaluationSource` preserves the old behavior.
+- `ThreadedSchedulerEvaluationSource` uses one named platform thread through `Executors.newSingleThreadExecutor(...)`; virtual threads are not used.
+- `ScheduledDebugToteInjectorController` can use either source.
+- The integrated debug scene uses threaded evaluation.
+- The scheduler overlay exposes mode, in-flight state, and last completed evaluation sequence.
 
 ## Current Assumptions
 
@@ -232,5 +238,5 @@ Notes:
 - Manual tote order examples are pharmacy-pure and should unlock target dispatch work through line readiness.
 - Prepared-line readiness is keyed by target order id, target sheet, line id, and line type.
 - A blocked active service centre blocks later service centres.
-- Scheduler v1 is thread-ready but not threaded.
-- JSON import, richer visual injection, database decisions, scheduler threading, deadlock override timers, and command-button/manual exception handling are split into later branches.
+- Scheduler v1 is threaded in the integrated debug path, with synchronous fallback still available.
+- JSON import, richer visual injection, database decisions, deadlock override timers, and command-button/manual exception handling are split into later branches.

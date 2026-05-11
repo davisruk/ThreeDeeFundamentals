@@ -73,9 +73,9 @@ Architectural boundaries to maintain:
 
 ## Current Direction
 
-The latest completed scheduler-adjacent branch is `feature/machine-wait-queues`, merged back to `master`.
+The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`, merged back to `master`.
 
-The next planned scheduler branch is `feature/dsp-scheduler-thread`.
+No next feature branch has been selected. Before making further code changes, discuss the next larger plan with the user and create a branch-specific step plan.
 
 Completed scheduler work:
 
@@ -87,6 +87,7 @@ Completed scheduler work:
 - `feature/dsp-scheduler-json-loading`
 - `feature/renderable-visibility-lifecycle`
 - `feature/machine-wait-queues`
+- `feature/dsp-scheduler-thread`
 
 Current scheduler decisions:
 
@@ -99,7 +100,11 @@ Current scheduler decisions:
   - do not mix totes from different service centres, except naturally at the last/first boundary
   - if the active service centre is blocked, hold the window rather than skipping ahead
 - P2P admission is candidate-specific because tote processing depends on the candidate tote load plan.
-- Scheduler evaluation is currently synchronous in the integrated debug path. The next branch should introduce threaded evaluation behind an explicit synchronous fallback.
+- Scheduler evaluation now runs through an evaluation source boundary:
+  - `SynchronousSchedulerEvaluationSource` remains available as the fallback path
+  - `ThreadedSchedulerEvaluationSource` uses one named platform-thread executor
+  - the integrated debug scene uses the threaded source
+  - scheduler worker code receives immutable snapshots and returns evaluations; simulation-thread code still applies commands and mutates runtime state
 - Scheduler decisions are observable in the existing selection inspection overlay. The current integrated debug target is `tipper_slide`; longer term, composite machine selection should route child hits back to the root renderable.
 - Product master and 12N JSON loading now produce existing DSP domain/runtime objects without creating renderables or changing scheduling behavior.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
@@ -110,11 +115,11 @@ Current scheduler decisions:
   - this architecture correction was inserted mid DSP scheduler work before adding further scheduler behaviour
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/dsp-scheduler-thread-plan.md`.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then create or follow the next branch-specific plan agreed with the user.
 
 ## Deferred Direction
 
-After the scheduler thread branch:
+Next direction to decide:
 
 1. Reassess whether to continue scheduler behavior work or pause for further machine/layout work.
 

@@ -91,9 +91,9 @@ Read:
 
 Current scheduler decisions:
 
-- The latest completed scheduler-adjacent branch is `feature/machine-wait-queues`.
-- The next planned scheduler branch is `feature/dsp-scheduler-thread`.
-- Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, and machine wait queues.
+- The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`.
+- No next feature branch has been selected.
+- Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, machine wait queues, and scheduler thread.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
 - Product master and 12N JSON loading produces domain/runtime data only; loaded data does not create renderables.
@@ -107,13 +107,14 @@ Current scheduler decisions:
   - machine processing admission remains local to the downstream machine
   - for P2P, scheduler release is based on input queue capacity
   - `ToteToBagFlowController.canAdmit(...)` remains the local tipper processing gate
-- The scheduler thread branch should preserve the boundary:
+- Scheduler evaluation now preserves the thread boundary:
   - simulation thread builds immutable snapshots
   - scheduler worker computes decisions only
   - simulation thread applies commands/mutations
   - synchronous evaluation remains available as a fallback
+  - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/dsp-scheduler-thread-plan.md`.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then create or follow the next branch-specific plan agreed with the user.
 
 ## DSP Model Notes
 

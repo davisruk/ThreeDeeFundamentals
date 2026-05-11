@@ -1,6 +1,6 @@
 # DSP Scheduler Thread Plan
 
-Status: planned. Implement next on `feature/dsp-scheduler-thread`.
+Status: complete and green. Implemented on `feature/dsp-scheduler-thread` and merged to `master`.
 
 ## Summary
 
