@@ -73,7 +73,9 @@ Architectural boundaries to maintain:
 
 ## Current Direction
 
-The next scheduler-adjacent branch is `feature/machine-wait-queues`.
+The latest completed scheduler-adjacent branch is `feature/machine-wait-queues`, merged back to `master`.
+
+No next feature branch has been started. Before making further code changes, create or confirm the next detailed step plan from the scheduler roadmap.
 
 Completed scheduler work:
 
@@ -84,6 +86,7 @@ Completed scheduler work:
 - `feature/dsp-scheduler-debug-observability`
 - `feature/dsp-scheduler-json-loading`
 - `feature/renderable-visibility-lifecycle`
+- `feature/machine-wait-queues`
 
 Current scheduler decisions:
 
@@ -100,17 +103,18 @@ Current scheduler decisions:
 - Scheduler decisions are observable in the existing selection inspection overlay. The current integrated debug target is `tipper_slide`; longer term, composite machine selection should route child hits back to the root renderable.
 - Product master and 12N JSON loading now produce existing DSP domain/runtime objects without creating renderables or changing scheduling behavior.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
-- The next slice is a machine wait queue architecture correction:
-  - scheduler release admission should answer whether a tote can enter station waiting space
-  - machine processing admission should remain local to the machine/controller
-  - for P2P, queue capacity should gate scheduler release, while `ToteToBagFlowController.canAdmit(...)` remains the local tipper processing gate
-  - this is being done mid DSP scheduler work before adding further scheduler behaviour
+- Machine wait queues are now the scheduler release boundary for the integrated debug P2P path:
+  - scheduler release admission answers whether a tote can enter station waiting space
+  - machine processing admission remains local to the machine/controller
+  - for P2P, queue capacity gates scheduler release, while `ToteToBagFlowController.canAdmit(...)` remains the local tipper processing gate
+  - this architecture correction was inserted mid DSP scheduler work before adding further scheduler behaviour
+- The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/machine-wait-queues-plan.md`.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then create or follow the next branch-specific plan agreed with the user.
 
 ## Deferred Direction
 
-After machine wait queues are proven:
+Possible next scheduler step:
 
 1. Consider scheduler threading only after synchronous snapshot/command integration remains stable.
 

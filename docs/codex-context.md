@@ -91,8 +91,8 @@ Read:
 
 Current scheduler decisions:
 
-- The next scheduler-adjacent branch is `feature/machine-wait-queues`.
-- Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, and renderable visibility/lifecycle.
+- The latest completed scheduler-adjacent branch is `feature/machine-wait-queues`.
+- Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, and machine wait queues.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
 - Product master and 12N JSON loading produces domain/runtime data only; loaded data does not create renderables.
@@ -101,20 +101,13 @@ Current scheduler decisions:
 - Totes from different service centres should not be mixed, except naturally when one service centre finishes and the next begins.
 - If the active service centre is blocked by dependencies or capacity, hold the active window rather than skipping to the next service centre.
 - The scheduler should model P2P as an admission/capacity boundary first.
-- A queue architecture correction is needed before further scheduler behaviour:
-  - release admission should mean there is station input waiting space
-  - machine processing admission should remain local to the downstream machine
-  - for P2P, scheduler release should be based on input queue capacity
-  - `ToteToBagFlowController.canAdmit(...)` should remain the local tipper processing gate
+- Machine wait queues now separate scheduler release admission from machine processing admission in the integrated debug P2P path:
+  - release admission means there is station input waiting space
+  - machine processing admission remains local to the downstream machine
+  - for P2P, scheduler release is based on input queue capacity
+  - `ToteToBagFlowController.canAdmit(...)` remains the local tipper processing gate
 
-Next branch:
-
-```powershell
-git switch master
-git switch -c feature/machine-wait-queues
-```
-
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/machine-wait-queues-plan.md` step by step.
+No next branch has been started. Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then create or follow the next branch-specific plan agreed with the user.
 
 ## DSP Model Notes
 
@@ -167,6 +160,7 @@ Implemented visibility support:
 - Hidden renderables skip update, draw, and picking.
 - `Tote.areLidsOpen()` supports contained pack render decisions.
 - `PackRenderableVisibility` controls current pack renderable show/hide/reset behavior.
+- The integrated/debug tipper rigs open inbound source tote lids through `DebugToteLidController` after actual motion starts, rather than opening them in `TipperDemoFixtures`. This lets closed-lid contained pack visibility be verified visually.
 
 ## Remaining Machine Work
 

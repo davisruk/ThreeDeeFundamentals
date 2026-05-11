@@ -1,6 +1,6 @@
 # Machine Wait Queues Plan
 
-Status: drafted. Implement next on `feature/machine-wait-queues`.
+Status: complete and green. Implemented on `feature/machine-wait-queues` and merged to `master`.
 
 ## Summary
 
@@ -13,6 +13,10 @@ Can enter station input queue? != Can be processed by the machine now?
 ```
 
 This branch introduces explicit machine input wait queues with manually configured capacity. The first application should be the P2P/tipper debug path, so scheduler release can be based on queue space while the existing local machine admission remains the processing gate.
+
+Implementation note:
+
+- The integrated debug path also added a rig-only `DebugToteLidController` after visual verification showed the need to prove closed-lid contained pack visibility. Inbound source tote lids are no longer opened in `TipperDemoFixtures`; the debug rigs open them after actual tote motion starts. This is intentionally a rig concern until a real lid-opening machine is implemented.
 
 Do not add scheduler threading, database storage, JSON-to-renderable loading, manual exception buttons, lid opener/strapper machines, or full warehouse layout in this branch.
 
@@ -292,6 +296,7 @@ Completion criteria:
 - Existing P2P processing admission remains the local machine gate.
 - Scheduler remains synchronous.
 - No scheduler thread, database, JSON renderable loading, or full warehouse layout is introduced.
+- Inbound debug source totes keep lids closed until motion starts, and contained pack renderables remain hidden while lids are closed.
 
 ## Deferred Work
 

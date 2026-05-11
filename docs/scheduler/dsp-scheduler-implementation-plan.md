@@ -172,7 +172,7 @@ Notes:
 
 ### `feature/machine-wait-queues`
 
-Status: planned; detailed plan drafted.
+Status: complete and green.
 
 Detailed implementation doc:
 
@@ -189,8 +189,14 @@ Purpose:
 Notes:
 
 - This work is intentionally inserted mid DSP scheduler implementation before further scheduler behaviour.
-- Do not continue deep scheduler release logic until machine queue admission is explicit.
+- Machine queue admission is now explicit in the integrated debug P2P path.
 - Do not reintroduce ad hoc two-slot state inside `ToteTrackTipperFlowController`; use the wait queue abstraction.
+- `MachineWaitQueue` / `MachineWaitQueueSnapshot` provide the generic FIFO queue primitive.
+- `TipperInputQueue` stores queued `TipperTotePayload`s for the debug P2P path.
+- `QueuedReleaseP2pAdmission` gates scheduler-side P2P release by queue capacity.
+- `QueuedTipperFlowScheduledToteReleaseTarget` releases scheduled totes into the input queue rather than directly into the tipper flow.
+- `TipperInputQueueController` drains the queue into `ToteTrackTipperFlowController` when the tipper flow can accept the next tote.
+- `DebugToteLidController` is a rig-only temporary lid opener that opens inbound tote lids after actual motion starts, preserving future room for a real lid-opening machine.
 
 ### `feature/dsp-scheduler-thread`
 
