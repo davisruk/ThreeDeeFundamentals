@@ -4,14 +4,15 @@ import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
+import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerEvaluationResult;
+import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerEvaluationSource;
+import online.davisfamily.warehouse.sim.dsp.runtime.SynchronousSchedulerEvaluationSource;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspReleaseScheduler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseOrderCommand;
-import online.davisfamily.warehouse.sim.dsp.scheduler.SchedulerEvaluation;
-import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
 
 public class ScheduledDebugToteInjectorController implements SimulationController {
-    private final DspReleaseScheduler scheduler;
+    private final SchedulerEvaluationSource evaluationSource;
     private final DspSchedulerRuntimeState runtimeState;
     private final ScheduledTipperToteReleaseCatalog releaseCatalog;
     private final ScheduledToteReleaseTarget releaseTarget;
@@ -31,14 +32,36 @@ public class ScheduledDebugToteInjectorController implements SimulationControlle
             ScheduledTipperToteReleaseCatalog releaseCatalog,
             ScheduledToteReleaseTarget releaseTarget,
             SchedulerDebugState debugState) {
-        if (scheduler == null
+        this(
+                new SynchronousSchedulerEvaluationSource(scheduler),
+                runtimeState,
+                releaseCatalog,
+                releaseTarget,
+                debugState);
+    }
+
+    public ScheduledDebugToteInjectorController(
+            SchedulerEvaluationSource evaluationSource,
+            DspSchedulerRuntimeState runtimeState,
+            ScheduledTipperToteReleaseCatalog releaseCatalog,
+            ScheduledToteReleaseTarget releaseTarget) {
+        this(evaluationSource, runtimeState, releaseCatalog, releaseTarget, new SchedulerDebugState());
+    }
+
+    public ScheduledDebugToteInjectorController(
+            SchedulerEvaluationSource evaluationSource,
+            DspSchedulerRuntimeState runtimeState,
+            ScheduledTipperToteReleaseCatalog releaseCatalog,
+            ScheduledToteReleaseTarget releaseTarget,
+            SchedulerDebugState debugState) {
+        if (evaluationSource == null
                 || runtimeState == null
                 || releaseCatalog == null
                 || releaseTarget == null
                 || debugState == null) {
             throw new IllegalArgumentException("Scheduled debug tote injector inputs must not be null");
         }
-        this.scheduler = scheduler;
+        this.evaluationSource = evaluationSource;
         this.runtimeState = runtimeState;
         this.releaseCatalog = releaseCatalog;
         this.releaseTarget = releaseTarget;
@@ -51,14 +74,21 @@ public class ScheduledDebugToteInjectorController implements SimulationControlle
             return;
         }
 
-        WarehouseSchedulerSnapshot snapshot = runtimeState.snapshot();
-        SchedulerEvaluation evaluation = scheduler.evaluate(snapshot);
-        debugState.recordEvaluation(snapshot, evaluation);
-        if (evaluation.releaseDecision().isEmpty()) {
+        if (evaluationSource.canSubmit()) {
+            evaluationSource.submit(runtimeState.snapshot());
+        }
+
+        SchedulerEvaluationResult evaluationResult = evaluationSource.pollResult().orElse(null);
+        if (evaluationResult == null) {
             return;
         }
 
-        ReleaseOrderCommand command = evaluation.releaseDecision().get().command();
+        debugState.recordEvaluation(evaluationResult.snapshot(), evaluationResult.evaluation());
+        if (evaluationResult.evaluation().releaseDecision().isEmpty()) {
+            return;
+        }
+
+        ReleaseOrderCommand command = evaluationResult.evaluation().releaseDecision().get().command();
         ScheduledTipperToteRelease scheduledRelease = releaseCatalog.findByOrderId(command.orderId())
                 .orElseThrow(() -> new IllegalStateException("No scheduled tipper release for orderId " + command.orderId()));
 

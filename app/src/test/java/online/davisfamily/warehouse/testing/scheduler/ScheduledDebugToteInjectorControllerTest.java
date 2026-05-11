@@ -21,10 +21,13 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
+import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerEvaluationResult;
+import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerEvaluationSource;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspDependencyEvaluator;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspReleaseScheduler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.scheduler.SchedulerEvaluation;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentrePriority;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentreWindowPolicy;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -129,6 +132,37 @@ class ScheduledDebugToteInjectorControllerTest {
         assertEquals(1, factoryCount.get());
         assertEquals(1, releaseTarget.releaseCalls);
         assertEquals(DspOrderStatus.WAITING, runtimeState.snapshot().orderStates().getFirst().status());
+    }
+
+    @Test
+    void shouldWaitForPolledEvaluationResultBeforeApplyingRelease() {
+        DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingOrder("order-1", "sc-1")));
+        TestReleaseTarget releaseTarget = new TestReleaseTarget(true, SchedulerCommandApplicationResult.appliedResult());
+        AtomicInteger factoryCount = new AtomicInteger();
+        ManualEvaluationSource evaluationSource = new ManualEvaluationSource();
+        ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
+                evaluationSource,
+                runtimeState,
+                new ScheduledTipperToteReleaseCatalog(List.of(release("order-1", "tote-1", factoryCount))),
+                releaseTarget);
+
+        controller.update(new SimulationContext(), 0.1d);
+
+        assertEquals(1, evaluationSource.submitCalls);
+        assertEquals(0, releaseTarget.releaseCalls);
+        assertEquals(0, factoryCount.get());
+        assertEquals(DspOrderStatus.WAITING, runtimeState.snapshot().orderStates().getFirst().status());
+
+        evaluationSource.completeWith(new SchedulerEvaluationResult(
+                0L,
+                runtimeState.snapshot(),
+                SchedulerEvaluation.release(scheduler("sc-1").evaluate(runtimeState.snapshot()).releaseDecision().orElseThrow())));
+
+        controller.update(new SimulationContext(), 0.1d);
+
+        assertEquals(1, releaseTarget.releaseCalls);
+        assertEquals(1, factoryCount.get());
+        assertEquals(DspOrderStatus.RELEASED, runtimeState.snapshot().orderStates().getFirst().status());
     }
 
     @Test
@@ -334,6 +368,42 @@ class ScheduledDebugToteInjectorControllerTest {
             releaseCalls++;
             lastPayload = payload;
             return releaseResult;
+        }
+    }
+
+    private static final class ManualEvaluationSource implements SchedulerEvaluationSource {
+        private SchedulerEvaluationResult pendingResult;
+        private boolean submitAllowed = true;
+        private int submitCalls;
+
+        @Override
+        public boolean canSubmit() {
+            return submitAllowed;
+        }
+
+        @Override
+        public void submit(WarehouseSchedulerSnapshot snapshot) {
+            submitCalls++;
+            submitAllowed = false;
+        }
+
+        @Override
+        public Optional<SchedulerEvaluationResult> pollResult() {
+            if (pendingResult == null) {
+                return Optional.empty();
+            }
+            SchedulerEvaluationResult result = pendingResult;
+            pendingResult = null;
+            submitAllowed = true;
+            return Optional.of(result);
+        }
+
+        @Override
+        public void close() {
+        }
+
+        private void completeWith(SchedulerEvaluationResult result) {
+            pendingResult = result;
         }
     }
 }
