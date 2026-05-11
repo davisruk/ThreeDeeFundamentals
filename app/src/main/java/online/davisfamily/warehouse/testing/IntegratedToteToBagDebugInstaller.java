@@ -18,6 +18,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.SnapshotStationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.runtime.ThreadedSchedulerEvaluationSource;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.BaggingSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assembly.SortingInstallation;
@@ -55,6 +56,7 @@ public class IntegratedToteToBagDebugInstaller {
     private static final int DEBUG_TOTE_BAG_CAPACITY = 25;
     private static final int DEBUG_TIPPER_INPUT_QUEUE_CAPACITY = 1;
     private static final String DEBUG_SERVICE_CENTRE_ID = "SC-DEBUG";
+    private static final String DEBUG_SCHEDULER_WORKER_NAME = "dsp-scheduler-worker";
 
     public IntegratedToteToBagDebugInstallation install(
             TriangleRenderer tr,
@@ -187,8 +189,11 @@ public class IntegratedToteToBagDebugInstaller {
                         p2pSnapshotFactory::stationSnapshot));
 
         sim.addSimObject(pcrConveyor);
-        ScheduledDebugToteInjectorController scheduledInjectorController = new ScheduledDebugToteInjectorController(
+        ThreadedSchedulerEvaluationSource schedulerEvaluationSource = new ThreadedSchedulerEvaluationSource(
                 scheduler,
+                DEBUG_SCHEDULER_WORKER_NAME);
+        ScheduledDebugToteInjectorController scheduledInjectorController = new ScheduledDebugToteInjectorController(
+                schedulerEvaluationSource,
                 runtimeState,
                 releaseCatalog,
                 new QueuedTipperFlowScheduledToteReleaseTarget(
