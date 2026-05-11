@@ -4,6 +4,8 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
+Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`.
+
 The scheduler architecture remains snapshot/command based:
 
 ```text
@@ -239,4 +241,5 @@ Notes:
 - Prepared-line readiness is keyed by target order id, target sheet, line id, and line type.
 - A blocked active service centre blocks later service centres.
 - Scheduler v1 is threaded in the integrated debug path, with synchronous fallback still available.
+- Deeper scheduler behavior depends on Phase 1 station state, queue, and readiness surfaces.
 - JSON import, richer visual injection, database decisions, deadlock override timers, and command-button/manual exception handling are split into later branches.

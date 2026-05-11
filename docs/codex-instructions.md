@@ -9,7 +9,8 @@ Read these documents before starting:
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-4. The branch-specific plan referenced by the scheduler roadmap
+4. `docs/machines/phase-1-stations-roadmap.md`
+5. The branch-specific plan referenced by the active roadmap
 
 Read these domain documents when touching their areas:
 
@@ -75,7 +76,7 @@ Architectural boundaries to maintain:
 
 The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`, merged back to `master`.
 
-No next feature branch has been selected. Before making further code changes, discuss the next larger plan with the user and create a branch-specific step plan.
+The next larger direction is Phase 1 station implementation. Before making code changes, create or confirm the branch-specific station plan.
 
 Completed scheduler work:
 
@@ -115,18 +116,24 @@ Current scheduler decisions:
   - this architecture correction was inserted mid DSP scheduler work before adding further scheduler behaviour
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then create or follow the next branch-specific plan agreed with the user.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. The first detailed station plan should likely be `feature/adapting-station-phase-1` unless the user changes priority.
 
 ## Deferred Direction
 
-Next direction to decide:
+Current larger direction:
 
-1. Reassess whether to continue scheduler behavior work or pause for further machine/layout work.
+1. Pause deeper scheduler behavior work while Phase 1 stations are introduced.
+2. Implement Phase 1 stations with state-complete, visually cheap placeholders.
+3. Defer station visual polish to separate Phase 2 visualisation plans.
 
-Known future machine work still exists, but is lower priority than understanding scheduler impact:
+Known Phase 1 machine/station work:
 
+- adapting station
+- third-party station
+- manual station
+- exception station
 - lid opening machine
-- tote strapping machine
+- lid closing machine
 - scheduler-controlled tote buffer
 - full warehouse layout with multiple P2P instances
 

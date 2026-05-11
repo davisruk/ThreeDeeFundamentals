@@ -87,12 +87,13 @@ Read:
 
 1. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The branch-specific plan referenced by the scheduler roadmap
+3. `docs/machines/phase-1-stations-roadmap.md`
+4. The branch-specific plan referenced by the active roadmap
 
 Current scheduler decisions:
 
 - The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`.
-- No next feature branch has been selected.
+- The next larger direction is Phase 1 station implementation, starting with the adapting station unless the user changes priority.
 - Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, machine wait queues, and scheduler thread.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
@@ -114,7 +115,31 @@ Current scheduler decisions:
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then create or follow the next branch-specific plan agreed with the user.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active roadmap, then create or follow the next branch-specific station plan agreed with the user.
+
+## Phase 1 Station Direction
+
+Phase 1 station work should be state-complete and visually cheap.
+
+Core rules:
+
+- Implement station state machines, input wait queues, route stops, scheduler-facing availability, and logical inventory effects first.
+- Use placeholder renderables and simple inspection text only where needed to verify behavior.
+- Do not spend Phase 1 effort on detailed station meshes, bins/racks, pack transfer animation, or visual polish.
+- Defer detailed presentation and animation to separate Phase 2 visualisation plans.
+
+Planned Phase 1 order:
+
+- adapting station
+- third-party station
+- manual station
+- exception station
+- tote lid open/close machines
+
+Adapting station should be first because it forces the hardest merge/preparation model:
+
+- `STORE`: adapted/preparation totes deposit prepared packs into logical station storage.
+- `COLLECT`: collecting/dispatch totes collect prepared packs from logical station storage before P2P/tote-to-bag.
 
 ## DSP Model Notes
 
