@@ -21,6 +21,7 @@ import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.sim.machine.queue.MachineWaitQueueSnapshot;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 
 class TipperInputQueueTest {
 
@@ -61,6 +62,16 @@ class TipperInputQueueTest {
         assertEquals(2, snapshot.capacity());
         assertEquals(java.util.List.of("tote-a"), snapshot.toteIds());
         assertTrue(snapshot.canAccept());
+    }
+
+    @Test
+    void shouldHoldToteWhenQueued() {
+        TipperInputQueue queue = new TipperInputQueue("tipper-input", 1);
+        TipperTotePayload payload = payload("tote-a");
+
+        queue.enqueue(payload);
+
+        assertEquals(ToteMotionState.HELD, payload.getTote().getInteractionMode());
     }
 
     @Test

@@ -5,6 +5,7 @@ import java.util.Map;
 
 import online.davisfamily.warehouse.sim.machine.queue.MachineWaitQueue;
 import online.davisfamily.warehouse.sim.machine.queue.MachineWaitQueueSnapshot;
+import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 
 public class TipperInputQueue {
     private final MachineWaitQueue queue;
@@ -23,6 +24,7 @@ public class TipperInputQueue {
             throw new IllegalArgumentException("payload must not be null");
         }
         String toteId = payload.getTote().getId();
+        payload.getTote().setInteractionMode(ToteMotionState.HELD);
         queue.enqueue(toteId);
         payloadsByToteId.put(toteId, payload);
     }
