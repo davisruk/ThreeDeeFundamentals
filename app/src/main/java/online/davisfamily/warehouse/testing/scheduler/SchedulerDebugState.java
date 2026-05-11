@@ -18,9 +18,13 @@ public class SchedulerDebugState {
 
     public synchronized void recordEvaluation(
             WarehouseSchedulerSnapshot schedulerSnapshot,
-            SchedulerEvaluation evaluation) {
+            SchedulerEvaluation evaluation,
+            long completedSequence) {
         if (schedulerSnapshot == null || evaluation == null) {
             throw new IllegalArgumentException("schedulerSnapshot and evaluation must not be null");
+        }
+        if (completedSequence < 0L) {
+            throw new IllegalArgumentException("completedSequence must be >= 0");
         }
 
         List<String> waitingOrderIds = schedulerSnapshot.orderStates().stream()
@@ -35,6 +39,9 @@ public class SchedulerDebugState {
                 .or(() -> blockedDecision.map(BlockedDecision::activeServiceCentreId));
 
         snapshot = new SchedulerDebugSnapshot(
+                snapshot.evaluationMode(),
+                snapshot.evaluationInFlight(),
+                Optional.of(completedSequence),
                 activeServiceCentreId,
                 waitingOrderIds,
                 releaseOrderId,
@@ -53,6 +60,9 @@ public class SchedulerDebugState {
             throw new IllegalArgumentException("orderId must not be blank");
         }
         snapshot = new SchedulerDebugSnapshot(
+                snapshot.evaluationMode(),
+                snapshot.evaluationInFlight(),
+                snapshot.lastCompletedEvaluationSequence(),
                 snapshot.activeServiceCentreId(),
                 snapshot.waitingOrderIds(),
                 snapshot.releaseOrderId(),
@@ -71,6 +81,9 @@ public class SchedulerDebugState {
             throw new IllegalArgumentException("orderId must not be blank");
         }
         snapshot = new SchedulerDebugSnapshot(
+                snapshot.evaluationMode(),
+                snapshot.evaluationInFlight(),
+                snapshot.lastCompletedEvaluationSequence(),
                 snapshot.activeServiceCentreId(),
                 snapshot.waitingOrderIds(),
                 snapshot.releaseOrderId(),
@@ -89,6 +102,9 @@ public class SchedulerDebugState {
             throw new IllegalArgumentException("orderId must not be blank");
         }
         snapshot = new SchedulerDebugSnapshot(
+                snapshot.evaluationMode(),
+                snapshot.evaluationInFlight(),
+                snapshot.lastCompletedEvaluationSequence(),
                 snapshot.activeServiceCentreId(),
                 snapshot.waitingOrderIds(),
                 snapshot.releaseOrderId(),
@@ -100,6 +116,27 @@ public class SchedulerDebugState {
                 Optional.empty(),
                 Optional.of(orderId),
                 Optional.of(normalizeReason(reason)));
+    }
+
+    public synchronized void recordEvaluationSourceState(String modeLabel, boolean evaluationInFlight) {
+        if (modeLabel == null || modeLabel.isBlank()) {
+            throw new IllegalArgumentException("modeLabel must not be blank");
+        }
+        snapshot = new SchedulerDebugSnapshot(
+                modeLabel,
+                evaluationInFlight,
+                snapshot.lastCompletedEvaluationSequence(),
+                snapshot.activeServiceCentreId(),
+                snapshot.waitingOrderIds(),
+                snapshot.releaseOrderId(),
+                snapshot.blockedServiceCentreId(),
+                snapshot.blockedCandidateOrderIds(),
+                snapshot.blockedReasons(),
+                snapshot.lastAppliedOrderId(),
+                snapshot.lastDeferredOrderId(),
+                snapshot.lastDeferredReason(),
+                snapshot.lastRejectedOrderId(),
+                snapshot.lastRejectedReason());
     }
 
     private static String normalizeReason(String reason) {

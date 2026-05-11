@@ -70,6 +70,9 @@ public class ScheduledDebugToteInjectorController implements SimulationControlle
 
     @Override
     public void update(SimulationContext context, double dtSeconds) {
+        debugState.recordEvaluationSourceState(
+                evaluationSource.modeLabel(),
+                evaluationSource.evaluationInFlight());
         if (!releaseTarget.canAcceptRelease()) {
             return;
         }
@@ -83,7 +86,10 @@ public class ScheduledDebugToteInjectorController implements SimulationControlle
             return;
         }
 
-        debugState.recordEvaluation(evaluationResult.snapshot(), evaluationResult.evaluation());
+        debugState.recordEvaluation(
+                evaluationResult.snapshot(),
+                evaluationResult.evaluation(),
+                evaluationResult.sequence());
         if (evaluationResult.evaluation().releaseDecision().isEmpty()) {
             return;
         }

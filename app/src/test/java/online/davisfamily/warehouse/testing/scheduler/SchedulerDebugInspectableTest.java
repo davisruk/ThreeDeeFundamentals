@@ -47,6 +47,9 @@ class SchedulerDebugInspectableTest {
 
         List<String> lines = new SchedulerDebugInspectable(controller).describe();
         assertEquals("Scheduler: debug", lines.get(0));
+        assertTrue(lines.contains("Mode: sync"));
+        assertTrue(lines.contains("In flight: false"));
+        assertTrue(lines.contains("Last eval seq: 0"));
         assertTrue(lines.contains("Active SC: sc-1"));
         assertTrue(lines.contains("Waiting: order-1"));
         assertTrue(lines.contains("Release: order-1"));
@@ -66,6 +69,9 @@ class SchedulerDebugInspectableTest {
         controller.update(new SimulationContext(), 0.1d);
 
         List<String> lines = new SchedulerDebugInspectable(controller).describe();
+        assertTrue(lines.contains("Mode: sync"));
+        assertTrue(lines.contains("In flight: false"));
+        assertTrue(lines.contains("Last eval seq: 0"));
         assertTrue(lines.contains("Active SC: sc-1"));
         assertTrue(lines.contains("Release: none"));
         assertTrue(lines.contains("Blocked SC: sc-1"));
@@ -81,6 +87,9 @@ class SchedulerDebugInspectableTest {
         deferredController.update(new SimulationContext(), 0.1d);
 
         List<String> deferredLines = new SchedulerDebugInspectable(deferredController).describe();
+        assertTrue(deferredLines.contains("Mode: sync"));
+        assertTrue(deferredLines.contains("In flight: false"));
+        assertTrue(deferredLines.contains("Last eval seq: 0"));
         assertTrue(deferredLines.contains("Last applied: none"));
         assertTrue(deferredLines.contains("Last deferred: order-1 - later"));
         assertTrue(deferredLines.contains("Last rejected: none"));
@@ -94,6 +103,9 @@ class SchedulerDebugInspectableTest {
         }
 
         List<String> rejectedLines = new SchedulerDebugInspectable(rejectedController).describe();
+        assertTrue(rejectedLines.contains("Mode: sync"));
+        assertTrue(rejectedLines.contains("In flight: false"));
+        assertTrue(rejectedLines.contains("Last eval seq: 0"));
         assertTrue(rejectedLines.contains("Last applied: none"));
         assertTrue(rejectedLines.contains("Last deferred: none"));
         assertTrue(rejectedLines.contains("Last rejected: order-1 - bad target state"));

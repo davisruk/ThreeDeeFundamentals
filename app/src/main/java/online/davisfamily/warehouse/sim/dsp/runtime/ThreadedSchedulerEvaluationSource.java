@@ -73,6 +73,16 @@ public class ThreadedSchedulerEvaluationSource implements SchedulerEvaluationSou
         executor.shutdownNow();
     }
 
+    @Override
+    public String modeLabel() {
+        return "threaded";
+    }
+
+    @Override
+    public boolean evaluationInFlight() {
+        return evaluationInFlight;
+    }
+
     private void evaluateOnWorker(long sequence, WarehouseSchedulerSnapshot snapshot) {
         try {
             pendingResult = new SchedulerEvaluationResult(

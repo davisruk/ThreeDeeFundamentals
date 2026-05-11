@@ -49,4 +49,9 @@ public class SynchronousSchedulerEvaluationSource implements SchedulerEvaluation
     @Override
     public void close() {
     }
+
+    @Override
+    public String modeLabel() {
+        return "sync";
+    }
 }

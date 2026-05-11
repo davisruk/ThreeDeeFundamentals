@@ -22,6 +22,11 @@ public class SchedulerDebugInspectable implements Inspectable {
         SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
         List<String> lines = new ArrayList<>();
         lines.add("Scheduler: debug");
+        lines.add("Mode: " + snapshot.evaluationMode());
+        lines.add("In flight: " + snapshot.evaluationInFlight());
+        lines.add("Last eval seq: " + snapshot.lastCompletedEvaluationSequence()
+                .map(String::valueOf)
+                .orElse("none"));
         lines.add("Active SC: " + snapshot.activeServiceCentreId().orElse("none"));
         lines.add("Waiting: " + formatList(snapshot.waitingOrderIds()));
         lines.add("Release: " + snapshot.releaseOrderId().orElse("none"));

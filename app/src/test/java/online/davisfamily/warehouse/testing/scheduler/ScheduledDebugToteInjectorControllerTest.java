@@ -151,6 +151,9 @@ class ScheduledDebugToteInjectorControllerTest {
         assertEquals(1, evaluationSource.submitCalls);
         assertEquals(0, releaseTarget.releaseCalls);
         assertEquals(0, factoryCount.get());
+        assertEquals("custom", controller.debugSnapshot().evaluationMode());
+        assertFalse(controller.debugSnapshot().evaluationInFlight());
+        assertEquals(Optional.empty(), controller.debugSnapshot().lastCompletedEvaluationSequence());
         assertEquals(DspOrderStatus.WAITING, runtimeState.snapshot().orderStates().getFirst().status());
 
         evaluationSource.completeWith(new SchedulerEvaluationResult(
@@ -162,6 +165,7 @@ class ScheduledDebugToteInjectorControllerTest {
 
         assertEquals(1, releaseTarget.releaseCalls);
         assertEquals(1, factoryCount.get());
+        assertEquals(Optional.of(0L), controller.debugSnapshot().lastCompletedEvaluationSequence());
         assertEquals(DspOrderStatus.RELEASED, runtimeState.snapshot().orderStates().getFirst().status());
     }
 
@@ -209,6 +213,9 @@ class ScheduledDebugToteInjectorControllerTest {
         controller.update(new SimulationContext(), 0.1d);
 
         SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals("sync", snapshot.evaluationMode());
+        assertFalse(snapshot.evaluationInFlight());
+        assertEquals(Optional.of(0L), snapshot.lastCompletedEvaluationSequence());
         assertEquals(Optional.of("sc-1"), snapshot.activeServiceCentreId());
         assertEquals(List.of("order-1"), snapshot.waitingOrderIds());
         assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
@@ -232,6 +239,9 @@ class ScheduledDebugToteInjectorControllerTest {
         controller.update(new SimulationContext(), 0.1d);
 
         SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals("sync", snapshot.evaluationMode());
+        assertFalse(snapshot.evaluationInFlight());
+        assertEquals(Optional.of(0L), snapshot.lastCompletedEvaluationSequence());
         assertEquals(Optional.of("sc-1"), snapshot.activeServiceCentreId());
         assertEquals(List.of("order-1"), snapshot.waitingOrderIds());
         assertEquals(Optional.empty(), snapshot.releaseOrderId());
@@ -254,6 +264,9 @@ class ScheduledDebugToteInjectorControllerTest {
         controller.update(new SimulationContext(), 0.1d);
 
         SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals("sync", snapshot.evaluationMode());
+        assertFalse(snapshot.evaluationInFlight());
+        assertEquals(Optional.of(0L), snapshot.lastCompletedEvaluationSequence());
         assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
         assertEquals(Optional.of("order-1"), snapshot.lastDeferredOrderId());
         assertEquals(Optional.of("later"), snapshot.lastDeferredReason());
@@ -275,6 +288,9 @@ class ScheduledDebugToteInjectorControllerTest {
         assertThrows(IllegalStateException.class, () -> controller.update(new SimulationContext(), 0.1d));
 
         SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals("sync", snapshot.evaluationMode());
+        assertFalse(snapshot.evaluationInFlight());
+        assertEquals(Optional.of(0L), snapshot.lastCompletedEvaluationSequence());
         assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
         assertEquals(Optional.of("order-1"), snapshot.lastRejectedOrderId());
         assertEquals(Optional.of("bad target state"), snapshot.lastRejectedReason());

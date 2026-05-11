@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.Optional;
 
 public record SchedulerDebugSnapshot(
+        String evaluationMode,
+        boolean evaluationInFlight,
+        Optional<Long> lastCompletedEvaluationSequence,
         Optional<String> activeServiceCentreId,
         List<String> waitingOrderIds,
         Optional<String> releaseOrderId,
@@ -17,7 +20,9 @@ public record SchedulerDebugSnapshot(
         Optional<String> lastRejectedReason) {
 
     public SchedulerDebugSnapshot {
-        if (activeServiceCentreId == null
+        if (evaluationMode == null || evaluationMode.isBlank()
+                || lastCompletedEvaluationSequence == null
+                || activeServiceCentreId == null
                 || waitingOrderIds == null
                 || releaseOrderId == null
                 || blockedServiceCentreId == null
@@ -37,6 +42,9 @@ public record SchedulerDebugSnapshot(
 
     public static SchedulerDebugSnapshot empty() {
         return new SchedulerDebugSnapshot(
+                "unknown",
+                false,
+                Optional.empty(),
                 Optional.empty(),
                 List.of(),
                 Optional.empty(),
