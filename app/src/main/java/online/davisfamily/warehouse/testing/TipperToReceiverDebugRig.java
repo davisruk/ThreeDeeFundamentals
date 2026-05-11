@@ -59,6 +59,7 @@ public class TipperToReceiverDebugRig implements DebugSceneRuntime {
                 tipperInstallation.getTippingMachine(),
                 new ImmediatePackReceiveDownstreamFlow(receiverTarget),
                 0.55d);
+        sim.addController(new DebugToteLidController(List.of(tipperInstallation.getTote())));
         sim.addController(flowController);
 
         TipperToReceiverDebugSeam dischargeSeam = new TipperToReceiverDebugSeam();

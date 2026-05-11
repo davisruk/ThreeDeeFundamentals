@@ -154,6 +154,10 @@ public class IntegratedToteToBagDebugInstaller {
         TipperInputQueueController tipperInputQueueController = new TipperInputQueueController(
                 tipperInputQueue,
                 tipperToSorterSection.getFlowController());
+        DebugToteLidController debugToteLidController = new DebugToteLidController(
+                demoTipperFeedSet.demoTipperFeeds().stream()
+                        .map(feed -> feed.totePayload().getTote())
+                        .toList());
 
         DspDebugSchedulerFixtureAdapter schedulerFixtureAdapter = new DspDebugSchedulerFixtureAdapter();
         StationCapacity p2pCapacity = new StationCapacity(1, 100);
@@ -210,6 +214,7 @@ public class IntegratedToteToBagDebugInstaller {
         });
         sim.addController(scheduledInjectorController);
         sim.addController(tipperInputQueueController);
+        sim.addController(debugToteLidController);
         sim.addController(flowController);
 
         return new IntegratedToteToBagDebugInstallation(

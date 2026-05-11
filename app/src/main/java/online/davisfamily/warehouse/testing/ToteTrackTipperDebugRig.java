@@ -62,6 +62,7 @@ public class ToteTrackTipperDebugRig implements DebugSceneRuntime {
                 tipperInstallation,
                 sortingInstallation,
                 sorterOutfeedTarget);
+        sim.addController(new DebugToteLidController(List.of(tipperInstallation.getTote())));
     }
 
     @Override

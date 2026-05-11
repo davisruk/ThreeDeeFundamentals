@@ -117,7 +117,6 @@ public final class TipperDemoFixtures {
                 toteRenderable,
                 new Vec3(0f, trackSection.getToteYOffset(), 0f),
                 toteRenderable.yawOffsetRadians);
-        tote.openLids();
 
         ToteLoadPlan toteLoadPlan = new ToteLoadPlan(tote.getId(), packPlans);
         Map<String, Vec3> containedPackLayoutById = new ContainedPackLayout(
