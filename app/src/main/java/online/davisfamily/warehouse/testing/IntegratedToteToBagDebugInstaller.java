@@ -26,6 +26,8 @@ import online.davisfamily.warehouse.sim.totebag.assembly.TipperInstallation;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSectionInstaller;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueueController;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSection;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSectionInstaller;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
@@ -43,14 +45,15 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
 import online.davisfamily.warehouse.testing.scheduler.DspDebugSchedulerFixtureAdapter;
 import online.davisfamily.warehouse.testing.scheduler.DebugP2pAdmissionSnapshotFactory;
+import online.davisfamily.warehouse.testing.scheduler.QueuedReleaseP2pAdmission;
+import online.davisfamily.warehouse.testing.scheduler.QueuedTipperFlowScheduledToteReleaseTarget;
 import online.davisfamily.warehouse.testing.scheduler.ScheduledDebugToteInjectorController;
-import online.davisfamily.warehouse.testing.scheduler.ScheduledReleaseP2pAdmission;
 import online.davisfamily.warehouse.testing.scheduler.ScheduledTipperToteReleaseCatalog;
 import online.davisfamily.warehouse.testing.scheduler.SchedulerDebugInspectable;
-import online.davisfamily.warehouse.testing.scheduler.TipperFlowScheduledToteReleaseTarget;
 
 public class IntegratedToteToBagDebugInstaller {
     private static final int DEBUG_TOTE_BAG_CAPACITY = 25;
+    private static final int DEBUG_TIPPER_INPUT_QUEUE_CAPACITY = 1;
     private static final String DEBUG_SERVICE_CENTRE_ID = "SC-DEBUG";
 
     public IntegratedToteToBagDebugInstallation install(
@@ -145,6 +148,12 @@ public class IntegratedToteToBagDebugInstaller {
                 (prlId, pack) -> subsystem.getLayout().prlToPcrEntryFrontDistanceFor(indexOfPrl(prls, prlId), pack));
 
         tipperToSorterSection.getFlowController().setToteAdmissionPredicate(flowController::canAdmit);
+        TipperInputQueue tipperInputQueue = new TipperInputQueue(
+                "debug-p2p-input-queue",
+                DEBUG_TIPPER_INPUT_QUEUE_CAPACITY);
+        TipperInputQueueController tipperInputQueueController = new TipperInputQueueController(
+                tipperInputQueue,
+                tipperToSorterSection.getFlowController());
 
         DspDebugSchedulerFixtureAdapter schedulerFixtureAdapter = new DspDebugSchedulerFixtureAdapter();
         StationCapacity p2pCapacity = new StationCapacity(1, 100);
@@ -168,7 +177,7 @@ public class IntegratedToteToBagDebugInstaller {
                 new DspDependencyEvaluator(),
                 new P2pStationAdmissionResolver(
                         new SnapshotStationAdmissionResolver(),
-                        new ScheduledReleaseP2pAdmission(releaseCatalog, flowController),
+                        new QueuedReleaseP2pAdmission(tipperInputQueue),
                         p2pSnapshotFactory::snapshot,
                         p2pCapacity,
                         p2pSnapshotFactory::stationSnapshot));
@@ -178,10 +187,10 @@ public class IntegratedToteToBagDebugInstaller {
                 scheduler,
                 runtimeState,
                 releaseCatalog,
-                new TipperFlowScheduledToteReleaseTarget(
+                new QueuedTipperFlowScheduledToteReleaseTarget(
                         sim,
                         objects,
-                        tipperToSorterSection.getFlowController()));
+                        tipperInputQueue));
         SchedulerDebugInspectable schedulerInspectable = new SchedulerDebugInspectable(scheduledInjectorController);
         RenderableObject schedulerInspectionTarget = RenderableObject.traverseAndExtractAllWithIdStartingWith(
                 tipperInstallation.getTipperModule().getAssemblyRenderable(),
@@ -194,10 +203,13 @@ public class IntegratedToteToBagDebugInstaller {
             lines.add("Type: Tipper");
             lines.add("State: " + tipperInstallation.getTipperModule().getTippingMachine().getState());
             lines.add("Remaining packs: " + tipperInstallation.getTipperModule().getTippingMachine().getRemainingPackCount());
+            lines.add("Queue: " + tipperInputQueue.snapshot().toteIds().size() + " / " + tipperInputQueue.snapshot().capacity());
+            lines.add("Queued totes: " + formatQueueIds(tipperInputQueue.snapshot().toteIds()));
             lines.addAll(schedulerInspectable.describe());
             return List.copyOf(lines);
         });
         sim.addController(scheduledInjectorController);
+        sim.addController(tipperInputQueueController);
         sim.addController(flowController);
 
         return new IntegratedToteToBagDebugInstallation(
@@ -217,5 +229,12 @@ public class IntegratedToteToBagDebugInstaller {
             }
         }
         return 0;
+    }
+
+    private String formatQueueIds(List<String> toteIds) {
+        if (toteIds.isEmpty()) {
+            return "none";
+        }
+        return String.join(", ", toteIds);
     }
 }
