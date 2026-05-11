@@ -75,7 +75,7 @@ Architectural boundaries to maintain:
 
 The latest completed scheduler-adjacent branch is `feature/machine-wait-queues`, merged back to `master`.
 
-No next feature branch has been started. Before making further code changes, create or confirm the next detailed step plan from the scheduler roadmap.
+The next planned scheduler branch is `feature/dsp-scheduler-thread`.
 
 Completed scheduler work:
 
@@ -99,7 +99,7 @@ Current scheduler decisions:
   - do not mix totes from different service centres, except naturally at the last/first boundary
   - if the active service centre is blocked, hold the window rather than skipping ahead
 - P2P admission is candidate-specific because tote processing depends on the candidate tote load plan.
-- Scheduler evaluation remains synchronous; do not introduce a scheduler thread yet.
+- Scheduler evaluation is currently synchronous in the integrated debug path. The next branch should introduce threaded evaluation behind an explicit synchronous fallback.
 - Scheduler decisions are observable in the existing selection inspection overlay. The current integrated debug target is `tipper_slide`; longer term, composite machine selection should route child hits back to the root renderable.
 - Product master and 12N JSON loading now produce existing DSP domain/runtime objects without creating renderables or changing scheduling behavior.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
@@ -110,13 +110,13 @@ Current scheduler decisions:
   - this architecture correction was inserted mid DSP scheduler work before adding further scheduler behaviour
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 
-Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then create or follow the next branch-specific plan agreed with the user.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the scheduler branch roadmap, then follow `docs/scheduler/dsp-scheduler-thread-plan.md`.
 
 ## Deferred Direction
 
-Possible next scheduler step:
+After the scheduler thread branch:
 
-1. Consider scheduler threading only after synchronous snapshot/command integration remains stable.
+1. Reassess whether to continue scheduler behavior work or pause for further machine/layout work.
 
 Known future machine work still exists, but is lower priority than understanding scheduler impact:
 

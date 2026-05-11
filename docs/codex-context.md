@@ -92,6 +92,7 @@ Read:
 Current scheduler decisions:
 
 - The latest completed scheduler-adjacent branch is `feature/machine-wait-queues`.
+- The next planned scheduler branch is `feature/dsp-scheduler-thread`.
 - Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, and machine wait queues.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
@@ -106,8 +107,13 @@ Current scheduler decisions:
   - machine processing admission remains local to the downstream machine
   - for P2P, scheduler release is based on input queue capacity
   - `ToteToBagFlowController.canAdmit(...)` remains the local tipper processing gate
+- The scheduler thread branch should preserve the boundary:
+  - simulation thread builds immutable snapshots
+  - scheduler worker computes decisions only
+  - simulation thread applies commands/mutations
+  - synchronous evaluation remains available as a fallback
 
-No next branch has been started. Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then create or follow the next branch-specific plan agreed with the user.
+Use `docs/scheduler/dsp-scheduler-implementation-plan.md` as the roadmap, then follow `docs/scheduler/dsp-scheduler-thread-plan.md`.
 
 ## DSP Model Notes
 

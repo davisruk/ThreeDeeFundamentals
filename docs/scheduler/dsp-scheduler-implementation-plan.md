@@ -200,7 +200,7 @@ Notes:
 
 ### `feature/dsp-scheduler-thread`
 
-Status: planned.
+Status: planned. Implement next after `feature/machine-wait-queues`.
 
 Detailed implementation doc:
 
@@ -212,6 +212,16 @@ Purpose:
 - Publish immutable `WarehouseSchedulerSnapshot`s to the scheduler thread.
 - Publish `SchedulerCommand`s back to a simulation-thread command queue.
 - Keep all live simulation mutations on the simulation thread.
+- Keep a synchronous evaluation source as an explicit fallback.
+- Wire the integrated debug scene through the threaded evaluation source only after the fallback boundary is in place.
+
+Notes:
+
+- This branch is the first concrete enforcement of the future thread boundary:
+  - worker threads receive immutable snapshots
+  - worker threads return decisions/results
+  - the simulation thread applies all mutations
+- Rendering remains on the current thread model in this branch. Render-thread separation is deferred, but this boundary should make that later split easier.
 
 ## Current Assumptions
 
