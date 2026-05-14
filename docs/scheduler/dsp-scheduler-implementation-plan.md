@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`.
+Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. The next implementation branch is generic inline transfer-target support, followed by adapting station Phase 1.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -231,6 +231,37 @@ Notes:
 - The integrated debug scene uses threaded evaluation.
 - The scheduler overlay exposes mode, in-flight state, and last completed evaluation sequence.
 
+### `feature/inline-transfer-targets`
+
+Status: planned.
+
+Detailed implementation doc:
+
+- `docs/machines/inline-transfer-targets-plan.md`
+
+Purpose:
+
+- Extend transfer-zone routing so one physical transfer window can choose a concrete target segment, entry distance, and travel direction.
+- Support inline transfer layouts required by the adapting area.
+- Keep the change generic and complete before adapting station logic starts.
+
+### `feature/adapting-station-phase-1`
+
+Status: planned.
+
+Detailed implementation doc:
+
+- `docs/machines/adapting-station-phase-1-plan.md`
+
+Purpose:
+
+- Add the Phase 1 adapting station after inline transfer support is available.
+- Support STORE visits from ADAPTED preparation totes.
+- Support COLLECT visits for ASSOCIATED/EMPTY dispatch totes.
+- Stage adapted prepared lines logically and only mark them ready after STORE processing.
+- Update collecting tote load plans so P2P can process collected packs.
+- Keep visuals minimal and defer racks/bins/pack animation to Phase 2.
+
 ## Current Assumptions
 
 - `master` is the integration base for scheduler branches.
@@ -239,6 +270,8 @@ Notes:
 - Adapted preparation orders may contain lines for multiple pharmacies.
 - Manual tote order examples are pharmacy-pure and should unlock target dispatch work through line readiness.
 - Prepared-line readiness is keyed by target order id, target sheet, line id, and line type.
+- Loaded ADAPTED prepared-line data is not automatically ready. Adapted readiness should be added when the adapting station processes STORE work, except for explicit already-staged startup fixtures.
+- `FULL_PACK` orders never collect adapted lines.
 - A blocked active service centre blocks later service centres.
 - Scheduler v1 is threaded in the integrated debug path, with synchronous fallback still available.
 - Deeper scheduler behavior depends on Phase 1 station state, queue, and readiness surfaces.

@@ -115,7 +115,7 @@ Current scheduler decisions:
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active roadmap, then create or follow the next branch-specific station plan agreed with the user.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active roadmap, then create or follow the next branch-specific station plan agreed with the user. The next planned branch is generic inline transfer-target support, followed by adapting station Phase 1.
 
 ## Phase 1 Station Direction
 
@@ -130,6 +130,7 @@ Core rules:
 
 Planned Phase 1 order:
 
+- inline transfer targets, as a prerequisite route/transfer capability for the adapting area
 - adapting station
 - third-party station
 - manual station
@@ -140,6 +141,11 @@ Adapting station should be first because it forces the hardest merge/preparation
 
 - `STORE`: adapted/preparation totes deposit prepared packs into logical station storage.
 - `COLLECT`: collecting/dispatch totes collect prepared packs from logical station storage before P2P/tote-to-bag.
+- Loaded ADAPTED prepared-line data is work to process, not automatically completed readiness.
+- STORE processing makes adapted prepared-line keys scheduler-ready.
+- The source ADAPTED tote is removed/stored after STORE and can disappear in Phase 1.
+- COLLECT updates the collecting tote load plan so P2P can process the newly collected packs.
+- `FULL_PACK` orders never collect adapted lines.
 
 ## DSP Model Notes
 

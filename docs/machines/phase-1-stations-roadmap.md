@@ -8,6 +8,8 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
+Before adapting station work starts, complete the generic inline transfer-target branch. The adapting area needs transfer machines that can route one source window to one of multiple target tracks/directions; that is a route/transfer capability, not adapting-station logic.
+
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
 ## Phase Split
@@ -31,6 +33,26 @@ Phase 2:
 
 ## Station Sequence
 
+### 0. Inline Transfer Targets
+
+Purpose:
+
+- Extend the existing transfer-zone machinery so one physical transfer window can route a tote to a selected target segment/direction.
+- Support inline transfer layouts needed around the adapting benches.
+- Keep the change generic so later stations can use it.
+
+Detailed implementation doc:
+
+- `docs/machines/inline-transfer-targets-plan.md`
+
+Phase 1 expectations:
+
+- Add an explicit transfer target/result model.
+- Keep existing direct transfer and transfer-to-link behaviour working.
+- Make target travel direction explicit for transfer completion.
+- Add focused tests for one source window selecting between multiple targets.
+- Do not add adapting station logic in this branch.
+
 ### 1. Adapting Station Phase 1
 
 Purpose:
@@ -45,8 +67,12 @@ Phase 1 expectations:
 - One adapting station state machine with operation mode/request type, not two separate station types.
 - A station input wait queue with manually configured capacity.
 - A logical prepared-pack store keyed by the existing prepared-line identity, or by a small closely related key if the existing `PreparedLineKey` is not sufficient.
+- Loaded ADAPTED prepared lines represent work to process, not completed readiness. Adapted `PreparedLineKey`s become scheduler-ready after the station processes a `STORE` visit, except for fixtures that explicitly seed already-staged startup state.
 - Placeholder stop/processing point where source packs disappear for `STORE`.
+- The source `ADAPTED` tote is removed/stored after `STORE` and can disappear in Phase 1.
 - Placeholder stop/processing point where prepared packs reappear in the collecting tote for `COLLECT`.
+- `COLLECT` updates the collecting tote load plan so P2P can act on the newly collected packs.
+- `FULL_PACK` orders never collect adapted lines.
 - Scheduler readiness should eventually be able to ask whether required adapted lines for a target dispatch tote are available.
 - No rendered racks/bins or animated pack transfer in Phase 1.
 
@@ -144,6 +170,7 @@ Each station should get its own detailed plan before coding. Plans should:
 
 Suggested branch names:
 
+- `feature/inline-transfer-targets`
 - `feature/adapting-station-phase-1`
 - `feature/third-party-station-phase-1`
 - `feature/manual-station-phase-1`
