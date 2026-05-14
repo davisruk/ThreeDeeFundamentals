@@ -262,14 +262,32 @@ public class Tote implements TrackableObject {
 	}
 	
 	public void beginTransfer(String machineId, RouteSegment targetSegment, RouteSegment sourceSegment, float sourceTransferCenterDistance, float targetDistanceAlongSegment, TransferMotionConfig motionConfig) {
+		beginTransfer(
+				machineId,
+				targetSegment,
+				sourceSegment,
+				sourceTransferCenterDistance,
+				targetDistanceAlongSegment,
+				routeFollower.getTravelDirection(),
+				motionConfig);
+	}
+
+	public void beginTransfer(
+			String machineId,
+			RouteSegment targetSegment,
+			RouteSegment sourceSegment,
+			float sourceTransferCenterDistance,
+			float targetDistanceAlongSegment,
+			TravelDirection targetTravelDirection,
+			TransferMotionConfig motionConfig) {
 		if (!machineId.equals(reservedByMachineId)) return;
 		
 		RouteFollowerSnapshot snap = lastRouteSnapshot;
 		if (snap == null) return;
 		if (motionConfig == null) return;
+		if (targetTravelDirection == null) return;
 
 		Vec3 startPosition = new Vec3(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
-		TravelDirection targetTravelDirection = routeFollower.getTravelDirection();
 		float targetMergeDistanceAlongSegment = calculateMergeDistance(
 				startPosition,
 				targetSegment,

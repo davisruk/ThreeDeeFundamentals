@@ -1,5 +1,6 @@
 package online.davisfamily.warehouse.sim.tote;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -7,12 +8,16 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.behaviour.transformation.ClampedRotationBehaviour;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
+import online.davisfamily.threedee.behaviour.routing.RouteFollower.TravelDirection;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
+import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
+import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 
 class ToteTest {
 
@@ -59,6 +64,37 @@ class ToteTest {
 
         assertTrue(leftLid.behaviours.stream().anyMatch(ClampedRotationBehaviour.class::isInstance));
         assertTrue(rightLid.behaviours.stream().anyMatch(ClampedRotationBehaviour.class::isInstance));
+    }
+
+    @Test
+    void shouldCompleteTransferUsingExplicitTargetTravelDirection() {
+        Tote tote = tote();
+        RouteSegment targetSegment = new RouteSegment(
+                "target",
+                new LinearSegment3(new Vec3(2f, 0f, 0f), new Vec3(1f, 0f, 0f), false));
+        TransferMotionConfig motionConfig = new TransferMotionConfig(0.35, 0f, 0f);
+        TransferZoneMachine machine = new TransferZoneMachine("machine", "approach", "window", null);
+        SimulationContext context = new SimulationContext();
+
+        tote.update(context, 0d);
+        tote.reserveForTransfer(machine);
+        tote.beginTransfer(
+                "machine",
+                targetSegment,
+                tote.getRouteFollower().getCurrentSegment(),
+                0f,
+                0f,
+                TravelDirection.REVERSE,
+                motionConfig);
+
+        tote.update(context, 0d);
+        for (int i = 0; i < 10 && tote.getInteractionMode() == Tote.ToteMotionState.TRANSFERRING; i++) {
+            tote.update(context, 0.5d);
+        }
+
+        assertEquals(Tote.ToteMotionState.MOVING, tote.getInteractionMode());
+        assertEquals(targetSegment, tote.getRouteFollower().getCurrentSegment());
+        assertEquals(TravelDirection.REVERSE, tote.getRouteFollower().getTravelDirection());
     }
 
     private RouteSegment routeSegment() {
