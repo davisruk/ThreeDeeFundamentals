@@ -82,7 +82,7 @@ class LegacyTransferDecisionStrategyAdapterTest {
                 0f,
                 GuideSide.RIGHT,
                 GuideSide.LEFT,
-                (ignoredTote, ignoredMachine) -> Optional.of(TransferDecision.BRANCH),
+                (TransferDecisionStrategy) (ignoredTote, ignoredMachine) -> Optional.of(TransferDecision.BRANCH),
                 new TransferMotionConfig(0.35, 0f, 0f));
         return new TransferZoneMachine("machine", "approach", "window", zone);
     }

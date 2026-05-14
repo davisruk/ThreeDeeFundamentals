@@ -7,6 +7,8 @@ import java.util.List;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.sim.transfer.mechanism.TransferZoneMechanism;
+import online.davisfamily.warehouse.sim.transfer.strategy.LegacyTransferDecisionStrategyAdapter;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
 
 public class TransferZone {
@@ -16,7 +18,8 @@ public class TransferZone {
     private final RouteSegment sourceSegment;
     private final RouteSegment targetSegment;
     private final float targetStartDistance;
-    private final TransferDecisionStrategy decisionStrategy;
+    private final TransferDecisionStrategy legacyDecisionStrategy;
+    private final TransferTargetDecisionStrategy targetDecisionStrategy;
     private final GuideSide sourceOpenSide;
     private final GuideSide targetOpenSide;
     private final float centrePoint;
@@ -34,6 +37,57 @@ public class TransferZone {
             GuideSide targetOpenSide,
             TransferDecisionStrategy decisionStrategy,
             TransferMotionConfig motionConfig) {
+        this(
+                id,
+                startDistance,
+                length,
+                sourceSegment,
+                targetSegment,
+                targetStartDistance,
+                sourceOpenSide,
+                targetOpenSide,
+                decisionStrategy,
+                new LegacyTransferDecisionStrategyAdapter(decisionStrategy),
+                motionConfig);
+    }
+
+    public TransferZone(
+            String id,
+            float startDistance,
+            float length,
+            RouteSegment sourceSegment,
+            RouteSegment targetSegment,
+            float targetStartDistance,
+            GuideSide sourceOpenSide,
+            GuideSide targetOpenSide,
+            TransferTargetDecisionStrategy decisionStrategy,
+            TransferMotionConfig motionConfig) {
+        this(
+                id,
+                startDistance,
+                length,
+                sourceSegment,
+                targetSegment,
+                targetStartDistance,
+                sourceOpenSide,
+                targetOpenSide,
+                null,
+                decisionStrategy,
+                motionConfig);
+    }
+
+    private TransferZone(
+            String id,
+            float startDistance,
+            float length,
+            RouteSegment sourceSegment,
+            RouteSegment targetSegment,
+            float targetStartDistance,
+            GuideSide sourceOpenSide,
+            GuideSide targetOpenSide,
+            TransferDecisionStrategy legacyDecisionStrategy,
+            TransferTargetDecisionStrategy targetDecisionStrategy,
+            TransferMotionConfig motionConfig) {
 
         if (length <= 0f) {
             throw new IllegalArgumentException("length must be > 0");
@@ -41,7 +95,7 @@ public class TransferZone {
         if (targetSegment == null) {
             throw new IllegalArgumentException("targetSegment must not be null");
         }
-        if (decisionStrategy == null) {
+        if (targetDecisionStrategy == null) {
             throw new IllegalArgumentException("decisionStrategy must not be null");
         }
         if (sourceOpenSide == null) {
@@ -59,9 +113,10 @@ public class TransferZone {
         this.sourceSegment = sourceSegment;
         this.targetSegment = targetSegment;
         this.targetStartDistance = targetStartDistance;
+        this.legacyDecisionStrategy = legacyDecisionStrategy;
+        this.targetDecisionStrategy = targetDecisionStrategy;
         this.sourceOpenSide = sourceOpenSide;
         this.targetOpenSide = targetOpenSide;
-        this.decisionStrategy = decisionStrategy;
         this.centrePoint = startDistance + length * 0.5f;
         this.motionConfig = motionConfig;
     }
@@ -99,7 +154,11 @@ public class TransferZone {
     }
 
     public TransferDecisionStrategy getDecisionStrategy() {
-        return decisionStrategy;
+        return legacyDecisionStrategy;
+    }
+
+    public TransferTargetDecisionStrategy getTargetDecisionStrategy() {
+        return targetDecisionStrategy;
     }
 
     public TransferMotionConfig getMotionConfig() {

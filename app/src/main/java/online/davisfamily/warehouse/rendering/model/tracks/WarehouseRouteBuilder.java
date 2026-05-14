@@ -11,10 +11,12 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory.SpecAndSegment;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
+import online.davisfamily.warehouse.sim.transfer.TransferTarget;
 import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneController;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 
 public class WarehouseRouteBuilder {
     private static final TransferMotionConfig LINK_TRANSFER_MOTION_DEFAULTS =
@@ -439,6 +441,71 @@ public class WarehouseRouteBuilder {
                 targetConnectionClearanceLength,
                 targetOpenSide,
                 ConnectionClearance.ConnectionClearanceType.CONNECTION_TARGET);
+
+        return this;
+    }
+
+    public WarehouseRouteBuilder addInlineTransfer(
+            String transferId,
+            RouteSegment sourceSegment,
+            float sourceTransferCentreDistance,
+            float openingLength,
+            GuideSide sourceOpenSide,
+            List<TransferTarget> targets,
+            TransferTargetDecisionStrategy strategy,
+            TransferMotionConfig motionConfig) {
+
+        if (sourceSegment == null) {
+            throw new IllegalArgumentException("sourceSegment must not be null");
+        }
+        if (sourceOpenSide == null) {
+            throw new IllegalArgumentException("sourceOpenSide must not be null");
+        }
+        if (targets == null || targets.isEmpty()) {
+            throw new IllegalArgumentException("targets must not be empty");
+        }
+        if (openingLength <= 0f) {
+            throw new IllegalArgumentException("openingLength must be > 0");
+        }
+        if (strategy == null) {
+            throw new IllegalArgumentException("strategy must not be null");
+        }
+        if (motionConfig == null) {
+            throw new IllegalArgumentException("motionConfig must not be null");
+        }
+
+        TransferTarget defaultTarget = targets.getFirst();
+        float sourceStart = sourceTransferCentreDistance - (openingLength * 0.5f);
+        TransferZone zone = new TransferZone(
+                transferId,
+                sourceStart,
+                openingLength,
+                sourceSegment,
+                defaultTarget.segment(),
+                defaultTarget.entryDistance(),
+                sourceOpenSide,
+                GuideSide.RIGHT,
+                strategy,
+                motionConfig
+        );
+
+        metadata(sourceSegment).addTransferZone(sourceSegment, zone);
+
+        addCentredGuideOpening(
+                sourceSegment,
+                sourceTransferCentreDistance,
+                openingLength,
+                sourceOpenSide,
+                GuideOpening.GuideOpeningType.TRANSFER_SOURCE);
+
+        for (TransferTarget target : targets) {
+            addCentredGuideOpening(
+                    target.segment(),
+                    target.entryDistance(),
+                    openingLength,
+                    GuideSide.RIGHT,
+                    GuideOpening.GuideOpeningType.CONNECTION_TARGET);
+        }
 
         return this;
     }

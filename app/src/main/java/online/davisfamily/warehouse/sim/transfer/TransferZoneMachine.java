@@ -11,7 +11,9 @@ import online.davisfamily.threedee.sim.framework.objects.sensors.WindowSensorAre
 import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
 import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
+import online.davisfamily.warehouse.sim.transfer.strategy.LegacyTransferDecisionStrategyAdapter;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 
 public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>{
 	
@@ -46,6 +48,20 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	// sensors, controller and machine are registered with simulation 
 	// approach window is based on initial distance and the start of the transfer zone
 	public static TransferZoneMachine createTransferZoneMachine(SimulationWorld sim, RouteSegment segment, float approachStartDistance, TransferZone tz, TransferDecisionStrategy transferStrategy) {
+		return createTransferZoneMachine(
+				sim,
+				segment,
+				approachStartDistance,
+				tz,
+				new LegacyTransferDecisionStrategyAdapter(transferStrategy));
+	}
+
+	public static TransferZoneMachine createTransferZoneMachine(
+			SimulationWorld sim,
+			RouteSegment segment,
+			float approachStartDistance,
+			TransferZone tz,
+			TransferTargetDecisionStrategy transferStrategy) {
 		String id = tz.getId();
 	    WindowSensorAreaImpl m_wsai = new WindowSensorAreaImpl(id + "_member_sensor_area", segment, approachStartDistance, tz.getStartDistance());
 	    Sensor tzms = new MembershipSensor(id + "_member_sensor", m_wsai);
