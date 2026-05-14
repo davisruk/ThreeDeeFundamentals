@@ -38,6 +38,7 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	private String reservedToteId;
 	private String toteInWindowId;
 	private TransferDecision activeDirection;
+	private TransferRoutingDecision activeRoutingDecision;
 	private double timeInStateSeconds;
 	private final TransferZone transferZone;
 	
@@ -102,6 +103,14 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 		this.activeDirection = activeDirection;
 	}
 
+	public TransferRoutingDecision getActiveRoutingDecision() {
+		return activeRoutingDecision;
+	}
+
+	public void setActiveRoutingDecision(TransferRoutingDecision activeRoutingDecision) {
+		this.activeRoutingDecision = activeRoutingDecision;
+	}
+
 	public String getId() {
 		return id;
 	}
@@ -130,6 +139,7 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 		reservedToteId = null;
 		toteInWindowId = null;
 		activeDirection = null;
+		activeRoutingDecision = null;
 		state = TransferZoneState.IDLE; 
 	}
 

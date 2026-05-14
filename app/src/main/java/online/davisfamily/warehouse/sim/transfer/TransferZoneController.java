@@ -48,7 +48,6 @@ public class TransferZoneController implements SimulationController{
 		// current event bus simple, but it leaves warehouse transfer startup
 		// dependent on id consistency between the tracked sim object and whatever
 		// upstream component published the snapshot/event identity.
-		DetectionType d = event.getDetectionType();
 		Tote t = (Tote) context.getTrackedObjects().stream()
 				.filter(to -> to.getId().equals(event.getObjectId()))
 				.findAny()
@@ -56,14 +55,17 @@ public class TransferZoneController implements SimulationController{
 
 		if (event.getDetectionType() != DetectionType.ENTER) return;
 		if (machine.getState() != TransferZoneState.IDLE) return;
+		if (t == null) return;
 		// could check the detected object is a Tote here but not worth it yet
 		
 		var decision = decisionStrategy.decide(t, machine);
 		if (decision.isEmpty()) return;
+		TransferRoutingDecision routingDecision = toRoutingDecision(t, decision.get());
 		
 		commandMechanisms(TransferOutcome.fromDecision(decision.get()));
 		machine.setReservedToteId(t.getId());
 		machine.setActiveDirection(decision.get());
+		machine.setActiveRoutingDecision(routingDecision);
 		if (machine.getActiveDirection().equals(TransferDecision.BRANCH)) {
 			machine.transitionTo(TransferZoneState.RESERVED);
 			t.reserveForTransfer(machine);
@@ -146,19 +148,32 @@ public class TransferZoneController implements SimulationController{
 		if (!tote.getId().equals(machine.getReservedToteId())) return;
 		if (!tote.getId().equals(machine.getToteInWindowId())) return;
 		if (machine.getActiveDirection() != TransferDecision.BRANCH) return;
+		if (machine.getActiveRoutingDecision() == null) return;
+		if (!machine.getActiveRoutingDecision().isTransfer()) return;
 		if (!mechanismsReadyFor(TransferOutcome.BRANCH)) return;
 		if (tote.getLastSnapshot() == null) return;
 
 		TransferZone tz = machine.getTransferZone();
 		if (!tz.contains(tote.getLastSnapshot().distanceAlongSegment())) return;
+		TransferTarget target = machine.getActiveRoutingDecision().transferTarget();
 
 		machine.transitionTo(TransferZoneState.TRANSFERRING);
 		tote.beginTransfer(machine.getId(),
-				tz.getTargetSegment(),
+				target.segment(),
 				tz.getSourceSegment(),
 				tz.getCentrePoint(),
-				tz.getTargetStartDistance(),
+				target.entryDistance(),
+				target.travelDirection(),
 				tz.getMotionConfig());
+	}
+
+	private TransferRoutingDecision toRoutingDecision(Tote tote, TransferDecision decision) {
+		TransferZone tz = machine.getTransferZone();
+		TransferTarget branchTarget = new TransferTarget(
+				tz.getTargetSegment(),
+				tz.getTargetStartDistance(),
+				tote.getRouteFollower().getTravelDirection());
+		return TransferRoutingDecision.fromDecision(decision, branchTarget);
 	}
 
 }
