@@ -234,9 +234,61 @@ Ask the user to run:
 .\gradlew test --tests online.davisfamily.warehouse.sim.transfer.*
 ```
 
+## Follow-Up Slice: Add Inline Transfer Visual Rig
+
+Status: optional follow-up before closing `feature/inline-transfer-targets`.
+
+Purpose:
+
+- Provide a visual scene that exercises one physical inline transfer window choosing between multiple target tracks.
+- Make the new behaviour inspectable without relying only on unit tests.
+- Keep this as a debug/fixture addition only; do not change scheduler, adapting station, or P2P logic.
+
+Allowed production/debug files:
+
+- `app/src/main/java/online/davisfamily/warehouse/testing/DebugSceneKind.java`
+- `app/src/main/java/online/davisfamily/warehouse/testing/TestScene.java`
+- `app/src/main/java/online/davisfamily/warehouse/testing/WarehouseTrackFactory.java`
+- narrowly needed transfer strategy helper files if the scene needs a simple alternating target strategy
+
+Allowed tests:
+
+- existing transfer tests if the new strategy helper needs coverage
+- no broad visual automation required for this slice
+
+Implementation steps:
+
+1. Add a new debug scene kind, suggested CLI value: `inline-transfer`.
+2. Add `WarehouseTrackFactory.setupInlineTransferTargets(...)`.
+3. Build one source track, one inline transfer zone, and two outbound target tracks.
+4. Use `WarehouseRouteBuilder.addInlineTransfer(...)` with two `TransferTarget`s using different `TravelDirection`s.
+5. Use a simple deterministic target-selection strategy, such as alternating left/right for each arriving tote or always choosing one target first while keeping the second target selectable by a small strategy change.
+6. Register the steering transfer inspection overlay so clicking the transfer shows source, default target, mechanism state, and readiness.
+7. Wire the scene into `TestScene.installScene(...)`.
+
+Expected output:
+
+- Running the debug scene shows a tote entering one transfer window and moving to the selected outbound target.
+- The scene proves the route uses one physical transfer zone rather than two overlapping transfer zones.
+- The inspection overlay still works for the transfer mechanism.
+- Existing `oval-track` and `parallel-track` debug scenes continue to work.
+
+Ask the user to run the focused compile/test command first:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.transfer.* --tests online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilderTest
+```
+
+Then ask the user to run the visual scene command used locally for this project, with:
+
+```powershell
+--scene=inline-transfer
+```
+
 ## Completion Criteria
 
 - Existing transfer examples still work.
 - Inline transfer target selection is represented as one physical transfer machine with multiple possible targets.
 - Target travel direction is explicit and tested.
 - No adapting station logic has been introduced in this branch.
+- If the visual follow-up slice is implemented, `--scene=inline-transfer` demonstrates the multi-target inline transfer path.
