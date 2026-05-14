@@ -10,13 +10,19 @@ import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDecision;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
 import online.davisfamily.warehouse.sim.transfer.mechanism.TransferZoneMechanism;
+import online.davisfamily.warehouse.sim.transfer.strategy.LegacyTransferDecisionStrategyAdapter;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 
 public class TransferZoneController implements SimulationController{
 	private final TransferZoneMachine machine;
-	private final TransferDecisionStrategy decisionStrategy;
+	private final TransferTargetDecisionStrategy decisionStrategy;
 	
 	public TransferZoneController(TransferZoneMachine machine, TransferDecisionStrategy decisionStrategy) {
+		this(machine, new LegacyTransferDecisionStrategyAdapter(decisionStrategy));
+	}
+
+	public TransferZoneController(TransferZoneMachine machine, TransferTargetDecisionStrategy decisionStrategy) {
 		super();
 		this.machine = machine;
 		this.decisionStrategy = decisionStrategy;
@@ -58,14 +64,14 @@ public class TransferZoneController implements SimulationController{
 		if (t == null) return;
 		// could check the detected object is a Tote here but not worth it yet
 		
-		var decision = decisionStrategy.decide(t, machine);
-		if (decision.isEmpty()) return;
-		TransferRoutingDecision routingDecision = toRoutingDecision(t, decision.get());
+		var routingDecision = decisionStrategy.decide(t, machine);
+		if (routingDecision.isEmpty()) return;
+		TransferRoutingDecision selectedDecision = routingDecision.get();
 		
-		commandMechanisms(TransferOutcome.fromDecision(decision.get()));
+		commandMechanisms(selectedDecision.isTransfer() ? TransferOutcome.BRANCH : TransferOutcome.CONTINUE);
 		machine.setReservedToteId(t.getId());
-		machine.setActiveDirection(decision.get());
-		machine.setActiveRoutingDecision(routingDecision);
+		machine.setActiveDirection(selectedDecision.isTransfer() ? TransferDecision.BRANCH : TransferDecision.CONTINUE);
+		machine.setActiveRoutingDecision(selectedDecision);
 		if (machine.getActiveDirection().equals(TransferDecision.BRANCH)) {
 			machine.transitionTo(TransferZoneState.RESERVED);
 			t.reserveForTransfer(machine);
@@ -165,15 +171,6 @@ public class TransferZoneController implements SimulationController{
 				target.entryDistance(),
 				target.travelDirection(),
 				tz.getMotionConfig());
-	}
-
-	private TransferRoutingDecision toRoutingDecision(Tote tote, TransferDecision decision) {
-		TransferZone tz = machine.getTransferZone();
-		TransferTarget branchTarget = new TransferTarget(
-				tz.getTargetSegment(),
-				tz.getTargetStartDistance(),
-				tote.getRouteFollower().getTravelDirection());
-		return TransferRoutingDecision.fromDecision(decision, branchTarget);
 	}
 
 }
