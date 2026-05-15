@@ -182,9 +182,9 @@ Ask the user to run:
 .\gradlew test --tests online.davisfamily.warehouse.rendering.model.tracks.*
 ```
 
-## Step 5: Move TransferZoneMachine Sensors To The Transfer Segment
+## Step 5: Support Standalone Transfer Window With Optional Upstream Approach Sensor
 
-Update machine creation/controller usage so standalone transfer machines detect totes on the transfer segment.
+Update machine creation/controller usage so standalone transfer machines can use an explicit transfer window while still supporting upstream approach sensing.
 
 Files:
 
@@ -195,7 +195,10 @@ Files:
 
 Rules:
 
-- For standalone transfers, the approach/window sensors should be on the transfer segment.
+- The transfer window should be on the explicit transfer segment.
+- The approach sensor should be optional and may be on an upstream/source segment.
+- The current two-conveyor transfer machine should keep upstream approach sensing so its conveyors can rotate before the tote reaches the transfer window.
+- A future rotating-bed/turntable style transfer may choose to decide at the transfer window, hold the tote, rotate the bed/tote, then release.
 - A `CONTINUE` decision should clear reservation and let normal route following continue to the next connected segment.
 - A transfer decision should reserve, wait for mechanism readiness, and call `Tote.beginTransfer(...)` with the selected target and orientation policy.
 - Keep legacy interval-based construction working until existing rigs are migrated.
@@ -203,7 +206,10 @@ Rules:
 Expected output:
 
 - Existing transfer controller tests pass.
-- New standalone transfer controller test proves a tote transfers from the transfer segment to a selected target.
+- New standalone transfer controller tests prove:
+  - an upstream approach sensor can reserve/pre-position before the tote enters the transfer segment
+  - the transfer begins only when the tote enters the transfer window
+  - a window-only machine can still decide at the transfer segment when no upstream approach sensor is configured
 
 Ask the user to run:
 
