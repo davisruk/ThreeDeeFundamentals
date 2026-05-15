@@ -501,6 +501,44 @@ public class WarehouseRouteBuilder {
         return this;
     }
 
+    public WarehouseRouteBuilder addStandaloneTransfer(
+            String transferId,
+            RouteSegment transferSegment,
+            List<TransferTarget> targets,
+            TransferTargetDecisionStrategy strategy,
+            TransferMotionConfig motionConfig) {
+
+        if (transferSegment == null) {
+            throw new IllegalArgumentException("transferSegment must not be null");
+        }
+        if (targets == null || targets.isEmpty()) {
+            throw new IllegalArgumentException("targets must not be empty");
+        }
+        if (strategy == null) {
+            throw new IllegalArgumentException("strategy must not be null");
+        }
+        if (motionConfig == null) {
+            throw new IllegalArgumentException("motionConfig must not be null");
+        }
+
+        TransferTarget defaultTarget = targets.getFirst();
+        TransferZone zone = new TransferZone(
+                transferId,
+                0f,
+                transferSegment.length(),
+                transferSegment,
+                defaultTarget.segment(),
+                defaultTarget.entryDistance(),
+                GuideSide.RIGHT,
+                GuideSide.RIGHT,
+                strategy,
+                motionConfig
+        );
+
+        metadata(transferSegment).addTransferZone(transferSegment, zone);
+        return this;
+    }
+
     public List<RouteSegment> getSegments() {
         return routeBuilder.getSegments();
     }

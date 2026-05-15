@@ -72,6 +72,58 @@ class WarehouseRouteBuilderTest {
         assertEquals("targets must not be empty", ex.getMessage());
     }
 
+    @Test
+    void shouldAttachStandaloneTransferToTransferSegmentMetadata() {
+        WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
+        RouteSegment source = segment("source", new Vec3(0f, 0f, 0f), new Vec3(5f, 0f, 0f));
+        RouteSegment transfer = segment("transfer", new Vec3(5f, 0f, 0f), new Vec3(6f, 0f, 0f));
+        RouteSegment continueTarget = segment("continue", new Vec3(6f, 0f, 0f), new Vec3(8f, 0f, 0f));
+        RouteSegment branchTarget = segment("branch", new Vec3(6f, 0f, 1f), new Vec3(8f, 0f, 1f));
+        TransferTarget continueTransferTarget = new TransferTarget(continueTarget, 0f, TravelDirection.FORWARD);
+        TransferTarget branchTransferTarget = new TransferTarget(branchTarget, 0f, TravelDirection.FORWARD);
+
+        builder.connectLoop(source, transfer)
+                .connectLoop(transfer, continueTarget)
+                .addStandaloneTransfer(
+                        "standalone",
+                        transfer,
+                        List.of(continueTransferTarget, branchTransferTarget),
+                        (tote, machine) -> Optional.of(TransferRoutingDecision.transferTo(branchTransferTarget)),
+                        new TransferMotionConfig(0.35, 0f, 0f));
+
+        WarehouseSegmentMetadata sourceMetadata = builder.getMetadata(source);
+        WarehouseSegmentMetadata transferMetadata = builder.getMetadata(transfer);
+        WarehouseSegmentMetadata continueMetadata = builder.getMetadata(continueTarget);
+        WarehouseSegmentMetadata branchMetadata = builder.getMetadata(branchTarget);
+
+        assertEquals(0, sourceMetadata.getTransferZones().size());
+        assertEquals(1, transferMetadata.getTransferZones().size());
+        assertEquals(0, continueMetadata.getTransferZones().size());
+        assertEquals(0, branchMetadata.getTransferZones().size());
+        assertEquals(0, continueMetadata.getGuideOpenings().size());
+        assertEquals(0, branchMetadata.getGuideOpenings().size());
+        assertSame(transfer, transferMetadata.getTransferZones().getFirst().getSourceSegment());
+        assertSame(continueTarget, transferMetadata.getTransferZones().getFirst().getTargetSegment());
+        assertNotNull(transferMetadata.getTransferZones().getFirst().getTargetDecisionStrategy());
+    }
+
+    @Test
+    void shouldRejectEmptyStandaloneTransferTargets() {
+        WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
+        RouteSegment transfer = segment("transfer", new Vec3(0f, 0f, 0f), new Vec3(1f, 0f, 0f));
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> builder.addStandaloneTransfer(
+                        "standalone",
+                        transfer,
+                        List.of(),
+                        (tote, machine) -> Optional.of(TransferRoutingDecision.continueOnCurrentRoute()),
+                        new TransferMotionConfig(0.35, 0f, 0f)));
+
+        assertEquals("targets must not be empty", ex.getMessage());
+    }
+
     private static RouteSegment segment(String label, Vec3 start, Vec3 end) {
         return new RouteSegment(label, new LinearSegment3(start, end, false));
     }
