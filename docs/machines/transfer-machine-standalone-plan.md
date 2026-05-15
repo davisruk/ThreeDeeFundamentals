@@ -224,6 +224,7 @@ Migrate the `inline-transfer` debug scene.
 Files:
 
 - `app/src/main/java/online/davisfamily/warehouse/testing/WarehouseTrackFactory.java`
+- narrowly needed transfer-machine geometry helper under `app/src/main/java/online/davisfamily/warehouse/testing` or `app/src/main/java/online/davisfamily/warehouse/sim/transfer`
 - `app/src/main/java/online/davisfamily/warehouse/testing/DebugSceneKind.java`
 - `app/src/main/java/online/davisfamily/warehouse/testing/TestScene.java`
 
@@ -249,15 +250,27 @@ That shape is useful for validating real warehouse geometry, but it is not requi
 Rules:
 
 - The source track must stop at the transfer segment.
-- Target tracks must start from the transfer machine edges/exit points.
+- Target tracks must start from transfer machine attachment points, not from duplicated fixture-side footprint calculations.
 - Target tracks must keep full guides unless explicitly suppressed.
 - The transfer renderable remains separate from transfer behaviour.
 - The current two-conveyor renderable may continue to be used.
+- Add a small transfer machine geometry/attachment model before placing the target tracks.
+- The geometry model should be the single source of truth for:
+  - source/approach attachment point
+  - transfer segment/window placement
+  - left target attachment point
+  - right target attachment point
+  - machine footprint values needed by the renderable
+- For the current steering transfer renderable, the machine footprint should be square.
+- Target attachment points should sit on the left/right footprint edges on the transfer-window centerline, not on the internal conveyor lane centerlines.
+- Follow the existing machine pattern used by sorter/bagger: keep behaviour separate from the renderable, but allow the machine/layout helper to expose named world/local handoff or attachment points.
+- Do not make `WarehouseRouteBuilder` understand transfer-machine mesh internals.
 
 Expected output:
 
 - `--scene=inline-transfer` shows the transfer machine at the junction.
 - The source track no longer visually runs through the transfer machine.
+- Source and target tracks align to the queried transfer machine attachment points.
 - Target tracks no longer have accidental guide openings.
 - Totes route alternately to the target tracks.
 

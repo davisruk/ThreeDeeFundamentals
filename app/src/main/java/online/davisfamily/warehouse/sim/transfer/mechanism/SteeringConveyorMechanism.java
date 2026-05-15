@@ -125,9 +125,10 @@ public class SteeringConveyorMechanism implements TransferZoneMechanism {
 
     public void setBranchYawRadians(float branchYawRadians) {
         this.branchYawRadians = normalizeAngle(branchYawRadians);
-        if (commandedOutcome == TransferOutcome.BRANCH && motionState == readyStateFor(TransferOutcome.BRANCH)) {
-            currentYawRadians = this.branchYawRadians;
-            applyYawToRenderables();
+        if (commandedOutcome == TransferOutcome.BRANCH) {
+            motionState = isReadyFor(TransferOutcome.BRANCH)
+                    ? readyStateFor(TransferOutcome.BRANCH)
+                    : movingStateFor(TransferOutcome.BRANCH);
         }
     }
 

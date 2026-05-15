@@ -24,7 +24,6 @@ import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
-import online.davisfamily.warehouse.rendering.model.tracks.RollerMeshFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory.ConveyorVisualSpeed;
@@ -582,37 +581,68 @@ public class WarehouseTrackFactory {
 				false,
 				0.080f
 		);
+		TrackSpec transferSpec = new TrackSpec(
+				toteEnvelope,
+				0.030f,
+				0.040f,
+				0.000f,
+				false,
+				0.050f,
+				0.010f,
+				0.000f,
+				0.5f,
+				1.0f,
+				TrackDriveType.ROLLER,
+				true,
+				0.080f,
+				0.010f,
+				0.025f,
+				0.018f,
+				0.010f,
+				0.012f,
+				0.080f,
+				0.220f,
+				0.050f,
+				0.004f,
+				true,
+				false,
+				0.080f
+		);
 
 		WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
 		float transferLength = toteGeometry.getOuterBottomDepth();
-		TransferMechanismFootprint footprint = transferMechanismFootprint(transferLength);
-		RouteSegment source = builder.segment("inline_source", new LinearSegment3(
+		SteeringTransferMachineGeometry geometry = SteeringTransferMachineGeometry.fromTransferWindow(
+				new Vec3(0f, 0f, -transferLength),
+				new Vec3(0f, 0f, 0f));
+		RouteSegment approach = builder.segment("inline_approach", new LinearSegment3(
 				new Vec3(0f, 0f, -8f),
-				new Vec3(0f, 0f, 0f),
+				geometry.transferWindowStartPoint(),
+				false));
+		RouteSegment transfer = builder.segment("inline_transfer_segment", new LinearSegment3(
+				geometry.transferWindowStartPoint(),
+				geometry.transferWindowEndPoint(),
 				false));
 		RouteSegment left = builder.segment("inline_left", new LinearSegment3(
-				new Vec3(-footprint.baseHalfLength(), 0f, -footprint.conveyorOffset()),
-				new Vec3(-4f, 0f, -footprint.conveyorOffset()),
+				geometry.leftTargetAttachmentPoint(),
+				new Vec3(-4f, 0f, geometry.leftTargetAttachmentPoint().z),
 				false));
 		RouteSegment right = builder.segment("inline_right", new LinearSegment3(
-				new Vec3(footprint.baseHalfLength(), 0f, footprint.conveyorOffset()),
-				new Vec3(4f, 0f, footprint.conveyorOffset()),
+				geometry.rightTargetAttachmentPoint(),
+				new Vec3(4f, 0f, geometry.rightTargetAttachmentPoint().z),
 				false));
 
-		builder.renderWith(source, sourceSpec)
+		builder.renderWith(approach, sourceSpec)
+				.renderWith(transfer, transferSpec)
 				.renderWith(left, branchSpec)
 				.renderWith(right, branchSpec);
+		builder.connectLoop(approach, transfer);
 
 		TransferTarget leftTarget = new TransferTarget(left, 0f, RouteFollower.TravelDirection.FORWARD);
 		TransferTarget rightTarget = new TransferTarget(right, 0f, RouteFollower.TravelDirection.FORWARD);
 		AlternatingInlineTransferStrategy alternatingStrategy = new AlternatingInlineTransferStrategy(leftTarget, rightTarget);
-		float sourceTransferCentreDistance = source.length() - (transferLength * 0.5f);
-		builder.addInlineTransfer(
+		builder.addStandaloneTransfer(
 				"inline_transfer",
-				source,
-				sourceTransferCentreDistance,
-				transferLength,
-				GuideSide.RIGHT,
+				transfer,
 				List.of(leftTarget, rightTarget),
 				alternatingStrategy,
 				new TransferMotionConfig(0.35, 0f, 0f));
@@ -630,16 +660,17 @@ public class WarehouseTrackFactory {
 				builder.getSpecsAndSegments(),
 				appearance);
 
-		for (TransferZone tz : builder.getMetadata(source).getTransferZones()) {
+		for (TransferZone tz : builder.getMetadata(transfer).getTransferZones()) {
 			SteeringConveyorMechanism mechanism =
-					attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
+					attachSteeringMechanismForZone(tz, geometry, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
 			float leftYaw = yawForTransferTarget(leftTarget);
 			float rightYaw = yawForTransferTarget(rightTarget);
 			alternatingStrategy.bindMechanism(mechanism, leftYaw, rightYaw);
 			TransferZoneMachine.createTransferZoneMachine(
 					sim,
-					source,
-					sourceTransferCentreDistance - 0.9f,
+					approach,
+					approach.length() - 2.0f,
+					transfer,
 					tz,
 					tz.getTargetDecisionStrategy());
 		}
@@ -649,7 +680,7 @@ public class WarehouseTrackFactory {
 				"InlineToteA",
 				tr,
 				toteGeometry,
-				source,
+				approach,
 				5.6f,
 				rollerYOffset,
 				objects,
@@ -658,8 +689,8 @@ public class WarehouseTrackFactory {
 				"InlineToteB",
 				tr,
 				toteGeometry,
-				source,
-				3.6f,
+				approach,
+				2.0f,
 				rollerYOffset,
 				objects,
 				inspectionRegistry);
@@ -765,7 +796,40 @@ public class WarehouseTrackFactory {
 			SelectionInspectionRegistry inspectionRegistry,
 			int bodyColourArgb,
 			int markerColourArgb) {
-		RenderableObject root = createSteeringMechanismRenderable(zone, tr, bodyColourArgb, markerColourArgb);
+		RenderableObject root = createSteeringMechanismRenderable(zone, null, tr, bodyColourArgb, markerColourArgb);
+		float continueYaw = localXYawFromDirection(
+				zone.getSourceSegment().getGeometry().sampleOrientationDirectionByDistance(zone.getCentrePoint()));
+		Vec3 sourcePosition = zone.getSourceSegment().getGeometry().sampleByDistance(zone.getCentrePoint());
+		Vec3 targetPosition = zone.getTargetSegment().getGeometry().sampleByDistance(zone.getTargetStartDistance());
+		Vec3 branchVector = targetPosition.subtract(sourcePosition);
+		float branchYaw = localXYawFromDirection(new Vec3(branchVector.x, 0f, branchVector.z));
+		TransferOutcome initialOutcome =
+				zone.getDecisionStrategy() instanceof AlwaysTransferStrategy
+						? TransferOutcome.BRANCH
+						: TransferOutcome.CONTINUE;
+		SteeringConveyorMechanism mechanism = new SteeringConveyorMechanism(
+				zone.getId() + "_steering",
+				List.of(root),
+				continueYaw,
+				branchYaw,
+				2.8f,
+				0.04f,
+				initialOutcome);
+		zone.addMechanism(mechanism);
+		registerTransferZoneInspection(inspectionRegistry, root, zone, mechanism);
+		objects.addAll(mechanism.getRenderables());
+		return mechanism;
+	}
+
+	private static SteeringConveyorMechanism attachSteeringMechanismForZone(
+			TransferZone zone,
+			SteeringTransferMachineGeometry geometry,
+			TriangleRenderer tr,
+			List<RenderableObject> objects,
+			SelectionInspectionRegistry inspectionRegistry,
+			int bodyColourArgb,
+			int markerColourArgb) {
+		RenderableObject root = createSteeringMechanismRenderable(zone, geometry, tr, bodyColourArgb, markerColourArgb);
 		float continueYaw = localXYawFromDirection(
 				zone.getSourceSegment().getGeometry().sampleOrientationDirectionByDistance(zone.getCentrePoint()));
 		Vec3 sourcePosition = zone.getSourceSegment().getGeometry().sampleByDistance(zone.getCentrePoint());
@@ -792,20 +856,23 @@ public class WarehouseTrackFactory {
 
 	private static RenderableObject createSteeringMechanismRenderable(
 			TransferZone zone,
+			SteeringTransferMachineGeometry geometry,
 			TriangleRenderer tr,
 			int bodyColourArgb,
 			int markerColourArgb) {
 		float centreDistance = zone.getCentrePoint();
-		Vec3 centre = zone.getSourceSegment().getGeometry().sampleByDistance(centreDistance);
+		Vec3 centre = geometry != null
+				? geometry.transferWindowCenterPoint()
+				: zone.getSourceSegment().getGeometry().sampleByDistance(centreDistance);
 		float y = 0.01f;
-		float mechanismWidth = 0.32f;
-		float conveyorLength = Math.max(0.14f, Math.min(0.18f, zone.getLength() * 0.36f));
-		float conveyorWidth = Math.min(conveyorLength * 0.4f, mechanismWidth * 0.28f);
-		float gap = (mechanismWidth - (2f * conveyorWidth)) / 3f;
-		float conveyorOffset = (conveyorWidth + gap) * 0.5f;
-		float baseLength = conveyorLength + 0.024f;
-		float baseWidth = (2f * conveyorWidth) + gap + 0.028f;
-		float baseThickness = 0.004f;
+		SteeringTransferMachineGeometry resolvedGeometry = geometry != null
+				? geometry
+				: SteeringTransferMachineGeometry.fromTransferWindow(
+						new Vec3(centre.x, centre.y, centre.z - (zone.getLength() * 0.5f)),
+						new Vec3(centre.x, centre.y, centre.z + (zone.getLength() * 0.5f)));
+		float conveyorLength = resolvedGeometry.conveyorLength();
+		float conveyorWidth = resolvedGeometry.conveyorWidth();
+		float conveyorOffset = resolvedGeometry.conveyorOffset();
 		float rollerRadius = 0.018f;
 		float scale = conveyorLength / 0.18f;
 		TrackAppearance appearance = new TrackAppearance(
@@ -828,16 +895,6 @@ public class WarehouseTrackFactory {
 				rootTransform,
 				triangleIndex -> 0,
 				false);
-		Mesh baseMesh = RollerMeshFactory.createBoxRollerMesh(baseLength, baseThickness, baseWidth);
-		RenderableObject base = RenderableObject.create(
-				zone.getId() + "_steering_base",
-				tr,
-				baseMesh,
-				new ObjectTransformation(0f, 0f, 0f, 0f, -0.006f, 0f, new Mat4()),
-				new OneColourStrategyImpl(markerColourArgb),
-				true);
-		base.setSelectionTarget(root);
-
 		RenderableObject leftConveyor = StraightConveyorFactory.create(
 				zone.getId() + "_steering_left_conveyor",
 				tr,
@@ -868,7 +925,6 @@ public class WarehouseTrackFactory {
 				appearance);
 		rightConveyor.transformation.zTranslation = conveyorOffset;
 
-		root.addChild(base);
 		root.addChild(leftConveyor);
 		root.addChild(rightConveyor);
 		return root;
@@ -900,22 +956,6 @@ public class WarehouseTrackFactory {
 			direction = direction.scale(-1f);
 		}
 		return localXYawFromDirection(direction);
-	}
-
-	private record TransferMechanismFootprint(
-			float conveyorLength,
-			float conveyorOffset,
-			float baseHalfLength) {
-	}
-
-	private static TransferMechanismFootprint transferMechanismFootprint(float transferLength) {
-		float mechanismWidth = 0.32f;
-		float conveyorLength = Math.max(0.14f, Math.min(0.18f, transferLength * 0.36f));
-		float conveyorWidth = Math.min(conveyorLength * 0.4f, mechanismWidth * 0.28f);
-		float gap = (mechanismWidth - (2f * conveyorWidth)) / 3f;
-		float conveyorOffset = (conveyorWidth + gap) * 0.5f;
-		float baseLength = conveyorLength + 0.024f;
-		return new TransferMechanismFootprint(conveyorLength, conveyorOffset, baseLength * 0.5f);
 	}
 
 	private static void registerTransferZoneInspection(

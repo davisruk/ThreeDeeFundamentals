@@ -307,6 +307,7 @@ public class Tote implements TrackableObject {
 				orientationPolicy);
 		float transferLengthWorld = startPosition.distanceTo(targetPosition);
 		this.interactionMode = ToteMotionState.TRANSFERRING;
+		boolean preserveWorldYaw = orientationPolicy == TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION;
 	    this.transferMotionState = new TransferMotionState(
 	            machineId,
 	            sourceSegment,
@@ -314,7 +315,7 @@ public class Tote implements TrackableObject {
 	            sourceTransferCenterDistance,
 	            targetTravelDirection,
 	            targetFacingDirection,
-	            targetSegment.getGeometry().isLinkSegment(),
+	            preserveWorldYaw,
 	            transformation.angleY,
 	            targetMergeDistanceAlongSegment,
 	            startPosition,

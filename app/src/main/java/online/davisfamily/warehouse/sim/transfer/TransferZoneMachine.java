@@ -82,11 +82,14 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	    Sensor tzms = null;
 	    String approachSensorId = null;
 	    if (approachSegment != null) {
+	        float approachEndDistance = approachSegment == transferWindowSegment
+	                ? tz.getStartDistance()
+	                : approachSegment.length();
 	    	WindowSensorAreaImpl m_wsai = new WindowSensorAreaImpl(
 	    			id + "_member_sensor_area",
 	    			approachSegment,
 	    			approachStartDistance,
-	    			tz.getStartDistance());
+	                approachEndDistance);
 	    	tzms = new MembershipSensor(id + "_member_sensor", m_wsai);
 	    	approachSensorId = tzms.getId();
 	    }

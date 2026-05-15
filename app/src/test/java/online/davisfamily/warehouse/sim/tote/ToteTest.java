@@ -100,6 +100,39 @@ class ToteTest {
     }
 
     @Test
+    void shouldPreserveWorldYawWhenTransferPreservesToteOrientation() {
+        Tote tote = tote();
+        RouteSegment targetSegment = new RouteSegment(
+                "target",
+                new LinearSegment3(new Vec3(2f, 0f, 0f), new Vec3(2f, 0f, 1f), false));
+        TransferMotionConfig motionConfig = new TransferMotionConfig(0.35, 0f, 0f);
+        TransferZoneMachine machine = new TransferZoneMachine("machine", "approach", "window", null);
+        SimulationContext context = new SimulationContext();
+
+        tote.update(context, 0d);
+        float sourceYaw = tote.getTransformation().angleY;
+        tote.reserveForTransfer(machine);
+        tote.beginTransfer(
+                "machine",
+                targetSegment,
+                tote.getRouteFollower().getCurrentSegment(),
+                0f,
+                0f,
+                TravelDirection.FORWARD,
+                TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION,
+                motionConfig);
+
+        tote.update(context, 0d);
+        for (int i = 0; i < 10 && tote.getInteractionMode() == Tote.ToteMotionState.TRANSFERRING; i++) {
+            tote.update(context, 0.5d);
+        }
+
+        assertEquals(Tote.ToteMotionState.MOVING, tote.getInteractionMode());
+        assertEquals(targetSegment, tote.getRouteFollower().getCurrentSegment());
+        assertEquals(sourceYaw, tote.getTransformation().angleY, 0.0001f);
+    }
+
+    @Test
     void shouldAlignTransferredToteToTargetTravelWhenRequested() {
         Tote tote = tote();
         RouteSegment targetSegment = new RouteSegment(

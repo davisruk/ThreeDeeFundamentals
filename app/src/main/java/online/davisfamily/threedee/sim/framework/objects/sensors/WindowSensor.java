@@ -1,5 +1,8 @@
 package online.davisfamily.threedee.sim.framework.objects.sensors;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnapshot;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
@@ -13,18 +16,14 @@ public class WindowSensor implements Sensor {
 	private final float endDistance;
 	private final String id;
 	private final WindowSensorArea area;
-	private boolean inside = false;
-	private DetectionType detectionType = DetectionType.NOT_PRESENT;
-	
-	private final DetectionEvent cachedEvent;
+	private final Set<String> trackablesInside = new HashSet<>();
+
 	public WindowSensor(String id, WindowSensorArea area) {
 		super();
 		this.id = id;
 		this.startDistance = area.startDistance();
 		this.endDistance = area.endDistance();
 		this.area = area;
-		cachedEvent = new DetectionEvent();
-		cachedEvent.set(id, 0, id, null, DetectionType.NOT_PRESENT);
 	}
 
 	@Override
@@ -36,29 +35,39 @@ public class WindowSensor implements Sensor {
 	public void update(SimulationContext context, double dtSeconds) {
 		for(TrackableObject t: context.getTrackedObjects()) {
 			RouteFollowerSnapshot last=t.getLastSnapshot();
+			if (last == null) {
+				continue;
+			}
+
+			String followerId = last.followerId();
 			RouteSegment curr = last.currentSegment();
-			if (!(curr == area.routeSegment())) continue;
-			float distanceAlong = last.distanceAlongSegment(); 
-			if (distanceAlong >= startDistance && distanceAlong <= endDistance) {
-				if (inside == false) {
-					inside = true;
-					detectionType = DetectionType.ENTER;
-				} else {
-					detectionType = DetectionType.PRESENT;
-				}
-			} else if (inside == true) {
-				inside = false;
+			boolean inside = false;
+			if (curr == area.routeSegment()) {
+				float distanceAlong = last.distanceAlongSegment();
+				inside = distanceAlong >= startDistance && distanceAlong <= endDistance;
+			}
+
+			boolean wasInside = trackablesInside.contains(followerId);
+			DetectionType detectionType;
+			if (inside && !wasInside) {
+				trackablesInside.add(followerId);
+				detectionType = DetectionType.ENTER;
+			} else if (inside) {
+				detectionType = DetectionType.PRESENT;
+			} else if (wasInside) {
+				trackablesInside.remove(followerId);
 				detectionType = DetectionType.EXIT;
 			} else {
 				detectionType = DetectionType.NOT_PRESENT;
 			}
-			
+
 			if (detectionType != DetectionType.NOT_PRESENT) {
-				cachedEvent.set(
-				        context.getSimulationTimeSeconds(),
-				        last.followerId(),
-				        detectionType);
-				context.publish(cachedEvent);
+				context.publish(new DetectionEvent(
+						id,
+						context.getSimulationTimeSeconds(),
+						id,
+						followerId,
+						detectionType));
 			}
 		}
 	}
