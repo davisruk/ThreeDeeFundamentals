@@ -265,6 +265,9 @@ Rules:
 - Target attachment points should sit on the left/right footprint edges on the transfer-window centerline, not on the internal conveyor lane centerlines.
 - Follow the existing machine pattern used by sorter/bagger: keep behaviour separate from the renderable, but allow the machine/layout helper to expose named world/local handoff or attachment points.
 - Do not make `WarehouseRouteBuilder` understand transfer-machine mesh internals.
+- The upstream approach sensor must be far enough ahead of the transfer window for the worst-case steering movement, not just the first/easy target. In the inline debug rig this means allowing for a 180-degree target change.
+- Dynamic target changes on a steering transfer must animate to the new branch yaw. Do not snap the current yaw when the mechanism is already `READY_BRANCH`.
+- Window sensors must track presence per tote/trackable. A single global inside/outside flag prevents the second tote from receiving a clean `ENTER` event after the first tote transfers away.
 
 Expected output:
 
@@ -273,6 +276,8 @@ Expected output:
 - Source and target tracks align to the queried transfer machine attachment points.
 - Target tracks no longer have accidental guide openings.
 - Totes route alternately to the target tracks.
+- The steering conveyors rotate before each tote reaches the transfer window, including the second tote's opposite-target move.
+- Totes preserve yaw unless an explicit orientation policy requests target-travel alignment.
 
 Ask the user to run focused tests first:
 
