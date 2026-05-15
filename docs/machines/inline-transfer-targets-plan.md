@@ -2,7 +2,7 @@
 
 Branch: `feature/inline-transfer-targets`
 
-Status: planned. This branch must be completed before `feature/adapting-station-phase-1`.
+Status: partially superseded. Steps 1-7 describe the target-selection work already introduced on this branch. The visual follow-up has been superseded by `docs/machines/transfer-machine-requirements.md` and `docs/machines/transfer-machine-standalone-plan.md`.
 
 ## Purpose
 
@@ -234,9 +234,11 @@ Ask the user to run:
 .\gradlew test --tests online.davisfamily.warehouse.sim.transfer.*
 ```
 
-## Follow-Up Slice: Add Inline Transfer Visual Rig
+## Superseded Follow-Up Slice: Add Inline Transfer Visual Rig
 
-Status: optional follow-up before closing `feature/inline-transfer-targets`.
+Status: superseded by `transfer-machine-standalone-plan.md`.
+
+The initial visual rig exposed a deeper modelling issue: inline transfer machines should not be represented as transfer intervals overlaid onto a longer source track, and transfer targets should not receive automatic guide openings. Continue with `docs/machines/transfer-machine-standalone-plan.md` before closing this branch.
 
 Purpose:
 

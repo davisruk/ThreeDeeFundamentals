@@ -20,6 +20,7 @@ import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
@@ -35,11 +36,14 @@ import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
 import online.davisfamily.warehouse.sim.transfer.TransferOutcome;
+import online.davisfamily.warehouse.sim.transfer.TransferRoutingDecision;
+import online.davisfamily.warehouse.sim.transfer.TransferTarget;
 import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.mechanism.SteeringConveyorMechanism;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 
 public class WarehouseTrackFactory {
 	public static void setupOvalTrack(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects, SelectionInspectionRegistry inspectionRegistry) {
@@ -511,6 +515,162 @@ public class WarehouseTrackFactory {
 		    objects.add(track);
 		}		
 	}
+
+	public static void setupInlineTransferTargets(
+			TriangleRenderer tr,
+			SimulationWorld sim,
+			List<RenderableObject> objects,
+			SelectionInspectionRegistry inspectionRegistry) {
+
+		ToteGeometry toteGeometry = new ToteGeometry();
+		ToteEnvelope toteEnvelope = new ToteEnvelope(
+				toteGeometry.getOuterBottomWidth(),
+				toteGeometry.getOuterBottomDepth(),
+				toteGeometry.getOuterHeight());
+
+		TrackSpec sourceSpec = new TrackSpec(
+				toteEnvelope,
+				0.030f,
+				0.040f,
+				0.000f,
+				true,
+				0.050f,
+				0.010f,
+				0.000f,
+				0.5f,
+				1.0f,
+				TrackDriveType.ROLLER,
+				true,
+				0.080f,
+				0.010f,
+				0.025f,
+				0.018f,
+				0.010f,
+				0.012f,
+				0.080f,
+				0.220f,
+				0.050f,
+				0.004f,
+				true,
+				true,
+				0.080f
+		);
+		TrackSpec branchSpec = new TrackSpec(
+				toteEnvelope,
+				0.030f,
+				0.040f,
+				0.000f,
+				true,
+				0.050f,
+				0.010f,
+				0.000f,
+				0.5f,
+				1.0f,
+				TrackDriveType.ROLLER,
+				true,
+				0.080f,
+				0.010f,
+				0.025f,
+				0.018f,
+				0.010f,
+				0.012f,
+				0.080f,
+				0.220f,
+				0.050f,
+				0.004f,
+				true,
+				false,
+				0.080f
+		);
+
+		WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
+		float transferLength = toteGeometry.getOuterBottomDepth();
+		TransferMechanismFootprint footprint = transferMechanismFootprint(transferLength);
+		RouteSegment source = builder.segment("inline_source", new LinearSegment3(
+				new Vec3(0f, 0f, -8f),
+				new Vec3(0f, 0f, 0f),
+				false));
+		RouteSegment left = builder.segment("inline_left", new LinearSegment3(
+				new Vec3(-footprint.baseHalfLength(), 0f, -footprint.conveyorOffset()),
+				new Vec3(-4f, 0f, -footprint.conveyorOffset()),
+				false));
+		RouteSegment right = builder.segment("inline_right", new LinearSegment3(
+				new Vec3(footprint.baseHalfLength(), 0f, footprint.conveyorOffset()),
+				new Vec3(4f, 0f, footprint.conveyorOffset()),
+				false));
+
+		builder.renderWith(source, sourceSpec)
+				.renderWith(left, branchSpec)
+				.renderWith(right, branchSpec);
+
+		TransferTarget leftTarget = new TransferTarget(left, 0f, RouteFollower.TravelDirection.FORWARD);
+		TransferTarget rightTarget = new TransferTarget(right, 0f, RouteFollower.TravelDirection.FORWARD);
+		AlternatingInlineTransferStrategy alternatingStrategy = new AlternatingInlineTransferStrategy(leftTarget, rightTarget);
+		float sourceTransferCentreDistance = source.length() - (transferLength * 0.5f);
+		builder.addInlineTransfer(
+				"inline_transfer",
+				source,
+				sourceTransferCentreDistance,
+				transferLength,
+				GuideSide.RIGHT,
+				List.of(leftTarget, rightTarget),
+				alternatingStrategy,
+				new TransferMotionConfig(0.35, 0f, 0f));
+
+		TrackAppearance appearance = new TrackAppearance(
+				new OneColourStrategyImpl(0xFF00FF00),
+				new OneColourStrategyImpl(0xFF00FFFF),
+				new OneColourStrategyImpl(0xFF2F2F2F),
+				new OneColourStrategyImpl(0xFFB8B8B8),
+				new OneColourStrategyImpl(0xFFFF00FF),
+				new OneColourStrategyImpl(0xFFFF8800)
+		);
+		List<RenderableObject> tracks = RouteTrackFactory.createRenderableTracks(
+				tr,
+				builder.getSpecsAndSegments(),
+				appearance);
+
+		for (TransferZone tz : builder.getMetadata(source).getTransferZones()) {
+			SteeringConveyorMechanism mechanism =
+					attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
+			float leftYaw = yawForTransferTarget(leftTarget);
+			float rightYaw = yawForTransferTarget(rightTarget);
+			alternatingStrategy.bindMechanism(mechanism, leftYaw, rightYaw);
+			TransferZoneMachine.createTransferZoneMachine(
+					sim,
+					source,
+					sourceTransferCentreDistance - 0.9f,
+					tz,
+					tz.getTargetDecisionStrategy());
+		}
+
+		float rollerYOffset = sourceSpec.getLoadSurfaceHeight() + 0.02f;
+		Tote firstTote = createDebugTote(
+				"InlineToteA",
+				tr,
+				toteGeometry,
+				source,
+				5.6f,
+				rollerYOffset,
+				objects,
+				inspectionRegistry);
+		Tote secondTote = createDebugTote(
+				"InlineToteB",
+				tr,
+				toteGeometry,
+				source,
+				3.6f,
+				rollerYOffset,
+				objects,
+				inspectionRegistry);
+
+		sim.addTrackableObject(firstTote);
+		sim.addTrackableObject(secondTote);
+
+		for (RenderableObject track : tracks) {
+			objects.add(track);
+		}
+	}
 	
 	public static void setupCylinder(TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects) {
 		Mesh m = CylinderFactory.buildCylinder(1f, 3f, 360, true);
@@ -598,7 +758,7 @@ public class WarehouseTrackFactory {
 		objects.add(compactTransferConveyor);
 	}
 
-	private static void attachSteeringMechanismForZone(
+	private static SteeringConveyorMechanism attachSteeringMechanismForZone(
 			TransferZone zone,
 			TriangleRenderer tr,
 			List<RenderableObject> objects,
@@ -627,6 +787,7 @@ public class WarehouseTrackFactory {
 		zone.addMechanism(mechanism);
 		registerTransferZoneInspection(inspectionRegistry, root, zone, mechanism);
 		objects.addAll(mechanism.getRenderables());
+		return mechanism;
 	}
 
 	private static RenderableObject createSteeringMechanismRenderable(
@@ -733,11 +894,38 @@ public class WarehouseTrackFactory {
 		return Vec3.yawFromDirection(horizontal) - (float) (Math.PI / 2.0);
 	}
 
+	private static float yawForTransferTarget(TransferTarget target) {
+		Vec3 direction = target.segment().getGeometry().sampleOrientationDirectionByDistance(target.entryDistance());
+		if (target.travelDirection() == RouteFollower.TravelDirection.REVERSE) {
+			direction = direction.scale(-1f);
+		}
+		return localXYawFromDirection(direction);
+	}
+
+	private record TransferMechanismFootprint(
+			float conveyorLength,
+			float conveyorOffset,
+			float baseHalfLength) {
+	}
+
+	private static TransferMechanismFootprint transferMechanismFootprint(float transferLength) {
+		float mechanismWidth = 0.32f;
+		float conveyorLength = Math.max(0.14f, Math.min(0.18f, transferLength * 0.36f));
+		float conveyorWidth = Math.min(conveyorLength * 0.4f, mechanismWidth * 0.28f);
+		float gap = (mechanismWidth - (2f * conveyorWidth)) / 3f;
+		float conveyorOffset = (conveyorWidth + gap) * 0.5f;
+		float baseLength = conveyorLength + 0.024f;
+		return new TransferMechanismFootprint(conveyorLength, conveyorOffset, baseLength * 0.5f);
+	}
+
 	private static void registerTransferZoneInspection(
 			SelectionInspectionRegistry inspectionRegistry,
 			RenderableObject renderable,
 			TransferZone zone,
 			SteeringConveyorMechanism mechanism) {
+		String strategyName = zone.getDecisionStrategy() != null
+				? zone.getDecisionStrategy().getClass().getSimpleName()
+				: zone.getTargetDecisionStrategy().getClass().getSimpleName();
 		inspectionRegistry.register(renderable, () -> List.of(
 				"Type: Steering transfer",
 				"Id: " + zone.getId(),
@@ -745,11 +933,74 @@ public class WarehouseTrackFactory {
 				"Target segment: " + zone.getTargetSegment().getLabel(),
 				"Start distance: " + String.format("%.3f", zone.getStartDistance()),
 				"End distance: " + String.format("%.3f", zone.getEndDistance()),
-				"Decision strategy: " + zone.getDecisionStrategy().getClass().getSimpleName(),
+				"Decision strategy: " + strategyName,
 				"Mechanism state: " + mechanism.getMotionState(),
 				"Mechanism ready CONTINUE: " + mechanism.isReadyFor(TransferOutcome.CONTINUE),
 				"Mechanism ready BRANCH: " + mechanism.isReadyFor(TransferOutcome.BRANCH)
 		));
+	}
+
+	private static Tote createDebugTote(
+			String id,
+			TriangleRenderer tr,
+			ToteGeometry toteGeometry,
+			RouteSegment segment,
+			float startDistance,
+			float rollerYOffset,
+			List<RenderableObject> objects,
+			SelectionInspectionRegistry inspectionRegistry) {
+		RenderableObject renderable = RenderableToteFactory.createRenderableTote(id, tr, toteGeometry, true);
+		objects.add(renderable);
+		Tote tote = new Tote(
+				id,
+				new RouteFollower(id, segment, startDistance, 1.0d),
+				renderable,
+				new Vec3(0f, rollerYOffset, 0f),
+				renderable.yawOffsetRadians);
+		inspectionRegistry.register(renderable, () -> List.of(
+				"Type: Tote",
+				"Id: " + tote.getId(),
+				"Motion: " + tote.getInteractionMode(),
+				"Reserved by: " + String.valueOf(tote.getReservedByMachineId()),
+				"Segment: " + (tote.getLastSnapshot() == null ? "None" : tote.getLastSnapshot().currentSegment().getLabel()),
+				"Distance: " + formatDistance(tote),
+				"Travel dir: " + tote.getRouteFollower().getTravelDirection()
+		));
+		return tote;
+	}
+
+	private static final class AlternatingInlineTransferStrategy implements TransferTargetDecisionStrategy {
+		private final TransferTarget firstTarget;
+		private final TransferTarget secondTarget;
+		private SteeringConveyorMechanism mechanism;
+		private float firstYawRadians;
+		private float secondYawRadians;
+		private boolean useFirst = true;
+
+		private AlternatingInlineTransferStrategy(TransferTarget firstTarget, TransferTarget secondTarget) {
+			this.firstTarget = firstTarget;
+			this.secondTarget = secondTarget;
+		}
+
+		private void bindMechanism(
+				SteeringConveyorMechanism mechanism,
+				float firstYawRadians,
+				float secondYawRadians) {
+			this.mechanism = mechanism;
+			this.firstYawRadians = firstYawRadians;
+			this.secondYawRadians = secondYawRadians;
+			this.mechanism.setBranchYawRadians(firstYawRadians);
+		}
+
+		@Override
+		public java.util.Optional<TransferRoutingDecision> decide(Tote tote, TransferZoneMachine machine) {
+			TransferTarget selected = useFirst ? firstTarget : secondTarget;
+			if (mechanism != null) {
+				mechanism.setBranchYawRadians(useFirst ? firstYawRadians : secondYawRadians);
+			}
+			useFirst = !useFirst;
+			return java.util.Optional.of(TransferRoutingDecision.transferTo(selected));
+		}
 	}
 
 	private static String formatDistance(Tote tote) {

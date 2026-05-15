@@ -1,6 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
+
         {
             "type": "java",
             "name": "Scene: Tote To Bag",
@@ -49,6 +50,14 @@
             "projectName": "app",
             "args": "--scene=straight-conveyor"
         },
+        {
+            "type": "java",
+            "name": "Scene: Inline Transfer",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=inline-transfer"
+        },        
         {
             "type": "java",
             "name": "Scene: Default",

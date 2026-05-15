@@ -12,7 +12,7 @@ public class SteeringConveyorMechanism implements TransferZoneMechanism {
     private final String id;
     private final List<RenderableObject> renderables;
     private final float continueYawRadians;
-    private final float branchYawRadians;
+    private float branchYawRadians;
     private final float angularSpeedRadiansPerSecond;
     private final float readyToleranceRadians;
 
@@ -121,6 +121,14 @@ public class SteeringConveyorMechanism implements TransferZoneMechanism {
     @Override
     public List<RenderableObject> getRenderables() {
         return renderables;
+    }
+
+    public void setBranchYawRadians(float branchYawRadians) {
+        this.branchYawRadians = normalizeAngle(branchYawRadians);
+        if (commandedOutcome == TransferOutcome.BRANCH && motionState == readyStateFor(TransferOutcome.BRANCH)) {
+            currentYawRadians = this.branchYawRadians;
+            applyYawToRenderables();
+        }
     }
 
     private void applyYawToRenderables() {

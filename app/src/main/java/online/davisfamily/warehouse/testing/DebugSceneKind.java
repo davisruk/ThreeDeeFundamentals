@@ -6,6 +6,7 @@ public enum DebugSceneKind {
     TIPPER_TO_RECEIVER("tipper-to-receiver"),
     OVAL_TRACK("oval-track"),
     PARALLEL_TRACK("parallel-track"),
+    INLINE_TRANSFER("inline-transfer"),
     STRAIGHT_CONVEYOR("straight-conveyor");
 
     private final String cliValue;

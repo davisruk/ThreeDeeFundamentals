@@ -53,6 +53,10 @@ public class TestScene extends BaseScene{
 				WarehouseTrackFactory.setupParallelTracks(tote, rTote, tr, sim, objects, inspectionRegistry);
 				yield DebugSceneRuntime.noop();
 			}
+			case INLINE_TRANSFER -> {
+				WarehouseTrackFactory.setupInlineTransferTargets(tr, sim, objects, inspectionRegistry);
+				yield DebugSceneRuntime.noop();
+			}
 		};
 	}
 	
