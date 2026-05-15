@@ -230,11 +230,21 @@ Files:
 Required layout:
 
 ```text
-source track -> transfer window segment -> optional/default continue track
-                          |
-                          +-> left target
-                          +-> right target
+              |
+left target <-+-> right target
 ```
+
+The vertical line is the source track feeding into the transfer window segment. The transfer machine then routes to either the left or right target. Do not model the source as a straight-through route with side branches for this rig.
+
+A more realistic DSP layout can be introduced later if needed:
+
+```text
+->-- + -->-
+     |
+-<-- + -->-
+```
+
+That shape is useful for validating real warehouse geometry, but it is not required for the first standalone transfer visual rig.
 
 Rules:
 
