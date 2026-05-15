@@ -170,6 +170,7 @@ public class TransferZoneController implements SimulationController{
 				tz.getCentrePoint(),
 				target.entryDistance(),
 				target.travelDirection(),
+				machine.getActiveRoutingDecision().orientationPolicy(),
 				tz.getMotionConfig());
 	}
 

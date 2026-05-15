@@ -15,6 +15,7 @@ import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
 import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
+import online.davisfamily.warehouse.sim.transfer.TransferOrientationPolicy;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionState;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionState.TransferMotionPhase;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
@@ -269,6 +270,7 @@ public class Tote implements TrackableObject {
 				sourceTransferCenterDistance,
 				targetDistanceAlongSegment,
 				routeFollower.getTravelDirection(),
+				TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION,
 				motionConfig);
 	}
 
@@ -279,6 +281,7 @@ public class Tote implements TrackableObject {
 			float sourceTransferCenterDistance,
 			float targetDistanceAlongSegment,
 			TravelDirection targetTravelDirection,
+			TransferOrientationPolicy orientationPolicy,
 			TransferMotionConfig motionConfig) {
 		if (!machineId.equals(reservedByMachineId)) return;
 		
@@ -286,6 +289,7 @@ public class Tote implements TrackableObject {
 		if (snap == null) return;
 		if (motionConfig == null) return;
 		if (targetTravelDirection == null) return;
+		if (orientationPolicy == null) return;
 
 		Vec3 startPosition = new Vec3(transformation.xTranslation, transformation.yTranslation, transformation.zTranslation);
 		float targetMergeDistanceAlongSegment = calculateMergeDistance(
@@ -299,7 +303,8 @@ public class Tote implements TrackableObject {
 				snap,
 				targetSegment,
 				targetMergeDistanceAlongSegment,
-				targetTravelDirection);
+				targetTravelDirection,
+				orientationPolicy);
 		float transferLengthWorld = startPosition.distanceTo(targetPosition);
 		this.interactionMode = ToteMotionState.TRANSFERRING;
 	    this.transferMotionState = new TransferMotionState(
@@ -375,7 +380,14 @@ public class Tote implements TrackableObject {
 			RouteFollowerSnapshot currentSnapshot,
 			RouteSegment targetSegment,
 			float targetDistanceAlongSegment,
-			TravelDirection targetTravelDirection) {
+			TravelDirection targetTravelDirection,
+			TransferOrientationPolicy orientationPolicy) {
+
+		if (orientationPolicy == TransferOrientationPolicy.ALIGN_TO_TARGET_TRAVEL) {
+			return targetTravelDirection == TravelDirection.REVERSE
+					? FacingDirection.AGAINST_TRAVEL
+					: FacingDirection.WITH_TRAVEL;
+		}
 
 		Vec3 preservedFacing = getFacingVector(currentSnapshot, facingDirection);
 		Vec3 targetTravelVector = sampleTravelVector(targetSegment, targetDistanceAlongSegment, targetTravelDirection);

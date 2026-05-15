@@ -24,6 +24,7 @@ class TransferRoutingDecisionTest {
         assertTrue(decision.isContinueOnCurrentRoute());
         assertFalse(decision.isTransfer());
         assertNull(decision.transferTarget());
+        assertEquals(TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION, decision.orientationPolicy());
     }
 
     @Test
@@ -35,6 +36,21 @@ class TransferRoutingDecisionTest {
         assertFalse(decision.isContinueOnCurrentRoute());
         assertTrue(decision.isTransfer());
         assertSame(target, decision.transferTarget());
+        assertEquals(TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION, decision.orientationPolicy());
+    }
+
+    @Test
+    void shouldCreateTransferDecisionWithExplicitOrientationPolicy() {
+        TransferTarget target = target();
+
+        TransferRoutingDecision decision = TransferRoutingDecision.transferTo(
+                target,
+                TransferOrientationPolicy.ALIGN_TO_TARGET_TRAVEL);
+
+        assertFalse(decision.isContinueOnCurrentRoute());
+        assertTrue(decision.isTransfer());
+        assertSame(target, decision.transferTarget());
+        assertEquals(TransferOrientationPolicy.ALIGN_TO_TARGET_TRAVEL, decision.orientationPolicy());
     }
 
     @Test
@@ -47,6 +63,15 @@ class TransferRoutingDecisionTest {
     }
 
     @Test
+    void shouldRejectNullOrientationPolicy() {
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> TransferRoutingDecision.transferTo(target(), null));
+
+        assertEquals("orientationPolicy must not be null", ex.getMessage());
+    }
+
+    @Test
     void shouldCreateContinueDecisionFromLegacyDecision() {
         TransferRoutingDecision decision = TransferRoutingDecision.fromDecision(
                 TransferDecision.CONTINUE,
@@ -55,6 +80,7 @@ class TransferRoutingDecisionTest {
         assertTrue(decision.isContinueOnCurrentRoute());
         assertFalse(decision.isTransfer());
         assertNull(decision.transferTarget());
+        assertEquals(TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION, decision.orientationPolicy());
     }
 
     @Test
@@ -68,6 +94,7 @@ class TransferRoutingDecisionTest {
         assertFalse(decision.isContinueOnCurrentRoute());
         assertTrue(decision.isTransfer());
         assertSame(target, decision.transferTarget());
+        assertEquals(TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION, decision.orientationPolicy());
     }
 
     @Test
