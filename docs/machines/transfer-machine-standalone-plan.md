@@ -47,18 +47,16 @@ Do not change:
 - Do not implement multi-source transfer routing in this slice, but avoid naming/API choices that would prevent it later.
 - Tote orientation after transfer must be controlled by an explicit policy.
 
-## Step 1: Refresh Transfer Documentation And Tests Around Current Builder Assumptions
+## Step 1: Add Failing Test For Current Builder Assumption
 
-Update the existing builder tests that currently assert inline transfer target guide openings.
+Update the existing builder test that currently asserts inline transfer target guide openings.
 
 Files:
 
 - `app/src/test/java/online/davisfamily/warehouse/rendering/model/tracks/WarehouseRouteBuilderTest.java`
-- `docs/machines/inline-transfer-targets-plan.md`
 
 Required changes:
 
-- Mark the old inline transfer builder expectation as obsolete.
 - Add or adjust a failing test that proves an inline transfer target does not automatically receive a guide opening.
 - The test should still prove the source side can receive an explicit source opening.
 
@@ -345,4 +343,3 @@ Ask the user to run whichever wider test command they prefer for branch closure.
 - Existing single-target transfer behaviour still works.
 - Existing transfer visual rigs are migrated or clearly marked as legacy.
 - Adapting station phase 1 can proceed without relying on overlay transfer-zone mechanics.
-
