@@ -47,10 +47,10 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 	// factory method to create a transfer zone machine with approach and window sensors
 	// sensors, controller and machine are registered with simulation 
 	// approach window is based on initial distance and the start of the transfer zone
-	public static TransferZoneMachine createTransferZoneMachine(SimulationWorld sim, RouteSegment segment, float approachStartDistance, TransferZone tz, TransferDecisionStrategy transferStrategy) {
+	public static TransferZoneMachine createTransferZoneMachine(SimulationWorld sim, RouteSegment approachSegment, float approachStartDistance, TransferZone tz, TransferDecisionStrategy transferStrategy) {
 		return createTransferZoneMachine(
 				sim,
-				segment,
+				approachSegment,
 				approachStartDistance,
 				tz,
 				new LegacyTransferDecisionStrategyAdapter(transferStrategy));
@@ -58,21 +58,48 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 
 	public static TransferZoneMachine createTransferZoneMachine(
 			SimulationWorld sim,
-			RouteSegment segment,
+			RouteSegment approachSegment,
 			float approachStartDistance,
 			TransferZone tz,
 			TransferTargetDecisionStrategy transferStrategy) {
+		return createTransferZoneMachine(
+				sim,
+				approachSegment,
+				approachStartDistance,
+				tz.getRouteSegment(),
+				tz,
+				transferStrategy);
+	}
+
+	public static TransferZoneMachine createTransferZoneMachine(
+			SimulationWorld sim,
+			RouteSegment approachSegment,
+			float approachStartDistance,
+			RouteSegment transferWindowSegment,
+			TransferZone tz,
+			TransferTargetDecisionStrategy transferStrategy) {
 		String id = tz.getId();
-	    WindowSensorAreaImpl m_wsai = new WindowSensorAreaImpl(id + "_member_sensor_area", segment, approachStartDistance, tz.getStartDistance());
-	    Sensor tzms = new MembershipSensor(id + "_member_sensor", m_wsai);
-	    WindowSensorAreaImpl w_wsai = new WindowSensorAreaImpl(id + "_window_sensor_area", segment, tz.getStartDistance(), tz.getEndDistance());
+	    Sensor tzms = null;
+	    String approachSensorId = null;
+	    if (approachSegment != null) {
+	    	WindowSensorAreaImpl m_wsai = new WindowSensorAreaImpl(
+	    			id + "_member_sensor_area",
+	    			approachSegment,
+	    			approachStartDistance,
+	    			tz.getStartDistance());
+	    	tzms = new MembershipSensor(id + "_member_sensor", m_wsai);
+	    	approachSensorId = tzms.getId();
+	    }
+	    WindowSensorAreaImpl w_wsai = new WindowSensorAreaImpl(id + "_window_sensor_area", transferWindowSegment, tz.getStartDistance(), tz.getEndDistance());
 	    Sensor tzws = new WindowSensor(tz.getId() + "_sensor", w_wsai);
-	    TransferZoneMachine tzm = new TransferZoneMachine("Transfer_Machine_" + tz.getId(), tzms.getId(), tzws.getId(), tz);
+	    TransferZoneMachine tzm = new TransferZoneMachine("Transfer_Machine_" + tz.getId(), approachSensorId, tzws.getId(), tz);
 	    TransferZoneController tzc = new TransferZoneController(tzm, transferStrategy);
     	sim.addController(tzc);
 	    sim.registerListener(DetectionEvent.class, tzc.detectionHandler());
 	    sim.registerListener(TransferCompletedEvent.class, tzc.completionHandler());
-	    sim.addSensor(tzms);
+	    if (tzms != null) {
+	    	sim.addSensor(tzms);
+	    }
 	    sim.addSensor(tzws);
 		return tzm;
 	}
@@ -141,6 +168,10 @@ public class TransferZoneMachine implements StatefulSimObject<TransferZoneState>
 
 	public String getApproachSensorId() {
 		return approachSensorId;
+	}
+
+	public boolean hasApproachSensor() {
+		return approachSensorId != null;
 	}
 
 	public String getWindowSensorId() {

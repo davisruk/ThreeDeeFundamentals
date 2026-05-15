@@ -22,6 +22,7 @@ import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferDecision;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine.TransferZoneState;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 
 class TransferZoneControllerTest {
 
@@ -72,6 +73,103 @@ class TransferZoneControllerTest {
         assertEquals(TransferZoneState.TRANSFERRING, machine.getState());
         assertEquals(selectedTarget, tote.getRouteFollower().getCurrentSegment());
         assertEquals(TravelDirection.REVERSE, tote.getRouteFollower().getTravelDirection());
+    }
+
+    @Test
+    void shouldReserveOnUpstreamApproachAndBeginTransferOnTransferWindowEntry() {
+        RouteSegment approachSegment = segment("approach", new Vec3(0f, 0f, 0f), new Vec3(1f, 0f, 0f));
+        RouteSegment transferSegment = segment("transfer", new Vec3(1f, 0f, 0f), new Vec3(2f, 0f, 0f));
+        RouteSegment selectedTarget = segment("selected", new Vec3(3f, 0f, 0f), new Vec3(4f, 0f, 0f));
+        TransferTargetDecisionStrategy strategy =
+                (tote, machine) -> Optional.of(TransferRoutingDecision.transferTo(
+                        new TransferTarget(selectedTarget, 0f, TravelDirection.FORWARD)));
+        TransferZone zone = new TransferZone(
+                "zone",
+                0f,
+                transferSegment.length(),
+                transferSegment,
+                selectedTarget,
+                0f,
+                GuideSide.RIGHT,
+                GuideSide.LEFT,
+                strategy,
+                new TransferMotionConfig(0.35, 0f, 0f));
+        TransferZoneMachine machine = new TransferZoneMachine("machine", "approach", "window", zone);
+        TransferZoneController controller = new TransferZoneController(machine, strategy);
+        Tote tote = tote("tote", transferSegment);
+        SimulationContext context = new SimulationContext();
+
+        context.addTrackedObject(tote);
+        tote.update(context, 0d);
+
+        controller.handleDetection(new DetectionEvent(
+                "sensor-approach",
+                0d,
+                "approach",
+                "tote",
+                DetectionType.ENTER), context);
+
+        assertEquals(TransferZoneState.RESERVED, machine.getState());
+        assertEquals("tote", machine.getReservedToteId());
+        assertEquals(null, machine.getToteInWindowId());
+
+        controller.handleDetection(new DetectionEvent(
+                "sensor-transfer",
+                0d,
+                "window",
+                "tote",
+                DetectionType.ENTER), context);
+
+        for (int i = 0; i < 10 && tote.getInteractionMode() == Tote.ToteMotionState.TRANSFERRING; i++) {
+            tote.update(context, 0.5d);
+        }
+
+        assertEquals(TransferZoneState.TRANSFERRING, machine.getState());
+        assertEquals("tote", machine.getToteInWindowId());
+        assertEquals(selectedTarget, tote.getRouteFollower().getCurrentSegment());
+    }
+
+    @Test
+    void shouldBeginTransferFromWindowOnlyMachineWhenNoApproachSensorIsConfigured() {
+        RouteSegment transferSegment = segment("transfer", new Vec3(1f, 0f, 0f), new Vec3(2f, 0f, 0f));
+        RouteSegment selectedTarget = segment("selected", new Vec3(3f, 0f, 1f), new Vec3(4f, 0f, 1f));
+        TransferTargetDecisionStrategy strategy =
+                (tote, machine) -> Optional.of(TransferRoutingDecision.transferTo(
+                        new TransferTarget(selectedTarget, 0f, TravelDirection.FORWARD)));
+        TransferZone zone = new TransferZone(
+                "zone",
+                0f,
+                transferSegment.length(),
+                transferSegment,
+                selectedTarget,
+                0f,
+                GuideSide.RIGHT,
+                GuideSide.LEFT,
+                strategy,
+                new TransferMotionConfig(0.35, 0f, 0f));
+        TransferZoneMachine machine = new TransferZoneMachine("machine", null, "window", zone);
+        TransferZoneController controller = new TransferZoneController(machine, strategy);
+        Tote tote = tote("tote", transferSegment);
+        SimulationContext context = new SimulationContext();
+
+        context.addTrackedObject(tote);
+        tote.update(context, 0d);
+
+        controller.handleDetection(new DetectionEvent(
+                "sensor-transfer",
+                0d,
+                "window",
+                "tote",
+                DetectionType.ENTER), context);
+
+        for (int i = 0; i < 10 && tote.getInteractionMode() == Tote.ToteMotionState.TRANSFERRING; i++) {
+            tote.update(context, 0.5d);
+        }
+
+        assertEquals(TransferZoneState.TRANSFERRING, machine.getState());
+        assertEquals("tote", machine.getReservedToteId());
+        assertEquals("tote", machine.getToteInWindowId());
+        assertEquals(selectedTarget, tote.getRouteFollower().getCurrentSegment());
     }
 
     private static TransferDecisionStrategy legacyBranchStrategy() {

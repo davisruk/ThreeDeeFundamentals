@@ -37,7 +37,7 @@ public class TransferZoneController implements SimulationController{
     }
 	
 	public void handleDetection(DetectionEvent  event, SimulationContext context) {
-		if (machine.getApproachSensorId().equals(event.getSensorId())) handleApproachSensor(event, context);
+		if (machine.hasApproachSensor() && machine.getApproachSensorId().equals(event.getSensorId())) handleApproachSensor(event, context);
 		if (machine.getWindowSensorId().equals(event.getSensorId())) handleWindowSensor(event, context);
 	}
 	
@@ -90,6 +90,12 @@ public class TransferZoneController implements SimulationController{
 				.findAny()
 				.orElse(null);
 		if (t == null) return;
+
+		if (event.getDetectionType() == DetectionType.ENTER
+				&& !machine.hasApproachSensor()
+				&& machine.getState() == TransferZoneState.IDLE) {
+			attemptReservation(t);
+		}
 
 		if (event.getDetectionType() == DetectionType.ENTER
 				&& machine.getState() == TransferZoneState.RESERVED
@@ -146,6 +152,23 @@ public class TransferZoneController implements SimulationController{
 				.filter(to -> to.getId().equals(machine.getReservedToteId()))
 				.findAny()
 				.orElse(null);
+	}
+
+	private void attemptReservation(Tote tote) {
+		var routingDecision = decisionStrategy.decide(tote, machine);
+		if (routingDecision.isEmpty()) return;
+		TransferRoutingDecision selectedDecision = routingDecision.get();
+
+		commandMechanisms(selectedDecision.isTransfer() ? TransferOutcome.BRANCH : TransferOutcome.CONTINUE);
+		machine.setReservedToteId(tote.getId());
+		machine.setActiveDirection(selectedDecision.isTransfer() ? TransferDecision.BRANCH : TransferDecision.CONTINUE);
+		machine.setActiveRoutingDecision(selectedDecision);
+		if (machine.getActiveDirection().equals(TransferDecision.BRANCH)) {
+			machine.transitionTo(TransferZoneState.RESERVED);
+			tote.reserveForTransfer(machine);
+		} else {
+			machine.setReservedToteId(null);
+		}
 	}
 
 	private void attemptBeginTransfer(SimulationContext context, Tote tote) {
