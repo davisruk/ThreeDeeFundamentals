@@ -498,15 +498,6 @@ public class WarehouseRouteBuilder {
                 sourceOpenSide,
                 GuideOpening.GuideOpeningType.TRANSFER_SOURCE);
 
-        for (TransferTarget target : targets) {
-            addCentredGuideOpening(
-                    target.segment(),
-                    target.entryDistance(),
-                    openingLength,
-                    GuideSide.RIGHT,
-                    GuideOpening.GuideOpeningType.CONNECTION_TARGET);
-        }
-
         return this;
     }
 

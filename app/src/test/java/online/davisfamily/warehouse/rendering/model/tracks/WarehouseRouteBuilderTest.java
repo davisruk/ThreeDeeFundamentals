@@ -21,7 +21,7 @@ import online.davisfamily.warehouse.sim.transfer.TransferTarget;
 class WarehouseRouteBuilderTest {
 
     @Test
-    void shouldAddInlineTransferWithOneSourceZoneAndMultipleTargetOpenings() {
+    void shouldNotAddTargetGuideOpeningsForInlineTransferTargets() {
         WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
         RouteSegment source = segment("source", new Vec3(0f, 0f, 0f), new Vec3(10f, 0f, 0f));
         RouteSegment left = segment("left", new Vec3(5f, 0f, 1f), new Vec3(0f, 0f, 1f));
@@ -45,8 +45,8 @@ class WarehouseRouteBuilderTest {
 
         assertEquals(1, sourceMetadata.getTransferZones().size());
         assertEquals(1, sourceMetadata.getGuideOpenings().size());
-        assertEquals(1, leftMetadata.getGuideOpenings().size());
-        assertEquals(1, rightMetadata.getGuideOpenings().size());
+        assertEquals(0, leftMetadata.getGuideOpenings().size());
+        assertEquals(0, rightMetadata.getGuideOpenings().size());
         assertSame(left, sourceMetadata.getTransferZones().getFirst().getTargetSegment());
         assertSame(leftTarget.segment(), sourceMetadata.getTransferZones().getFirst().getTargetSegment());
         assertNotNull(sourceMetadata.getTransferZones().getFirst().getTargetDecisionStrategy());
