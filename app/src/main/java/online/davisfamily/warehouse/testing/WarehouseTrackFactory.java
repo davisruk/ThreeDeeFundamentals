@@ -478,7 +478,7 @@ public class WarehouseTrackFactory {
 		        new GuideOpening(
 		                0f,
 		                Math.min(transferLength, upperBody.length()),
-		                GuideSide.RIGHT,
+		                GuideSide.LEFT,
 		                GuideOpening.GuideOpeningType.CONNECTION_TARGET));
 		builder.getMetadata(upperBody).addGuideOpening(
 		        upperBody,
