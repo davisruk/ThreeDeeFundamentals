@@ -30,6 +30,7 @@ public class SchedulerDebugInspectable implements Inspectable {
         lines.add("Active SC: " + snapshot.activeServiceCentreId().orElse("none"));
         lines.add("Waiting: " + formatList(snapshot.waitingOrderIds()));
         lines.add("Release: " + snapshot.releaseOrderId().orElse("none"));
+        lines.add("Release adapting bench: " + snapshot.releaseAdaptingBenchId().orElse("none"));
         lines.add("Blocked SC: " + snapshot.blockedServiceCentreId().orElse("none"));
         lines.add("Blocked candidates: " + formatList(snapshot.blockedCandidateOrderIds()));
         snapshot.blockedReasons().stream()

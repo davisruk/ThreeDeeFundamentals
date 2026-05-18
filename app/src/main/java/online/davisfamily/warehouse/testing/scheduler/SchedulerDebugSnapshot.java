@@ -10,6 +10,7 @@ public record SchedulerDebugSnapshot(
         Optional<String> activeServiceCentreId,
         List<String> waitingOrderIds,
         Optional<String> releaseOrderId,
+        Optional<String> releaseAdaptingBenchId,
         Optional<String> blockedServiceCentreId,
         List<String> blockedCandidateOrderIds,
         List<String> blockedReasons,
@@ -25,6 +26,7 @@ public record SchedulerDebugSnapshot(
                 || activeServiceCentreId == null
                 || waitingOrderIds == null
                 || releaseOrderId == null
+                || releaseAdaptingBenchId == null
                 || blockedServiceCentreId == null
                 || blockedCandidateOrderIds == null
                 || blockedReasons == null
@@ -47,6 +49,7 @@ public record SchedulerDebugSnapshot(
                 Optional.empty(),
                 Optional.empty(),
                 List.of(),
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 List.of(),

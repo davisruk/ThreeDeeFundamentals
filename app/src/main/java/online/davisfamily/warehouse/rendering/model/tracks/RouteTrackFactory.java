@@ -27,6 +27,18 @@ public final class RouteTrackFactory {
 		public static SpecAndSegment createSpecAndSegment(TrackSpec ts, RouteSegment rs, WarehouseSegmentMetadata metadata) {
     		return new SpecAndSegment(ts, rs, metadata);
     	}
+
+        public TrackSpec spec() {
+            return spec;
+        }
+
+        public RouteSegment segment() {
+            return segment;
+        }
+
+        public WarehouseSegmentMetadata metadata() {
+            return metadata;
+        }
     }
     
 	public static List<RenderableObject> createRenderableTracks(

@@ -27,7 +27,9 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspDependencyEvaluator;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspReleaseScheduler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseDecision;
 import online.davisfamily.warehouse.sim.dsp.scheduler.SchedulerEvaluation;
+import online.davisfamily.warehouse.sim.dsp.scheduler.SelectedStationTargets;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentrePriority;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentreWindowPolicy;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -170,6 +172,36 @@ class ScheduledDebugToteInjectorControllerTest {
     }
 
     @Test
+    void shouldExposeSelectedAdaptingBenchForDebugging() {
+        DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingAdaptingOrder("order-1", "sc-1")));
+        SchedulerDebugState debugState = new SchedulerDebugState();
+        ManualEvaluationSource evaluationSource = new ManualEvaluationSource();
+        ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
+                evaluationSource,
+                runtimeState,
+                new ScheduledTipperToteReleaseCatalog(List.of(release("order-1", "tote-1", new AtomicInteger()))),
+                new TestReleaseTarget(true, SchedulerCommandApplicationResult.appliedResult()),
+                debugState);
+
+        controller.update(new SimulationContext(), 0.1d);
+        evaluationSource.completeWith(new SchedulerEvaluationResult(
+                0L,
+                runtimeState.snapshot(),
+                SchedulerEvaluation.release(new ReleaseDecision(
+                        "order-1",
+                        "sc-1",
+                        StartLocation.OSR,
+                        new RouteRequirements(false, true, false, true, false, StartLocation.OSR),
+                        new online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseOrderCommand("order-1", "sc-1", StartLocation.OSR),
+                        new SelectedStationTargets(Map.of(StationType.ADAPTING, "bench-2"))))));
+
+        controller.update(new SimulationContext(), 0.1d);
+
+        SchedulerDebugSnapshot snapshot = controller.debugSnapshot();
+        assertEquals(Optional.of("bench-2"), snapshot.releaseAdaptingBenchId());
+    }
+
+    @Test
     void shouldRejectMissingReleaseForSchedulerCommand() {
         DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingOrder("order-1", "sc-1")));
         ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
@@ -219,6 +251,7 @@ class ScheduledDebugToteInjectorControllerTest {
         assertEquals(Optional.of("sc-1"), snapshot.activeServiceCentreId());
         assertEquals(List.of("order-1"), snapshot.waitingOrderIds());
         assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
+        assertEquals(Optional.empty(), snapshot.releaseAdaptingBenchId());
         assertEquals(Optional.of("order-1"), snapshot.lastAppliedOrderId());
         assertEquals(Optional.empty(), snapshot.blockedServiceCentreId());
         assertEquals(List.of(), snapshot.blockedCandidateOrderIds());
@@ -245,6 +278,7 @@ class ScheduledDebugToteInjectorControllerTest {
         assertEquals(Optional.of("sc-1"), snapshot.activeServiceCentreId());
         assertEquals(List.of("order-1"), snapshot.waitingOrderIds());
         assertEquals(Optional.empty(), snapshot.releaseOrderId());
+        assertEquals(Optional.empty(), snapshot.releaseAdaptingBenchId());
         assertEquals(Optional.of("sc-1"), snapshot.blockedServiceCentreId());
         assertEquals(List.of("order-1"), snapshot.blockedCandidateOrderIds());
         assertFalse(snapshot.blockedReasons().isEmpty());
@@ -268,6 +302,7 @@ class ScheduledDebugToteInjectorControllerTest {
         assertFalse(snapshot.evaluationInFlight());
         assertEquals(Optional.of(0L), snapshot.lastCompletedEvaluationSequence());
         assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
+        assertEquals(Optional.empty(), snapshot.releaseAdaptingBenchId());
         assertEquals(Optional.of("order-1"), snapshot.lastDeferredOrderId());
         assertEquals(Optional.of("later"), snapshot.lastDeferredReason());
         assertEquals(Optional.empty(), snapshot.lastAppliedOrderId());
@@ -292,6 +327,7 @@ class ScheduledDebugToteInjectorControllerTest {
         assertFalse(snapshot.evaluationInFlight());
         assertEquals(Optional.of(0L), snapshot.lastCompletedEvaluationSequence());
         assertEquals(Optional.of("order-1"), snapshot.releaseOrderId());
+        assertEquals(Optional.empty(), snapshot.releaseAdaptingBenchId());
         assertEquals(Optional.of("order-1"), snapshot.lastRejectedOrderId());
         assertEquals(Optional.of("bad target state"), snapshot.lastRejectedReason());
         assertEquals(Optional.empty(), snapshot.lastAppliedOrderId());
@@ -327,6 +363,10 @@ class ScheduledDebugToteInjectorControllerTest {
 
     private static DspSchedulerOrderState completedOrder(String orderId, String serviceCentreId) {
         return orderState(orderId, serviceCentreId, DspOrderStatus.COMPLETED);
+    }
+
+    private static DspSchedulerOrderState waitingAdaptingOrder(String orderId, String serviceCentreId) {
+        return orderState(orderId, serviceCentreId, OrderType.ASSOCIATED, true, DspOrderStatus.WAITING);
     }
 
     private static DspSchedulerOrderState orderState(String orderId, String serviceCentreId, DspOrderStatus status) {
@@ -380,7 +420,7 @@ class ScheduledDebugToteInjectorControllerTest {
         }
 
         @Override
-        public SchedulerCommandApplicationResult release(TipperTotePayload payload) {
+        public SchedulerCommandApplicationResult release(ReleaseDecision decision, TipperTotePayload payload) {
             releaseCalls++;
             lastPayload = payload;
             return releaseResult;

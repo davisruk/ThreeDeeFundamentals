@@ -94,12 +94,13 @@ public class ScheduledDebugToteInjectorController implements SimulationControlle
             return;
         }
 
-        ReleaseOrderCommand command = evaluationResult.evaluation().releaseDecision().get().command();
+        var decision = evaluationResult.evaluation().releaseDecision().get();
+        ReleaseOrderCommand command = decision.command();
         ScheduledTipperToteRelease scheduledRelease = releaseCatalog.findByOrderId(command.orderId())
                 .orElseThrow(() -> new IllegalStateException("No scheduled tipper release for orderId " + command.orderId()));
 
         TipperTotePayload payload = scheduledRelease.createPayload();
-        SchedulerCommandApplicationResult result = releaseTarget.release(payload);
+        SchedulerCommandApplicationResult result = releaseTarget.release(decision, payload);
         if (result.applied()) {
             runtimeState.markReleased(command.orderId());
             debugState.recordApplied(command.orderId());

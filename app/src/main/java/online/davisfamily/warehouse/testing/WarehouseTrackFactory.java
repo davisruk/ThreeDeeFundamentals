@@ -862,7 +862,7 @@ public class WarehouseTrackFactory {
 		objects.add(compactTransferConveyor);
 	}
 
-	private static SteeringConveyorMechanism attachSteeringMechanismForZone(
+	public static SteeringConveyorMechanism attachSteeringMechanismForZone(
 			TransferZone zone,
 			TriangleRenderer tr,
 			List<RenderableObject> objects,
@@ -894,7 +894,7 @@ public class WarehouseTrackFactory {
 		return mechanism;
 	}
 
-	private static SteeringConveyorMechanism attachSteeringMechanismForZone(
+	public static SteeringConveyorMechanism attachSteeringMechanismForZone(
 			TransferZone zone,
 			SteeringTransferMachineGeometry geometry,
 			TriangleRenderer tr,

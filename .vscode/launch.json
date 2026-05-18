@@ -57,7 +57,15 @@
             "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
             "projectName": "app",
             "args": "--scene=inline-transfer"
-        },        
+        },
+        {
+            "type": "java",
+            "name": "Scene: Adapting",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=adapting"
+        },                
         {
             "type": "java",
             "name": "Scene: Default",

@@ -24,6 +24,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspDependencyEvaluator;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspReleaseScheduler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseDecision;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentrePriority;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ServiceCentreWindowPolicy;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -53,6 +54,7 @@ class SchedulerDebugInspectableTest {
         assertTrue(lines.contains("Active SC: sc-1"));
         assertTrue(lines.contains("Waiting: order-1"));
         assertTrue(lines.contains("Release: order-1"));
+        assertTrue(lines.contains("Release adapting bench: none"));
         assertTrue(lines.contains("Blocked SC: none"));
         assertTrue(lines.contains("Blocked candidates: none"));
         assertTrue(lines.contains("Last applied: order-1"));
@@ -74,6 +76,7 @@ class SchedulerDebugInspectableTest {
         assertTrue(lines.contains("Last eval seq: 0"));
         assertTrue(lines.contains("Active SC: sc-1"));
         assertTrue(lines.contains("Release: none"));
+        assertTrue(lines.contains("Release adapting bench: none"));
         assertTrue(lines.contains("Blocked SC: sc-1"));
         assertTrue(lines.contains("Blocked candidates: order-1"));
         assertTrue(lines.stream().anyMatch(line -> line.startsWith("Block: ")));
@@ -178,7 +181,9 @@ class SchedulerDebugInspectableTest {
         }
 
         @Override
-        public SchedulerCommandApplicationResult release(online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload payload) {
+        public SchedulerCommandApplicationResult release(
+                ReleaseDecision decision,
+                online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload payload) {
             return releaseResult;
         }
     }

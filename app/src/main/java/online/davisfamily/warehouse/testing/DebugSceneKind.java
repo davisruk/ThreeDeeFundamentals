@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.testing;
 
 public enum DebugSceneKind {
+    ADAPTING("adapting"),
     TOTE_TO_BAG("tote-to-bag"),
     TIPPER_TRACK("tipper-track"),
     TIPPER_TO_RECEIVER("tipper-to-receiver"),

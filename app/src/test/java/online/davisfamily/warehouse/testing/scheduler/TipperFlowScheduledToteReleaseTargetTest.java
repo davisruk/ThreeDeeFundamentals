@@ -21,6 +21,8 @@ import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseDecision;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseOrderCommand;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
@@ -39,7 +41,7 @@ class TipperFlowScheduledToteReleaseTargetTest {
         TestFixture fixture = new TestFixture();
         TipperFlowScheduledToteReleaseTarget releaseTarget = fixture.releaseTarget();
 
-        SchedulerCommandApplicationResult result = releaseTarget.release(fixture.secondPayload);
+        SchedulerCommandApplicationResult result = releaseTarget.release(releaseDecision("order-2"), fixture.secondPayload);
 
         assertFalse(result.applied());
         assertTrue(result.deferred());
@@ -53,7 +55,7 @@ class TipperFlowScheduledToteReleaseTargetTest {
         fixture.advanceUntilReadyForNextTote();
         TipperFlowScheduledToteReleaseTarget releaseTarget = fixture.releaseTarget();
 
-        SchedulerCommandApplicationResult result = releaseTarget.release(fixture.secondPayload);
+        SchedulerCommandApplicationResult result = releaseTarget.release(releaseDecision("order-2"), fixture.secondPayload);
 
         assertTrue(result.applied());
         assertFalse(result.deferred());
@@ -71,7 +73,7 @@ class TipperFlowScheduledToteReleaseTargetTest {
         fixture.objects.add(fixture.secondPayload.getToteRenderable());
         TipperFlowScheduledToteReleaseTarget releaseTarget = fixture.releaseTarget();
 
-        SchedulerCommandApplicationResult result = releaseTarget.release(fixture.secondPayload);
+        SchedulerCommandApplicationResult result = releaseTarget.release(releaseDecision("order-2"), fixture.secondPayload);
 
         assertTrue(result.applied());
         assertEquals(1, fixture.objects.size());
@@ -83,7 +85,7 @@ class TipperFlowScheduledToteReleaseTargetTest {
         fixture.advanceUntilReadyForNextTote();
         TipperFlowScheduledToteReleaseTarget releaseTarget = fixture.releaseTarget();
 
-        SchedulerCommandApplicationResult result = releaseTarget.release(fixture.secondPayload);
+        SchedulerCommandApplicationResult result = releaseTarget.release(releaseDecision("order-2"), fixture.secondPayload);
 
         assertTrue(result.applied());
         assertFalse(fixture.controller.canAcceptNextTote());
@@ -203,5 +205,15 @@ class TipperFlowScheduledToteReleaseTargetTest {
                 },
                 new int[][] { {0, 1, 2} },
                 "anchor");
+    }
+
+    private static ReleaseDecision releaseDecision(String orderId) {
+        return new ReleaseDecision(
+                orderId,
+                "sc-1",
+                online.davisfamily.warehouse.sim.dsp.model.StartLocation.OSR,
+                new online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements(false, false, false, true, false,
+                        online.davisfamily.warehouse.sim.dsp.model.StartLocation.OSR),
+                new ReleaseOrderCommand(orderId, "sc-1", online.davisfamily.warehouse.sim.dsp.model.StartLocation.OSR));
     }
 }

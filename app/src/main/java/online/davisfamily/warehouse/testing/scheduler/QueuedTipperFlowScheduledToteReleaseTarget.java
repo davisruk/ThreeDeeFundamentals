@@ -5,6 +5,7 @@ import java.util.List;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseDecision;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
 
@@ -31,7 +32,10 @@ public class QueuedTipperFlowScheduledToteReleaseTarget implements ScheduledTote
     }
 
     @Override
-    public SchedulerCommandApplicationResult release(TipperTotePayload payload) {
+    public SchedulerCommandApplicationResult release(ReleaseDecision decision, TipperTotePayload payload) {
+        if (decision == null) {
+            throw new IllegalArgumentException("decision must not be null");
+        }
         if (payload == null) {
             throw new IllegalArgumentException("payload must not be null");
         }

@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.testing.scheduler;
 import java.util.List;
 import java.util.Optional;
 
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.scheduler.BlockedDecision;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseDecision;
@@ -33,6 +34,8 @@ public class SchedulerDebugState {
                 .toList();
         Optional<ReleaseDecision> releaseDecision = evaluation.releaseDecision();
         Optional<String> releaseOrderId = releaseDecision.map(ReleaseDecision::orderId);
+        Optional<String> releaseAdaptingBenchId = releaseDecision
+                .flatMap(decision -> decision.selectedStationTargets().selectedTargetIdFor(StationType.ADAPTING));
         Optional<BlockedDecision> blockedDecision = evaluation.blockedDecision();
         Optional<String> activeServiceCentreId = schedulerSnapshot.activeServiceCentreId()
                 .or(() -> releaseDecision.map(ReleaseDecision::serviceCentreId))
@@ -45,6 +48,7 @@ public class SchedulerDebugState {
                 activeServiceCentreId,
                 waitingOrderIds,
                 releaseOrderId,
+                releaseAdaptingBenchId,
                 blockedDecision.map(BlockedDecision::activeServiceCentreId),
                 blockedDecision.map(BlockedDecision::candidateOrderIds).orElse(List.of()),
                 blockedDecision.map(BlockedDecision::blockReasons).orElse(List.of()),
@@ -66,6 +70,7 @@ public class SchedulerDebugState {
                 snapshot.activeServiceCentreId(),
                 snapshot.waitingOrderIds(),
                 snapshot.releaseOrderId(),
+                snapshot.releaseAdaptingBenchId(),
                 snapshot.blockedServiceCentreId(),
                 snapshot.blockedCandidateOrderIds(),
                 snapshot.blockedReasons(),
@@ -87,6 +92,7 @@ public class SchedulerDebugState {
                 snapshot.activeServiceCentreId(),
                 snapshot.waitingOrderIds(),
                 snapshot.releaseOrderId(),
+                snapshot.releaseAdaptingBenchId(),
                 snapshot.blockedServiceCentreId(),
                 snapshot.blockedCandidateOrderIds(),
                 snapshot.blockedReasons(),
@@ -108,6 +114,7 @@ public class SchedulerDebugState {
                 snapshot.activeServiceCentreId(),
                 snapshot.waitingOrderIds(),
                 snapshot.releaseOrderId(),
+                snapshot.releaseAdaptingBenchId(),
                 snapshot.blockedServiceCentreId(),
                 snapshot.blockedCandidateOrderIds(),
                 snapshot.blockedReasons(),
@@ -129,6 +136,7 @@ public class SchedulerDebugState {
                 snapshot.activeServiceCentreId(),
                 snapshot.waitingOrderIds(),
                 snapshot.releaseOrderId(),
+                snapshot.releaseAdaptingBenchId(),
                 snapshot.blockedServiceCentreId(),
                 snapshot.blockedCandidateOrderIds(),
                 snapshot.blockedReasons(),

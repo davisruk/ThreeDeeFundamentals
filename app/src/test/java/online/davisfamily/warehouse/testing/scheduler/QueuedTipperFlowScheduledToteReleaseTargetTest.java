@@ -22,6 +22,8 @@ import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseDecision;
+import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseOrderCommand;
 import online.davisfamily.warehouse.sim.machine.queue.MachineWaitQueueSnapshot;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
@@ -33,7 +35,7 @@ class QueuedTipperFlowScheduledToteReleaseTargetTest {
     void shouldDeferWhenQueueIsFull() {
         TestFixture fixture = new TestFixture(0);
 
-        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(fixture.payload);
+        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(releaseDecision("tote-b"), fixture.payload);
 
         assertFalse(result.applied());
         assertTrue(result.deferred());
@@ -46,7 +48,7 @@ class QueuedTipperFlowScheduledToteReleaseTargetTest {
     void shouldAddRenderableAndTrackableObjectWhenReleased() {
         TestFixture fixture = new TestFixture(1);
 
-        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(fixture.payload);
+        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(releaseDecision("tote-b"), fixture.payload);
 
         assertTrue(result.applied());
         assertTrue(fixture.objects.contains(fixture.payload.getToteRenderable()));
@@ -61,7 +63,7 @@ class QueuedTipperFlowScheduledToteReleaseTargetTest {
         TestFixture fixture = new TestFixture(1);
         fixture.objects.add(fixture.payload.getToteRenderable());
 
-        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(fixture.payload);
+        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(releaseDecision("tote-b"), fixture.payload);
 
         assertTrue(result.applied());
         assertEquals(1, fixture.objects.size());
@@ -71,7 +73,7 @@ class QueuedTipperFlowScheduledToteReleaseTargetTest {
     void shouldEnqueuePayloadWithoutDirectTipperHandoff() {
         TestFixture fixture = new TestFixture(1);
 
-        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(fixture.payload);
+        SchedulerCommandApplicationResult result = fixture.releaseTarget().release(releaseDecision("tote-b"), fixture.payload);
 
         assertTrue(result.applied());
         assertSame(fixture.payload, fixture.queue.peekPayload());
@@ -127,5 +129,15 @@ class QueuedTipperFlowScheduledToteReleaseTargetTest {
                 },
                 new int[][] { {0, 1, 2} },
                 "anchor");
+    }
+
+    private static ReleaseDecision releaseDecision(String orderId) {
+        return new ReleaseDecision(
+                orderId,
+                "sc-1",
+                online.davisfamily.warehouse.sim.dsp.model.StartLocation.OSR,
+                new online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements(false, false, false, true, false,
+                        online.davisfamily.warehouse.sim.dsp.model.StartLocation.OSR),
+                new ReleaseOrderCommand(orderId, "sc-1", online.davisfamily.warehouse.sim.dsp.model.StartLocation.OSR));
     }
 }
