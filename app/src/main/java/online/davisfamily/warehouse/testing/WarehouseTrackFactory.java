@@ -2,7 +2,6 @@ package online.davisfamily.warehouse.testing;
 
 import java.util.List;
 
-import online.davisfamily.threedee.behaviour.routing.RouteConnection;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.behaviour.transformation.SpinBehaviour;
@@ -15,7 +14,6 @@ import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.model.cylinder.CylinderFactory;
 import online.davisfamily.threedee.path.BezierSegment3;
 import online.davisfamily.threedee.path.LinearSegment3;
-import online.davisfamily.threedee.path.PathSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
@@ -23,6 +21,7 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
+import online.davisfamily.warehouse.rendering.model.tracks.GuideOpening;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.rendering.model.tracks.RouteTrackFactory;
 import online.davisfamily.warehouse.rendering.model.tracks.StraightConveyorFactory;
@@ -41,12 +40,12 @@ import online.davisfamily.warehouse.sim.transfer.TransferZone;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 import online.davisfamily.warehouse.sim.transfer.mechanism.SteeringConveyorMechanism;
 import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
+import online.davisfamily.warehouse.sim.transfer.strategy.LegacyTransferDecisionStrategyAdapter;
 import online.davisfamily.warehouse.sim.transfer.strategy.ToggleStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 
 public class WarehouseTrackFactory {
 	public static void setupOvalTrack(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects, SelectionInspectionRegistry inspectionRegistry) {
-
 	    ToteEnvelope widthToteEnvelope = new ToteEnvelope(
 	            tote.getOuterBottomWidth(),
 	            tote.getOuterBottomDepth(),
@@ -59,6 +58,24 @@ public class WarehouseTrackFactory {
 	            0.040f,
 	            0.000f,
 	            true,
+	            0.050f,
+	            0.010f,
+	            0.005f,
+	            0.5f,
+	            1.0f,
+	            true,
+	            0.080f,
+	            0.010f,
+	            0.025f,
+	            0.018f,
+	            0.080f
+	    );
+	    TrackSpec transferWidthWise = new TrackSpec(
+	            widthToteEnvelope,
+	            0.030f,
+	            0.040f,
+	            0.000f,
+	            false,
 	            0.050f,
 	            0.010f,
 	            0.005f,
@@ -148,18 +165,43 @@ public class WarehouseTrackFactory {
 	    float toteSpeedUnitsPerSecond = 2.0f;
 	    float linkOpeningLength = specToteLengthWise.getGuideJoinOpeningLength();
 
-	    // Path geometry
 	    float leftX = 0f;
 	    float link1X = 3f;
 	    float link2X = 5f;
 	    float rightX = 8f;
 	    float topZ = 0f;
 	    float bottomZ = -3f;
+	    float topLinkClearance = 0.2f;
+	    float bottomLinkClearance = 0.0f;
+	    float transfer1StartX = link1X - (toteLength * 0.5f);
+	    float transfer1EndX = link1X + (toteLength * 0.5f);
+	    float transfer2StartX = link2X - (toteLength * 0.5f);
+	    float transfer2EndX = link2X + (toteLength * 0.5f);
 
 	    WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
 
-	    RouteSegment top = builder.segment("top", new LinearSegment3(
+	    RouteSegment topLeft = builder.segment("topLeft", new LinearSegment3(
 	            new Vec3(leftX, 0f, topZ),
+	            new Vec3(transfer1StartX, 0f, topZ),
+	            false
+	    ));
+	    RouteSegment transfer1 = builder.segment("transfer1", new LinearSegment3(
+	            new Vec3(transfer1StartX, 0f, topZ),
+	            new Vec3(transfer1EndX, 0f, topZ),
+	            false
+	    ));
+	    RouteSegment topMid = builder.segment("topMid", new LinearSegment3(
+	            new Vec3(transfer1EndX, 0f, topZ),
+	            new Vec3(transfer2StartX, 0f, topZ),
+	            false
+	    ));
+	    RouteSegment transfer2 = builder.segment("transfer2", new LinearSegment3(
+	            new Vec3(transfer2StartX, 0f, topZ),
+	            new Vec3(transfer2EndX, 0f, topZ),
+	            false
+	    ));
+	    RouteSegment topRight = builder.segment("topRight", new LinearSegment3(
+	            new Vec3(transfer2EndX, 0f, topZ),
 	            new Vec3(rightX, 0f, topZ),
 	            false
 	    ));
@@ -184,9 +226,6 @@ public class WarehouseTrackFactory {
 	            new Vec3(leftX, 0f, topZ)
 	    ));
 
-	    float topLinkClearance = 0.2f;
-	    float bottomLinkClearance = 0.0f;
-
 	    RouteSegment link1 = builder.segment("link1", new LinearSegment3(
 	            new Vec3(link1X, 0f, topZ - topLinkClearance),
 	            new Vec3(link1X, 0f, bottomZ + bottomLinkClearance),
@@ -199,95 +238,70 @@ public class WarehouseTrackFactory {
 	            true
 	    ));
 
-	    // Visual trim on the link segments themselves
 	    float linkTrimStart = 0.0f;
 	    float linkTrimEnd = 0.195f;
-
 	    builder.getMetadata(link1).setRenderTrimStartDistance(linkTrimStart);
 	    builder.getMetadata(link1).setRenderTrimEndDistance(linkTrimEnd);
-
 	    builder.getMetadata(link2).setRenderTrimStartDistance(linkTrimStart);
 	    builder.getMetadata(link2).setRenderTrimEndDistance(linkTrimEnd);
 
-	    // Connection clearances on neighbouring segments.
-	    // These are now explicit rather than implicit.
-	    //
-	    // Top side: pull the source guides back where totes transfer into the links.
-	    // Bottom side: pull the target guides back where the trimmed links join the bottom run.
-	    float topConnectionClearance = topLinkClearance;
-	    float bottomConnectionClearance = linkTrimEnd;
 	    TransferMotionConfig tunedLinkTransfer = new TransferMotionConfig(0.35, 0.12f, 0.75f);
+	    TransferMotionConfig defaultLinkTransfer = new TransferMotionConfig(0.35, 0.10f, 0.80f);
 
-	    // Rendering specs per segment
-	    builder.renderWith(top, specToteWidthWise)
+	    builder.renderWith(topLeft, specToteWidthWise)
+	           .renderWith(transfer1, transferWidthWise)
+	           .renderWith(topMid, specToteWidthWise)
+	           .renderWith(transfer2, transferWidthWise)
+	           .renderWith(topRight, specToteWidthWise)
 	           .renderWith(rightReturn, specToteWidthWise)
 	           .renderWith(bottom, bottomSupportSpec)
 	           .renderWith(leftReturn, specToteWidthWise)
 	           .renderWith(link1, specToteLengthWise)
 	           .renderWith(link2, specToteLengthWise);
 
-	    // Main loop
-	    builder.connectLoop(top, rightReturn)
+	    builder.connectLoop(topLeft, transfer1)
+	           .connectLoop(transfer1, topMid)
+	           .connectLoop(topMid, transfer2)
+	           .connectLoop(transfer2, topRight)
+	           .connectLoop(topRight, rightReturn)
 	           .connectLoop(rightReturn, bottom)
 	           .connectLoop(bottom, leftReturn)
-	           .connectLoop(leftReturn, top);
+	           .connectLoop(leftReturn, topLeft);
 
-	    // Link into bottom:
-	    // openingLength controls the guide opening itself
-	    // bottomConnectionClearance controls how far the bottom guides pull back
 	    builder.connectLinkInto(
 	            link1,
 	            bottom,
 	            5.0f,
 	            GuideSide.RIGHT,
 	            linkOpeningLength,
-	            bottomConnectionClearance
+	            linkTrimEnd
 	    ).connectLinkInto(
 	            link2,
 	            bottom,
 	            3.0f,
 	            GuideSide.RIGHT,
 	            linkOpeningLength,
-	            bottomConnectionClearance
+	            linkTrimEnd
 	    );
 
-	    // Transfers from top into links:
-	    // sourceOpeningLength controls the opening in the top guides
-	    // topConnectionClearance controls how far the top guides pull back visually
-	    builder.addTransferToLink(
+	    TransferTargetDecisionStrategy transfer1Strategy =
+	            new LegacyTransferDecisionStrategyAdapter(new ToggleStrategy(true));
+	    TransferTargetDecisionStrategy transfer2Strategy =
+	            new LegacyTransferDecisionStrategyAdapter(new ToggleStrategy(true));
+	    builder.addStandaloneTransfer(
 	            "transfer_1",
-	    		top,
-	            link1,
-	            link1X,
-	            toteLength,
-	            linkOpeningLength,
-	            GuideSide.RIGHT,
-	            GuideSide.LEFT,
-	            false,
-	            topConnectionClearance,
+	            transfer1,
+	            List.of(new TransferTarget(link1, 0f, RouteFollower.TravelDirection.FORWARD)),
+	            transfer1Strategy,
 	            tunedLinkTransfer
-	    ).addTransferToLink(
+	    ).addStandaloneTransfer(
 	            "transfer_2",
-	    		top,
-	            link2,
-	            link2X,
-	            toteLength,
-	            linkOpeningLength,
-	            GuideSide.RIGHT,
-	            GuideSide.LEFT,
-	            false,
-	            topConnectionClearance
+	            transfer2,
+	            List.of(new TransferTarget(link2, 0f, RouteFollower.TravelDirection.FORWARD)),
+	            transfer2Strategy,
+	            defaultLinkTransfer
 	    );
-	    
-	    PathSegment3 geometry = bottom.getGeometry(); 
-	    System.out.println(String.format("Bottom Length: %.3f", bottom.length()));
-	    System.out.println(String.format("Bottom Sample 0: %s", geometry.sampleByDistance(0f)));
 
-	    for (RouteConnection rc: bottom.getPreviousConnections()) {
-		    System.out.println(String.format("Bottom Entry Distance %s : %s", rc.getSegment().getLabel(), rc.getSegment().getGeometry().sampleByDistance(0f)));
-	    }
-	    
-	    
 	    OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
 	    OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);
 	    OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF);
@@ -330,8 +344,8 @@ public class WarehouseTrackFactory {
 	            bottom.getGeometry().sampleOrientationDirectionByDistance(bottom.length() * 0.5f));
 
 	    float rollerYOffset = specToteWidthWise.getLoadSurfaceHeight() + 0.02f;
-	    RouteFollower rtf = new RouteFollower(rTote.id, top, 0f, toteSpeedUnitsPerSecond);
-	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f); 
+	    RouteFollower rtf = new RouteFollower(rTote.id, topLeft, 0f, toteSpeedUnitsPerSecond);
+	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset, 0f);
 	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
 	    inspectionRegistry.register(rTote, () -> List.of(
 	    		"Type: Tote",
@@ -342,15 +356,17 @@ public class WarehouseTrackFactory {
 	    		"Distance: " + formatDistance(st),
 	    		"Travel dir: " + st.getRouteFollower().getTravelDirection()
 	    ));
-	    
-	    float member_start = 1f;
-	    for (TransferZone tz: builder.getMetadata(top).getTransferZones()) {
-	    	attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
-	    	TransferZoneMachine.createTransferZoneMachine(sim, top, member_start, tz, new ToggleStrategy(true));
-    	    // hack as we know there are only 2 tzs
-    	    member_start = tz.getEndDistance();
+
+	    for (TransferZone tz: builder.getMetadata(transfer1).getTransferZones()) {
+	        attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
+	        TransferZoneMachine.createTransferZoneMachine(sim, topLeft, 1.0f, transfer1, tz, tz.getTargetDecisionStrategy());
         }
-        
+
+	    for (TransferZone tz: builder.getMetadata(transfer2).getTransferZones()) {
+	        attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
+	        TransferZoneMachine.createTransferZoneMachine(sim, topMid, 0.0f, transfer2, tz, tz.getTargetDecisionStrategy());
+        }
+
 	    sim.addTrackableObject(st);
 
 	    for (RenderableObject track : tracks) {
@@ -360,7 +376,6 @@ public class WarehouseTrackFactory {
 	}
 	
 	public static void setupParallelTracks(ToteGeometry tote, RenderableObject rTote, TriangleRenderer tr, SimulationWorld sim, List<RenderableObject> objects, SelectionInspectionRegistry inspectionRegistry){
-		
 		ToteEnvelope toteEnvelope = new ToteEnvelope(
 		        tote.getOuterBottomWidth(),
 		        tote.getOuterBottomDepth(),
@@ -384,85 +399,133 @@ public class WarehouseTrackFactory {
 		        0.025f,
 		        0.018f,
 		        0.080f
-		);		
-		float toteLength = tote.getOuterBottomDepth();
-		// =====================
-		// Parallel track layout
-		// =====================
+		);
+		float transferSideClearance = 0.030f;
+		float transferLength = tote.getOuterBottomDepth();
+		ToteEnvelope transferEnvelope = new ToteEnvelope(
+				tote.getOuterBottomWidth(),
+				tote.getOuterBottomDepth(),
+				tote.getOuterHeight()
+		);
+		TrackSpec transferSpec = new TrackSpec(
+				transferEnvelope,
+		        transferSideClearance,
+		        0.040f,
+		        0.000f,
+		        false,
+		        0.050f,
+		        0.010f,
+		        0.000f,
+		        0.5f,
+		        1.0f,
+		        true,
+		        0.080f,
+		        0.010f,
+		        0.025f,
+		        0.018f,
+		        0.080f
+		);
 
 		float leftX = 0f;
 		float rightX = 8f;
-
-		float epsilon = 0.01f;
-		float trackSpacing = rollerSpec.getOverallWidth() + epsilon;
-
-		// upper track at Z = 0 (travels +X)
 		float upperZ = 0f;
+		float machineWidth = transferSpec.getOverallWidth();
+		float transferEntryDistance = transferLength * 0.5f;
 
-		// lower track below it (travels -X)
-		float lowerZ = -trackSpacing;
-		// Upper track: +X
-		PathSegment3 upperGeometry = new LinearSegment3(
-		    new Vec3(leftX, 0f, upperZ),
-		    new Vec3(rightX, 0f, upperZ),
-		    false
-		);
+		SteeringTransferMachineGeometry leftMachine = SteeringTransferMachineGeometry.fromTransferWindow(
+		        new Vec3(leftX + transferLength, 0f, upperZ),
+		        new Vec3(leftX, 0f, upperZ),
+		        transferLength,
+		        machineWidth);
+		float bodyRunningWidth = rollerSpec.getRunningWidth();
+		Vec3 leftTargetEntry = leftMachine.leftTargetExitAttachmentPoint(bodyRunningWidth);
+		float lowerZ = leftTargetEntry.z;
+		SteeringTransferMachineGeometry rightMachine = SteeringTransferMachineGeometry.fromTransferWindow(
+		        new Vec3(rightX - transferLength, 0f, lowerZ),
+		        new Vec3(rightX, 0f, lowerZ),
+		        transferLength,
+		        machineWidth);
+		Vec3 rightTargetEntry = rightMachine.leftTargetExitAttachmentPoint(bodyRunningWidth);
 
-		// Lower track: -X (reverse direction)
-		PathSegment3 lowerGeometry = new LinearSegment3(
-		    new Vec3(rightX, 0f, lowerZ),
-		    new Vec3(leftX, 0f, lowerZ),
-		    false
-		);		
 		WarehouseRouteBuilder builder = new WarehouseRouteBuilder();
-		RouteSegment upper = builder.segment("upper", upperGeometry);
-		RouteSegment lower = builder.segment("lower", lowerGeometry);
+		RouteSegment upperBody = builder.segment("upperBody", new LinearSegment3(
+		        rightTargetEntry,
+		        leftMachine.sourceEntryAttachmentPoint(),
+		        false
+		));
+		RouteSegment upperTransfer = builder.segment("upperTransfer", new LinearSegment3(
+		        leftMachine.sourceEntryAttachmentPoint(),
+		        leftMachine.sourceExitAttachmentPoint(),
+		        false
+		));
+		RouteSegment lowerBody = builder.segment("lowerBody", new LinearSegment3(
+		        leftTargetEntry,
+		        rightMachine.sourceEntryAttachmentPoint(),
+		        false
+		));
+		RouteSegment lowerTransfer = builder.segment("lowerTransfer", new LinearSegment3(
+		        rightMachine.sourceEntryAttachmentPoint(),
+		        rightMachine.sourceExitAttachmentPoint(),
+		        false
+		));
 
-		// transfer near the right end of the upper track
-		float transferCentre = 7.5f;
+		builder.connectLoop(upperBody, upperTransfer)
+		       .connectLoop(lowerBody, lowerTransfer);
 
-		// land near the start of the lower track
-		float targetEntry = 0.5f;
+		float machineFacingGapLength = rollerSpec.getGuideJoinOpeningLength();
+		builder.getMetadata(upperBody).addGuideOpening(
+		        upperBody,
+		        new GuideOpening(
+		                0f,
+		                Math.min(machineFacingGapLength, upperBody.length()),
+		                GuideSide.LEFT,
+		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
+		builder.getMetadata(upperBody).addGuideOpening(
+		        upperBody,
+		        new GuideOpening(
+		                Math.max(0f, upperBody.length() - machineFacingGapLength),
+		                upperBody.length(),
+		                GuideSide.LEFT,
+		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
+		builder.getMetadata(lowerBody).addGuideOpening(
+		        lowerBody,
+		        new GuideOpening(
+		                0f,
+		                Math.min(machineFacingGapLength, lowerBody.length()),
+		                GuideSide.LEFT,
+		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
+		builder.getMetadata(lowerBody).addGuideOpening(
+		        lowerBody,
+		        new GuideOpening(
+		                Math.max(0f, lowerBody.length() - machineFacingGapLength),
+		                lowerBody.length(),
+		                GuideSide.LEFT,
+		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
+
 		TransferMotionConfig straightAcrossTransfer = new TransferMotionConfig(0.35, 0f, 0f);
+		TransferTargetDecisionStrategy alwaysTransfer =
+		        new LegacyTransferDecisionStrategyAdapter(new AlwaysTransferStrategy());
 
-		AlwaysTransferStrategy always = new AlwaysTransferStrategy();
-		builder.addDirectTransfer(
+		builder.addStandaloneTransfer(
 		        "transfer_1",
-				upper,
-		        lower,
-		        transferCentre,
-		        toteLength,
-		        targetEntry,
-		        GuideSide.RIGHT,   // open lower-facing rail on upper
-		        GuideSide.RIGHT,    // open upper-facing rail on lower
-		        always,
+		        upperTransfer,
+		        List.of(new TransferTarget(lowerBody, transferEntryDistance, RouteFollower.TravelDirection.FORWARD)),
+		        alwaysTransfer,
 		        straightAcrossTransfer
 		);
-
-
-		float lowerTransferInset = 0.25f;
-		float lowerTransferCentre =
-		        lower.getGeometry().getTotalLength() - lowerTransferInset - (toteLength * 0.5f);
-
-		float lowerTransferX = rightX - lowerTransferCentre;
-		float upperEntryDistance = lowerTransferX - leftX;
-
-		builder.addDirectTransfer(
+		builder.addStandaloneTransfer(
 		        "transfer_2",
-				lower,
-		        upper,
-		        lowerTransferCentre,
-		        toteLength,
-		        upperEntryDistance,
-		        GuideSide.RIGHT,
-		        GuideSide.RIGHT,
-		        always,
+		        lowerTransfer,
+		        List.of(new TransferTarget(upperBody, transferEntryDistance, RouteFollower.TravelDirection.FORWARD)),
+		        alwaysTransfer,
 		        straightAcrossTransfer
 		);
-	
-		builder.renderWith(upper, rollerSpec)
-	       .renderWith(lower, rollerSpec);
-		
+
+		builder.renderWith(upperBody, rollerSpec)
+		       .renderWith(upperTransfer, transferSpec)
+		       .renderWith(lowerBody, rollerSpec)
+		       .renderWith(lowerTransfer, transferSpec);
+
 		OneColourStrategyImpl deckColour = new OneColourStrategyImpl(0xFF00FF00);
 		OneColourStrategyImpl guidesColour = new OneColourStrategyImpl(0xFFFF00FF);
 		OneColourStrategyImpl rollersColour = new OneColourStrategyImpl(0xFF00FFFF);
@@ -485,34 +548,44 @@ public class WarehouseTrackFactory {
 		);
 
 		float rollerYOffset = rollerSpec.getLoadSurfaceHeight();
-	
-	    RouteFollower rtf = new RouteFollower(rTote.id, upper, 0f, 2.0f);
-	    Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset + 0.02f, 0f); 
-	    Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
-	    inspectionRegistry.register(rTote, () -> List.of(
-	    		"Type: Tote",
-	    		"Id: " + st.getId(),
-	    		"Motion: " + st.getInteractionMode(),
-	    		"Segment: " + (st.getLastSnapshot() == null ? "None" : st.getLastSnapshot().currentSegment().getLabel()),
-	    		"Distance: " + formatDistance(st),
-	    		"Travel dir: " + st.getRouteFollower().getTravelDirection()
-	    ));
+		RouteFollower rtf = new RouteFollower(rTote.id, upperBody, 0f, 2.0f);
+		Vec3 toteRenderOffsets = new Vec3(0f, rollerYOffset + 0.02f, 0f);
+		Tote st = new Tote(rTote.id, rtf, rTote, toteRenderOffsets, rTote.yawOffsetRadians);
+		inspectionRegistry.register(rTote, () -> List.of(
+		        "Type: Tote",
+		        "Id: " + st.getId(),
+		        "Motion: " + st.getInteractionMode(),
+		        "Segment: " + (st.getLastSnapshot() == null ? "None" : st.getLastSnapshot().currentSegment().getLabel()),
+		        "Distance: " + formatDistance(st),
+		        "Travel dir: " + st.getRouteFollower().getTravelDirection()
+		));
 
-	    for (TransferZone tz : builder.getMetadata(upper).getTransferZones()) {
-	    	attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
-	    	TransferZoneMachine.createTransferZoneMachine(sim, upper, 0f, tz, tz.getDecisionStrategy());
-	    }
+		for (TransferZone tz : builder.getMetadata(upperTransfer).getTransferZones()) {
+		    attachSteeringMechanismForZone(tz, leftMachine, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
+		    TransferZoneMachine.createTransferZoneMachine(
+		            sim,
+		            upperBody,
+		            Math.max(0f, upperBody.length() - 2.0f),
+		            upperTransfer,
+		            tz,
+		            tz.getTargetDecisionStrategy());
+		}
 
-	    for (TransferZone tz : builder.getMetadata(lower).getTransferZones()) {
-	    	attachSteeringMechanismForZone(tz, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
-	    	TransferZoneMachine.createTransferZoneMachine(sim, lower, 0f, tz, tz.getDecisionStrategy());
-	    }
+		for (TransferZone tz : builder.getMetadata(lowerTransfer).getTransferZones()) {
+		    attachSteeringMechanismForZone(tz, rightMachine, tr, objects, inspectionRegistry, 0xFF444444, 0xFFB8B8B8);
+		    TransferZoneMachine.createTransferZoneMachine(
+		            sim,
+		            lowerBody,
+		            Math.max(0f, lowerBody.length() - 2.0f),
+		            lowerTransfer,
+		            tz,
+		            tz.getTargetDecisionStrategy());
+		}
 
-	    sim.addTrackableObject(st);
-		
+		sim.addTrackableObject(st);
 		for (RenderableObject track : tracks) {
 		    objects.add(track);
-		}		
+		}
 	}
 
 	public static void setupInlineTransferTargets(

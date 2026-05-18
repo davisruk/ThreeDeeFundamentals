@@ -40,6 +40,25 @@ public final class SteeringTransferMachineGeometry {
     public static SteeringTransferMachineGeometry fromTransferWindow(
             Vec3 transferWindowStartPoint,
             Vec3 transferWindowEndPoint) {
+        return fromTransferWindow(transferWindowStartPoint, transferWindowEndPoint, -1f);
+    }
+
+    public static SteeringTransferMachineGeometry fromTransferWindow(
+            Vec3 transferWindowStartPoint,
+            Vec3 transferWindowEndPoint,
+            float requestedMachineSize) {
+        return fromTransferWindow(
+                transferWindowStartPoint,
+                transferWindowEndPoint,
+                requestedMachineSize,
+                requestedMachineSize);
+    }
+
+    public static SteeringTransferMachineGeometry fromTransferWindow(
+            Vec3 transferWindowStartPoint,
+            Vec3 transferWindowEndPoint,
+            float requestedBaseLength,
+            float requestedBaseWidth) {
         if (transferWindowStartPoint == null || transferWindowEndPoint == null) {
             throw new IllegalArgumentException("transfer window points must not be null");
         }
@@ -54,17 +73,20 @@ public final class SteeringTransferMachineGeometry {
         Vec3 rightDirection = new Vec3(sourceDirection.z, 0f, -sourceDirection.x).normalize();
         Vec3 centerPoint = Vec3.immutableLerp(transferWindowStartPoint, transferWindowEndPoint, 0.5f);
 
-        float machineSize = transferLength;
-        float mechanismWidth = Math.max(0.32f, machineSize * 0.58f);
+        float baseLength = requestedBaseLength > 0f ? requestedBaseLength : transferLength;
+        if (baseLength + 0.0001f < transferLength) {
+            throw new IllegalArgumentException("machine length must be >= transfer window length");
+        }
+        baseLength = Math.max(baseLength, transferLength);
+        float baseWidth = requestedBaseWidth > 0f ? requestedBaseWidth : baseLength;
+        float mechanismWidth = Math.max(0.32f, baseWidth * 0.58f);
         float conveyorLength = Math.max(0.14f, Math.min(0.18f, transferLength * 0.36f));
         float conveyorWidth = Math.min(conveyorLength * 0.4f, mechanismWidth * 0.28f);
         float gap = (mechanismWidth - (2f * conveyorWidth)) / 3f;
         float conveyorOffset = (conveyorWidth + gap) * 0.5f;
-        float baseLength = machineSize;
-        float baseWidth = machineSize;
 
-        Vec3 leftAttachment = centerPoint.add(rightDirection.scale(-baseLength * 0.5f));
-        Vec3 rightAttachment = centerPoint.add(rightDirection.scale(baseLength * 0.5f));
+        Vec3 leftAttachment = centerPoint.add(rightDirection.scale(-baseWidth * 0.5f));
+        Vec3 rightAttachment = centerPoint.add(rightDirection.scale(baseWidth * 0.5f));
 
         return new SteeringTransferMachineGeometry(
                 transferWindowStartPoint,
@@ -85,6 +107,30 @@ public final class SteeringTransferMachineGeometry {
 
     public Vec3 transferWindowEndPoint() {
         return transferWindowEndPoint;
+    }
+
+    public Vec3 sourceEntryAttachmentPoint() {
+        return transferWindowStartPoint;
+    }
+
+    public Vec3 sourceExitAttachmentPoint() {
+        return transferWindowEndPoint;
+    }
+
+    public Vec3 leftTargetEntryAttachmentPoint(float targetRunningWidth) {
+        return sideTargetAttachmentPoint(transferWindowStartPoint, -1f, targetRunningWidth);
+    }
+
+    public Vec3 rightTargetEntryAttachmentPoint(float targetRunningWidth) {
+        return sideTargetAttachmentPoint(transferWindowStartPoint, 1f, targetRunningWidth);
+    }
+
+    public Vec3 leftTargetExitAttachmentPoint(float targetRunningWidth) {
+        return sideTargetAttachmentPoint(transferWindowEndPoint, -1f, targetRunningWidth);
+    }
+
+    public Vec3 rightTargetExitAttachmentPoint(float targetRunningWidth) {
+        return sideTargetAttachmentPoint(transferWindowEndPoint, 1f, targetRunningWidth);
     }
 
     public Vec3 transferWindowCenterPoint() {
@@ -117,5 +163,13 @@ public final class SteeringTransferMachineGeometry {
 
     public float baseWidth() {
         return baseWidth;
+    }
+
+    private Vec3 sideTargetAttachmentPoint(Vec3 sourceAxisPoint, float sideSign, float targetRunningWidth) {
+        Vec3 transferVector = transferWindowEndPoint.subtract(transferWindowStartPoint);
+        Vec3 sourceDirection = transferVector.normalize();
+        Vec3 rightDirection = new Vec3(sourceDirection.z, 0f, -sourceDirection.x).normalize();
+        float centrelineOffset = (baseWidth * 0.5f) + Math.max(0f, targetRunningWidth * 0.5f);
+        return sourceAxisPoint.add(rightDirection.scale(sideSign * centrelineOffset));
     }
 }
