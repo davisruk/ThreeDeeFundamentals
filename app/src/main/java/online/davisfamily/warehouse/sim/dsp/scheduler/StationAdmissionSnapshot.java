@@ -1,5 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler;
 
+import java.util.Optional;
+
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 
 public record StationAdmissionSnapshot(
@@ -7,7 +9,17 @@ public record StationAdmissionSnapshot(
         StationCapacity capacity,
         StationSnapshot snapshot,
         boolean admissionOpen,
-        String blockedReason) {
+        String blockedReason,
+        Optional<String> selectedTargetId) {
+
+    public StationAdmissionSnapshot(
+            StationType stationType,
+            StationCapacity capacity,
+            StationSnapshot snapshot,
+            boolean admissionOpen,
+            String blockedReason) {
+        this(stationType, capacity, snapshot, admissionOpen, blockedReason, Optional.empty());
+    }
 
     public StationAdmissionSnapshot {
         if (stationType == null) {
@@ -22,10 +34,14 @@ public record StationAdmissionSnapshot(
         if (snapshot.stationType() != stationType) {
             throw new IllegalArgumentException("snapshot stationType must match stationType");
         }
+        if (selectedTargetId == null) {
+            throw new IllegalArgumentException("selectedTargetId must not be null");
+        }
         blockedReason = blockedReason == null ? "" : blockedReason;
         if (!admissionOpen && blockedReason.isBlank()) {
             throw new IllegalArgumentException("blockedReason must not be blank when admission is closed");
         }
+        selectedTargetId = selectedTargetId.map(String::trim).filter(value -> !value.isEmpty());
     }
 
     public boolean canAccept() {

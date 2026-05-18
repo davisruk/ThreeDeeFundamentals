@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.machine.queue.MachineWaitQueue;
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 
 public class AdaptingArea {
     private final Map<AdaptingBenchId, BenchSlot> benchSlots = new LinkedHashMap<>();
@@ -116,6 +118,18 @@ public class AdaptingArea {
 
     public AdaptingBench bench(AdaptingBenchId benchId) {
         return slot(benchId).bench;
+    }
+
+    public StationSnapshot stationSnapshot() {
+        int inProgress = 0;
+        int queued = 0;
+        for (BenchSlot slot : benchSlots.values()) {
+            if (slot.bench.state() != AdaptingBenchState.IDLE) {
+                inProgress++;
+            }
+            queued += slot.pendingVisits.size();
+        }
+        return new StationSnapshot(StationType.ADAPTING, inProgress, queued);
     }
 
     private BenchSlot slot(AdaptingBenchId benchId) {

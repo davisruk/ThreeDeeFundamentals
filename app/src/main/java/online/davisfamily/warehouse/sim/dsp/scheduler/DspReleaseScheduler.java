@@ -2,8 +2,10 @@ package online.davisfamily.warehouse.sim.dsp.scheduler;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -64,7 +66,8 @@ public class DspReleaseScheduler {
         for (DspSchedulerOrderState candidate : candidates) {
             candidateOrderIds.add(candidate.order().orderId());
 
-            List<String> reasons = collectBlockReasons(candidate, snapshot);
+            CandidateAdmissionResult admissionResult = collectAdmissionResult(candidate, snapshot);
+            List<String> reasons = admissionResult.reasons();
             if (reasons.isEmpty()) {
                 ReleaseOrderCommand command = new ReleaseOrderCommand(
                         candidate.order().orderId(),
@@ -75,7 +78,8 @@ public class DspReleaseScheduler {
                         candidate.order().serviceCentreId(),
                         candidate.routeRequirements().startLocation(),
                         candidate.routeRequirements(),
-                        command);
+                        command,
+                        new SelectedStationTargets(admissionResult.selectedTargetIds()));
                 return SchedulerEvaluation.release(decision);
             }
             for (String reason : reasons) {
@@ -86,19 +90,21 @@ public class DspReleaseScheduler {
         return SchedulerEvaluation.blocked(new BlockedDecision(activeServiceCentreId, candidateOrderIds, blockReasons));
     }
 
-    private List<String> collectBlockReasons(DspSchedulerOrderState candidate, WarehouseSchedulerSnapshot snapshot) {
+    private CandidateAdmissionResult collectAdmissionResult(DspSchedulerOrderState candidate, WarehouseSchedulerSnapshot snapshot) {
         List<String> reasons = new ArrayList<>();
         dependencyEvaluator.findBlocks(candidate, snapshot).stream()
                 .map(DependencyBlock::reason)
                 .forEach(reasons::add);
-        addCapacityBlockReasons(candidate, snapshot, reasons);
-        return List.copyOf(reasons);
+        Map<StationType, String> selectedTargetIds = new LinkedHashMap<>();
+        addCapacityBlockReasons(candidate, snapshot, reasons, selectedTargetIds);
+        return new CandidateAdmissionResult(List.copyOf(reasons), Map.copyOf(selectedTargetIds));
     }
 
     private void addCapacityBlockReasons(
             DspSchedulerOrderState candidate,
             WarehouseSchedulerSnapshot snapshot,
-            List<String> reasons) {
+            List<String> reasons,
+            Map<StationType, String> selectedTargetIds) {
         RouteRequirements routeRequirements = candidate.routeRequirements();
         Set<StationType> requiredStations = new LinkedHashSet<>();
         if (routeRequirements.requiresThirdParty()) {
@@ -128,7 +134,9 @@ public class DspReleaseScheduler {
                         ? "Station " + stationType + " has no capacity"
                         : admission.blockedReason();
                 reasons.add(blockedReason);
+                continue;
             }
+            admission.selectedTargetId().ifPresent(selectedTargetId -> selectedTargetIds.put(stationType, selectedTargetId));
         }
     }
 
@@ -146,5 +154,8 @@ public class DspReleaseScheduler {
             case ASSOCIATED, EMPTY -> 1;
             case FULL_PACK -> 2;
         };
+    }
+
+    private record CandidateAdmissionResult(List<String> reasons, Map<StationType, String> selectedTargetIds) {
     }
 }

@@ -8,7 +8,17 @@ public record ReleaseDecision(
         String serviceCentreId,
         StartLocation startLocation,
         RouteRequirements routeRequirements,
-        ReleaseOrderCommand command) {
+        ReleaseOrderCommand command,
+        SelectedStationTargets selectedStationTargets) {
+
+    public ReleaseDecision(
+            String orderId,
+            String serviceCentreId,
+            StartLocation startLocation,
+            RouteRequirements routeRequirements,
+            ReleaseOrderCommand command) {
+        this(orderId, serviceCentreId, startLocation, routeRequirements, command, SelectedStationTargets.empty());
+    }
 
     public ReleaseDecision {
         if (orderId == null || orderId.isBlank()) {
@@ -25,6 +35,9 @@ public record ReleaseDecision(
         }
         if (command == null) {
             throw new IllegalArgumentException("command must not be null");
+        }
+        if (selectedStationTargets == null) {
+            throw new IllegalArgumentException("selectedStationTargets must not be null");
         }
     }
 }
