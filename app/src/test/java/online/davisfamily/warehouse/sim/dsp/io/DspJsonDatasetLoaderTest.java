@@ -56,11 +56,12 @@ class DspJsonDatasetLoaderTest {
         assertEquals(1, data.dispatchOrders().size());
         assertEquals(OrderType.FULL_PACK, data.dispatchOrders().getFirst().orderType());
         assertTrue(data.preparedLines().isEmpty());
-        assertTrue(data.preparedLineKeys().isEmpty());
+        assertTrue(data.loadedPreparedLineKeys().isEmpty());
+        assertTrue(data.startupReadyPreparedLineKeys().isEmpty());
     }
 
     @Test
-    void shouldLoadAdaptedPreparationLinesAndPreparedLineKeysWithoutDispatchOrder() {
+    void shouldLoadAdaptedPreparationLinesAndLoadedPreparedLineKeysWithoutDispatchOrder() {
         LoadedDspData data = loader.load(
                 List.of(new ProductMasterRecord("36550", ProductCategory.SORTABLE, false)),
                 List.of(message("""
@@ -101,7 +102,8 @@ class DspJsonDatasetLoaderTest {
         assertEquals(Set.of(
                 new PreparedLineKey("TOTE0007168519", 1, "000243449262", DspOrderLineType.ADAPTED),
                 new PreparedLineKey("TOTE0007168489", 1, "000243450449", DspOrderLineType.ADAPTED)),
-                data.preparedLineKeys());
+                data.loadedPreparedLineKeys());
+        assertTrue(data.startupReadyPreparedLineKeys().isEmpty());
     }
 
     @Test

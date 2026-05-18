@@ -82,20 +82,39 @@ class LoadedDspSchedulerRuntimeFactoryTest {
     }
 
     @Test
-    void shouldCarryPreparedLineKeysIntoInitialSnapshot() {
-        Set<PreparedLineKey> preparedLineKeys = Set.of(
+    void shouldNotTreatLoadedPreparedLineKeysAsStartupReady() {
+        Set<PreparedLineKey> loadedPreparedLineKeys = Set.of(
                 new PreparedLineKey("target-1", 1, "line-1", DspOrderLineType.ADAPTED),
                 new PreparedLineKey("target-2", 1, "line-2", DspOrderLineType.MANUAL));
         LoadedDspData data = new LoadedDspData(
                 List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
                 List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "9114", "0006461", 0L)),
                 List.of(),
-                preparedLineKeys);
+                loadedPreparedLineKeys);
         LoadedDspSchedulerRuntimeFactory factory = factoryWithProducts(data.products());
 
         DspSchedulerRuntimeState runtimeState = factory.createRuntimeState(data, Map.of(), Optional.empty());
 
-        assertEquals(preparedLineKeys, runtimeState.snapshot().preparedLineKeys());
+        assertTrue(runtimeState.snapshot().preparedLineKeys().isEmpty());
+        assertEquals(loadedPreparedLineKeys, data.loadedPreparedLineKeys());
+    }
+
+    @Test
+    void shouldCarryExplicitStartupReadyPreparedLineKeysIntoInitialSnapshot() {
+        Set<PreparedLineKey> startupReadyPreparedLineKeys = Set.of(
+                new PreparedLineKey("target-1", 1, "line-1", DspOrderLineType.ADAPTED),
+                new PreparedLineKey("target-2", 1, "line-2", DspOrderLineType.MANUAL));
+        LoadedDspData data = new LoadedDspData(
+                List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
+                List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "9114", "0006461", 0L)),
+                List.of(),
+                Set.of(),
+                startupReadyPreparedLineKeys);
+        LoadedDspSchedulerRuntimeFactory factory = factoryWithProducts(data.products());
+
+        DspSchedulerRuntimeState runtimeState = factory.createRuntimeState(data, Map.of(), Optional.empty());
+
+        assertEquals(startupReadyPreparedLineKeys, runtimeState.snapshot().preparedLineKeys());
     }
 
     @Test

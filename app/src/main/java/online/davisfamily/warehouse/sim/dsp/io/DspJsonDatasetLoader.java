@@ -76,7 +76,7 @@ public class DspJsonDatasetLoader {
 
         List<NotionalToteOrder> dispatchOrders = new ArrayList<>();
         List<DspOrderItem> preparedLines = new ArrayList<>();
-        Set<PreparedLineKey> preparedLineKeys = new LinkedHashSet<>();
+        Set<PreparedLineKey> loadedPreparedLineKeys = new LinkedHashSet<>();
         long dispatchSequenceNumber = 0L;
 
         for (TwelveNMessageJson message : List.copyOf(messages)) {
@@ -96,12 +96,12 @@ public class DspJsonDatasetLoader {
                     List<DspOrderItem> lines = preparedLineMapper.toPreparedLines(message);
                     preparedLines.addAll(lines);
                     for (DspOrderItem line : lines) {
-                        preparedLineKeys.add(PreparedLineKey.forPreparedLine(line));
+                        loadedPreparedLineKeys.add(PreparedLineKey.forPreparedLine(line));
                     }
                 }
             }
         }
 
-        return new LoadedDspData(products, dispatchOrders, preparedLines, preparedLineKeys);
+        return new LoadedDspData(products, dispatchOrders, preparedLines, loadedPreparedLineKeys);
     }
 }

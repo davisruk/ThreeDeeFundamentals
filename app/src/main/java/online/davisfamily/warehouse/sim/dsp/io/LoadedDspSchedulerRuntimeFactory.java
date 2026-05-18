@@ -47,7 +47,7 @@ public class LoadedDspSchedulerRuntimeFactory {
         return new DspSchedulerRuntimeState(new WarehouseSchedulerSnapshot(
                 orderStates,
                 stationAdmissions,
-                data.preparedLineKeys(),
+                data.startupReadyPreparedLineKeys(),
                 activeServiceCentreId));
     }
 }
