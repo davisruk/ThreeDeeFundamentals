@@ -108,6 +108,12 @@ public class WarehouseRouteBuilder {
         return this;
     }
 
+    /**
+     * Legacy overlay helper for source-segment interval transfers into a link segment.
+     * Prefer {@link #addStandaloneTransfer(String, RouteSegment, List, TransferTargetDecisionStrategy, TransferMotionConfig)}
+     * when modelling an explicit transfer-controlled segment/window.
+     */
+    @Deprecated
     public WarehouseRouteBuilder addTransferToLink(
             String transferId,
             RouteSegment sourceSegment,
@@ -283,6 +289,12 @@ public class WarehouseRouteBuilder {
         return this;
     }
 
+    /**
+     * Legacy overlay helper for direct source-segment interval transfers.
+     * Prefer {@link #addStandaloneTransfer(String, RouteSegment, List, TransferTargetDecisionStrategy, TransferMotionConfig)}
+     * for new work.
+     */
+    @Deprecated
     public WarehouseRouteBuilder addDirectTransfer(
             String transferId,
             RouteSegment sourceSegment,
@@ -445,6 +457,12 @@ public class WarehouseRouteBuilder {
         return this;
     }
 
+    /**
+     * Legacy overlay helper for inline source-segment interval transfers.
+     * Prefer {@link #addStandaloneTransfer(String, RouteSegment, List, TransferTargetDecisionStrategy, TransferMotionConfig)}
+     * when the transfer area should be its own route segment.
+     */
+    @Deprecated
     public WarehouseRouteBuilder addInlineTransfer(
             String transferId,
             RouteSegment sourceSegment,

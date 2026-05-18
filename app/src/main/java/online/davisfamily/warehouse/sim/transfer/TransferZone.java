@@ -7,6 +7,7 @@ import java.util.List;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.rendering.model.tracks.GuideSide;
 import online.davisfamily.warehouse.sim.transfer.mechanism.TransferZoneMechanism;
+import online.davisfamily.warehouse.sim.transfer.strategy.AlwaysTransferStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.LegacyTransferDecisionStrategyAdapter;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferTargetDecisionStrategy;
 import online.davisfamily.warehouse.sim.transfer.strategy.TransferDecisionStrategy;
@@ -153,12 +154,27 @@ public class TransferZone {
         return targetStartDistance;
     }
 
+    /**
+     * Legacy strategy accessor retained for interval/overlay transfer callers.
+     * Prefer {@link #getTargetDecisionStrategy()} for standalone transfer windows.
+     */
+    @Deprecated
     public TransferDecisionStrategy getDecisionStrategy() {
         return legacyDecisionStrategy;
     }
 
     public TransferTargetDecisionStrategy getTargetDecisionStrategy() {
         return targetDecisionStrategy;
+    }
+
+    public boolean usesLegacyAlwaysTransferStrategy() {
+        return legacyDecisionStrategy instanceof AlwaysTransferStrategy;
+    }
+
+    public String getPreferredStrategyName() {
+        return legacyDecisionStrategy != null
+                ? legacyDecisionStrategy.getClass().getSimpleName()
+                : targetDecisionStrategy.getClass().getSimpleName();
     }
 
     public TransferMotionConfig getMotionConfig() {

@@ -877,7 +877,7 @@ public class WarehouseTrackFactory {
 		Vec3 branchVector = targetPosition.subtract(sourcePosition);
 		float branchYaw = localXYawFromDirection(new Vec3(branchVector.x, 0f, branchVector.z));
 		TransferOutcome initialOutcome =
-				zone.getDecisionStrategy() instanceof AlwaysTransferStrategy
+				zone.usesLegacyAlwaysTransferStrategy()
 						? TransferOutcome.BRANCH
 						: TransferOutcome.CONTINUE;
 		SteeringConveyorMechanism mechanism = new SteeringConveyorMechanism(
@@ -910,7 +910,7 @@ public class WarehouseTrackFactory {
 		Vec3 branchVector = targetPosition.subtract(sourcePosition);
 		float branchYaw = localXYawFromDirection(new Vec3(branchVector.x, 0f, branchVector.z));
 		TransferOutcome initialOutcome =
-				zone.getDecisionStrategy() instanceof AlwaysTransferStrategy
+				zone.usesLegacyAlwaysTransferStrategy()
 						? TransferOutcome.BRANCH
 						: TransferOutcome.CONTINUE;
 		SteeringConveyorMechanism mechanism = new SteeringConveyorMechanism(
@@ -1036,9 +1036,7 @@ public class WarehouseTrackFactory {
 			RenderableObject renderable,
 			TransferZone zone,
 			SteeringConveyorMechanism mechanism) {
-		String strategyName = zone.getDecisionStrategy() != null
-				? zone.getDecisionStrategy().getClass().getSimpleName()
-				: zone.getTargetDecisionStrategy().getClass().getSimpleName();
+		String strategyName = zone.getPreferredStrategyName();
 		inspectionRegistry.register(renderable, () -> List.of(
 				"Type: Steering transfer",
 				"Id: " + zone.getId(),

@@ -112,6 +112,16 @@ public final class RouteTrackLayoutFactory {
             }
         }
 
+        if (spec.suppressGuidesInTransferZones) {
+            for (TrackInterval interval : layout.getIntervals()) {
+                if (interval.getType() == TrackIntervalType.TRANSFER) {
+                    blockedSpans.add(new TrackSpan(
+                            interval.getStartDistance(),
+                            interval.getEndDistance()));
+                }
+            }
+        }
+
         List<TrackSpan> clipped = clipAndMerge(blockedSpans, guideStart, guideEnd);
         return subtractBlockedSpans(guideStart, guideEnd, clipped);
     }
