@@ -2,7 +2,7 @@
 
 Branch: `feature/inline-transfer-targets`
 
-Status: planned. This replaces the visual-only follow-up in `inline-transfer-targets-plan.md`.
+Status: completed on `feature/inline-transfer-targets`. This replaced the visual-only follow-up in `inline-transfer-targets-plan.md`.
 
 Related requirements: `docs/machines/transfer-machine-requirements.md`
 
@@ -367,6 +367,13 @@ Before closing the branch:
 - update `docs/machines/adapting-station-phase-1-plan.md` if it references old overlay transfer behaviour
 
 Ask the user to run whichever wider test command they prefer for branch closure.
+
+Completion notes:
+
+- Focused transfer tests passed after Step 8 cleanup.
+- Visual checks for `inline-transfer`, `oval-track`, and `parallel-track` completed successfully.
+- Legacy overlay helpers remain available only as compatibility entry points and are now marked as legacy/deprecated in code.
+- `docs/machines/adapting-station-phase-1-plan.md` already targets the standalone transfer-segment model and did not require overlay-related changes.
 
 ## Completion Criteria
 

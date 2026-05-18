@@ -2,7 +2,7 @@
 
 Branch: `feature/adapting-station-phase-1`
 
-Status: planned. Start this only after `feature/inline-transfer-targets` is complete and merged.
+Status: planned. `feature/inline-transfer-targets` is complete, and this plan assumes the standalone transfer-segment model delivered there.
 
 ## Purpose
 

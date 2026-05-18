@@ -472,18 +472,18 @@ public class WarehouseTrackFactory {
 		builder.connectLoop(upperBody, upperTransfer)
 		       .connectLoop(lowerBody, lowerTransfer);
 
-		float machineFacingGapLength = rollerSpec.getGuideJoinOpeningLength();
+		float sourceGuideEndTrim = rollerSpec.guideThickness;
 		builder.getMetadata(upperBody).addGuideOpening(
 		        upperBody,
 		        new GuideOpening(
 		                0f,
-		                Math.min(machineFacingGapLength, upperBody.length()),
-		                GuideSide.LEFT,
-		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
+		                Math.min(transferLength, upperBody.length()),
+		                GuideSide.RIGHT,
+		                GuideOpening.GuideOpeningType.CONNECTION_TARGET));
 		builder.getMetadata(upperBody).addGuideOpening(
 		        upperBody,
 		        new GuideOpening(
-		                Math.max(0f, upperBody.length() - machineFacingGapLength),
+		                Math.max(0f, upperBody.length() - sourceGuideEndTrim),
 		                upperBody.length(),
 		                GuideSide.LEFT,
 		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
@@ -491,13 +491,13 @@ public class WarehouseTrackFactory {
 		        lowerBody,
 		        new GuideOpening(
 		                0f,
-		                Math.min(machineFacingGapLength, lowerBody.length()),
+		                Math.min(transferLength, lowerBody.length()),
 		                GuideSide.LEFT,
-		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
+		                GuideOpening.GuideOpeningType.CONNECTION_TARGET));
 		builder.getMetadata(lowerBody).addGuideOpening(
 		        lowerBody,
 		        new GuideOpening(
-		                Math.max(0f, lowerBody.length() - machineFacingGapLength),
+		                Math.max(0f, lowerBody.length() - sourceGuideEndTrim),
 		                lowerBody.length(),
 		                GuideSide.LEFT,
 		                GuideOpening.GuideOpeningType.TRANSFER_SOURCE));
