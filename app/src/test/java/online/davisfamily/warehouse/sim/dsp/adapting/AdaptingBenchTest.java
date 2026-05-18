@@ -1,0 +1,118 @@
+package online.davisfamily.warehouse.sim.dsp.adapting;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
+
+class AdaptingBenchTest {
+
+    @Test
+    void shouldStageAdaptedLinesAfterStoreVisitCompletes() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 5d);
+        DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
+        DspOrderItem line2 = adaptedLine("line-2", "target-2", "0000388");
+
+        bench.acceptVisit(AdaptingVisit.store("tote-store", List.of(line1, line2)));
+        assertEquals(AdaptingBenchState.QUEUED, bench.state());
+        assertEquals("tote-store", bench.snapshot().activeToteId());
+        assertEquals(AdaptingVisitType.STORE, bench.snapshot().activeVisitType());
+
+        bench.startProcessing();
+        assertEquals(AdaptingBenchState.PROCESSING_STORE, bench.state());
+        bench.tick(4d);
+        assertEquals(AdaptingBenchState.PROCESSING_STORE, bench.state());
+        assertEquals(1d, bench.snapshot().remainingProcessingSeconds(), 0.0001d);
+
+        bench.tick(1d);
+        assertEquals(AdaptingBenchState.COMPLETED, bench.state());
+        assertTrue(store.contains(PreparedLineKey.forPreparedLine(line1)));
+        assertTrue(store.contains(PreparedLineKey.forPreparedLine(line2)));
+        assertEquals(2, store.snapshot().stagedLineCount());
+
+        AdaptingBenchCompletion completion = bench.consumeCompletion().orElseThrow();
+        assertEquals(AdaptingVisitType.STORE, completion.visit().visitType());
+        assertTrue(completion.collectedLines().isEmpty());
+        assertEquals(AdaptingBenchState.IDLE, bench.state());
+    }
+
+    @Test
+    void shouldReturnCollectedLinesAfterCollectVisitCompletes() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
+        DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
+        DspOrderItem line2 = adaptedLine("line-2", "target-2", "0000388");
+        store.stage(line1);
+        store.stage(line2);
+
+        bench.acceptVisit(AdaptingVisit.collect(
+                "tote-collect",
+                List.of(PreparedLineKey.forPreparedLine(line2), PreparedLineKey.forPreparedLine(line1))));
+        bench.startProcessing();
+
+        assertEquals(AdaptingBenchState.COMPLETED, bench.state());
+        AdaptingBenchCompletion completion = bench.consumeCompletion().orElseThrow();
+        assertEquals(AdaptingVisitType.COLLECT, completion.visit().visitType());
+        assertEquals(List.of(
+                PreparedLineKey.forPreparedLine(line2),
+                PreparedLineKey.forPreparedLine(line1)),
+                completion.collectedLines().stream().map(AdaptedLineRecord::key).toList());
+        assertEquals(0, store.snapshot().stagedLineCount());
+        assertEquals(AdaptingBenchState.IDLE, bench.state());
+    }
+
+    @Test
+    void shouldEnterBlockedStateWhenCollectVisitCannotFindAllRequestedLines() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
+        DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
+        DspOrderItem missingLine = adaptedLine("line-2", "target-2", "0000388");
+        store.stage(line1);
+
+        bench.acceptVisit(AdaptingVisit.collect(
+                "tote-collect",
+                List.of(PreparedLineKey.forPreparedLine(line1), PreparedLineKey.forPreparedLine(missingLine))));
+        bench.startProcessing();
+
+        assertEquals(AdaptingBenchState.BLOCKED, bench.state());
+        assertTrue(bench.snapshot().blockedReason().contains("Missing staged adapted lines"));
+        assertFalse(bench.consumeCompletion().isPresent());
+
+        bench.clearBlocked();
+        assertEquals(AdaptingBenchState.IDLE, bench.state());
+    }
+
+    @Test
+    void shouldRejectVisitWhileBenchIsNotIdle() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 1d);
+        bench.acceptVisit(AdaptingVisit.store("tote-store", List.of(adaptedLine("line-1", "target-1", "0000310"))));
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> bench.acceptVisit(AdaptingVisit.store("tote-store-2", List.of(adaptedLine("line-2", "target-2", "0000388")))));
+
+        assertTrue(exception.getMessage().contains("Bench is not idle"));
+    }
+
+    private static DspOrderItem adaptedLine(String lineId, String targetOrderId, String pharmacyId) {
+        return new DspOrderItem(
+                lineId,
+                "product-" + lineId,
+                1,
+                pharmacyId,
+                DspOrderLineType.ADAPTED,
+                targetOrderId,
+                1,
+                0);
+    }
+}
