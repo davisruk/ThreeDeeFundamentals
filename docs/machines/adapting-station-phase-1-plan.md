@@ -6,14 +6,14 @@ Status: planned. `feature/inline-transfer-targets` is complete, and this plan as
 
 ## Purpose
 
-Add the first Phase 1 merge/preparation station. Phase 1 is state-complete and visually cheap:
+Add the first Phase 1 merge/preparation station area. Phase 1 is state-complete and visually cheap:
 
 - no rendered racks/bins
 - no detailed pack transfer animation
-- placeholder station stop/renderable only
+- placeholder bench/station stop renderables only
 - strong machine state, queue, logical inventory, and scheduler-facing readiness
 
-The adapting station has two visit reasons:
+The adapting area contains multiple adapting bench stations. A tote is routed to one bench based on available waiting/processing capacity. Each bench has two visit reasons:
 
 - `STORE`: an `ADAPTED` preparation tote deposits prepared lines into logical station storage.
 - `COLLECT`: an `ASSOCIATED` or `EMPTY` dispatch tote collects staged adapted lines before travelling onward.
@@ -24,12 +24,38 @@ The adapting station has two visit reasons:
 
 - `ADAPTED` totes are transient preparation carriers and may contain lines for multiple pharmacies/stores.
 - After a `STORE` visit, the source tote is removed/stored and can disappear in Phase 1. It does not continue through the route.
-- Prepared adapted lines become scheduler-ready only after the adapting station has processed the `STORE` visit.
+- Prepared adapted lines become scheduler-ready only after an adapting bench has processed the `STORE` visit.
 - Loaded prepared-line data represents work that exists in the dataset, not automatically completed station work.
 - If a fixture needs lines to be ready at startup, it must seed readiness explicitly as already-staged state.
 - A `COLLECT` visit updates the collecting tote's load plan so the downstream P2P line can act on the newly added packs.
 - `ASSOCIATED` and `EMPTY` orders may collect adapted lines.
 - `FULL_PACK` orders do not collect adapted lines.
+- The adapting area has multiple bench stations. Phase 1 can use a small fixed count in tests/fixtures, but the domain should not assume exactly one station.
+- Scheduler release admission is area-level: a tote may be released to the adapting area only when at least one compatible bench has waiting or processing capacity.
+- Bench selection should be deterministic when multiple benches can accept a tote. Prefer lowest bench id unless a stronger rule is introduced later.
+
+## Implementation Vocabulary
+
+Use these names consistently unless the existing code strongly indicates a better local naming convention:
+
+- `AdaptingArea`: owns multiple benches and exposes area-level admission/selection.
+- `AdaptingBench`: one physical/manual bench station. This is the state machine that processes one visit at a time.
+- `AdaptingBenchId`: stable bench identifier. Phase 1 may use a simple string or small value object; tests should use ids like `bench-1`, `bench-2`.
+- `AdaptingVisit`: immutable request describing one tote/order visit to a bench.
+- `AdaptingVisitType`: `STORE` or `COLLECT`.
+- `AdaptingBenchSnapshot`: immutable state/capacity snapshot for one bench.
+- `AdaptingAreaSnapshot`: immutable area snapshot containing bench snapshots and area-level admission result data.
+- `AdaptingBenchSelection`: result of area admission, containing accepted/blocked plus selected `AdaptingBenchId` when accepted.
+- `AdaptedLineStore`: shared logical storage for staged adapted lines. It is owned by the adapting area or an area controller, not by the scheduler worker.
+
+Naming rule:
+
+- Do not introduce both `AdaptingStation` and `AdaptingBench` for the same concept. In this plan, `AdaptingBench` is the station machine. If existing code already has an `AdaptingStation` type before implementation starts, rename the plan consistently before coding.
+
+Snapshot rule:
+
+- Scheduler-visible snapshots must be immutable.
+- Scheduler-visible snapshots must not expose mutable `AdaptedLineStore`, `MachineWaitQueue`, live totes, route followers, renderables, or controllers.
 
 ## Scope
 
@@ -65,7 +91,7 @@ Target behaviour:
 
 Expected output:
 
-- A dispatch order with adapted dependencies remains blocked after JSON load until readiness is added by station processing.
+- A dispatch order with adapted dependencies remains blocked after JSON load until readiness is added by bench processing.
 - Existing tests that assumed all loaded prepared lines were ready should be updated to assert loaded work separately from readiness.
 
 Ask the user to run:
@@ -111,9 +137,9 @@ Ask the user to run:
 .\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineStoreTest
 ```
 
-## Step 3: Add Station State Machine
+## Step 3: Add Bench State Machine
 
-Add a Phase 1 adapting station machine with explicit state.
+Add a Phase 1 adapting bench machine with explicit state.
 
 Suggested states:
 
@@ -124,18 +150,21 @@ Suggested states:
 - `COMPLETED`
 - `BLOCKED`
 
-Suggested classes:
+Required classes:
 
-- `AdaptingStation`
-- `AdaptingStationState`
+- `AdaptingBench`
+- `AdaptingBenchState`
 - `AdaptingVisitType`
-- `AdaptingStationSnapshot`
+- `AdaptingVisit`
+- `AdaptingBenchSnapshot`
 
 Rules:
 
-- The station owns current visit state and processing timers.
-- The station does not mutate route follower state directly.
-- The station exposes a snapshot for scheduler/debug use.
+- The bench owns current visit state and processing timers.
+- The bench does not mutate route follower state directly.
+- The bench exposes an immutable snapshot for scheduler/debug use.
+- `AdaptingVisitType.STORE` is only valid for adapted preparation work.
+- `AdaptingVisitType.COLLECT` is only valid for collecting dispatch work.
 
 Expected output:
 
@@ -146,34 +175,44 @@ Expected output:
 Ask the user to run:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchTest
 ```
 
-## Step 4: Add Input Queue And Admission Snapshot
+## Step 4: Add Bench Input Queues And Area Admission Snapshot
 
-Use the existing `MachineWaitQueue` pattern for adapting station waiting space.
+Use the existing `MachineWaitQueue` pattern for each adapting bench's waiting space.
 
-Suggested classes:
+Required classes:
 
-- `AdaptingStationQueue`
-- `AdaptingStationAdmissionSnapshot`
+- `AdaptingArea`
+- `AdaptingBenchId`
+- `AdaptingBenchAdmissionSnapshot`
+- `AdaptingAreaAdmissionSnapshot`
+- `AdaptingBenchSelection`
 - or reuse `MachineWaitQueue` directly if a wrapper adds no value
 
 Rules:
 
-- Scheduler release admission means queue capacity exists.
-- Station processing admission means the station can start the next queued visit.
+- Scheduler release admission means at least one compatible bench queue or processing slot has capacity.
+- Bench selection is deterministic; if several benches can accept, choose the lowest bench id.
+- Bench processing admission means a specific bench can start the next queued visit.
 - Keep these two gates separate.
+- `AdaptingArea.selectBenchFor(visit)` should return `AdaptingBenchSelection.accepted(benchId)` or a blocked result.
+- Compatibility in Phase 1 means:
+  - the bench can accept the visit type
+  - the bench queue has capacity or the bench can start immediately
+  - future compatibility constraints can be added without changing scheduler call sites
 
 Expected output:
 
-- Queue capacity can be represented in immutable snapshots.
-- A queued tote waits until the station can process it.
+- Per-bench queue capacity can be represented in immutable snapshots.
+- Area-level capacity can be represented without exposing mutable bench objects to scheduler code.
+- A queued tote waits at its selected bench until that bench can process it.
 
 Ask the user to run:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationQueueTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingAreaAdmissionTest
 ```
 
 ## Step 5: Add STORE Visit Processing
@@ -183,9 +222,10 @@ Implement the `ADAPTED` preparation path.
 Rules:
 
 - The incoming source tote carries prepared adapted lines.
-- The station stages those lines in `AdaptedLineStore`.
-- The runtime/scheduler prepared-line readiness is updated only after station processing completes.
+- The selected `AdaptingBench` stages those lines in `AdaptedLineStore`.
+- The runtime/scheduler prepared-line readiness is updated only after bench processing completes.
 - The source tote is removed/stored/disappears for Phase 1.
+- `AdaptingArea` or an area controller applies STORE completion to the shared store and publishes readiness; the scheduler worker must not mutate the store.
 
 Expected output:
 
@@ -209,11 +249,12 @@ Rules:
 - Retrieve matching staged records from `AdaptedLineStore`.
 - Update the collecting tote load plan so P2P sees the collected packs.
 - Do not support `FULL_PACK` collection.
+- `AdaptingArea` or an area controller applies COLLECT completion to the shared store and tote load plan; the scheduler worker must not mutate either object.
 
 Expected output:
 
 - An `ASSOCIATED` or `EMPTY` collecting tote receives staged adapted lines.
-- P2P-facing `ToteLoadPlan` includes collected packs after station processing.
+- P2P-facing `ToteLoadPlan` includes collected packs after bench processing.
 - A `FULL_PACK` collect request is rejected or ignored by contract, with a test proving it cannot collect adapted lines.
 
 Ask the user to run:
@@ -224,18 +265,27 @@ Ask the user to run:
 
 ## Step 7: Add Scheduler/Runtime Integration
 
-Expose adapting readiness and queue capacity through the scheduler snapshot path.
+Expose adapting readiness and multi-bench area capacity through the scheduler snapshot path.
 
 Rules:
 
-- Scheduler sees adapting queue capacity as station admission.
-- Scheduler sees adapted dependencies as ready only when station processing has staged them.
+- Scheduler sees adapting area capacity as area admission.
+- Scheduler decisions can identify the selected adapting bench target when the area has capacity.
+- Scheduler sees adapted dependencies as ready only when bench processing has staged them.
 - Scheduler should not mutate `AdaptedLineStore` directly. Simulation-thread station/controller code mutates live store state and then publishes immutable snapshots.
+- Candidate evaluation should use the same deterministic selection contract as the runtime area:
+  - filter compatible bench snapshots with capacity
+  - sort by `AdaptingBenchId`
+  - choose the first
+- If the scheduler emits a release command for an adapting-bound tote, that command/result must carry the selected `AdaptingBenchId` so the simulation-thread controller can route the tote to the matching bench path.
 
 Expected output:
 
 - A collecting order is blocked before required adapted lines are staged.
 - The same order becomes releasable after STORE completes and readiness is visible.
+- An adapting-bound tote is blocked when every bench is full.
+- An adapting-bound tote is assigned to a deterministic bench when multiple benches can accept.
+- The selected bench id is visible in the scheduler/runtime result used by the simulation thread.
 
 Ask the user to run:
 
@@ -245,23 +295,55 @@ Ask the user to run:
 
 ## Step 8: Add Minimal Debug Layout Integration
 
-Add a placeholder adapting station to the debug warehouse route.
+Add placeholder adapting bench stations to the debug warehouse route.
+
+Suggested Phase 1 routing shape:
+
+```text
+D--<-+-<---O
+ ^ b | b ^
+ | b v b |
+-+-<-+->-+-
+```
+
+Legend:
+
+- `O` is the origination side.
+- `D` is the downstream destination side.
+- `+` symbols are transfer machines/windows.
+- `b` markers are adapting benches.
+- Arrow characters show travel direction only.
+
+Both STORE and COLLECT totes originate from `O` and may divert at the first main-line transfer into the adapting area. Inside the adapting area, an inline transfer routes the tote to the selected bench path. STORE totes terminate/disappear at the selected bench after processing. COLLECT totes stop at the selected bench, receive logical packs, continue along that bench path, and transfer back to the main line toward `D`.
+
+The rig does not need to match the final warehouse layout, but it must prove that the scheduler/controller can direct totes to one of several adapting benches based on capacity and can return COLLECT totes to the main line without re-diverting them back into the adapting area.
 
 Rules:
 
 - Use the inline transfer-target work for adapting-area routing where needed.
-- Add one simple selectable station renderable or use an existing simple marker.
+- Add simple selectable bench renderables or existing simple markers.
+- Fixture routing should map `AdaptingBenchId` to a concrete transfer target/path. Do not infer the path from list order in more than one place.
+- Suggested fixture mapping:
+  - `bench-1` routes to the upper bench path
+  - `bench-2` routes to the lower bench path
+- The first main-line transfer must divert only totes whose selected next visit is adapting STORE or adapting COLLECT.
+- A COLLECT tote returning from a bench path to the main line must continue toward `D`; it must not be re-diverted into the adapting area.
+- STORE tote removal happens at the selected bench after processing, not on the main line.
 - Inspection should show:
-  - station state
+  - bench id
+  - bench state
   - queue count/capacity
   - staged adapted line count
   - active visit type
+  - selected bench id on the adapting-area/scheduler debug surface when available
 - No rendered racks/bins or pack transfer animation.
 
 Expected output:
 
-- A STORE tote can arrive and disappear after processing.
-- A later COLLECT tote can arrive, receive logical packs, and continue toward P2P.
+- A STORE tote can be routed to an available bench and disappear after processing.
+- If one bench is full, a later tote can be routed to another available bench.
+- A later COLLECT tote can arrive, receive logical packs, return to the main line, and continue toward P2P/`D`.
+- A COLLECT tote that has returned to the main line is not reselected by the adapting diversion transfer.
 - Visual validation can be done through motion plus inspection overlay.
 
 Ask the user to run the focused adapting test first, then a visual run command agreed at that time.
@@ -271,7 +353,8 @@ Ask the user to run the focused adapting test first, then a visual run command a
 - Adapted line readiness is no longer implied by loading ADAPTED 12N messages.
 - STORE processing stages adapted lines and makes them ready.
 - STORE source totes disappear in Phase 1.
-- COLLECT processing updates the collecting tote load plan for P2P.
+- COLLECT processing updates the collecting tote load plan for P2P and returns the tote to the main line.
 - `FULL_PACK` never collects adapted lines.
-- Station queue and station processing gates are separate.
+- Area release admission, bench queue admission, and bench processing gates are separate.
+- Multiple adapting benches are supported, with deterministic capacity-based bench selection.
 - Visual presentation remains deliberately minimal.

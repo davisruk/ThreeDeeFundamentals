@@ -233,17 +233,18 @@ Notes:
 
 ### `feature/inline-transfer-targets`
 
-Status: planned.
+Status: completed and merged. The initial target-selection work was completed, then superseded by the standalone transfer-machine modelling work.
 
 Detailed implementation doc:
 
 - `docs/machines/inline-transfer-targets-plan.md`
+- `docs/machines/transfer-machine-standalone-plan.md`
 
 Purpose:
 
 - Extend transfer-zone routing so one physical transfer window can choose a concrete target segment, entry distance, and travel direction.
 - Support inline transfer layouts required by the adapting area.
-- Keep the change generic and complete before adapting station logic starts.
+- Keep transfer control separate from transfer renderables, with explicit transfer-controlled route segments as the preferred model.
 
 ### `feature/adapting-station-phase-1`
 
@@ -255,7 +256,7 @@ Detailed implementation doc:
 
 Purpose:
 
-- Add the Phase 1 adapting station after inline transfer support is available.
+- Add the Phase 1 adapting station now that standalone transfer-machine support is available.
 - Support STORE visits from ADAPTED preparation totes.
 - Support COLLECT visits for ASSOCIATED/EMPTY dispatch totes.
 - Stage adapted prepared lines logically and only mark them ready after STORE processing.
@@ -270,7 +271,7 @@ Purpose:
 - Adapted preparation orders may contain lines for multiple pharmacies.
 - Manual tote order examples are pharmacy-pure and should unlock target dispatch work through line readiness.
 - Prepared-line readiness is keyed by target order id, target sheet, line id, and line type.
-- Loaded ADAPTED prepared-line data is not automatically ready. Adapted readiness should be added when the adapting station processes STORE work, except for explicit already-staged startup fixtures.
+- Loaded ADAPTED prepared-line data is not automatically ready. Adapted readiness should be added when an adapting bench processes STORE work, except for explicit already-staged startup fixtures.
 - `FULL_PACK` orders never collect adapted lines.
 - A blocked active service centre blocks later service centres.
 - Scheduler v1 is threaded in the integrated debug path, with synchronous fallback still available.
