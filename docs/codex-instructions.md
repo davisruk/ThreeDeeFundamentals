@@ -116,7 +116,7 @@ Current scheduler decisions:
   - this architecture correction was inserted mid DSP scheduler work before adding further scheduler behaviour
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. The generic transfer-machine capability is complete and merged; the next planned branch is `feature/adapting-station-phase-1`.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. The generic transfer-machine capability is complete and merged. `feature/adapting-station-phase-1` is implemented and ready for branch closure; after it is merged, the next Phase 1 station should be planned from updated `master`.
 
 ## Deferred Direction
 
@@ -128,7 +128,7 @@ Current larger direction:
 
 Known Phase 1 machine/station work:
 
-- adapting station
+- adapting station: Phase 1 implemented on `feature/adapting-station-phase-1`
 - third-party station
 - manual station
 - exception station

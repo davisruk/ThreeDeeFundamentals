@@ -8,7 +8,7 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
-Before adapting station work starts, complete the generic inline transfer-target branch. The adapting area needs transfer machines that can route one source window to one of multiple target tracks/directions; that is a route/transfer capability, not adapting-station logic.
+The generic transfer-machine work is complete. Adapting Station Phase 1 is implemented and ready for merge from `feature/adapting-station-phase-1`; continue with the remaining Phase 1 stations from updated `master` after that branch is closed.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -55,6 +55,8 @@ Phase 1 expectations:
 
 ### 1. Adapting Station Phase 1
 
+Status: implemented on `feature/adapting-station-phase-1`; ready for branch closure after final verification/commit.
+
 Purpose:
 
 - Introduce the most complex merge/preparation station first.
@@ -75,6 +77,14 @@ Phase 1 expectations:
 - `FULL_PACK` orders never collect adapted lines.
 - Scheduler readiness should eventually be able to ask whether required adapted lines for a target dispatch tote are available.
 - No rendered racks/bins or animated pack transfer in Phase 1.
+
+Implemented notes:
+
+- Multi-bench adapting area with deterministic capacity/store-affinity selection.
+- Logical `bench -> rack -> shelf -> bin` storage allocation exists without rendered racks/bins.
+- STORE totes disappear after processing in the debug rig.
+- COLLECT totes update their load plan and return to the main line.
+- The adapting debug scene uses explicit bench stop sensors and six visible bench placeholders.
 
 ### 2. Third-Party Station Phase 1
 

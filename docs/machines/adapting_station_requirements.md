@@ -164,18 +164,15 @@ The simulation shall model adapting storage independently from totes.
 
 Loaded ADAPTED 12N prepared-line data is source work for the station. It must not automatically make a target dispatch dependency ready. A prepared-line key becomes available to the scheduler after the adapting station has processed the source STORE visit and staged the line. Test fixtures may seed already-staged startup state explicitly where needed.
 
-Example:
+Phase 1 storage is logical rather than visual, but it should preserve the shape needed for later rendering:
 
-```java
-class AdaptedProductStore {
-    Map<OrderReference, List<PreparedItem>> stagedItems;
-}
-
-record OrderReference(
-    String orderId,
-    int sheetNumber
-) {}
+```text
+bench -> rack -> shelf -> bin -> prepared lines
 ```
+
+Storage allocation does not need a complex planner in Phase 1. The station should use deterministic store/pharmacy affinity to choose a preferred bench, then dynamically create bins, shelves, and racks as simple capacities are reached.
+
+Each staged prepared line should retain enough location metadata to support future rack/bin placeholders and pack-transfer animation without changing the station semantics.
 
 ---
 
@@ -235,8 +232,16 @@ The simulation should support:
 - delayed fulfilment
 - partial retrieval scenarios
 - timeout / exception handling
+- multiple adapting benches with deterministic store/pharmacy affinity
+- explicit bench stop points so route geometry does not control station processing
 
 The Adapting Station should therefore be treated as both:
 
 - a processing station
 - and a temporary inventory subsystem
+
+Phase 1 implementation note:
+
+- STORE totes may disappear after bench processing.
+- COLLECT totes continue after processing and return to the main line.
+- Racks, bins, and pack movement are logical only; rendered storage detail is deferred to Phase 2.

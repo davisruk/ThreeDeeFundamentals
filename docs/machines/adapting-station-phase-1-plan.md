@@ -2,7 +2,7 @@
 
 Branch: `feature/adapting-station-phase-1`
 
-Status: planned. `feature/inline-transfer-targets` is complete, and this plan assumes the standalone transfer-segment model delivered there.
+Status: implemented and ready for branch closure. `feature/inline-transfer-targets` is complete, and this plan assumes the standalone transfer-segment model delivered there.
 
 ## Purpose
 
@@ -547,3 +547,22 @@ Then ask the user to run the adapting visual scene.
 - Multiple adapting benches are supported, with deterministic capacity/store-affinity based bench selection.
 - The adapting debug rig has explicit bench stop sensors and no longer relies on route-length threshold guesses for bench arrival.
 - Visual presentation remains deliberately minimal.
+
+## Completion Notes
+
+Implemented on `feature/adapting-station-phase-1`:
+
+- Loaded prepared-line work is separate from scheduler-ready adapted line state.
+- `AdaptedLineStore`, adapting bench state, area admission, and STORE/COLLECT completion flow are in place.
+- Logical adapting storage models `bench -> rack -> shelf -> bin` with simple dynamic allocation and store/pharmacy bench affinity.
+- Scheduler decisions can carry the selected adapting bench id to the simulation thread.
+- `--scene=adapting` provides a minimal six-bench debug rig with explicit bench stops.
+- STORE totes are hidden after bench processing completes.
+- COLLECT totes stop at the selected bench, update the tote load plan, and return to the main line.
+
+Deferred:
+
+- polished adapting geometry
+- rendered racks/bins
+- animated pack movement between totes, benches, and storage
+- detailed operator/manual workflows

@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. The next implementation branch is generic inline transfer-target support, followed by adapting station Phase 1.
+Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support is complete, and adapting station Phase 1 is implemented on `feature/adapting-station-phase-1`.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -248,7 +248,7 @@ Purpose:
 
 ### `feature/adapting-station-phase-1`
 
-Status: planned.
+Status: implemented and ready for branch closure.
 
 Detailed implementation doc:
 
@@ -262,6 +262,14 @@ Purpose:
 - Stage adapted prepared lines logically and only mark them ready after STORE processing.
 - Update collecting tote load plans so P2P can process collected packs.
 - Keep visuals minimal and defer racks/bins/pack animation to Phase 2.
+
+Notes:
+
+- The adapting area supports multiple benches and per-bench stop sensors in the debug scene.
+- Store/pharmacy affinity selects preferred benches while preserving deterministic fallback.
+- Logical adapting storage now models `bench -> rack -> shelf -> bin` without rendered storage visuals.
+- STORE source totes disappear after bench completion.
+- COLLECT totes return to the main line after load-plan update.
 
 ## Current Assumptions
 
