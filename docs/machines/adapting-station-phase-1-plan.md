@@ -54,6 +54,8 @@ Use these names consistently unless the existing code strongly indicates a bette
 - `AdaptingStorageMap`: maps store/pharmacy identifiers to their preferred `AdaptingBenchId`.
 - `AdaptingStorageLayout`: owns the logical `bench -> rack -> shelf -> bin` hierarchy and dynamically creates bins/shelves/racks when capacity is reached.
 - `StoredAdaptedLineRecord`: staged adapted line plus its `AdaptingStorageLocation`, if keeping location metadata outside `AdaptedLineRecord` is cleaner.
+- `AdaptingBenchStop`: fixture/runtime stop point for one adapting bench. It maps one `AdaptingBenchId` to a concrete `RouteSegment` and a sensor/hold distance.
+- `AdaptingBenchStopController`: simulation controller that observes tote route progress, holds totes at their assigned bench stop, starts bench processing, and releases/removes totes after completion.
 
 Naming rule:
 
@@ -413,6 +415,127 @@ Expected output:
 
 Ask the user to run the focused adapting test first, then a visual run command agreed at that time.
 
+## Step 10: Add Bench Stop Sensors And Expand The Debug Rig To Six Benches
+
+Replace distance-only bench stopping in the adapting debug rig with explicit bench stop sensors, and expand the fixture from two benches to six benches.
+
+This step is primarily runtime/fixture work. It should not change the adapting storage model, scheduler prioritisation, P2P, or transfer-machine core logic.
+
+Required classes or equivalent:
+
+- `AdaptingBenchStop`
+- `AdaptingBenchStopController`
+- `AdaptingBenchStopSnapshot` if useful for inspection/tests
+
+Allowed location:
+
+- Prefer `online.davisfamily.warehouse.testing` if the stop objects are only debug-rig fixtures.
+- Use `online.davisfamily.warehouse.sim.dsp.adapting` only if the stop model becomes part of reusable simulation backend behaviour.
+
+Bench-count requirement:
+
+- The adapting debug rig should contain six benches:
+  - three benches between `adapting_spine` / upper bench lane and the upper return track
+  - three benches between `adapting_spine` / lower bench lane and the lower return track
+- Use stable ids:
+  - `bench-1`, `bench-2`, `bench-3` on one side
+  - `bench-4`, `bench-5`, `bench-6` on the other side
+- The exact side/id mapping can be chosen by the implementer, but it must be declared once in the fixture and reused consistently for:
+  - `AdaptingArea` construction
+  - `AdaptingStorageMap` available benches
+  - scheduler selected bench id routing
+  - transfer target/path selection
+  - bench stop lookup
+  - inspection/debug labels
+
+Bench-stop rules:
+
+- Do not rely on `BENCH_STOP_DISTANCE` alone to decide whether a tote has reached a bench.
+- Each `AdaptingBenchStop` must explicitly define:
+  - `AdaptingBenchId benchId`
+  - `RouteSegment segment`
+  - `float sensorDistance`
+  - optional `float holdDistance` if the tote should snap/hold at a slightly different point
+- A tote should stop only at the `AdaptingBenchStop` assigned to its selected `AdaptingBenchId`.
+- A tote passing another bench stop on the same lane must not start or block that bench.
+- The controller should detect arrival by crossing the sensor distance on the assigned segment, not by exact equality.
+- The controller should handle update steps that move a tote from before the sensor to after it in one tick.
+- If the tote has already passed its assigned sensor on the assigned segment, the controller should still hold it at the next update rather than letting it continue to the return transfer.
+- Avoid scattering bench stop distances through the rig. Store them in one fixture map such as `Map<AdaptingBenchId, AdaptingBenchStop>`.
+
+Controller responsibilities:
+
+- `AdaptingBenchStopController` should own the physical stop/start behaviour currently embedded in the adapting rig journey update logic.
+- On arrival at the assigned stop:
+  - set the tote motion state to `HELD`
+  - open the tote lids
+  - start the selected `AdaptingBench` if its active visit is queued for that tote
+  - set the journey phase to `PROCESSING_STORE` or `PROCESSING_COLLECT`
+- On STORE completion:
+  - apply bench completion through `AdaptingAreaController`
+  - remove/hide the source tote visually for Phase 1
+  - mark the journey complete
+- On COLLECT completion:
+  - apply bench completion through `AdaptingAreaController`
+  - close the tote lids
+  - set the tote motion state back to `MOVING`
+  - mark the journey as returning so it continues to the return transfer and then the main line
+
+STORE tote removal:
+
+- STORE totes should disappear once emptied at the bench.
+- Phase 1 can continue using the existing hide/remove behaviour rather than modelling an empty-tote storage route.
+- Do not remove COLLECT totes after collection; they must continue toward the main line and downstream destination.
+
+Six-bench routing rules:
+
+- `AdaptingArea` already supports multiple benches; construct it with all six benches in the debug rig.
+- Configure `AdaptingStorageMap` with all six bench ids.
+- Provide explicit pharmacy/store assignments in the fixture so at least two STORE/COLLECT flows route to different benches.
+- If using a simple inline transfer with two lanes, the fixture may route multiple bench ids to the same physical lane and distinguish their stop points by sensor distance along that lane.
+- Do not duplicate bench-id to route mapping logic in several places. Use one helper such as:
+  - `RouteSegment benchPathFor(AdaptingBenchId benchId)`
+  - `TransferTarget benchTargetFor(AdaptingBenchId benchId)`
+  - `AdaptingBenchStop benchStopFor(AdaptingBenchId benchId)`
+
+Inspection/debug requirements:
+
+- Each bench placeholder should be selectable.
+- Inspection should show:
+  - bench id
+  - bench state
+  - queue count/capacity
+  - active tote
+  - active visit type
+  - staged adapted line count
+- It is acceptable for bench placeholders to remain simple rectangular blocks.
+- Do not add detailed bins, racks, or pack-transfer animation in this step.
+
+Expected tests:
+
+- `AdaptingBenchStopControllerTest` or equivalent should prove:
+  - a tote stops at the sensor for its assigned bench
+  - a tote does not stop at another bench's sensor
+  - crossing the sensor in one update still triggers the stop
+  - STORE completion hides/removes the source tote
+  - COLLECT completion releases the tote back to moving state
+- Existing adapting scheduler/domain tests should remain green.
+
+Expected visual output:
+
+- The adapting scene has six visible bench placeholders.
+- STORE totes stop at the selected bench and disappear after processing.
+- COLLECT totes stop at the selected bench, then continue to the return transfer and main line.
+- Totes no longer depend on bench-path length to decide where to stop.
+
+Ask the user to run:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.testing.*Adapting* --tests online.davisfamily.warehouse.sim.dsp.adapting.*
+```
+
+Then ask the user to run the adapting visual scene.
+
 ## Completion Criteria
 
 - Adapted line readiness is no longer implied by loading ADAPTED 12N messages.
@@ -421,5 +544,6 @@ Ask the user to run the focused adapting test first, then a visual run command a
 - COLLECT processing updates the collecting tote load plan for P2P and returns the tote to the main line.
 - `FULL_PACK` never collects adapted lines.
 - Area release admission, bench queue admission, and bench processing gates are separate.
-- Multiple adapting benches are supported, with deterministic capacity-based bench selection.
+- Multiple adapting benches are supported, with deterministic capacity/store-affinity based bench selection.
+- The adapting debug rig has explicit bench stop sensors and no longer relies on route-length threshold guesses for bench arrival.
 - Visual presentation remains deliberately minimal.
