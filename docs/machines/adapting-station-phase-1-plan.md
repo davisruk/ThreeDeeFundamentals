@@ -32,7 +32,9 @@ The adapting area contains multiple adapting bench stations. A tote is routed to
 - `FULL_PACK` orders do not collect adapted lines.
 - The adapting area has multiple bench stations. Phase 1 can use a small fixed count in tests/fixtures, but the domain should not assume exactly one station.
 - Scheduler release admission is area-level: a tote may be released to the adapting area only when at least one compatible bench has waiting or processing capacity.
-- Bench selection should be deterministic when multiple benches can accept a tote. Prefer lowest bench id unless a stronger rule is introduced later.
+- Bench selection should be deterministic when multiple benches can accept a tote. Prefer the store/pharmacy's nearest bench when known, then fall back deterministically.
+- Store/pharmacy storage is logical in Phase 1, but it must be represented in the backend as `bench -> rack -> shelf -> bin` so later visual work can render storage placeholders and pack movement without changing station semantics.
+- Phase 1 storage allocation should be simple and deterministic. Do not build an optimisation planner yet; create bins/shelves/racks dynamically when configured capacities are reached.
 
 ## Implementation Vocabulary
 
@@ -47,6 +49,11 @@ Use these names consistently unless the existing code strongly indicates a bette
 - `AdaptingAreaSnapshot`: immutable area snapshot containing bench snapshots and area-level admission result data.
 - `AdaptingBenchSelection`: result of area admission, containing accepted/blocked plus selected `AdaptingBenchId` when accepted.
 - `AdaptedLineStore`: shared logical storage for staged adapted lines. It is owned by the adapting area or an area controller, not by the scheduler worker.
+- `AdaptingStorageLocation`: logical storage assignment for a staged line, including `AdaptingBenchId`, rack index/id, shelf index/id, bin index/id, and store/pharmacy id.
+- `AdaptingStorageConfig`: simple capacity settings, such as lines per bin, bins per shelf, and shelves per rack.
+- `AdaptingStorageMap`: maps store/pharmacy identifiers to their preferred `AdaptingBenchId`.
+- `AdaptingStorageLayout`: owns the logical `bench -> rack -> shelf -> bin` hierarchy and dynamically creates bins/shelves/racks when capacity is reached.
+- `StoredAdaptedLineRecord`: staged adapted line plus its `AdaptingStorageLocation`, if keeping location metadata outside `AdaptedLineRecord` is cleaner.
 
 Naming rule:
 
@@ -293,7 +300,64 @@ Ask the user to run:
 .\gradlew test --tests online.davisfamily.warehouse.sim.dsp.scheduler.* --tests online.davisfamily.warehouse.sim.dsp.adapting.*
 ```
 
-## Step 8: Add Minimal Debug Layout Integration
+## Step 8: Add Store-Aware Adapting Storage And Bench Selection
+
+Add logical storage hierarchy and store affinity so STORE and COLLECT visits are routed to the bench nearest the store/pharmacy they service.
+
+Required classes or equivalent:
+
+- `AdaptingStorageLocation`
+- `AdaptingStorageConfig`
+- `AdaptingStorageMap`
+- `AdaptingStorageLayout`
+- `StoredAdaptedLineRecord` or `AdaptingStorageAssignment` if useful for returning selected storage metadata with staged records
+
+Rules:
+
+- `ADAPTED` totes may contain lines for multiple pharmacies/stores. Do not assume an adapted STORE visit is pharmacy-pure.
+- The storage structure is logical in Phase 1 but should model `bench -> rack -> shelf -> bin`.
+- Configure simple capacities:
+  - lines per bin
+  - bins per shelf
+  - shelves per rack
+- `STORE` processing should stage each adapted line into a logical bin derived from that line's pharmacy/store identifier.
+- `COLLECT` processing should retrieve lines from the same logical bins/locations used by STORE.
+- `AdaptingArea.selectBenchFor(visit)` should prefer the bench associated with the visit's relevant store/pharmacy when capacity allows.
+- For `COLLECT`, the relevant store/pharmacy is the collecting order's store/pharmacy.
+- For mixed `STORE` visits, derive a preferred bench by scoring the visit's lines by their storage locations:
+  - count lines per preferred bench
+  - choose the bench with the highest count when it has capacity
+  - break ties by lowest `AdaptingBenchId`
+  - if the preferred bench is full, fall back to the next compatible bench with capacity, ordered by score then bench id
+- If a line has no explicit storage map entry, use a deterministic fallback location, preferably the lowest bench id with capacity.
+- Do not implement complex placement optimisation in Phase 1.
+- Allocation within a preferred bench is append-only/dynamic:
+  - use the store/pharmacy's current open bin if it has line capacity
+  - when a bin is full, create the next bin on the same shelf
+  - when a shelf is full, create the next shelf on the same rack
+  - when a rack is full, create the next rack for that bench
+- Keep storage affinity inside the adapting area/domain. The scheduler should still ask for area admission and receive only selected target metadata such as `AdaptingBenchId`.
+- Phase 1 does not need rendered bins or racks, but snapshots/debug output should expose enough logical storage information to validate routing and future visuals:
+  - preferred bench for the visit
+  - staged line count per bench/rack/shelf/bin
+  - missing/unmapped store count if relevant
+
+Expected output:
+
+- A STORE visit containing lines for multiple pharmacies can stage records into multiple logical storage locations.
+- A STORE visit is routed to the bench nearest the dominant/target storage location when that bench has capacity.
+- A COLLECT visit is routed to the bench associated with its store/pharmacy when that bench has capacity.
+- If the preferred bench is full, selection falls back deterministically without losing the original storage location metadata.
+- Stored records retain enough location metadata for later visual rack/shelf/bin rendering.
+- Bin, shelf, and rack creation is covered by focused tests using deliberately small capacities.
+
+Ask the user to run:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.*
+```
+
+## Step 9: Add Minimal Debug Layout Integration
 
 Add placeholder adapting bench stations to the debug warehouse route.
 
@@ -326,6 +390,7 @@ Rules:
 - Suggested fixture mapping:
   - `bench-1` routes to the upper bench path
   - `bench-2` routes to the lower bench path
+- Use the store-aware storage map from Step 8 in the debug fixture so STORE and COLLECT totes naturally route to the bench associated with their store/pharmacy where possible.
 - The first main-line transfer must divert only totes whose selected next visit is adapting STORE or adapting COLLECT.
 - A COLLECT tote returning from a bench path to the main line must continue toward `D`; it must not be re-diverted into the adapting area.
 - STORE tote removal happens at the selected bench after processing, not on the main line.
