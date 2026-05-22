@@ -1,40 +1,47 @@
 package online.davisfamily.warehouse.sim.dsp.adapting;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public class AdaptedLineStore {
-    private final Map<PreparedLineKey, AdaptedLineRecord> stagedLines = new LinkedHashMap<>();
+    private final AdaptingStorageLayout layout;
+
+    public AdaptedLineStore() {
+        this(new AdaptingStorageLayout(AdaptingStorageConfig.defaults(), new AdaptingStorageMap()));
+    }
+
+    public AdaptedLineStore(AdaptingStorageLayout layout) {
+        if (layout == null) {
+            throw new IllegalArgumentException("layout must not be null");
+        }
+        this.layout = layout;
+    }
+
+    public void bindStorageMap(AdaptingStorageMap storageMap) {
+        layout.bindStorageMap(storageMap);
+    }
 
     public void stage(DspOrderItem line) {
-        stage(AdaptedLineRecord.fromPreparedLine(line));
+        layout.stage(line);
     }
 
     public void stage(AdaptedLineRecord record) {
         if (record == null) {
             throw new IllegalArgumentException("record must not be null");
         }
-        stagedLines.put(record.key(), record);
+        layout.stage(record);
     }
 
     public boolean contains(PreparedLineKey key) {
-        if (key == null) {
-            throw new IllegalArgumentException("key must not be null");
-        }
-        return stagedLines.containsKey(key);
+        return layout.contains(key);
     }
 
     public Optional<AdaptedLineRecord> take(PreparedLineKey key) {
-        if (key == null) {
-            throw new IllegalArgumentException("key must not be null");
-        }
-        return Optional.ofNullable(stagedLines.remove(key));
+        return Optional.ofNullable(layout.take(key));
     }
 
     public List<AdaptedLineRecord> takeAll(Iterable<PreparedLineKey> keys) {
@@ -49,22 +56,10 @@ public class AdaptedLineStore {
             }
             requestedKeys.add(key);
         }
-
-        List<PreparedLineKey> missingKeys = requestedKeys.stream()
-                .filter(key -> !stagedLines.containsKey(key))
-                .toList();
-        if (!missingKeys.isEmpty()) {
-            throw new IllegalStateException("Missing staged adapted lines for keys: " + missingKeys);
-        }
-
-        List<AdaptedLineRecord> records = new ArrayList<>(requestedKeys.size());
-        for (PreparedLineKey key : requestedKeys) {
-            records.add(stagedLines.remove(key));
-        }
-        return List.copyOf(records);
+        return layout.takeAll(requestedKeys);
     }
 
     public AdaptedLineStoreSnapshot snapshot() {
-        return new AdaptedLineStoreSnapshot(stagedLines.size(), stagedLines.keySet());
+        return layout.snapshot();
     }
 }

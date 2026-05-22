@@ -27,10 +27,14 @@ public class AdaptingCollectVisitFactory {
                 .filter(line -> line.lineType() == DspOrderLineType.ADAPTED)
                 .map(line -> PreparedLineKey.forDispatchLine(order, line))
                 .toList();
+        List<String> pharmacyIds = order.items().stream()
+                .filter(line -> line.lineType() == DspOrderLineType.ADAPTED)
+                .map(line -> line.pharmacyId())
+                .toList();
         if (requestedLineKeys.isEmpty()) {
             throw new IllegalArgumentException("Collecting order must contain at least one ADAPTED line");
         }
 
-        return AdaptingVisit.collect(toteId.trim(), requestedLineKeys);
+        return AdaptingVisit.collect(toteId.trim(), requestedLineKeys, pharmacyIds);
     }
 }

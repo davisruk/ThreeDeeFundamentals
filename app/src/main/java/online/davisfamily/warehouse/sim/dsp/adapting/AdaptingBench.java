@@ -33,6 +33,10 @@ public class AdaptingBench {
         return id;
     }
 
+    void bindStorageMap(AdaptingStorageMap storageMap) {
+        store.bindStorageMap(storageMap);
+    }
+
     public AdaptingBenchState state() {
         return state;
     }

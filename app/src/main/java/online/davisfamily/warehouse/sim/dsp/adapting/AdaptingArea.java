@@ -16,14 +16,23 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 public class AdaptingArea {
     private final Map<AdaptingBenchId, BenchSlot> benchSlots = new LinkedHashMap<>();
     private final List<AdaptingBenchId> sortedBenchIds;
+    private final AdaptingStorageMap storageMap;
 
     public AdaptingArea(List<AdaptingBench> benches, int queueCapacityPerBench) {
+        this(benches, queueCapacityPerBench, new AdaptingStorageMap());
+    }
+
+    public AdaptingArea(List<AdaptingBench> benches, int queueCapacityPerBench, AdaptingStorageMap storageMap) {
         if (benches == null) {
             throw new IllegalArgumentException("benches must not be null");
         }
         if (queueCapacityPerBench < 0) {
             throw new IllegalArgumentException("queueCapacityPerBench must be >= 0");
         }
+        if (storageMap == null) {
+            throw new IllegalArgumentException("storageMap must not be null");
+        }
+        this.storageMap = storageMap;
 
         for (AdaptingBench bench : List.copyOf(benches)) {
             if (bench == null) {
@@ -46,6 +55,10 @@ public class AdaptingArea {
         sortedBenchIds = benchSlots.keySet().stream()
                 .sorted(Comparator.naturalOrder())
                 .toList();
+        this.storageMap.configureAvailableBenches(sortedBenchIds);
+        for (BenchSlot slot : benchSlots.values()) {
+            slot.bench.bindStorageMap(this.storageMap);
+        }
     }
 
     public AdaptingBenchSelection selectBenchFor(AdaptingVisit visit) {
@@ -53,7 +66,7 @@ public class AdaptingArea {
             throw new IllegalArgumentException("visit must not be null");
         }
 
-        for (AdaptingBenchId benchId : sortedBenchIds) {
+        for (AdaptingBenchId benchId : preferredBenchOrderFor(visit)) {
             BenchSlot slot = benchSlots.get(benchId);
             if (slot.canAcceptVisit()) {
                 return AdaptingBenchSelection.accepted(benchId);
@@ -130,6 +143,21 @@ public class AdaptingArea {
             queued += slot.pendingVisits.size();
         }
         return new StationSnapshot(StationType.ADAPTING, inProgress, queued);
+    }
+
+    private List<AdaptingBenchId> preferredBenchOrderFor(AdaptingVisit visit) {
+        Map<AdaptingBenchId, Integer> scores = new LinkedHashMap<>();
+        for (String pharmacyId : visit.pharmacyIds()) {
+            AdaptingBenchId preferredBench = storageMap.preferredBenchFor(pharmacyId);
+            scores.merge(preferredBench, 1, Integer::sum);
+        }
+
+        return sortedBenchIds.stream()
+                .sorted(Comparator
+                        .comparingInt((AdaptingBenchId benchId) -> scores.getOrDefault(benchId, 0))
+                        .reversed()
+                        .thenComparing(Comparator.naturalOrder()))
+                .toList();
     }
 
     private BenchSlot slot(AdaptingBenchId benchId) {

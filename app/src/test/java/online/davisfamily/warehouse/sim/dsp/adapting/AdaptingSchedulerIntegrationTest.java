@@ -34,35 +34,42 @@ class AdaptingSchedulerIntegrationTest {
 
     @Test
     void shouldReleaseCollectingOrderWithDeterministicSelectedBenchIdAfterStoreCompletes() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingStorageMap storageMap = storageMap();
+        storageMap.assignPharmacyToBench("0000310", new AdaptingBenchId("bench-2"));
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap));
         AdaptingBench bench1 = new AdaptingBench("bench-1", store, 1d);
         AdaptingBench bench2 = new AdaptingBench("bench-2", store, 1d);
-        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 0);
+        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 0, storageMap);
         DspSchedulerRuntimeState runtimeState = runtimeState(collectingOrderState("dispatch-1"));
         AdaptingAreaController controller = new AdaptingAreaController(area, runtimeState);
         DspReleaseScheduler scheduler = scheduler(area);
 
         DspOrderItem stagedLine = adaptedPreparedLine("line-1", "dispatch-1");
         area.submitVisit(AdaptingVisit.store("store-tote-1", List.of(stagedLine)));
-        bench1.startProcessing();
-        bench1.tick(1d);
-        controller.applyBenchCompletion(new AdaptingBenchId("bench-1")).orElseThrow();
+        bench2.startProcessing();
+        bench2.tick(1d);
+        controller.applyBenchCompletion(new AdaptingBenchId("bench-2")).orElseThrow();
 
         WarehouseSchedulerSnapshot snapshot = snapshotWithAdaptingAdmission(runtimeState.snapshot(), area);
         var evaluation = scheduler.evaluate(snapshot);
 
         assertTrue(evaluation.releaseDecision().isPresent());
         assertEquals("dispatch-1", evaluation.releaseDecision().get().orderId());
-        assertEquals(Optional.of("bench-1"),
+        assertEquals(Optional.of("bench-2"),
                 evaluation.releaseDecision().get().selectedStationTargets().selectedTargetIdFor(StationType.ADAPTING));
     }
 
     @Test
     void shouldBlockCollectingOrderBeforeStoreCompletionAndWhenAllBenchesAreFull() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingStorageMap storageMap = storageMap();
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap));
         AdaptingBench bench1 = new AdaptingBench("bench-1", store, 1d);
         AdaptingBench bench2 = new AdaptingBench("bench-2", store, 1d);
-        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 0);
+        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 0, storageMap);
         DspSchedulerRuntimeState runtimeState = runtimeState(collectingOrderState("dispatch-2"));
         DspReleaseScheduler scheduler = scheduler(area);
 
@@ -166,5 +173,11 @@ class AdaptingSchedulerIntegrationTest {
                 targetOrderId,
                 1,
                 0);
+    }
+
+    private static AdaptingStorageMap storageMap() {
+        AdaptingStorageMap storageMap = new AdaptingStorageMap();
+        storageMap.configureAvailableBenches(List.of(new AdaptingBenchId("bench-1"), new AdaptingBenchId("bench-2")));
+        return storageMap;
     }
 }

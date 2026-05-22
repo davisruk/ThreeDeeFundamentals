@@ -17,7 +17,9 @@ class AdaptingBenchTest {
 
     @Test
     void shouldStageAdaptedLinesAfterStoreVisitCompletes() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap("0000310", "bench-1", "0000388", "bench-2")));
         AdaptingBench bench = new AdaptingBench("bench-1", store, 5d);
         DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
         DspOrderItem line2 = adaptedLine("line-2", "target-2", "0000388");
@@ -38,6 +40,8 @@ class AdaptingBenchTest {
         assertTrue(store.contains(PreparedLineKey.forPreparedLine(line1)));
         assertTrue(store.contains(PreparedLineKey.forPreparedLine(line2)));
         assertEquals(2, store.snapshot().stagedLineCount());
+        assertEquals(1, store.snapshot().stagedLineCountByBench().getOrDefault(new AdaptingBenchId("bench-1"), 0));
+        assertEquals(1, store.snapshot().stagedLineCountByBench().getOrDefault(new AdaptingBenchId("bench-2"), 0));
 
         AdaptingBenchCompletion completion = bench.consumeCompletion().orElseThrow();
         assertEquals(AdaptingVisitType.STORE, completion.visit().visitType());
@@ -47,7 +51,9 @@ class AdaptingBenchTest {
 
     @Test
     void shouldReturnCollectedLinesAfterCollectVisitCompletes() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap("0000310", "bench-1", "0000388", "bench-2")));
         AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
         DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
         DspOrderItem line2 = adaptedLine("line-2", "target-2", "0000388");
@@ -56,7 +62,8 @@ class AdaptingBenchTest {
 
         bench.acceptVisit(AdaptingVisit.collect(
                 "tote-collect",
-                List.of(PreparedLineKey.forPreparedLine(line2), PreparedLineKey.forPreparedLine(line1))));
+                List.of(PreparedLineKey.forPreparedLine(line2), PreparedLineKey.forPreparedLine(line1)),
+                List.of("0000388", "0000310")));
         bench.startProcessing();
 
         assertEquals(AdaptingBenchState.COMPLETED, bench.state());
@@ -72,7 +79,9 @@ class AdaptingBenchTest {
 
     @Test
     void shouldEnterBlockedStateWhenCollectVisitCannotFindAllRequestedLines() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap("0000310", "bench-1", "0000388", "bench-2")));
         AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
         DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
         DspOrderItem missingLine = adaptedLine("line-2", "target-2", "0000388");
@@ -80,7 +89,8 @@ class AdaptingBenchTest {
 
         bench.acceptVisit(AdaptingVisit.collect(
                 "tote-collect",
-                List.of(PreparedLineKey.forPreparedLine(line1), PreparedLineKey.forPreparedLine(missingLine))));
+                List.of(PreparedLineKey.forPreparedLine(line1), PreparedLineKey.forPreparedLine(missingLine)),
+                List.of("0000310", "0000388")));
         bench.startProcessing();
 
         assertEquals(AdaptingBenchState.BLOCKED, bench.state());
@@ -114,5 +124,14 @@ class AdaptingBenchTest {
                 targetOrderId,
                 1,
                 0);
+    }
+
+    private static AdaptingStorageMap storageMap(String... values) {
+        AdaptingStorageMap storageMap = new AdaptingStorageMap();
+        storageMap.configureAvailableBenches(List.of(new AdaptingBenchId("bench-1"), new AdaptingBenchId("bench-2")));
+        for (int i = 0; i < values.length; i += 2) {
+            storageMap.assignPharmacyToBench(values[i], new AdaptingBenchId(values[i + 1]));
+        }
+        return storageMap;
     }
 }

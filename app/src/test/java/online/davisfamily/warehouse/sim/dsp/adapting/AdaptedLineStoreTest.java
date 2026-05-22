@@ -17,7 +17,9 @@ class AdaptedLineStoreTest {
 
     @Test
     void shouldStageAndTakeSingleAdaptedLine() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap("0000310", "bench-1")));
         DspOrderItem preparedLine = adaptedLine("line-1", "order-1", "0000310");
         PreparedLineKey key = PreparedLineKey.forPreparedLine(preparedLine);
 
@@ -31,13 +33,19 @@ class AdaptedLineStoreTest {
 
         assertEquals(key, record.key());
         assertEquals(preparedLine, record.line());
+        assertEquals(new AdaptingBenchId("bench-1"), record.location().benchId());
         assertFalse(store.contains(key));
         assertEquals(0, store.snapshot().stagedLineCount());
     }
 
     @Test
     void shouldTakeAllRequestedAdaptedLinesAndRemoveThemFromStore() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap(
+                        "0000310", "bench-1",
+                        "0000388", "bench-2",
+                        "0000456", "bench-2")));
         DspOrderItem line1 = adaptedLine("line-1", "order-1", "0000310");
         DspOrderItem line2 = adaptedLine("line-2", "order-2", "0000388");
         DspOrderItem line3 = adaptedLine("line-3", "order-3", "0000456");
@@ -62,7 +70,9 @@ class AdaptedLineStoreTest {
 
     @Test
     void shouldFailClearlyWhenTakingMissingAdaptedLineBatch() {
-        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap("0000310", "bench-1", "0000388", "bench-2")));
         DspOrderItem presentLine = adaptedLine("line-1", "order-1", "0000310");
         DspOrderItem missingLine = adaptedLine("line-2", "order-2", "0000388");
         PreparedLineKey presentKey = PreparedLineKey.forPreparedLine(presentLine);
@@ -95,6 +105,36 @@ class AdaptedLineStoreTest {
                 () -> AdaptedLineRecord.fromPreparedLine(manualLine));
 
         assertEquals("line must be ADAPTED", exception.getMessage());
+    }
+
+    @Test
+    void shouldCreateNewBinsShelvesAndRacksWhenCapacitiesAreReached() {
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                new AdaptingStorageConfig(1, 2, 2),
+                storageMap("0000310", "bench-2")));
+
+        store.stage(adaptedLine("line-1", "order-1", "0000310"));
+        store.stage(adaptedLine("line-2", "order-2", "0000310"));
+        store.stage(adaptedLine("line-3", "order-3", "0000310"));
+        store.stage(adaptedLine("line-4", "order-4", "0000310"));
+        store.stage(adaptedLine("line-5", "order-5", "0000310"));
+
+        AdaptedLineRecord line1 = store.take(PreparedLineKey.forPreparedLine(adaptedLine("line-1", "order-1", "0000310"))).orElseThrow();
+        AdaptedLineRecord line3 = store.take(PreparedLineKey.forPreparedLine(adaptedLine("line-3", "order-3", "0000310"))).orElseThrow();
+        AdaptedLineRecord line5 = store.take(PreparedLineKey.forPreparedLine(adaptedLine("line-5", "order-5", "0000310"))).orElseThrow();
+
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 0, 0), line1.location());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 1, 0), line3.location());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 1, 0, 0), line5.location());
+    }
+
+    private static AdaptingStorageMap storageMap(String... values) {
+        AdaptingStorageMap storageMap = new AdaptingStorageMap();
+        storageMap.configureAvailableBenches(List.of(new AdaptingBenchId("bench-1"), new AdaptingBenchId("bench-2")));
+        for (int i = 0; i < values.length; i += 2) {
+            storageMap.assignPharmacyToBench(values[i], new AdaptingBenchId(values[i + 1]));
+        }
+        return storageMap;
     }
 
     private static DspOrderItem adaptedLine(String lineId, String targetOrderId, String pharmacyId) {

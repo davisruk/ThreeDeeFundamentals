@@ -10,7 +10,8 @@ public record AdaptingVisit(
         String toteId,
         AdaptingVisitType visitType,
         List<DspOrderItem> preparedLines,
-        List<PreparedLineKey> requestedLineKeys) {
+        List<PreparedLineKey> requestedLineKeys,
+        List<String> pharmacyIds) {
 
     public AdaptingVisit {
         if (toteId == null || toteId.isBlank()) {
@@ -25,8 +26,12 @@ public record AdaptingVisit(
         if (requestedLineKeys == null) {
             throw new IllegalArgumentException("requestedLineKeys must not be null");
         }
+        if (pharmacyIds == null) {
+            throw new IllegalArgumentException("pharmacyIds must not be null");
+        }
         preparedLines = List.copyOf(preparedLines);
         requestedLineKeys = List.copyOf(requestedLineKeys);
+        pharmacyIds = List.copyOf(pharmacyIds);
 
         if (visitType == AdaptingVisitType.STORE) {
             if (preparedLines.isEmpty()) {
@@ -42,6 +47,9 @@ public record AdaptingVisit(
                 if (line.lineType() != DspOrderLineType.ADAPTED) {
                     throw new IllegalArgumentException("STORE visit lines must be ADAPTED");
                 }
+            }
+            if (pharmacyIds.size() != preparedLines.size()) {
+                throw new IllegalArgumentException("STORE visit pharmacyIds must align with preparedLines");
             }
         }
 
@@ -60,14 +68,20 @@ public record AdaptingVisit(
                     throw new IllegalArgumentException("COLLECT visit keys must be ADAPTED");
                 }
             }
+            if (pharmacyIds.isEmpty()) {
+                throw new IllegalArgumentException("COLLECT visit must include pharmacyIds");
+            }
         }
     }
 
     public static AdaptingVisit store(String toteId, List<DspOrderItem> preparedLines) {
-        return new AdaptingVisit(toteId, AdaptingVisitType.STORE, preparedLines, List.of());
+        List<String> pharmacyIds = preparedLines.stream()
+                .map(DspOrderItem::pharmacyId)
+                .toList();
+        return new AdaptingVisit(toteId, AdaptingVisitType.STORE, preparedLines, List.of(), pharmacyIds);
     }
 
-    public static AdaptingVisit collect(String toteId, List<PreparedLineKey> requestedLineKeys) {
-        return new AdaptingVisit(toteId, AdaptingVisitType.COLLECT, List.of(), requestedLineKeys);
+    public static AdaptingVisit collect(String toteId, List<PreparedLineKey> requestedLineKeys, List<String> pharmacyIds) {
+        return new AdaptingVisit(toteId, AdaptingVisitType.COLLECT, List.of(), requestedLineKeys, pharmacyIds);
     }
 }

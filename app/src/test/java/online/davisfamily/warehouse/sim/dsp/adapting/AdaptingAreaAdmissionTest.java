@@ -10,14 +10,17 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 class AdaptingAreaAdmissionTest {
 
     @Test
     void shouldSelectLowestBenchIdWhenMultipleBenchesCanAccept() {
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingStorageMap storageMap = storageMap();
         AdaptingArea area = new AdaptingArea(List.of(
-                new AdaptingBench("bench-2", new AdaptedLineStore(), 1d),
-                new AdaptingBench("bench-1", new AdaptedLineStore(), 1d)), 1);
+                new AdaptingBench("bench-2", sharedStore, 1d),
+                new AdaptingBench("bench-1", sharedStore, 1d)), 1, storageMap);
 
         AdaptingBenchSelection selection = area.selectBenchFor(storeVisit("tote-1", "line-1", "target-1"));
 
@@ -27,8 +30,9 @@ class AdaptingAreaAdmissionTest {
 
     @Test
     void shouldQueueVisitAtSelectedBenchUntilBenchCanProcessIt() {
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
         AdaptingArea area = new AdaptingArea(List.of(
-                new AdaptingBench("bench-1", new AdaptedLineStore(), 5d)), 1);
+                new AdaptingBench("bench-1", sharedStore, 5d)), 1, storageMap());
         AdaptingBenchId benchId = new AdaptingBenchId("bench-1");
 
         area.submitVisit(storeVisit("tote-1", "line-1", "target-1"));
@@ -51,9 +55,12 @@ class AdaptingAreaAdmissionTest {
 
     @Test
     void shouldSelectLaterBenchWhenEarlierBenchHasNoCapacity() {
-        AdaptingBench bench1 = new AdaptingBench("bench-1", new AdaptedLineStore(), 5d);
-        AdaptingBench bench2 = new AdaptingBench("bench-2", new AdaptedLineStore(), 5d);
-        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 1);
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingBench bench1 = new AdaptingBench("bench-1", sharedStore, 5d);
+        AdaptingBench bench2 = new AdaptingBench("bench-2", sharedStore, 5d);
+        AdaptingStorageMap storageMap = storageMap();
+        storageMap.assignPharmacyToBench("0000310", new AdaptingBenchId("bench-1"));
+        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 1, storageMap);
 
         area.submitVisit(storeVisit("tote-1", "line-1", "target-1"));
         bench1.startProcessing();
@@ -67,9 +74,10 @@ class AdaptingAreaAdmissionTest {
 
     @Test
     void shouldBlockWhenAllBenchesAreFull() {
-        AdaptingBench bench1 = new AdaptingBench("bench-1", new AdaptedLineStore(), 5d);
-        AdaptingBench bench2 = new AdaptingBench("bench-2", new AdaptedLineStore(), 5d);
-        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 0);
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingBench bench1 = new AdaptingBench("bench-1", sharedStore, 5d);
+        AdaptingBench bench2 = new AdaptingBench("bench-2", sharedStore, 5d);
+        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 0, storageMap());
 
         area.submitVisit(storeVisit("tote-1", "line-1", "target-1"));
         area.submitVisit(storeVisit("tote-2", "line-2", "target-2"));
@@ -83,9 +91,10 @@ class AdaptingAreaAdmissionTest {
 
     @Test
     void shouldExposeBenchAdmissionSnapshots() {
-        AdaptingBench bench1 = new AdaptingBench("bench-1", new AdaptedLineStore(), 5d);
-        AdaptingBench bench2 = new AdaptingBench("bench-2", new AdaptedLineStore(), 5d);
-        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 1);
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingBench bench1 = new AdaptingBench("bench-1", sharedStore, 5d);
+        AdaptingBench bench2 = new AdaptingBench("bench-2", sharedStore, 5d);
+        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 1, storageMap());
 
         area.submitVisit(storeVisit("tote-1", "line-1", "target-1"));
         bench1.startProcessing();
@@ -103,15 +112,63 @@ class AdaptingAreaAdmissionTest {
         assertTrue(bench1Snapshot.blockedReason().contains("full"));
     }
 
+    @Test
+    void shouldPreferMappedBenchForCollectVisit() {
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingStorageMap storageMap = storageMap();
+        storageMap.assignPharmacyToBench("0000388", new AdaptingBenchId("bench-2"));
+        AdaptingArea area = new AdaptingArea(List.of(
+                new AdaptingBench("bench-1", sharedStore, 1d),
+                new AdaptingBench("bench-2", sharedStore, 1d)), 1, storageMap);
+
+        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisit.collect(
+                "collect-1",
+                List.of(new PreparedLineKey("dispatch-1", 1, "line-1", DspOrderLineType.ADAPTED)),
+                List.of("0000388")));
+
+        assertTrue(selection.accepted());
+        assertEquals(new AdaptingBenchId("bench-2"), selection.benchId());
+    }
+
+    @Test
+    void shouldPreferDominantBenchForMixedStoreVisit() {
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingStorageMap storageMap = storageMap();
+        storageMap.assignPharmacyToBench("0000310", new AdaptingBenchId("bench-1"));
+        storageMap.assignPharmacyToBench("0000388", new AdaptingBenchId("bench-2"));
+        AdaptingArea area = new AdaptingArea(List.of(
+                new AdaptingBench("bench-1", sharedStore, 1d),
+                new AdaptingBench("bench-2", sharedStore, 1d)), 1, storageMap);
+
+        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisit.store("store-1", List.of(
+                adaptedLine("line-1", "target-1", "0000388"),
+                adaptedLine("line-2", "target-2", "0000388"),
+                adaptedLine("line-3", "target-3", "0000310"))));
+
+        assertTrue(selection.accepted());
+        assertEquals(new AdaptingBenchId("bench-2"), selection.benchId());
+    }
+
     private static AdaptingVisit storeVisit(String toteId, String lineId, String targetOrderId) {
-        return AdaptingVisit.store(toteId, List.of(new DspOrderItem(
+        return AdaptingVisit.store(toteId, List.of(adaptedLine(lineId, targetOrderId, "0000310")));
+    }
+
+    private static DspOrderItem adaptedLine(String lineId, String targetOrderId, String pharmacyId) {
+        return new DspOrderItem(
                 lineId,
                 "product-" + lineId,
                 1,
-                "0000310",
+                pharmacyId,
                 DspOrderLineType.ADAPTED,
                 targetOrderId,
                 1,
-                0)));
+                0);
+    }
+
+    private static AdaptingStorageMap storageMap() {
+        AdaptingStorageMap storageMap = new AdaptingStorageMap();
+        storageMap.configureAvailableBenches(List.of(new AdaptingBenchId("bench-1"), new AdaptingBenchId("bench-2")));
+        storageMap.assignPharmacyToBench("0000310", new AdaptingBenchId("bench-1"));
+        return storageMap;
     }
 }
