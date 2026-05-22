@@ -1,6 +1,5 @@
 package online.davisfamily.warehouse.testing;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,8 +15,6 @@ import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.TriangleRenderer;
 import online.davisfamily.threedee.rendering.appearance.OneColourStrategyImpl;
-import online.davisfamily.threedee.sim.framework.SimulationContext;
-import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteEnvelope;
@@ -36,11 +33,10 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingAreaController;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBench;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchId;
-import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchState;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingCollectVisitFactory;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStorageMap;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisit;
-import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitType;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
@@ -84,20 +80,18 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
     private static final String SERVICE_CENTRE_ID = "SC-ADAPTING";
     private static final PackDimensions PACK_DIMENSIONS = new PackDimensions(0.20f, 0.10f, 0.08f);
     private static final float TOTE_SPEED = 0.9f;
-    private static final float BENCH_STOP_DISTANCE = 1.8f;
-    private static final float BENCH_PATH_LENGTH = 1.8f;
+    private static final float BENCH_PATH_LENGTH = 5.4f;
+    private static final List<Float> BENCH_SENSOR_DISTANCES = List.of(1.0f, 2.7f, 4.4f);
+    private static final float BENCH_WALKWAY_CLEARANCE = 0.30f;
 
     private final AdaptedLineStore adaptedLineStore = new AdaptedLineStore();
-    private final AdaptingArea adaptingArea = new AdaptingArea(
-            List.of(
-                    new AdaptingBench("bench-1", adaptedLineStore, 2.5d),
-                    new AdaptingBench("bench-2", adaptedLineStore, 2.5d)),
-            0);
+    private final AdaptingStorageMap adaptingStorageMap = createStorageMap();
+    private final AdaptingArea adaptingArea = new AdaptingArea(createBenches(adaptedLineStore), 0, adaptingStorageMap);
     private final MapBackedToteLoadPlanRegistry toteLoadPlanRegistry = new MapBackedToteLoadPlanRegistry();
     private final DspSchedulerRuntimeState runtimeState;
     private final AdaptingAreaController areaController;
     private final Map<String, AdaptingVisit> visitsByOrderId = new LinkedHashMap<>();
-    private final Map<String, ActiveJourney> journeysByToteId = new LinkedHashMap<>();
+    private final Map<String, AdaptingBenchJourney> journeysByToteId = new LinkedHashMap<>();
     private final RouteSegment mainApproach;
     private final RouteSegment mainTransfer;
     private final RouteSegment mainDestination;
@@ -118,6 +112,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
     private final SteeringTransferMachineGeometry inlineTransferGeometry;
     private final SteeringTransferMachineGeometry mainReturn1Geometry;
     private final SteeringTransferMachineGeometry mainReturn2Geometry;
+    private final Map<AdaptingBenchId, AdaptingBenchStop> benchStopsById;
     private final RouteFollower.TravelDirection mainDirection = RouteFollower.TravelDirection.FORWARD;
     private final MainDivertStrategy mainDivertStrategy = new MainDivertStrategy();
     private final BenchSelectStrategy benchSelectStrategy = new BenchSelectStrategy();
@@ -274,6 +269,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         bench2Target = new TransferTarget(bench2Path, 0f, RouteFollower.TravelDirection.FORWARD);
         bench1ReturnTarget = new TransferTarget(bench1ReturnLink, 0f, RouteFollower.TravelDirection.FORWARD);
         bench2ReturnTarget = new TransferTarget(bench2ReturnLink, 0f, RouteFollower.TravelDirection.FORWARD);
+        benchStopsById = createBenchStops();
 
         builder.addStandaloneTransfer(
                 "adapting_main_divert",
@@ -326,22 +322,24 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         DspSchedulerOrderState storeOne = orderState(adaptedOrder(
                 "adapt-store-1",
                 "tote-store-1",
-                adaptedPreparedLine("line-c1", "collect-1")),
+                adaptedPreparedLine("line-c1", "collect-1", "0000310")),
                 storeRoute);
         DspSchedulerOrderState storeTwo = orderState(adaptedOrder(
                 "adapt-store-2",
                 "tote-store-2",
-                adaptedPreparedLine("line-unused", "collect-2")),
+                adaptedPreparedLine("line-unused", "collect-2", "0000388")),
                 storeRoute);
         DspSchedulerOrderState collectOne = orderState(associatedCollectOrder(
                 "collect-1",
                 "tote-collect-1",
-                "line-c1"),
+                "line-c1",
+                "0000310"),
                 collectRoute);
         DspSchedulerOrderState collectTwo = orderState(associatedCollectOrder(
                 "collect-2",
                 "tote-collect-2",
-                "line-unused"),
+                "line-unused",
+                "0000388"),
                 collectRoute);
 
         runtimeState = new DspSchedulerRuntimeState(new WarehouseSchedulerSnapshot(
@@ -383,7 +381,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 new AdaptingStationAdmissionResolver(
                         new online.davisfamily.warehouse.sim.dsp.scheduler.SnapshotStationAdmissionResolver(),
                         adaptingArea,
-                        new StationCapacity(2, 0)));
+                        new StationCapacity(6, 0)));
 
         ScheduledDebugToteInjectorController injectorController = new ScheduledDebugToteInjectorController(
                 scheduler,
@@ -391,60 +389,80 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 releaseCatalog,
                 new AdaptingReleaseTarget(sim, objects));
         sim.addController(injectorController);
-        sim.addController(new AdaptingAreaFlowController());
+        sim.addController(new AdaptingBenchStopController(
+                adaptingArea,
+                areaController,
+                journeysByToteId,
+                benchStopsById,
+                mainDestination,
+                AdaptingDebugRig::hideTote));
 
-        Vec3 bench1PathStop = bench1Path.getGeometry().sampleByDistance(bench1Path.length() * 0.5f);
-        float bench1MainDestinationDistance = clamp(bench1PathStop.z, 0f, mainDestination.length());
-        Vec3 bench1DestinationPoint = mainDestination.getGeometry().sampleByDistance(bench1MainDestinationDistance);
-        float bench1GapLength = Math.abs(bench1PathStop.x - bench1DestinationPoint.x);
-        float bench1WalkwayClearance = 0.30f;
-        float bench1Length = Math.max(0.50f, bench1GapLength - (2f * bench1WalkwayClearance));
-        Vec3 bench1Centre = new Vec3(
-                (bench1PathStop.x + bench1DestinationPoint.x) * 0.5f,
-                0.18f,
-                bench1PathStop.z);
-        RenderableObject bench1Marker = createBenchMarker(
-                "adapting_bench_1_marker",
-                tr,
-                bench1Centre,
-                bench1Length,
-                0.12f,
-                linkSpec.getOverallWidth(),
-                0xFF4F7F4F);
-        Vec3 bench2PathStop = bench2Path.getGeometry().sampleByDistance(bench2Path.length() * 0.5f);
-        float bench2MainApproachDistance = clamp(
-                Math.abs(bench2PathStop.z - mainApproach.getGeometry().getStartPoint().z),
-                0f,
-                mainApproach.length());
-        Vec3 bench2ApproachPoint = mainApproach.getGeometry().sampleByDistance(bench2MainApproachDistance);
-        float bench2GapLength = Math.abs(bench2PathStop.x - bench2ApproachPoint.x);
-        float bench2WalkwayClearance = 0.30f;
-        float bench2Length = Math.max(0.50f, bench2GapLength - (2f * bench2WalkwayClearance));
-        Vec3 bench2Centre = new Vec3(
-                (bench2PathStop.x + bench2ApproachPoint.x) * 0.5f,
-                0.18f,
-                bench2PathStop.z);
-        RenderableObject bench2Marker = createBenchMarker(
-                "adapting_bench_2_marker",
-                tr,
-                bench2Centre,
-                bench2Length,
-                0.12f,
-                linkSpec.getOverallWidth(),
-                0xFF4F7F4F);
+        for (AdaptingBenchStop stop : benchStopsById.values()) {
+            RenderableObject benchMarker = createBenchMarkerForStop(tr, stop, linkSpec);
+            objects.add(benchMarker);
+            registerBenchInspection(inspectionRegistry, benchMarker, stop.benchId());
+        }
         RenderableObject schedulerAnchor = createBenchMarker("adapting_scheduler_anchor", tr, new Vec3(0.8f, 0.18f, -6.5f), 0xFF4F5F7F);
-        objects.add(bench1Marker);
-        objects.add(bench2Marker);
         objects.add(schedulerAnchor);
-
-        registerBenchInspection(inspectionRegistry, bench1Marker, new AdaptingBenchId("bench-1"));
-        registerBenchInspection(inspectionRegistry, bench2Marker, new AdaptingBenchId("bench-2"));
         SchedulerDebugInspectable schedulerInspectable = new SchedulerDebugInspectable(injectorController);
         inspectionRegistry.register(schedulerAnchor, () -> schedulerInspectable.describe());
     }
 
     @Override
     public void syncVisuals() {
+    }
+
+    private Map<AdaptingBenchId, AdaptingBenchStop> createBenchStops() {
+        Map<AdaptingBenchId, AdaptingBenchStop> stops = new LinkedHashMap<>();
+        for (int i = 0; i < BENCH_SENSOR_DISTANCES.size(); i++) {
+            AdaptingBenchId upperBench = new AdaptingBenchId("bench-" + (i + 1));
+            AdaptingBenchId lowerBench = new AdaptingBenchId("bench-" + (i + 4));
+            stops.put(upperBench, new AdaptingBenchStop(upperBench, bench1Path, BENCH_SENSOR_DISTANCES.get(i)));
+            stops.put(lowerBench, new AdaptingBenchStop(lowerBench, bench2Path, BENCH_SENSOR_DISTANCES.get(i)));
+        }
+        return java.util.Collections.unmodifiableMap(new LinkedHashMap<>(stops));
+    }
+
+    private RouteSegment benchPathFor(AdaptingBenchId benchId) {
+        return isUpperBench(benchId) ? bench1Path : bench2Path;
+    }
+
+    private RouteSegment adjacentMainSegmentFor(AdaptingBenchId benchId) {
+        return isUpperBench(benchId) ? mainDestination : mainApproach;
+    }
+
+    private RenderableObject createBenchMarkerForStop(
+            TriangleRenderer tr,
+            AdaptingBenchStop stop,
+            TrackSpec linkSpec) {
+        Vec3 stopPoint = stop.segment().getGeometry().sampleByDistance(stop.sensorDistance());
+        RouteSegment adjacentSegment = adjacentMainSegmentFor(stop.benchId());
+        float adjacentDistance = distanceAlongAdjacentSegment(stop.benchId(), stopPoint.z);
+        Vec3 adjacentPoint = adjacentSegment.getGeometry().sampleByDistance(adjacentDistance);
+        float gapLength = Math.abs(stopPoint.x - adjacentPoint.x);
+        float benchLength = Math.max(0.50f, gapLength - (2f * BENCH_WALKWAY_CLEARANCE));
+        Vec3 benchCentre = new Vec3(
+                (stopPoint.x + adjacentPoint.x) * 0.5f,
+                0.18f,
+                stopPoint.z);
+        return createBenchMarker(
+                "adapting_" + stop.benchId().value() + "_marker",
+                tr,
+                benchCentre,
+                benchLength,
+                0.12f,
+                linkSpec.getOverallWidth(),
+                0xFF4F7F4F);
+    }
+
+    private float distanceAlongAdjacentSegment(AdaptingBenchId benchId, float z) {
+        if (isUpperBench(benchId)) {
+            return clamp(z - mainDestination.getGeometry().getStartPoint().z, 0f, mainDestination.length());
+        }
+        return clamp(
+                Math.abs(z - mainApproach.getGeometry().getStartPoint().z),
+                0f,
+                mainApproach.length());
     }
 
     private void installTransferMachines(
@@ -661,6 +679,38 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         return marker;
     }
 
+    private static List<AdaptingBench> createBenches(AdaptedLineStore store) {
+        return List.of(
+                new AdaptingBench("bench-1", store, 2.5d),
+                new AdaptingBench("bench-2", store, 2.5d),
+                new AdaptingBench("bench-3", store, 2.5d),
+                new AdaptingBench("bench-4", store, 2.5d),
+                new AdaptingBench("bench-5", store, 2.5d),
+                new AdaptingBench("bench-6", store, 2.5d));
+    }
+
+    private static AdaptingStorageMap createStorageMap() {
+        AdaptingStorageMap storageMap = new AdaptingStorageMap();
+        storageMap.configureAvailableBenches(List.of(
+                new AdaptingBenchId("bench-1"),
+                new AdaptingBenchId("bench-2"),
+                new AdaptingBenchId("bench-3"),
+                new AdaptingBenchId("bench-4"),
+                new AdaptingBenchId("bench-5"),
+                new AdaptingBenchId("bench-6")));
+        storageMap.assignPharmacyToBench("0000310", new AdaptingBenchId("bench-1"));
+        storageMap.assignPharmacyToBench("0000388", new AdaptingBenchId("bench-4"));
+        return storageMap;
+    }
+
+    private static boolean isUpperBench(AdaptingBenchId benchId) {
+        return benchNumber(benchId) <= 3;
+    }
+
+    private static int benchNumber(AdaptingBenchId benchId) {
+        return Integer.parseInt(benchId.value().substring("bench-".length()));
+    }
+
     private static Vec3 leftEdgePoint(
             RouteSegment segment,
             TrackSpec destinationSpec,
@@ -741,7 +791,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         return new NotionalToteOrder(orderId, toteId, SERVICE_CENTRE_ID, 1, OrderType.ADAPTED, List.of(items), 0L);
     }
 
-    private static NotionalToteOrder associatedCollectOrder(String orderId, String toteId, String adaptedLineId) {
+    private static NotionalToteOrder associatedCollectOrder(String orderId, String toteId, String adaptedLineId, String pharmacyId) {
         return new NotionalToteOrder(
                 orderId,
                 toteId,
@@ -752,7 +802,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                         adaptedLineId,
                         "product-" + adaptedLineId,
                         1,
-                        "0000310",
+                        pharmacyId,
                         DspOrderLineType.ADAPTED,
                         orderId,
                         1,
@@ -760,12 +810,12 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 2L);
     }
 
-    private static DspOrderItem adaptedPreparedLine(String lineId, String targetOrderId) {
+    private static DspOrderItem adaptedPreparedLine(String lineId, String targetOrderId, String pharmacyId) {
         return new DspOrderItem(
                 lineId,
                 "product-" + lineId,
                 1,
-                "0000310",
+                pharmacyId,
                 DspOrderLineType.ADAPTED,
                 targetOrderId,
                 1,
@@ -820,24 +870,24 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
             }
             sim.addTrackableObject(payload.getTote());
 
-            journeysByToteId.put(payload.getTote().getId(), new ActiveJourney(
+            journeysByToteId.put(payload.getTote().getId(), new AdaptingBenchJourney(
                     decision.orderId(),
                     payload.getTote(),
                     visit,
                     benchId,
-                    benchId.value().equals("bench-1") ? bench1Path : bench2Path,
-                    JourneyPhase.TO_BENCH));
+                    benchPathFor(benchId),
+                    AdaptingJourneyPhase.TO_BENCH));
             return online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult.appliedResult();
         }
 
-        private boolean occupiesIngressPath(ActiveJourney journey) {
-            if (journey == null || journey.tote.getLastSnapshot() == null) {
+        private boolean occupiesIngressPath(AdaptingBenchJourney journey) {
+            if (journey == null || journey.tote().getLastSnapshot() == null) {
                 return false;
             }
-            if (journey.phase != JourneyPhase.TO_BENCH) {
+            if (journey.phase() != AdaptingJourneyPhase.TO_BENCH) {
                 return false;
             }
-            RouteSegment currentSegment = journey.tote.getLastSnapshot().currentSegment();
+            RouteSegment currentSegment = journey.tote().getLastSnapshot().currentSegment();
             return currentSegment == mainApproach
                     || currentSegment == mainTransfer
                     || currentSegment == spine
@@ -845,80 +895,11 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         }
     }
 
-    private final class AdaptingAreaFlowController implements SimulationController {
-        @Override
-        public void update(SimulationContext context, double dtSeconds) {
-            adaptingArea.bench(new AdaptingBenchId("bench-1")).tick(dtSeconds);
-            adaptingArea.bench(new AdaptingBenchId("bench-2")).tick(dtSeconds);
-
-            for (ActiveJourney journey : new ArrayList<>(journeysByToteId.values())) {
-                updateJourney(journey);
-            }
-        }
-
-        private void updateJourney(ActiveJourney journey) {
-            if (journey.phase == JourneyPhase.TO_BENCH && isAtBenchStop(journey)) {
-                journey.tote.setInteractionMode(Tote.ToteMotionState.HELD);
-                journey.tote.openLids();
-                var bench = adaptingArea.bench(journey.benchId);
-                if (bench.state() == AdaptingBenchState.QUEUED
-                        && bench.snapshot().activeToteId().equals(journey.tote.getId())) {
-                    bench.startProcessing();
-                    journey.phase = journey.visit.visitType() == AdaptingVisitType.STORE
-                            ? JourneyPhase.PROCESSING_STORE
-                            : JourneyPhase.PROCESSING_COLLECT;
-                }
-                return;
-            }
-
-            if ((journey.phase == JourneyPhase.PROCESSING_STORE || journey.phase == JourneyPhase.PROCESSING_COLLECT)
-                    && adaptingArea.bench(journey.benchId).state() == AdaptingBenchState.COMPLETED) {
-                areaController.applyBenchCompletion(journey.benchId).orElseThrow();
-                if (journey.phase == JourneyPhase.PROCESSING_STORE) {
-                    hideTote(journey.tote);
-                    journey.phase = JourneyPhase.COMPLETE;
-                    journeysByToteId.remove(journey.tote.getId());
-                } else {
-                    journey.tote.closeLids();
-                    journey.tote.setInteractionMode(Tote.ToteMotionState.MOVING);
-                    journey.phase = JourneyPhase.RETURNING;
-                }
-                return;
-            }
-
-            if (journey.phase == JourneyPhase.RETURNING
-                    && journey.tote.getLastSnapshot() != null
-                    && journey.tote.getLastSnapshot().currentSegment() == mainDestination
-                    && journey.tote.getLastSnapshot().distanceAlongSegment() > 0.5f) {
-                journey.phase = JourneyPhase.COMPLETE;
-                journeysByToteId.remove(journey.tote.getId());
-            }
-        }
-
-        private boolean isAtBenchStop(ActiveJourney journey) {
-            if (journey.tote.getLastSnapshot() == null) {
-                return false;
-            }
-            float stopDistance = Math.min(
-                    BENCH_STOP_DISTANCE,
-                    Math.max(0.05f, journey.benchSegment.length() - 0.05f));
-            return journey.tote.getLastSnapshot().currentSegment() == journey.benchSegment
-                    && journey.tote.getLastSnapshot().distanceAlongSegment() >= stopDistance;
-        }
-
-        private void hideTote(Tote tote) {
-            tote.setInteractionMode(Tote.ToteMotionState.HELD);
-            tote.getRenderable().transformation.xTranslation = -50f;
-            tote.getRenderable().transformation.yTranslation = -50f;
-            tote.getRenderable().transformation.zTranslation = -50f;
-        }
-    }
-
     private final class MainDivertStrategy implements TransferTargetDecisionStrategy {
         @Override
         public Optional<TransferRoutingDecision> decide(Tote tote, TransferZoneMachine machine) {
-            ActiveJourney journey = journeysByToteId.get(tote.getId());
-            if (journey == null || journey.phase != JourneyPhase.TO_BENCH) {
+            AdaptingBenchJourney journey = journeysByToteId.get(tote.getId());
+            if (journey == null || journey.phase() != AdaptingJourneyPhase.TO_BENCH) {
                 return Optional.of(TransferRoutingDecision.continueOnCurrentRoute());
             }
             return Optional.of(TransferRoutingDecision.transferTo(mainBranchTarget));
@@ -942,11 +923,11 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
 
         @Override
         public Optional<TransferRoutingDecision> decide(Tote tote, TransferZoneMachine machine) {
-            ActiveJourney journey = journeysByToteId.get(tote.getId());
-            if (journey == null || journey.phase != JourneyPhase.TO_BENCH) {
+            AdaptingBenchJourney journey = journeysByToteId.get(tote.getId());
+            if (journey == null || journey.phase() != AdaptingJourneyPhase.TO_BENCH) {
                 return Optional.of(TransferRoutingDecision.continueOnCurrentRoute());
             }
-            boolean bench1 = journey.benchId.value().equals("bench-1");
+            boolean bench1 = isUpperBench(journey.benchId());
             if (mechanism != null) {
                 mechanism.setBranchYawRadians(bench1 ? bench1YawRadians : bench2YawRadians);
             }
@@ -968,35 +949,12 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         }
     }
 
-    private enum JourneyPhase {
-        TO_BENCH,
-        PROCESSING_STORE,
-        PROCESSING_COLLECT,
-        RETURNING,
-        COMPLETE
-    }
-
-    private static final class ActiveJourney {
-        private final String orderId;
-        private final Tote tote;
-        private final AdaptingVisit visit;
-        private final AdaptingBenchId benchId;
-        private final RouteSegment benchSegment;
-        private JourneyPhase phase;
-
-        private ActiveJourney(
-                String orderId,
-                Tote tote,
-                AdaptingVisit visit,
-                AdaptingBenchId benchId,
-                RouteSegment benchSegment,
-                JourneyPhase phase) {
-            this.orderId = orderId;
-            this.tote = tote;
-            this.visit = visit;
-            this.benchId = benchId;
-            this.benchSegment = benchSegment;
-            this.phase = phase;
-        }
+    private static void hideTote(Tote tote) {
+        tote.setInteractionMode(Tote.ToteMotionState.HELD);
+        tote.closeLids();
+        tote.getRenderable().setVisible(false);
+        tote.getRenderable().transformation.xTranslation = -50f;
+        tote.getRenderable().transformation.yTranslation = -50f;
+        tote.getRenderable().transformation.zTranslation = -50f;
     }
 }
