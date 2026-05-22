@@ -145,6 +145,14 @@ public final class SteeringTransferMachineGeometry {
         return rightTargetAttachmentPoint;
     }
 
+    public Vec3 leftTargetCentrelineAttachmentPoint(float targetRunningWidth) {
+        return sideTargetAttachmentPoint(transferWindowCenterPoint, -1f, targetRunningWidth);
+    }
+
+    public Vec3 rightTargetCentrelineAttachmentPoint(float targetRunningWidth) {
+        return sideTargetAttachmentPoint(transferWindowCenterPoint, 1f, targetRunningWidth);
+    }
+
     public float conveyorLength() {
         return conveyorLength;
     }

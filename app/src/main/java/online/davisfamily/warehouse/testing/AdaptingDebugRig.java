@@ -85,6 +85,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
     private static final PackDimensions PACK_DIMENSIONS = new PackDimensions(0.20f, 0.10f, 0.08f);
     private static final float TOTE_SPEED = 0.9f;
     private static final float BENCH_STOP_DISTANCE = 1.8f;
+    private static final float BENCH_PATH_LENGTH = 1.8f;
 
     private final AdaptedLineStore adaptedLineStore = new AdaptedLineStore();
     private final AdaptingArea adaptingArea = new AdaptingArea(
@@ -148,16 +149,17 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 toteGeometry.getOuterHeight());
         float transferLength = toteEnvelope.bottomDepth;
 
-        Vec3 mainTransferStart = new Vec3(0f, 0f, -transferLength);
-        Vec3 mainTransferEnd = new Vec3(0f, 0f, 0f);
+        float mainTransferCentreZ = 0.5f;
+        Vec3 mainTransferStart = new Vec3(0f, 0f, mainTransferCentreZ - (transferLength * 0.5f));
+        Vec3 mainTransferEnd = new Vec3(0f, 0f, mainTransferCentreZ + (transferLength * 0.5f));
         mainTransferGeometry = SteeringTransferMachineGeometry.fromTransferWindow(
                 mainTransferStart,
                 mainTransferEnd,
                 transferLength,
                 transferSpec.getOverallWidth());
         inlineTransferGeometry = SteeringTransferMachineGeometry.fromTransferWindow(
-                new Vec3(-2.5f, 0f, -0.5f),
-                new Vec3(-2.5f - transferLength, 0f, -0.5f),
+                new Vec3(-2.5f, 0f, 0.5f),
+                new Vec3(-2.5f - transferLength, 0f, 0.5f),
                 transferLength,
                 transferSpec.getOverallWidth());
 
@@ -176,19 +178,19 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 new Vec3(0f, 0f, 8f),
                 false));
         spine = builder.segment("adapting_spine", new LinearSegment3(
-                new Vec3(0f, 0f, -0.5f),
-                new Vec3(-2.5f, 0f, -0.5f),
+                mainTransferGeometry.leftTargetAttachmentPoint(),
+                new Vec3(-2.5f, 0f, 0.5f),
                 false));
         inlineTransfer = builder.segment("adapting_inline_transfer", new LinearSegment3(
-                new Vec3(-2.5f, 0f, -0.5f),
-                new Vec3(-2.5f - transferLength, 0f, -0.5f),
+                new Vec3(-2.5f, 0f, 0.5f),
+                new Vec3(-2.5f - transferLength, 0f, 0.5f),
                 false));
-        Vec3 bench1LaneStart = inlineTransferGeometry.leftTargetExitAttachmentPoint(sourceSpec.getRunningWidth());
-        Vec3 bench2LaneStart = inlineTransferGeometry.rightTargetExitAttachmentPoint(sourceSpec.getRunningWidth());
-        Vec3 bench1TransferStart = new Vec3(bench1LaneStart.x, 0f, 2.3f);
-        Vec3 bench1TransferEnd = new Vec3(bench1LaneStart.x, 0f, 2.3f + transferLength);
-        Vec3 bench2TransferStart = new Vec3(bench2LaneStart.x, 0f, -2.3f);
-        Vec3 bench2TransferEnd = new Vec3(bench2LaneStart.x, 0f, -2.3f - transferLength);
+        Vec3 bench1LaneStart = inlineTransferGeometry.rightTargetAttachmentPoint();
+        Vec3 bench2LaneStart = inlineTransferGeometry.leftTargetAttachmentPoint();
+        Vec3 bench1TransferStart = new Vec3(bench1LaneStart.x, 0f, bench1LaneStart.z + BENCH_PATH_LENGTH);
+        Vec3 bench1TransferEnd = new Vec3(bench1LaneStart.x, 0f, bench1TransferStart.z + transferLength);
+        Vec3 bench2TransferStart = new Vec3(bench2LaneStart.x, 0f, bench2LaneStart.z - BENCH_PATH_LENGTH);
+        Vec3 bench2TransferEnd = new Vec3(bench2LaneStart.x, 0f, bench2TransferStart.z - transferLength);
 
         bench1Path = builder.segment("adapting_bench_1_path", new LinearSegment3(
                 bench1LaneStart,
@@ -218,13 +220,26 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 transferLength,
                 transferSpec.getOverallWidth());
 
+        Vec3 bench1ReturnStart = mainReturn1Geometry.rightTargetAttachmentPoint();
+        float mainDestinationReturnEntryDistance = clamp(
+                bench1ReturnStart.z - mainDestination.getGeometry().getStartPoint().z,
+                0.75f,
+                mainDestination.length() - 0.75f);
+        Vec3 bench1ReturnEnd = leftEdgePoint(mainDestination, sourceSpec, mainDestinationReturnEntryDistance);
+        Vec3 bench2ReturnStart = mainReturn2Geometry.leftTargetAttachmentPoint();
+        float mainApproachReturnEntryDistance = clamp(
+                Math.abs(bench2ReturnStart.z - mainApproach.getGeometry().getStartPoint().z),
+                0.75f,
+                mainApproach.length() - 0.75f);
+        Vec3 bench2ReturnEnd = leftEdgePoint(mainApproach, sourceSpec, mainApproachReturnEntryDistance);
+
         bench1ReturnLink = builder.segment("adapting_bench_1_return", new LinearSegment3(
-                mainReturn1Geometry.rightTargetExitAttachmentPoint(linkSpec.getRunningWidth()),
-                new Vec3(0f, 0f, 3.0f),
+                bench1ReturnStart,
+                bench1ReturnEnd,
                 true));
         bench2ReturnLink = builder.segment("adapting_bench_2_return", new LinearSegment3(
-                mainReturn2Geometry.leftTargetExitAttachmentPoint(linkSpec.getRunningWidth()),
-                new Vec3(0f, 0f, -2.4f),
+                bench2ReturnStart,
+                bench2ReturnEnd,
                 true));
 
         builder.renderWith(mainApproach, sourceSpec)
@@ -243,11 +258,15 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         builder.connectLoop(spine, inlineTransfer);
         builder.connectLoop(bench1Path, mainReturn1Transfer);
         builder.connectLoop(bench2Path, mainReturn2Transfer);
-        builder.connectLinkInto(bench1ReturnLink, mainDestination, 3.0f, online.davisfamily.warehouse.rendering.model.tracks.GuideSide.RIGHT);
+        builder.connectLinkInto(
+                bench1ReturnLink,
+                mainDestination,
+                mainDestinationReturnEntryDistance,
+                online.davisfamily.warehouse.rendering.model.tracks.GuideSide.LEFT);
         builder.connectLinkInto(
                 bench2ReturnLink,
                 mainApproach,
-                Math.max(0.75f, mainApproach.length() - 1.25f),
+                mainApproachReturnEntryDistance,
                 online.davisfamily.warehouse.rendering.model.tracks.GuideSide.LEFT);
 
         mainBranchTarget = new TransferTarget(spine, 0f, RouteFollower.TravelDirection.FORWARD);
@@ -374,8 +393,45 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         sim.addController(injectorController);
         sim.addController(new AdaptingAreaFlowController());
 
-        RenderableObject bench1Marker = createBenchMarker("adapting_bench_1_marker", tr, new Vec3(bench1Path.getGeometry().sampleByDistance(1.2f).x, 0.18f, bench1Path.getGeometry().sampleByDistance(1.2f).z), 0xFF4F7F4F);
-        RenderableObject bench2Marker = createBenchMarker("adapting_bench_2_marker", tr, new Vec3(bench2Path.getGeometry().sampleByDistance(1.2f).x, 0.18f, bench2Path.getGeometry().sampleByDistance(1.2f).z), 0xFF4F7F4F);
+        Vec3 bench1PathStop = bench1Path.getGeometry().sampleByDistance(bench1Path.length() * 0.5f);
+        float bench1MainDestinationDistance = clamp(bench1PathStop.z, 0f, mainDestination.length());
+        Vec3 bench1DestinationPoint = mainDestination.getGeometry().sampleByDistance(bench1MainDestinationDistance);
+        float bench1GapLength = Math.abs(bench1PathStop.x - bench1DestinationPoint.x);
+        float bench1WalkwayClearance = 0.30f;
+        float bench1Length = Math.max(0.50f, bench1GapLength - (2f * bench1WalkwayClearance));
+        Vec3 bench1Centre = new Vec3(
+                (bench1PathStop.x + bench1DestinationPoint.x) * 0.5f,
+                0.18f,
+                bench1PathStop.z);
+        RenderableObject bench1Marker = createBenchMarker(
+                "adapting_bench_1_marker",
+                tr,
+                bench1Centre,
+                bench1Length,
+                0.12f,
+                linkSpec.getOverallWidth(),
+                0xFF4F7F4F);
+        Vec3 bench2PathStop = bench2Path.getGeometry().sampleByDistance(bench2Path.length() * 0.5f);
+        float bench2MainApproachDistance = clamp(
+                Math.abs(bench2PathStop.z - mainApproach.getGeometry().getStartPoint().z),
+                0f,
+                mainApproach.length());
+        Vec3 bench2ApproachPoint = mainApproach.getGeometry().sampleByDistance(bench2MainApproachDistance);
+        float bench2GapLength = Math.abs(bench2PathStop.x - bench2ApproachPoint.x);
+        float bench2WalkwayClearance = 0.30f;
+        float bench2Length = Math.max(0.50f, bench2GapLength - (2f * bench2WalkwayClearance));
+        Vec3 bench2Centre = new Vec3(
+                (bench2PathStop.x + bench2ApproachPoint.x) * 0.5f,
+                0.18f,
+                bench2PathStop.z);
+        RenderableObject bench2Marker = createBenchMarker(
+                "adapting_bench_2_marker",
+                tr,
+                bench2Centre,
+                bench2Length,
+                0.12f,
+                linkSpec.getOverallWidth(),
+                0xFF4F7F4F);
         RenderableObject schedulerAnchor = createBenchMarker("adapting_scheduler_anchor", tr, new Vec3(0.8f, 0.18f, -6.5f), 0xFF4F5F7F);
         objects.add(bench1Marker);
         objects.add(bench2Marker);
@@ -584,14 +640,40 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
     }
 
     private static RenderableObject createBenchMarker(String id, TriangleRenderer tr, Vec3 worldPosition, int colourArgb) {
+        return createBenchMarker(id, tr, worldPosition, 0.30f, 0.12f, 0.30f, colourArgb);
+    }
+
+    private static RenderableObject createBenchMarker(
+            String id,
+            TriangleRenderer tr,
+            Vec3 worldPosition,
+            float length,
+            float height,
+            float width,
+            int colourArgb) {
         RenderableObject marker = RenderableObject.create(
                 id,
                 tr,
-                RollerMeshFactory.createBoxRollerMesh(0.30f, 0.12f, 0.30f),
+                RollerMeshFactory.createBoxRollerMesh(length, height, width),
                 new ObjectTransformation(0f, 0f, 0f, worldPosition.x, worldPosition.y, worldPosition.z, new Mat4()),
                 new OneColourStrategyImpl(colourArgb),
                 true);
         return marker;
+    }
+
+    private static Vec3 leftEdgePoint(
+            RouteSegment segment,
+            TrackSpec destinationSpec,
+            float distanceAlongSegment) {
+        Vec3 centrePoint = segment.getGeometry().sampleByDistance(distanceAlongSegment);
+        Vec3 tangent = segment.getGeometry().sampleTangentByDistance(distanceAlongSegment);
+        Vec3 rightDirection = new Vec3(tangent.z, 0f, -tangent.x).normalize();
+        float offset = destinationSpec.getOverallWidth() * 0.5f;
+        return centrePoint.add(rightDirection.scale(-offset));
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static TrackSpec rollerSpec(ToteGeometry toteGeometry, boolean includeGuides) {
@@ -817,8 +899,11 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
             if (journey.tote.getLastSnapshot() == null) {
                 return false;
             }
+            float stopDistance = Math.min(
+                    BENCH_STOP_DISTANCE,
+                    Math.max(0.05f, journey.benchSegment.length() - 0.05f));
             return journey.tote.getLastSnapshot().currentSegment() == journey.benchSegment
-                    && journey.tote.getLastSnapshot().distanceAlongSegment() >= BENCH_STOP_DISTANCE;
+                    && journey.tote.getLastSnapshot().distanceAlongSegment() >= stopDistance;
         }
 
         private void hideTote(Tote tote) {
