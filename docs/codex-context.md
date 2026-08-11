@@ -18,6 +18,8 @@
 4. `SimulationWorld.update()` updates sim objects, sensors, events, then controllers.
 5. Warehouse objects such as totes mutate their render transforms from simulation state.
 
+Simulation and rendering currently run sequentially on the same game-loop thread. Swing input runs on the event-dispatch thread, and threaded DSP scheduler evaluation runs on its own worker. Render-thread separation has not been implemented.
+
 Important runtime classes:
 
 - `SimulationWorld`
@@ -85,15 +87,16 @@ The active major work is the DSP/OSR scheduler.
 
 Read:
 
-1. `docs/scheduler/dsp_osr_scheduler_requirements.md`
-2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. `docs/machines/phase-1-stations-roadmap.md`
-4. The branch-specific plan referenced by the active roadmap
+1. `docs/runtime/simulation-reset-plan.md` while `feature/simulation-reset` is active
+2. `docs/scheduler/dsp_osr_scheduler_requirements.md`
+3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+4. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
 - The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`.
-- The next larger direction is Phase 1 station implementation, starting with the adapting station unless the user changes priority.
+- Generic standalone transfer-machine support and adapting station Phase 1 are complete and merged.
+- The active branch is `feature/simulation-reset`, a runtime usability/lifecycle interlude before Third-Party Station Phase 1.
 - Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, machine wait queues, and scheduler thread.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
@@ -115,7 +118,21 @@ Current scheduler decisions:
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active roadmap, then create or follow the next branch-specific station plan agreed with the user. The next planned branch is generic inline transfer-target support, followed by adapting station Phase 1.
+Use `docs/runtime/simulation-reset-plan.md` for the active branch. After it is complete and merged, return to `docs/machines/phase-1-stations-roadmap.md` and create the detailed `feature/third-party-station-phase-1` plan from updated `master`.
+
+## Active Runtime Work: Simulation Reset
+
+The active branch is `feature/simulation-reset`.
+
+Reset contract:
+
+- `ALT+R` requests a one-shot reset from Swing input.
+- The game-loop thread consumes and applies the request at a frame safe point.
+- The selected debug scene is reinstalled with a new `SimulationWorld` and fresh runtime/renderables.
+- Camera position, camera orientation, selected scene kind, and display/input modes are preserved.
+- Selection and inspection state are cleared because they reference discarded renderables.
+- Debug runtimes gain an explicit close lifecycle so threaded scheduler evaluation is closed before replacement.
+- Rewind/forward and simulation/render thread separation remain deferred.
 
 ## Phase 1 Station Direction
 
@@ -130,14 +147,15 @@ Core rules:
 
 Planned Phase 1 order:
 
-- inline transfer targets, as a prerequisite route/transfer capability for the adapting area
-- adapting station
+- inline transfer targets: complete
+- adapting station: Phase 1 complete and merged
+- simulation reset runtime interlude: active
 - third-party station
 - manual station
 - exception station
 - tote lid open/close machines
 
-Adapting station should be first because it forces the hardest merge/preparation model:
+Adapting station Phase 1 established the hardest merge/preparation model:
 
 - `STORE`: adapted/preparation totes deposit prepared packs into logical station storage.
 - `COLLECT`: collecting/dispatch totes collect prepared packs from logical station storage before P2P/tote-to-bag.
@@ -200,11 +218,23 @@ Implemented visibility support:
 - `PackRenderableVisibility` controls current pack renderable show/hide/reset behavior.
 - The integrated/debug tipper rigs open inbound source tote lids through `DebugToteLidController` after actual motion starts, rather than opening them in `TipperDemoFixtures`. This lets closed-lid contained pack visibility be verified visually.
 
+Threading status:
+
+- scheduler evaluation is separated through immutable snapshots and result polling
+- simulation and rendering are not separated; `BaseScene.drawObject(...)` updates simulation and then draws on the same game-loop thread
+- simulation objects still directly mutate some renderable transformations
+- a future render split should first introduce a render-pose/snapshot boundary for dynamic totes, packs, bags, and moving machine parts
+- prefer a latest-complete double-buffered snapshot over an accumulating FIFO of stale render frames
+
 ## Remaining Machine Work
 
 These machines still need implementation using the established machine-state/install-result style:
 
+- third-party station Phase 1
+- manual station Phase 1
+- exception station Phase 1
 - lid opening machine
+- lid closing machine
 - tote strapping machine
 - scheduler-controlled tote buffer
 

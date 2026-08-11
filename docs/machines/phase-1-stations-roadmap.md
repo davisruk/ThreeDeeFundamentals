@@ -8,7 +8,7 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
-The generic transfer-machine work is complete. Adapting Station Phase 1 is implemented and ready for merge from `feature/adapting-station-phase-1`; continue with the remaining Phase 1 stations from updated `master` after that branch is closed.
+The generic transfer-machine work and Adapting Station Phase 1 are complete and merged. A short `feature/simulation-reset` runtime branch is active before the next station branch. After reset is merged, create the detailed plan for Third-Party Station Phase 1 from updated `master`.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -55,7 +55,7 @@ Phase 1 expectations:
 
 ### 1. Adapting Station Phase 1
 
-Status: implemented on `feature/adapting-station-phase-1`; ready for branch closure after final verification/commit.
+Status: complete and merged to `master`.
 
 Purpose:
 
@@ -85,6 +85,21 @@ Implemented notes:
 - STORE totes disappear after processing in the debug rig.
 - COLLECT totes update their load plan and return to the main line.
 - The adapting debug scene uses explicit bench stop sensors and six visible bench placeholders.
+
+### Runtime Interlude: Simulation Reset
+
+Status: planned on `feature/simulation-reset`.
+
+Detailed implementation doc:
+
+- `docs/runtime/simulation-reset-plan.md`
+
+Purpose:
+
+- Add an `ALT+R` command that safely rebuilds the active debug simulation.
+- Add the missing debug-runtime lifecycle needed to close scheduler workers before scene replacement.
+- Preserve the active scene kind, camera, and display modes while resetting simulation-owned state.
+- Keep rewind/forward and simulation/render thread separation out of scope.
 
 ### 2. Third-Party Station Phase 1
 
@@ -182,6 +197,7 @@ Suggested branch names:
 
 - `feature/inline-transfer-targets`
 - `feature/adapting-station-phase-1`
+- `feature/simulation-reset`
 - `feature/third-party-station-phase-1`
 - `feature/manual-station-phase-1`
 - `feature/exception-station-phase-1`

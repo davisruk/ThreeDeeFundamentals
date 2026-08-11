@@ -7,10 +7,10 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. `docs/scheduler/dsp_osr_scheduler_requirements.md`
-3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-4. `docs/machines/phase-1-stations-roadmap.md`
-5. The branch-specific plan referenced by the active roadmap
+2. The active branch plan, currently `docs/runtime/simulation-reset-plan.md`
+3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
+4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+5. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -76,7 +76,9 @@ Architectural boundaries to maintain:
 
 The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`, merged back to `master`.
 
-The next larger direction is Phase 1 station implementation. Before making code changes, create or confirm the branch-specific station plan.
+The adapting station Phase 1 branch is complete and merged to `master`.
+
+The active branch is `feature/simulation-reset`. Follow `docs/runtime/simulation-reset-plan.md`. This is a short runtime usability/lifecycle branch before planning the third-party station Phase 1 branch.
 
 Completed scheduler work:
 
@@ -115,8 +117,9 @@ Current scheduler decisions:
   - for P2P, queue capacity gates scheduler release, while `ToteToBagFlowController.canAdmit(...)` remains the local tipper processing gate
   - this architecture correction was inserted mid DSP scheduler work before adding further scheduler behaviour
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
+- Simulation and rendering still run sequentially on the same game-loop thread. Only scheduler evaluation has been moved to a worker thread. A future render-thread split remains deferred and would use published render snapshots rather than live renderable mutation.
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. The generic transfer-machine capability is complete and merged. `feature/adapting-station-phase-1` is implemented and ready for branch closure; after it is merged, the next Phase 1 station should be planned from updated `master`.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Generic transfer-machine capability and adapting station Phase 1 are complete and merged. After `feature/simulation-reset`, the next planned Phase 1 station is the third-party station; create its detailed branch plan before implementation.
 
 ## Deferred Direction
 
@@ -128,7 +131,7 @@ Current larger direction:
 
 Known Phase 1 machine/station work:
 
-- adapting station: Phase 1 implemented on `feature/adapting-station-phase-1`
+- adapting station: Phase 1 complete and merged
 - third-party station
 - manual station
 - exception station

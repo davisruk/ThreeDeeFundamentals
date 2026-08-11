@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support is complete, and adapting station Phase 1 is implemented on `feature/adapting-station-phase-1`.
+Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support and adapting station Phase 1 are complete and merged. `feature/simulation-reset` is the active runtime interlude before Third-Party Station Phase 1.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -248,7 +248,7 @@ Purpose:
 
 ### `feature/adapting-station-phase-1`
 
-Status: implemented and ready for branch closure.
+Status: complete and merged.
 
 Detailed implementation doc:
 
@@ -270,6 +270,27 @@ Notes:
 - Logical adapting storage now models `bench -> rack -> shelf -> bin` without rendered storage visuals.
 - STORE source totes disappear after bench completion.
 - COLLECT totes return to the main line after load-plan update.
+
+### `feature/simulation-reset`
+
+Status: planned on the active branch.
+
+Detailed implementation doc:
+
+- `docs/runtime/simulation-reset-plan.md`
+
+Purpose:
+
+- Add safe active-scene reset through `ALT+R`.
+- Apply reset on the game-loop thread rather than Swing's event-dispatch thread.
+- Add debug-runtime disposal so reset does not retain threaded scheduler workers.
+- Reinstall the same debug scene with fresh simulation/runtime/renderable state while preserving camera and display modes.
+
+Explicit non-goals:
+
+- no scheduler behavior changes
+- no rewind/forward history
+- no simulation/render thread split
 
 ## Current Assumptions
 

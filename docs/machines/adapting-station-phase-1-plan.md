@@ -2,7 +2,7 @@
 
 Branch: `feature/adapting-station-phase-1`
 
-Status: implemented and ready for branch closure. `feature/inline-transfer-targets` is complete, and this plan assumes the standalone transfer-segment model delivered there.
+Status: complete and merged to `master`. `feature/inline-transfer-targets` is complete, and this plan assumes the standalone transfer-segment model delivered there.
 
 ## Purpose
 
