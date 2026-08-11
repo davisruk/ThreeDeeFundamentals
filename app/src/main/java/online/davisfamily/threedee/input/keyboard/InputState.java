@@ -3,9 +3,11 @@ package online.davisfamily.threedee.input.keyboard;
 import java.awt.event.KeyEvent;
 import java.util.BitSet;
 import java.util.EnumSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class InputState {
 	private final BitSet pressed = new BitSet(512);
+	private final AtomicBoolean simulationResetRequested = new AtomicBoolean();
 	public enum Mode {
 		SHOW_DEBUG_INFO, 
 		SHOW_CAMERA_AXES, 
@@ -40,6 +42,14 @@ public class InputState {
 	public boolean up() { return isPressed(KeyEvent.VK_UP); }
 	public boolean down() { return isPressed(KeyEvent.VK_DOWN); }
 	public boolean alt() { return isPressed(KeyEvent.VK_ALT); }
+
+	public void requestSimulationReset() {
+		simulationResetRequested.set(true);
+	}
+
+	public boolean consumeSimulationResetRequest() {
+		return simulationResetRequested.getAndSet(false);
+	}
 		
 	public void toggle(Mode mode) {
 		if (modes.contains(mode))

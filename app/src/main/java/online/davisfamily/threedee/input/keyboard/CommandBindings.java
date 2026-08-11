@@ -26,6 +26,8 @@ public class CommandBindings {
 		bindToggle(Mode.PAUSE_ALL, im, am, KeyEvent.VK_P, 0, true, is);
 		bindToggle(Mode.PAUSE_TRANSFORMS, im, am, KeyEvent.VK_P, KeyEvent.ALT_DOWN_MASK, true, is);
 		bindToggle(Mode.SHOW_PATH, im, am, KeyEvent.VK_P, KeyEvent.CTRL_DOWN_MASK, true, is);
+		bindCommand(im, am, "simulation.reset", KeyEvent.VK_R, KeyEvent.ALT_DOWN_MASK, true,
+				is::requestSimulationReset);
 	}
 	
 	
