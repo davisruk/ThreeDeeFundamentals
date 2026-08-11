@@ -7,7 +7,7 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The active branch plan, currently `docs/runtime/simulation-reset-plan.md`
+2. The active branch plan, currently the completed `docs/runtime/simulation-reset-plan.md`
 3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 5. `docs/machines/phase-1-stations-roadmap.md`
@@ -78,7 +78,7 @@ The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`
 
 The adapting station Phase 1 branch is complete and merged to `master`.
 
-The active branch is `feature/simulation-reset`. Follow `docs/runtime/simulation-reset-plan.md`. This is a short runtime usability/lifecycle branch before planning the third-party station Phase 1 branch.
+The active branch is `feature/simulation-reset`. Its implementation and verification are complete; follow `docs/runtime/simulation-reset-plan.md` until the branch is merged. Then plan the third-party station Phase 1 branch from updated `master` before implementation.
 
 Completed scheduler work:
 
@@ -119,7 +119,7 @@ Current scheduler decisions:
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 - Simulation and rendering still run sequentially on the same game-loop thread. Only scheduler evaluation has been moved to a worker thread. A future render-thread split remains deferred and would use published render snapshots rather than live renderable mutation.
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Generic transfer-machine capability and adapting station Phase 1 are complete and merged. After `feature/simulation-reset`, the next planned Phase 1 station is the third-party station; create its detailed branch plan before implementation.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Generic transfer-machine capability and adapting station Phase 1 are complete and merged. After the completed `feature/simulation-reset` branch is merged, the next planned Phase 1 station is the third-party station; create its detailed branch plan before implementation.
 
 ## Deferred Direction
 

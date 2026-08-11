@@ -2,7 +2,7 @@
 
 Branch: `feature/simulation-reset`
 
-Status: planned. This is a short runtime usability branch between the completed adapting station Phase 1 work and the next Phase 1 station branch.
+Status: complete and verified on `feature/simulation-reset`, pending merge to `master`. Focused reset tests, the complete simulation suite, and visual checks passed.
 
 ## Purpose
 

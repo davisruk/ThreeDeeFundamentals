@@ -96,7 +96,7 @@ Current scheduler decisions:
 
 - The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`.
 - Generic standalone transfer-machine support and adapting station Phase 1 are complete and merged.
-- The active branch is `feature/simulation-reset`, a runtime usability/lifecycle interlude before Third-Party Station Phase 1.
+- The active branch is `feature/simulation-reset`. Its runtime usability/lifecycle work is complete and verified, pending merge before Third-Party Station Phase 1 planning.
 - Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, machine wait queues, and scheduler thread.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
@@ -118,11 +118,11 @@ Current scheduler decisions:
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/runtime/simulation-reset-plan.md` for the active branch. After it is complete and merged, return to `docs/machines/phase-1-stations-roadmap.md` and create the detailed `feature/third-party-station-phase-1` plan from updated `master`.
+Use `docs/runtime/simulation-reset-plan.md` for the completed active branch. After it is merged, return to `docs/machines/phase-1-stations-roadmap.md` and create the detailed `feature/third-party-station-phase-1` plan from updated `master`.
 
 ## Active Runtime Work: Simulation Reset
 
-The active branch is `feature/simulation-reset`.
+The active branch is `feature/simulation-reset`; implementation and verification are complete, pending merge.
 
 Reset contract:
 
@@ -149,7 +149,7 @@ Planned Phase 1 order:
 
 - inline transfer targets: complete
 - adapting station: Phase 1 complete and merged
-- simulation reset runtime interlude: active
+- simulation reset runtime interlude: complete and verified, pending merge
 - third-party station
 - manual station
 - exception station

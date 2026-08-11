@@ -8,7 +8,7 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
-The generic transfer-machine work and Adapting Station Phase 1 are complete and merged. A short `feature/simulation-reset` runtime branch is active before the next station branch. After reset is merged, create the detailed plan for Third-Party Station Phase 1 from updated `master`.
+The generic transfer-machine work and Adapting Station Phase 1 are complete and merged. The short `feature/simulation-reset` runtime branch is complete and verified, pending merge. After reset is merged, create the detailed plan for Third-Party Station Phase 1 from updated `master`.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -88,7 +88,7 @@ Implemented notes:
 
 ### Runtime Interlude: Simulation Reset
 
-Status: planned on `feature/simulation-reset`.
+Status: complete and verified on `feature/simulation-reset`, pending merge to `master`.
 
 Detailed implementation doc:
 
