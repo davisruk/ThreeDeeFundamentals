@@ -65,7 +65,7 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	protected final ScenePicker scenePicker = new ScenePicker();
 	protected final float pickerFovYRadians = (float) Math.toRadians(60);
 	protected List<RenderableObject> objects;
-	protected final SimulationWorld sim = new SimulationWorld();
+	protected SimulationWorld sim = new SimulationWorld();
 	
 	public BaseScene (JRootPane pane, ViewDimensions dimensions, CameraPosition camPos) {
 		root = pane;

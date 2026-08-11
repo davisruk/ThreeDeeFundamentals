@@ -10,6 +10,7 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.lights.DirectionalLight;
 import online.davisfamily.threedee.scene.BaseScene;
+import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.rendering.model.tote.RenderableToteFactory;
 import online.davisfamily.warehouse.rendering.model.tote.ToteGeometry;
 
@@ -17,13 +18,29 @@ public class TestScene extends BaseScene{
 
 	private RenderableObject rTote;
 	private final DirectionalLight lightDirection;
-	private final DebugSceneRuntime activeRuntime;
+	private final DebugSceneKind activeSceneKind;
+	private DebugSceneRuntime activeRuntime;
 
 	
 	public TestScene (JRootPane pane, ViewDimensions dimensions, DebugSceneOptions options) {
 		super(pane, dimensions,	CameraPosition.backRight());
 		lightDirection = new DirectionalLight(new Vec3(-0.2f, -0.8f, 1.0f), 0.55f, 0.45f);
-		activeRuntime = installScene(options.activeScene());
+		activeSceneKind = options.activeScene();
+		activeRuntime = installScene(activeSceneKind);
+	}
+
+	void resetActiveScene() {
+		activeRuntime.close();
+		selectionManager.clear();
+		inspectionRegistry.clear();
+		objects.clear();
+		rTote = null;
+		sim = new SimulationWorld();
+		activeRuntime = installScene(activeSceneKind);
+	}
+
+	DebugSceneKind activeSceneKind() {
+		return activeSceneKind;
 	}
 		
 	@Override

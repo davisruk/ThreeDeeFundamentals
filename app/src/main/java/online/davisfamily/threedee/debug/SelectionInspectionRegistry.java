@@ -26,4 +26,8 @@ public class SelectionInspectionRegistry {
         Inspectable inspectable = inspectablesByTarget.get(renderable.getSelectionTarget());
         return inspectable != null ? inspectable.describe() : List.of();
     }
+
+    public void clear() {
+        inspectablesByTarget.clear();
+    }
 }
