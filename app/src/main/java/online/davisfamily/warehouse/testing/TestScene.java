@@ -42,6 +42,13 @@ public class TestScene extends BaseScene{
 	DebugSceneKind activeSceneKind() {
 		return activeSceneKind;
 	}
+
+	@Override
+	protected void processFrameCommands() {
+		if (inputState.consumeSimulationResetRequest()) {
+			resetActiveScene();
+		}
+	}
 		
 	@Override
 	public void executeChildRenderOperations(double dtSeconds) {

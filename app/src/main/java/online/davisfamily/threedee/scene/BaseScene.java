@@ -184,9 +184,13 @@ public abstract class BaseScene implements Scene, MouseEventConsumer{
 	protected void registerInspectable(RenderableObject renderable, Inspectable inspectable) {
 		inspectionRegistry.register(renderable, inspectable);
 	}
+
+	protected void processFrameCommands() {
+	}
 	
 	@Override
 	public void renderFrame(double tSeconds) {
+		processFrameCommands();
 		if (!inputState.isSet(Mode.PAUSE_ALL)) {
 			updateCamera();
 			updatePosition(tSeconds);

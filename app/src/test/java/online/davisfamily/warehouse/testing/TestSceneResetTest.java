@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -12,6 +14,7 @@ import javax.swing.JRootPane;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.dimensions.ViewDimensions;
+import online.davisfamily.threedee.input.keyboard.InputState.Mode;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 
@@ -48,6 +51,37 @@ class TestSceneResetTest {
 
         assertNotSame(firstResetWorld, scene.simulationWorld());
         assertEquals(initialObjectCount, scene.sceneObjects().size());
+    }
+
+    @Test
+    void shouldConsumeResetWhileAllRenderingAndSimulationIsPaused() {
+        InspectableTestScene scene = createScene();
+        SimulationWorld originalWorld = scene.simulationWorld();
+        scene.toggleMode(Mode.PAUSE_ALL);
+        scene.requestSimulationReset();
+
+        scene.renderFrame(0.1d);
+
+        SimulationWorld resetWorld = scene.simulationWorld();
+        assertNotSame(originalWorld, resetWorld);
+        assertTrue(scene.isModeSet(Mode.PAUSE_ALL));
+
+        scene.renderFrame(0.1d);
+
+        assertSame(resetWorld, scene.simulationWorld());
+    }
+
+    @Test
+    void shouldConsumeResetWhileTransformsArePaused() {
+        InspectableTestScene scene = createScene();
+        SimulationWorld originalWorld = scene.simulationWorld();
+        scene.toggleMode(Mode.PAUSE_TRANSFORMS);
+        scene.requestSimulationReset();
+
+        scene.renderFrame(0.1d);
+
+        assertNotSame(originalWorld, scene.simulationWorld());
+        assertTrue(scene.isModeSet(Mode.PAUSE_TRANSFORMS));
     }
 
     private static InspectableTestScene createScene() {
@@ -87,6 +121,18 @@ class TestSceneResetTest {
 
         private List<String> describe(RenderableObject renderable) {
             return inspectionRegistry.describe(renderable);
+        }
+
+        private void requestSimulationReset() {
+            inputState.requestSimulationReset();
+        }
+
+        private void toggleMode(Mode mode) {
+            inputState.toggle(mode);
+        }
+
+        private boolean isModeSet(Mode mode) {
+            return inputState.isSet(mode);
         }
     }
 }
