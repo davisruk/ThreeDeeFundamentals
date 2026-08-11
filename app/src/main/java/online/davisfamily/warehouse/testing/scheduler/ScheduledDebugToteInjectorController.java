@@ -11,7 +11,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspReleaseScheduler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseOrderCommand;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
 
-public class ScheduledDebugToteInjectorController implements SimulationController {
+public class ScheduledDebugToteInjectorController implements SimulationController, AutoCloseable {
     private final SchedulerEvaluationSource evaluationSource;
     private final DspSchedulerRuntimeState runtimeState;
     private final ScheduledTipperToteReleaseCatalog releaseCatalog;
@@ -116,5 +116,10 @@ public class ScheduledDebugToteInjectorController implements SimulationControlle
 
     public SchedulerDebugSnapshot debugSnapshot() {
         return debugState.snapshot();
+    }
+
+    @Override
+    public void close() {
+        evaluationSource.close();
     }
 }

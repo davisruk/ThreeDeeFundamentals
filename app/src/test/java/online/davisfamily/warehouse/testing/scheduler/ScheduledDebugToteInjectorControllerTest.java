@@ -46,6 +46,20 @@ class ScheduledDebugToteInjectorControllerTest {
     private static final PackDimensions TEST_PACK = new PackDimensions(0.1f, 0.05f, 0.04f);
 
     @Test
+    void shouldCloseEvaluationSource() {
+        ManualEvaluationSource evaluationSource = new ManualEvaluationSource();
+        ScheduledDebugToteInjectorController controller = new ScheduledDebugToteInjectorController(
+                evaluationSource,
+                runtimeState(List.of(waitingOrder("order-1", "sc-1"))),
+                new ScheduledTipperToteReleaseCatalog(List.of()),
+                new TestReleaseTarget(true, SchedulerCommandApplicationResult.appliedResult()));
+
+        controller.close();
+
+        assertTrue(evaluationSource.closed);
+    }
+
+    @Test
     void shouldReleaseSchedulerSelectedToteAndMarkOrderReleased() {
         DspSchedulerRuntimeState runtimeState = runtimeState(List.of(waitingOrder("order-1", "sc-1")));
         TestReleaseTarget releaseTarget = new TestReleaseTarget(true, SchedulerCommandApplicationResult.appliedResult());
@@ -431,6 +445,7 @@ class ScheduledDebugToteInjectorControllerTest {
         private SchedulerEvaluationResult pendingResult;
         private boolean submitAllowed = true;
         private int submitCalls;
+        private boolean closed;
 
         @Override
         public boolean canSubmit() {
@@ -456,6 +471,7 @@ class ScheduledDebugToteInjectorControllerTest {
 
         @Override
         public void close() {
+            closed = true;
         }
 
         private void completeWith(SchedulerEvaluationResult result) {

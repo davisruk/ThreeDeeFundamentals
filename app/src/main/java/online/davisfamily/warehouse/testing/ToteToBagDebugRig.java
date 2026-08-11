@@ -60,6 +60,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
     private final ToteToBagSubsystem subsystem;
     private final ToteToBagCoreLayoutSpec layoutSpec;
     private final TipperToSorterSection tipperToSorterSection;
+    private final IntegratedToteToBagDebugInstallation installation;
 
     private final PdcConveyor pdcConveyor;
     private final PcrConveyor pcrConveyor;
@@ -100,7 +101,7 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
                 new OneColourStrategyImpl(0xFF596A54),
                 new OneColourStrategyImpl(0xFF596A54));
         layoutSpec = ToteToBagCoreLayoutSpec.fifteenPrlIntegratedDebugDefaults();
-        IntegratedToteToBagDebugInstallation installation = new IntegratedToteToBagDebugInstaller().install(
+        installation = new IntegratedToteToBagDebugInstaller().install(
                 tr,
                 sim,
                 objects,
@@ -138,6 +139,11 @@ public class ToteToBagDebugRig implements DebugSceneRuntime {
         registerBumperInspection();
         registerInspectableRoots();
         registerBagReceiverInspection();
+    }
+
+    @Override
+    public void close() {
+        installation.close();
     }
 
     @Override

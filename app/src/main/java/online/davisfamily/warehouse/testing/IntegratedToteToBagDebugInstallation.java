@@ -7,8 +7,9 @@ import online.davisfamily.warehouse.sim.totebag.assembly.TipperToSorterSection;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTrackSection;
 import online.davisfamily.warehouse.sim.totebag.assembly.ToteToBagSubsystem;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
+import online.davisfamily.warehouse.testing.scheduler.ScheduledDebugToteInjectorController;
 
-public class IntegratedToteToBagDebugInstallation {
+public class IntegratedToteToBagDebugInstallation implements AutoCloseable {
     private final ToteToBagSubsystem subsystem;
     private final TipperTrackSection trackSection;
     private final TipperInstallation tipperInstallation;
@@ -16,6 +17,7 @@ public class IntegratedToteToBagDebugInstallation {
     private final BaggingInstallation baggingInstallation;
     private final TipperToSorterSection tipperToSorterSection;
     private final ToteToBagFlowController flowController;
+    private final ScheduledDebugToteInjectorController scheduledInjectorController;
 
     public IntegratedToteToBagDebugInstallation(
             ToteToBagSubsystem subsystem,
@@ -24,14 +26,16 @@ public class IntegratedToteToBagDebugInstallation {
             SortingInstallation sortingInstallation,
             BaggingInstallation baggingInstallation,
             TipperToSorterSection tipperToSorterSection,
-            ToteToBagFlowController flowController) {
+            ToteToBagFlowController flowController,
+            ScheduledDebugToteInjectorController scheduledInjectorController) {
         if (subsystem == null
                 || trackSection == null
                 || tipperInstallation == null
                 || sortingInstallation == null
                 || baggingInstallation == null
                 || tipperToSorterSection == null
-                || flowController == null) {
+                || flowController == null
+                || scheduledInjectorController == null) {
             throw new IllegalArgumentException("Integrated tote-to-bag installation inputs must not be null");
         }
         this.subsystem = subsystem;
@@ -41,6 +45,7 @@ public class IntegratedToteToBagDebugInstallation {
         this.baggingInstallation = baggingInstallation;
         this.tipperToSorterSection = tipperToSorterSection;
         this.flowController = flowController;
+        this.scheduledInjectorController = scheduledInjectorController;
     }
 
     public ToteToBagSubsystem getSubsystem() {
@@ -69,5 +74,10 @@ public class IntegratedToteToBagDebugInstallation {
 
     public ToteToBagFlowController getFlowController() {
         return flowController;
+    }
+
+    @Override
+    public void close() {
+        scheduledInjectorController.close();
     }
 }

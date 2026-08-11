@@ -229,7 +229,8 @@ public class IntegratedToteToBagDebugInstaller {
                 sortingInstallation,
                 baggingInstallation,
                 tipperToSorterSection,
-                flowController);
+                flowController,
+                scheduledInjectorController);
     }
 
     private int indexOfPrl(List<PrlConveyor> prls, String prlId) {

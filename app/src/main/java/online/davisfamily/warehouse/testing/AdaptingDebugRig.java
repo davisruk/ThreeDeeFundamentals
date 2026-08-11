@@ -116,6 +116,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
     private final RouteFollower.TravelDirection mainDirection = RouteFollower.TravelDirection.FORWARD;
     private final MainDivertStrategy mainDivertStrategy = new MainDivertStrategy();
     private final BenchSelectStrategy benchSelectStrategy = new BenchSelectStrategy();
+    private final ScheduledDebugToteInjectorController injectorController;
 
     public AdaptingDebugRig(
             TriangleRenderer tr,
@@ -383,7 +384,7 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                         adaptingArea,
                         new StationCapacity(6, 0)));
 
-        ScheduledDebugToteInjectorController injectorController = new ScheduledDebugToteInjectorController(
+        injectorController = new ScheduledDebugToteInjectorController(
                 scheduler,
                 runtimeState,
                 releaseCatalog,
@@ -410,6 +411,11 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
 
     @Override
     public void syncVisuals() {
+    }
+
+    @Override
+    public void close() {
+        injectorController.close();
     }
 
     private Map<AdaptingBenchId, AdaptingBenchStop> createBenchStops() {
