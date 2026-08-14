@@ -410,6 +410,9 @@ public class ToteToBagFlowController implements SimulationController {
         if (candidateToteLoadPlan == null) {
             throw new IllegalArgumentException("candidateToteLoadPlan must not be null");
         }
+        if (candidateToteLoadPlan.getPackPlans().isEmpty()) {
+            return false;
+        }
         initializeIfNeeded();
 
         Set<String> distinctCorrelationIds = new LinkedHashSet<>();

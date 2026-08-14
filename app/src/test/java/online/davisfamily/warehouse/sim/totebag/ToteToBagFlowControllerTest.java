@@ -808,6 +808,13 @@ class ToteToBagFlowControllerTest {
     }
 
     @Test
+    void shouldRejectEmptyToteLoadPlanAtP2pAdmission() {
+        AdmissionFixture fixture = createAdmissionFixture();
+
+        assertFalse(fixture.controller().canAdmit(new ToteLoadPlan("candidate-tote", List.of())));
+    }
+
+    @Test
     void shouldCountRepeatedPacksForSameNewCorrelationAsOnePrlNeed() {
         AdmissionFixture fixture = createAdmissionFixture();
         fixture.controller().update(null, 0.05d);

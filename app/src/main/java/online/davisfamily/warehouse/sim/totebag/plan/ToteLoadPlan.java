@@ -11,9 +11,11 @@ import online.davisfamily.warehouse.sim.totebag.control.*;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ToteLoadPlan {
     private final String toteId;
@@ -23,11 +25,11 @@ public class ToteLoadPlan {
         if (toteId == null || toteId.isBlank()) {
             throw new IllegalArgumentException("toteId must not be blank");
         }
-        if (packPlans == null || packPlans.isEmpty()) {
-            throw new IllegalArgumentException("packPlans must not be empty");
+        if (packPlans == null) {
+            throw new IllegalArgumentException("packPlans must not be null");
         }
         this.toteId = toteId;
-        this.packPlans = List.copyOf(packPlans);
+        this.packPlans = validatedPackPlans(packPlans);
     }
 
     public String getToteId() {
@@ -36,6 +38,16 @@ public class ToteLoadPlan {
 
     public List<PackPlan> getPackPlans() {
         return Collections.unmodifiableList(packPlans);
+    }
+
+    public ToteLoadPlan withAdditionalPackPlans(List<PackPlan> additionalPackPlans) {
+        if (additionalPackPlans == null) {
+            throw new IllegalArgumentException("additionalPackPlans must not be null");
+        }
+
+        List<PackPlan> combinedPackPlans = new ArrayList<>(packPlans);
+        combinedPackPlans.addAll(additionalPackPlans);
+        return new ToteLoadPlan(toteId, combinedPackPlans);
     }
 
     public Map<String, List<PackPlan>> packPlansByCorrelationId() {
@@ -52,5 +64,16 @@ public class ToteLoadPlan {
 
     public List<String> orderedCorrelationIds() {
         return new ArrayList<>(packPlansByCorrelationId().keySet());
+    }
+
+    private static List<PackPlan> validatedPackPlans(List<PackPlan> packPlans) {
+        List<PackPlan> copy = List.copyOf(packPlans);
+        Set<String> packIds = new LinkedHashSet<>();
+        for (PackPlan packPlan : copy) {
+            if (!packIds.add(packPlan.packId())) {
+                throw new IllegalArgumentException("Duplicate packId: " + packPlan.packId());
+            }
+        }
+        return copy;
     }
 }
