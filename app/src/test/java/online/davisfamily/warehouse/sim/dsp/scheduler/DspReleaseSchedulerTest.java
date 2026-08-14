@@ -260,14 +260,14 @@ class DspReleaseSchedulerTest {
                 sequenceNumber);
     }
 
-    private static DspOrderItem line(String itemId, DspOrderLineType lineType) {
+    private static DspOrderItem line(String lineReference, DspOrderLineType lineType) {
         return new DspOrderItem(
-                itemId,
-                "product-" + itemId,
+                lineReference,
+                "product-" + lineReference,
                 1,
                 "0006515",
                 lineType,
-                "prepared-" + itemId,
+                "prepared-" + lineReference,
                 1,
                 0);
     }

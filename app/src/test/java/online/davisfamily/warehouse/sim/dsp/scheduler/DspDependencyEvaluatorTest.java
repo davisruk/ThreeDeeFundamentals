@@ -239,14 +239,14 @@ class DspDependencyEvaluatorTest {
                 0);
     }
 
-    private static DspOrderItem line(String itemId, DspOrderLineType lineType) {
+    private static DspOrderItem line(String lineReference, DspOrderLineType lineType) {
         return new DspOrderItem(
-                itemId,
-                "product-" + itemId,
+                lineReference,
+                "product-" + lineReference,
                 1,
                 "0006515",
                 lineType,
-                "prepared-order-" + itemId,
+                "prepared-order-" + lineReference,
                 1,
                 0);
     }

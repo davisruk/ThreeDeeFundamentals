@@ -34,10 +34,10 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
                 throw new IllegalArgumentException("collectedLines must not contain null");
             }
             for (int packNumber = 1; packNumber <= collectedLine.line().quantity(); packNumber++) {
-                String lineId = collectedLine.line().itemId();
+                String lineReference = collectedLine.line().lineReference();
                 packPlans.add(new PackPlan(
-                        "pack-" + lineId + "-" + packNumber,
-                        lineId,
+                        "pack-" + lineReference + "-" + packNumber,
+                        lineReference,
                         packDimensions));
             }
         }

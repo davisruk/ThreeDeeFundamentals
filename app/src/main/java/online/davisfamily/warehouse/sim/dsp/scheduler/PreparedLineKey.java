@@ -1,24 +1,15 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
-import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 
 public record PreparedLineKey(
         String targetOrderId,
-        int targetSheetNumber,
-        String orderLineNumber,
-        DspOrderLineType lineType) {
+        String lineReference) {
 
     public PreparedLineKey {
         targetOrderId = requireTrimmedValue(targetOrderId, "targetOrderId");
-        orderLineNumber = requireTrimmedValue(orderLineNumber, "orderLineNumber");
-        if (targetSheetNumber < 1) {
-            throw new IllegalArgumentException("targetSheetNumber must be >= 1");
-        }
-        if (lineType == null) {
-            throw new IllegalArgumentException("lineType must not be null");
-        }
+        lineReference = requireTrimmedValue(lineReference, "lineReference");
     }
 
     public static PreparedLineKey forPreparedLine(DspOrderItem preparedLine) {
@@ -27,9 +18,7 @@ public record PreparedLineKey(
         }
         return new PreparedLineKey(
                 preparedLine.referenceOrderId(),
-                preparedLine.referenceSheetNumber(),
-                preparedLine.itemId(),
-                preparedLine.lineType());
+                preparedLine.lineReference());
     }
 
     public static PreparedLineKey forDispatchLine(NotionalToteOrder dispatchOrder, DspOrderItem dispatchLine) {
@@ -41,9 +30,7 @@ public record PreparedLineKey(
         }
         return new PreparedLineKey(
                 dispatchOrder.orderId(),
-                dispatchOrder.sheetNumber(),
-                dispatchLine.itemId(),
-                dispatchLine.lineType());
+                dispatchLine.lineReference());
     }
 
     private static String requireTrimmedValue(String value, String fieldName) {

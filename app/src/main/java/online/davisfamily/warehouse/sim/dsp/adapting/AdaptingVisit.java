@@ -64,9 +64,6 @@ public record AdaptingVisit(
                 if (key == null) {
                     throw new IllegalArgumentException("requestedLineKeys must not contain null");
                 }
-                if (key.lineType() != DspOrderLineType.ADAPTED) {
-                    throw new IllegalArgumentException("COLLECT visit keys must be ADAPTED");
-                }
             }
             if (pharmacyIds.isEmpty()) {
                 throw new IllegalArgumentException("COLLECT visit must include pharmacyIds");

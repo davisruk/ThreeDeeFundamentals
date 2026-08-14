@@ -36,7 +36,7 @@ class DspSchedulerRuntimeStateTest {
         Map<StationType, StationAdmissionSnapshot> stationAdmissions = new LinkedHashMap<>();
         stationAdmissions.put(StationType.P2P, admission(StationType.P2P, 0, 0, true, ""));
         Set<PreparedLineKey> preparedLineKeys = new LinkedHashSet<>();
-        preparedLineKeys.add(new PreparedLineKey("order-1", 1, "line-1", DspOrderLineType.ADAPTED));
+        preparedLineKeys.add(new PreparedLineKey("order-1", "line-1"));
 
         DspSchedulerRuntimeState runtimeState = new DspSchedulerRuntimeState(new WarehouseSchedulerSnapshot(
                 List.of(waitingOrder("order-1", "sc-1")),
@@ -46,13 +46,13 @@ class DspSchedulerRuntimeStateTest {
 
         WarehouseSchedulerSnapshot snapshot = runtimeState.snapshot();
         stationAdmissions.put(StationType.MANUAL, admission(StationType.MANUAL, 0, 0, true, ""));
-        preparedLineKeys.add(new PreparedLineKey("order-2", 1, "line-2", DspOrderLineType.MANUAL));
+        preparedLineKeys.add(new PreparedLineKey("order-2", "line-2"));
 
         assertEquals(1, snapshot.stationAdmissions().size());
         assertEquals(1, snapshot.preparedLineKeys().size());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.orderStates().add(waitingOrder("order-2", "sc-1")));
         assertThrows(UnsupportedOperationException.class, () -> snapshot.stationAdmissions().put(StationType.MANUAL, admission(StationType.MANUAL, 0, 0, true, "")));
-        assertThrows(UnsupportedOperationException.class, () -> snapshot.preparedLineKeys().add(new PreparedLineKey("order-3", 1, "line-3", DspOrderLineType.FULL_PACK)));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.preparedLineKeys().add(new PreparedLineKey("order-3", "line-3")));
     }
 
     @Test
@@ -110,8 +110,8 @@ class DspSchedulerRuntimeStateTest {
                 Set.of(),
                 Optional.empty()));
 
-        PreparedLineKey adaptedKey = new PreparedLineKey("order-1", 1, "line-1", DspOrderLineType.ADAPTED);
-        PreparedLineKey manualKey = new PreparedLineKey("order-1", 1, "line-2", DspOrderLineType.MANUAL);
+        PreparedLineKey adaptedKey = new PreparedLineKey("order-1", "line-1");
+        PreparedLineKey manualKey = new PreparedLineKey("order-1", "line-2");
 
         runtimeState.addPreparedLineKey(adaptedKey);
         runtimeState.addPreparedLineKeys(Set.of(adaptedKey, manualKey));

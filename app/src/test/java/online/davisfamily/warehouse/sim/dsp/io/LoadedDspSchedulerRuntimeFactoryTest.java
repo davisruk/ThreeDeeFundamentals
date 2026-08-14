@@ -84,8 +84,8 @@ class LoadedDspSchedulerRuntimeFactoryTest {
     @Test
     void shouldNotTreatLoadedPreparedLineKeysAsStartupReady() {
         Set<PreparedLineKey> loadedPreparedLineKeys = Set.of(
-                new PreparedLineKey("target-1", 1, "line-1", DspOrderLineType.ADAPTED),
-                new PreparedLineKey("target-2", 1, "line-2", DspOrderLineType.MANUAL));
+                new PreparedLineKey("target-1", "line-1"),
+                new PreparedLineKey("target-2", "line-2"));
         LoadedDspData data = new LoadedDspData(
                 List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
                 List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "9114", "0006461", 0L)),
@@ -102,8 +102,8 @@ class LoadedDspSchedulerRuntimeFactoryTest {
     @Test
     void shouldCarryExplicitStartupReadyPreparedLineKeysIntoInitialSnapshot() {
         Set<PreparedLineKey> startupReadyPreparedLineKeys = Set.of(
-                new PreparedLineKey("target-1", 1, "line-1", DspOrderLineType.ADAPTED),
-                new PreparedLineKey("target-2", 1, "line-2", DspOrderLineType.MANUAL));
+                new PreparedLineKey("target-1", "line-1"),
+                new PreparedLineKey("target-2", "line-2"));
         LoadedDspData data = new LoadedDspData(
                 List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
                 List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "9114", "0006461", 0L)),

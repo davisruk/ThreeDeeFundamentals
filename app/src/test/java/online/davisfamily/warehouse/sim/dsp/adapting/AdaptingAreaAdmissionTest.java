@@ -123,7 +123,7 @@ class AdaptingAreaAdmissionTest {
 
         AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisit.collect(
                 "collect-1",
-                List.of(new PreparedLineKey("dispatch-1", 1, "line-1", DspOrderLineType.ADAPTED)),
+                List.of(new PreparedLineKey("dispatch-1", "line-1")),
                 List.of("0000388")));
 
         assertTrue(selection.accepted());

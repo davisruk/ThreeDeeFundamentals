@@ -87,9 +87,7 @@ class DspSchedulerStateTest {
         PreparedLineKey key = PreparedLineKey.forPreparedLine(preparedLine);
 
         assertEquals("target-order-1", key.targetOrderId());
-        assertEquals(2, key.targetSheetNumber());
-        assertEquals("line-1", key.orderLineNumber());
-        assertEquals(DspOrderLineType.ADAPTED, key.lineType());
+        assertEquals("line-1", key.lineReference());
     }
 
     @Test
@@ -114,17 +112,54 @@ class DspSchedulerStateTest {
         PreparedLineKey key = PreparedLineKey.forDispatchLine(dispatchOrder, dispatchOrder.items().getFirst());
 
         assertEquals("order-1", key.targetOrderId());
-        assertEquals(3, key.targetSheetNumber());
-        assertEquals("line-1", key.orderLineNumber());
-        assertEquals(DspOrderLineType.MANUAL, key.lineType());
+        assertEquals("line-1", key.lineReference());
+    }
+
+    @Test
+    void shouldMatchPreparedAndDispatchLinesRegardlessOfSheetNumberAndLineType() {
+        DspOrderItem preparedLine = new DspOrderItem(
+                "line-1",
+                "product-1",
+                1,
+                "0006515",
+                DspOrderLineType.ADAPTED,
+                "order-1",
+                1,
+                0);
+        NotionalToteOrder dispatchOrder = new NotionalToteOrder(
+                "order-1",
+                "notional-1",
+                "sc-1",
+                7,
+                OrderType.ASSOCIATED,
+                List.of(new DspOrderItem(
+                        "line-1",
+                        "product-1",
+                        1,
+                        "0006515",
+                        DspOrderLineType.MANUAL,
+                        "unused-reference-order",
+                        9,
+                        0)),
+                0);
+
+        assertEquals(
+                PreparedLineKey.forPreparedLine(preparedLine),
+                PreparedLineKey.forDispatchLine(dispatchOrder, dispatchOrder.items().getFirst()));
+    }
+
+    @Test
+    void shouldDistinguishPreparedLinesByTargetOrderAndLineReference() {
+        PreparedLineKey key = new PreparedLineKey("order-1", "line-1");
+
+        assertFalse(key.equals(new PreparedLineKey("order-1", "line-2")));
+        assertFalse(key.equals(new PreparedLineKey("order-2", "line-1")));
     }
 
     @Test
     void shouldRejectInvalidPreparedLineKeyFields() {
-        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("", 1, "line-1", DspOrderLineType.ADAPTED));
-        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("order-1", 0, "line-1", DspOrderLineType.ADAPTED));
-        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("order-1", 1, " ", DspOrderLineType.ADAPTED));
-        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("order-1", 1, "line-1", null));
+        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("", "line-1"));
+        assertThrows(IllegalArgumentException.class, () -> new PreparedLineKey("order-1", " "));
         assertThrows(IllegalArgumentException.class, () -> PreparedLineKey.forPreparedLine(null));
         assertThrows(IllegalArgumentException.class, () -> PreparedLineKey.forDispatchLine(null, validOrderState().order().items().getFirst()));
         assertThrows(IllegalArgumentException.class, () -> PreparedLineKey.forDispatchLine(validOrderState().order(), null));
@@ -144,7 +179,7 @@ class DspSchedulerStateTest {
                 ""));
 
         Set<PreparedLineKey> preparedLineKeys = new LinkedHashSet<>();
-        preparedLineKeys.add(new PreparedLineKey("order-a", 1, "line-a", DspOrderLineType.ADAPTED));
+        preparedLineKeys.add(new PreparedLineKey("order-a", "line-a"));
 
         WarehouseSchedulerSnapshot snapshot = new WarehouseSchedulerSnapshot(
                 orderStates,
@@ -159,17 +194,17 @@ class DspSchedulerStateTest {
                 new StationSnapshot(StationType.MANUAL, 0, 0),
                 true,
                 ""));
-        preparedLineKeys.add(new PreparedLineKey("order-b", 1, "line-b", DspOrderLineType.MANUAL));
+        preparedLineKeys.add(new PreparedLineKey("order-b", "line-b"));
 
         assertEquals(1, snapshot.orderStates().size());
         assertEquals(1, snapshot.stationAdmissions().size());
-        assertEquals(Set.of(new PreparedLineKey("order-a", 1, "line-a", DspOrderLineType.ADAPTED)), snapshot.preparedLineKeys());
+        assertEquals(Set.of(new PreparedLineKey("order-a", "line-a")), snapshot.preparedLineKeys());
         assertThrows(UnsupportedOperationException.class,
                 () -> snapshot.orderStates().add(validOrderState()));
         assertThrows(UnsupportedOperationException.class,
                 () -> snapshot.stationAdmissions().put(StationType.MANUAL, stationAdmissions.get(StationType.MANUAL)));
         assertThrows(UnsupportedOperationException.class,
-                () -> snapshot.preparedLineKeys().add(new PreparedLineKey("order-x", 1, "line-x", DspOrderLineType.FULL_PACK)));
+                () -> snapshot.preparedLineKeys().add(new PreparedLineKey("order-x", "line-x")));
     }
 
     private static DspSchedulerOrderState validOrderState() {

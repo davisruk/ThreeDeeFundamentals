@@ -57,7 +57,7 @@ class DspOrderModelTest {
                 3,
                 1);
 
-        assertEquals("item-1", item.itemId());
+        assertEquals("item-1", item.lineReference());
         assertEquals("product-1", item.productId());
         assertEquals("0006515", item.pharmacyId());
         assertEquals(DspOrderLineType.ADAPTED, item.lineType());
@@ -84,7 +84,7 @@ class DspOrderModelTest {
     void shouldKeepLegacyDspOrderItemConstructorForDebugData() {
         DspOrderItem item = new DspOrderItem("item-1", "product-1", 1);
 
-        assertEquals("item-1", item.itemId());
+        assertEquals("item-1", item.lineReference());
         assertEquals("product-1", item.productId());
         assertEquals(1, item.quantity());
         assertEquals("UNKNOWN", item.pharmacyId());

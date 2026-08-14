@@ -270,14 +270,14 @@ class DspSchedulerScenarioTest {
                 sequenceNumber);
     }
 
-    private static DspOrderItem line(String itemId, String pharmacyId, DspOrderLineType lineType) {
+    private static DspOrderItem line(String lineReference, String pharmacyId, DspOrderLineType lineType) {
         return new DspOrderItem(
-                itemId,
-                "product-" + itemId,
+                lineReference,
+                "product-" + lineReference,
                 1,
                 pharmacyId,
                 lineType,
-                "prepared-" + itemId,
+                "prepared-" + lineReference,
                 1,
                 0);
     }

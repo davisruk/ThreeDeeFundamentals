@@ -1,7 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.model;
 
 public record DspOrderItem(
-        String itemId,
+        String lineReference,
         String productId,
         int quantity,
         String pharmacyId,
@@ -11,7 +11,7 @@ public record DspOrderItem(
         int numberOfPacksPicked) {
 
     public DspOrderItem {
-        itemId = requireTrimmedValue(itemId, "itemId");
+        lineReference = requireTrimmedValue(lineReference, "lineReference");
         productId = requireTrimmedValue(productId, "productId");
         pharmacyId = requireTrimmedValue(pharmacyId, "pharmacyId");
         referenceOrderId = requireTrimmedValue(referenceOrderId, "referenceOrderId");
@@ -29,14 +29,14 @@ public record DspOrderItem(
         }
     }
 
-    public DspOrderItem(String itemId, String productId, int quantity) {
+    public DspOrderItem(String lineReference, String productId, int quantity) {
         this(
-                itemId,
+                lineReference,
                 productId,
                 quantity,
                 "UNKNOWN",
                 DspOrderLineType.FULL_PACK,
-                itemId,
+                lineReference,
                 1,
                 0);
     }

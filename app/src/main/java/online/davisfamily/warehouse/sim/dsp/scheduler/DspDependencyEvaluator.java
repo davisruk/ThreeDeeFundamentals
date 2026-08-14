@@ -46,7 +46,7 @@ public class DspDependencyEvaluator {
                             + " sheet "
                             + candidate.order().sheetNumber()
                             + " line "
-                            + firstMissingAdaptedLine.itemId()));
+                            + firstMissingAdaptedLine.lineReference()));
         }
     }
 
@@ -96,7 +96,7 @@ public class DspDependencyEvaluator {
                             + " sheet "
                             + candidate.order().sheetNumber()
                             + " line "
-                            + firstMissingManualLine.itemId()));
+                            + firstMissingManualLine.lineReference()));
         }
     }
 }

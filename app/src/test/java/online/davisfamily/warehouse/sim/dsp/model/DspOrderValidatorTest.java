@@ -92,10 +92,10 @@ class DspOrderValidatorTest {
                 0);
     }
 
-    private static DspOrderItem item(String itemId, String pharmacyId, DspOrderLineType lineType) {
+    private static DspOrderItem item(String lineReference, String pharmacyId, DspOrderLineType lineType) {
         return new DspOrderItem(
-                itemId,
-                "product-" + itemId,
+                lineReference,
+                "product-" + lineReference,
                 1,
                 pharmacyId,
                 lineType,

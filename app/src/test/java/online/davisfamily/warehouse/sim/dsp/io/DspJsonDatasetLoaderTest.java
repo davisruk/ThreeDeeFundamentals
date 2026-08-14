@@ -100,8 +100,8 @@ class DspJsonDatasetLoaderTest {
         assertTrue(data.dispatchOrders().isEmpty());
         assertEquals(2, data.preparedLines().size());
         assertEquals(Set.of(
-                new PreparedLineKey("TOTE0007168519", 1, "000243449262", DspOrderLineType.ADAPTED),
-                new PreparedLineKey("TOTE0007168489", 1, "000243450449", DspOrderLineType.ADAPTED)),
+                new PreparedLineKey("TOTE0007168519", "000243449262"),
+                new PreparedLineKey("TOTE0007168489", "000243450449")),
                 data.loadedPreparedLineKeys());
         assertTrue(data.startupReadyPreparedLineKeys().isEmpty());
     }
