@@ -43,34 +43,47 @@ class DspRouteDeriverTest {
     }
 
     @Test
-    void shouldDeriveThirdPartyFromMasterAndProcessingRequirementsFromLineTypes() {
+    void shouldDeriveThirdPartyAndAdaptingRequirementsWithoutManualFlow() {
         DspRouteDeriver deriver = newDeriver(
                 product("auto", "Y74"),
-                product("sortable", null),
-                product("manual", null));
+                product("sortable", null));
 
         RouteRequirements requirements = deriver.derive(order(
                 OrderType.ADAPTED,
                 item("auto", DspOrderLineType.FULL_PACK),
-                item("sortable", DspOrderLineType.ADAPTED),
-                item("manual", DspOrderLineType.MANUAL)));
+                item("sortable", DspOrderLineType.ADAPTED)));
 
         assertTrue(requirements.requiresThirdParty());
         assertTrue(requirements.requiresSortable());
-        assertTrue(requirements.requiresManual());
+        assertFalse(requirements.requiresManual());
         assertFalse(requirements.requiresP2p());
         assertFalse(requirements.requiresManualMerge());
     }
 
     @Test
-    void shouldRequireManualMergeForAssociatedOrEmptyOrdersWithManualItems() {
+    void shouldRequireThirdPartyAndAdaptingForMixedAssociatedOrder() {
         DspRouteDeriver deriver = newDeriver(
-                product("manual", null));
+                product("direct", "Y74"),
+                product("adapted", "Y75"));
 
-        assertTrue(deriver.derive(order(OrderType.ASSOCIATED, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
-        assertTrue(deriver.derive(order(OrderType.EMPTY, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
-        assertFalse(deriver.derive(order(OrderType.ADAPTED, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
-        assertFalse(deriver.derive(order(OrderType.FULL_PACK, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
+        RouteRequirements requirements = deriver.derive(order(
+                OrderType.ASSOCIATED,
+                item("direct", DspOrderLineType.FULL_PACK),
+                item("adapted", DspOrderLineType.ADAPTED)));
+
+        assertTrue(requirements.requiresThirdParty());
+        assertTrue(requirements.requiresSortable());
+        assertTrue(requirements.requiresP2p());
+        assertFalse(requirements.requiresManual());
+        assertFalse(requirements.requiresManualMerge());
+    }
+
+    @Test
+    void shouldRejectManualLinesOutsideActiveSimulationScope() {
+        DspRouteDeriver deriver = newDeriver(product("manual", null));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> deriver.derive(order(OrderType.ASSOCIATED, item("manual", DspOrderLineType.MANUAL))));
     }
 
     @Test

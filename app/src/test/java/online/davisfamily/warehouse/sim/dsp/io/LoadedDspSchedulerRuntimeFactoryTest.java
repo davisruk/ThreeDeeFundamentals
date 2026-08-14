@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -51,10 +52,9 @@ class LoadedDspSchedulerRuntimeFactoryTest {
     }
 
     @Test
-    void shouldUseLineTypesAndThirdPartyLocationForRouteDerivation() {
+    void shouldUseActiveLineTypesAndThirdPartyLocationForRouteDerivation() {
         LoadedDspData data = new LoadedDspData(
                 List.of(
-                        product("manual", null),
                         product("sortable", null),
                         product("third-party", "Y74")),
                 List.of(new NotionalToteOrder(
@@ -64,7 +64,6 @@ class LoadedDspSchedulerRuntimeFactoryTest {
                         1,
                         OrderType.ASSOCIATED,
                         List.of(
-                                new DspOrderItem("line-1", "manual", 1, "0006515", DspOrderLineType.MANUAL, "order-1", 1, 0),
                                 new DspOrderItem("line-2", "sortable", 1, "0006515", DspOrderLineType.ADAPTED, "order-1", 1, 0),
                                 new DspOrderItem("line-3", "third-party", 1, "0006515", DspOrderLineType.FULL_PACK, "order-1", 1, 0)),
                         0L)),
@@ -75,10 +74,11 @@ class LoadedDspSchedulerRuntimeFactoryTest {
         DspSchedulerRuntimeState runtimeState = factory.createRuntimeState(data, Map.of(), Optional.empty());
 
         var requirements = runtimeState.snapshot().orderStates().getFirst().routeRequirements();
-        assertTrue(requirements.requiresManual());
+        assertTrue(requirements.requiresP2p());
         assertTrue(requirements.requiresSortable());
         assertTrue(requirements.requiresThirdParty());
-        assertTrue(requirements.requiresManualMerge());
+        assertFalse(requirements.requiresManual());
+        assertFalse(requirements.requiresManualMerge());
     }
 
     @Test
