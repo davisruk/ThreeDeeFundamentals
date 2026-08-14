@@ -8,7 +8,7 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
-The generic transfer-machine work and Adapting Station Phase 1 are complete and merged. The short `feature/simulation-reset` runtime branch is complete and verified, pending merge. After reset is merged, create the detailed plan for Third-Party Station Phase 1 from updated `master`.
+The generic transfer-machine work, Adapting Station Phase 1, and simulation reset are complete and merged. `feature/third-party-station-phase-1` is active with agreed requirements and a branch-specific implementation plan.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -68,7 +68,7 @@ Phase 1 expectations:
 
 - One adapting station state machine with operation mode/request type, not two separate station types.
 - A station input wait queue with manually configured capacity.
-- A logical prepared-pack store keyed by the existing prepared-line identity, or by a small closely related key if the existing `PreparedLineKey` is not sufficient.
+- A logical prepared-pack store keyed by target order id plus globally distinct line reference. `referenceSheetNumber` is protocol-only and not part of identity.
 - Loaded ADAPTED prepared lines represent work to process, not completed readiness. Adapted `PreparedLineKey`s become scheduler-ready after the station processes a `STORE` visit, except for fixtures that explicitly seed already-staged startup state.
 - Placeholder stop/processing point where source packs disappear for `STORE`.
 - The source `ADAPTED` tote is removed/stored after `STORE` and can disappear in Phase 1.
@@ -88,7 +88,7 @@ Implemented notes:
 
 ### Runtime Interlude: Simulation Reset
 
-Status: complete and verified on `feature/simulation-reset`, pending merge to `master`.
+Status: complete and merged to `master`.
 
 Detailed implementation doc:
 
@@ -103,43 +103,46 @@ Purpose:
 
 ### 2. Third-Party Station Phase 1
 
-Purpose:
+Status: active on `feature/third-party-station-phase-1`.
 
-- Add a station for third-party product handling/merge behavior.
+Detailed documents:
 
-Phase 1 expectations:
-
-- Input wait queue and placeholder processing state.
-- Logical inventory/readiness state sufficient for scheduler dependency checks.
-- Minimal renderable/inspection only.
-- No detailed third-party handling visuals.
-
-### 3. Manual Station Phase 1
+- `docs/machines/third-party-station-requirements.md`
+- `docs/machines/third-party-station-phase-1-plan.md`
 
 Purpose:
 
-- Add manual item handling and manual merge behavior after P2P where required.
+- Add the through-track Third Party Area where packs are picked from manually replenished bins into fulfilment or ADAPTED preparation totes.
 
 Phase 1 expectations:
 
-- Input wait queue and placeholder processing state.
-- Support manual item flow and manual merge readiness at domain/state level.
-- Keep manual tote/order assumptions aligned with the DSP scheduler requirements.
-- No detailed operator/manual-work visuals.
+- Separate CSV product-master loading from 12N JSON loading.
+- Correct prepared-line correlation to target order id plus line reference.
+- Exclude MANUAL data and report it during ingestion.
+- Derive direct versus preparation Third Party work at line level.
+- Add configurable waiting and concurrent processing capacity.
+- Update tote load plans after successful picks.
+- Preserve conservative OSR dependency release.
+- Use minimal through-track placeholder geometry and inspection.
+- Defer stock tracking, short picks, NS labels, Exception routing, detailed shelving, and operative/pack animation.
 
-### 4. Exception Station Phase 1
+### 3. Exception Station Phase 1
 
 Purpose:
 
-- Add a destination/state path for exception bags/totes created by future manual override or deadlock recovery workflows.
+- Add conditional issue routing for missing master data, short picks, and other operational exceptions.
 
 Phase 1 expectations:
 
-- Placeholder station and queue.
-- Minimal logical exception intake/state.
-- Do not add full command-panel override workflows in Phase 1 unless explicitly planned.
+- Placeholder area and queue.
+- Distinguish missing master data from physical short picks.
+- Add COMPLETE/INCOMPLETE prepared-line outcomes so incomplete dependencies resolve without adding packs.
+- Carry incomplete-line metadata toward future NS bag labels.
+- Preserve the agreed FULL_PACK efficiency rule: a tote with at least one fulfilled line may bypass Exceptions and continue to P2P.
+- Support all-incomplete/empty NS bag semantics at domain level.
+- Do not add full command-panel override workflows or detailed label rendering in Phase 1 unless explicitly planned.
 
-### 5. Tote Lid Open/Close Machines Phase 1
+### 4. Tote Lid Open/Close Machines Phase 1
 
 Purpose:
 
@@ -159,11 +162,10 @@ The station work should move toward a whole-warehouse debug layout where a small
 
 - OSR/buffer release area
 - lid open/close machines
-- adapting station
-- third-party station
-- manual station
+- Third Party Area
+- Adapting Area
 - P2P/tote-to-bag
-- exception station where needed
+- Exception Area where needed
 
 The first layout does not need production geometry. It must provide enough route segments, station stops, wait queues, and placeholder renderables to verify scheduler-driven tote movement and station processing.
 
@@ -199,7 +201,6 @@ Suggested branch names:
 - `feature/adapting-station-phase-1`
 - `feature/simulation-reset`
 - `feature/third-party-station-phase-1`
-- `feature/manual-station-phase-1`
 - `feature/exception-station-phase-1`
 - `feature/tote-lid-open-close-phase-1`
 
@@ -211,7 +212,7 @@ Phase 2 should include:
 
 - adapting racks and logical bin presentation
 - pack transfer animation between tote and station storage
-- third-party/manual station visual detail
+- Third Party Area shelving/operative visual detail
 - exception station operator-facing visuals
 - polished lid opener/closer meshes and motion
 - richer selection and command-panel controls

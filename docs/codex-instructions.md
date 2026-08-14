@@ -7,10 +7,11 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The active branch plan, currently the completed `docs/runtime/simulation-reset-plan.md`
-3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
-4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-5. `docs/machines/phase-1-stations-roadmap.md`
+2. The active branch plan, currently `docs/machines/third-party-station-phase-1-plan.md`
+3. `docs/machines/third-party-station-requirements.md`
+4. `docs/scheduler/dsp_osr_scheduler_requirements.md`
+5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+6. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -76,9 +77,9 @@ Architectural boundaries to maintain:
 
 The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`, merged back to `master`.
 
-The adapting station Phase 1 branch is complete and merged to `master`.
+The adapting station Phase 1 and simulation-reset branches are complete and merged to `master`.
 
-The active branch is `feature/simulation-reset`. Its implementation and verification are complete; follow `docs/runtime/simulation-reset-plan.md` until the branch is merged. Then plan the third-party station Phase 1 branch from updated `master` before implementation.
+The active branch is `feature/third-party-station-phase-1`. Follow `docs/machines/third-party-station-phase-1-plan.md` one verified step at a time.
 
 Completed scheduler work:
 
@@ -95,7 +96,10 @@ Completed scheduler work:
 Current scheduler decisions:
 
 - Branch from `master` unless the user says otherwise.
-- Treat product master data as the source of product classification.
+- Treat 12N line type as the source of order-specific FULL_PACK/ADAPTED/MANUAL processing intent.
+- Treat the CSV product master as the source of Third Party bin location and physical dimensions.
+- Do not use `referenceSheetNumber` in prepared-line identity; use target order id plus line reference.
+- Exclude MANUAL messages/lines from active simulation and report them during ingestion.
 - Keep `OrderType` and `ToteType` distinct:
   - `OrderType` controls start location, dependencies, routing intent, and lifecycle
   - `ToteType` controls physical carrier role/capability
@@ -109,7 +113,7 @@ Current scheduler decisions:
   - the integrated debug scene uses the threaded source
   - scheduler worker code receives immutable snapshots and returns evaluations; simulation-thread code still applies commands and mutates runtime state
 - Scheduler decisions are observable in the existing selection inspection overlay. The current integrated debug target is `tipper_slide`; longer term, composite machine selection should route child hits back to the root renderable.
-- Product master and 12N JSON loading now produce existing DSP domain/runtime objects without creating renderables or changing scheduling behavior.
+- The active branch separates product-master CSV loading from 12N JSON loading; neither loading path creates renderables.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
 - Machine wait queues are now the scheduler release boundary for the integrated debug P2P path:
   - scheduler release admission answers whether a tote can enter station waiting space
@@ -119,7 +123,7 @@ Current scheduler decisions:
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 - Simulation and rendering still run sequentially on the same game-loop thread. Only scheduler evaluation has been moved to a worker thread. A future render-thread split remains deferred and would use published render snapshots rather than live renderable mutation.
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Generic transfer-machine capability and adapting station Phase 1 are complete and merged. After the completed `feature/simulation-reset` branch is merged, the next planned Phase 1 station is the third-party station; create its detailed branch plan before implementation.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Third Party Area Phase 1 is active; Exception Station Phase 1 follows it.
 
 ## Deferred Direction
 
@@ -132,9 +136,8 @@ Current larger direction:
 Known Phase 1 machine/station work:
 
 - adapting station: Phase 1 complete and merged
-- third-party station
-- manual station
-- exception station
+- Third Party Area: active
+- Exception Area: next
 - lid opening machine
 - lid closing machine
 - scheduler-controlled tote buffer

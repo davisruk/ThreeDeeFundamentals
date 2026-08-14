@@ -2,7 +2,7 @@
 
 Branch: `feature/simulation-reset`
 
-Status: complete and verified on `feature/simulation-reset`, pending merge to `master`. Focused reset tests, the complete simulation suite, and visual checks passed.
+Status: complete, verified, and merged to `master`. Focused reset tests, the complete simulation suite, and visual checks passed.
 
 ## Purpose
 

@@ -87,20 +87,21 @@ The active major work is the DSP/OSR scheduler.
 
 Read:
 
-1. `docs/runtime/simulation-reset-plan.md` while `feature/simulation-reset` is active
-2. `docs/scheduler/dsp_osr_scheduler_requirements.md`
-3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-4. `docs/machines/phase-1-stations-roadmap.md`
+1. `docs/machines/third-party-station-phase-1-plan.md` while the current branch is active
+2. `docs/machines/third-party-station-requirements.md`
+3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
+4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+5. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
 - The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`.
-- Generic standalone transfer-machine support and adapting station Phase 1 are complete and merged.
-- The active branch is `feature/simulation-reset`. Its runtime usability/lifecycle work is complete and verified, pending merge before Third-Party Station Phase 1 planning.
+- Generic standalone transfer-machine support, adapting station Phase 1, and simulation reset are complete and merged.
+- The active branch is `feature/third-party-station-phase-1`.
 - Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, machine wait queues, and scheduler thread.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
-- Product master and 12N JSON loading produces domain/runtime data only; loaded data does not create renderables.
+- The active branch separates the real CSV product-master export from 12N JSON loading. Loaded data must not create renderables.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped early in update/draw/pick, and current pack visual paths use visibility to hide contained or inactive packs.
 - Service centres are processed as whole release windows.
 - Totes from different service centres should not be mixed, except naturally when one service centre finishes and the next begins.
@@ -118,21 +119,22 @@ Current scheduler decisions:
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/runtime/simulation-reset-plan.md` for the completed active branch. After it is merged, return to `docs/machines/phase-1-stations-roadmap.md` and create the detailed `feature/third-party-station-phase-1` plan from updated `master`.
+Use `docs/machines/third-party-station-phase-1-plan.md` for the active branch and execute one verified step at a time.
 
-## Active Runtime Work: Simulation Reset
+## Active Work: Third Party Area Phase 1
 
-The active branch is `feature/simulation-reset`; implementation and verification are complete, pending merge.
+The active branch is `feature/third-party-station-phase-1`.
 
-Reset contract:
+Current branch contract:
 
-- `ALT+R` requests a one-shot reset from Swing input.
-- The game-loop thread consumes and applies the request at a frame safe point.
-- The selected debug scene is reinstalled with a new `SimulationWorld` and fresh runtime/renderables.
-- Camera position, camera orientation, selected scene kind, and display/input modes are preserved.
-- Selection and inspection state are cleared because they reference discarded renderables.
-- Debug runtimes gain an explicit close lifecycle so threaded scheduler evaluation is closed before replacement.
-- Rewind/forward and simulation/render thread separation remain deferred.
+- Load `app/md/product_automation.csv` independently from 12N JSON into an in-memory repository.
+- Treat nonblank `thirdPartyLocation` as Third Party and retain bin location plus dimensions.
+- Use 12N line type for order-specific processing; product master does not decide FULL_PACK/ADAPTED/MANUAL flow.
+- Correct prepared-line identity to target order id plus line reference. `referenceSheetNumber` is protocol-only.
+- Exclude MANUAL messages/lines and report them during ingestion.
+- Add successful direct and ADAPTED-preparation Third Party picks with configurable area capacity.
+- Preserve conservative OSR dependency release.
+- Defer short picks, incomplete outcomes, NS labels, Exception routing, stock tracking, and detailed shelving/operative visuals.
 
 ## Phase 1 Station Direction
 
@@ -149,10 +151,9 @@ Planned Phase 1 order:
 
 - inline transfer targets: complete
 - adapting station: Phase 1 complete and merged
-- simulation reset runtime interlude: complete and verified, pending merge
-- third-party station
-- manual station
-- exception station
+- simulation reset runtime interlude: complete and merged
+- Third Party Area: active
+- Exception Area: next after Third Party
 - tote lid open/close machines
 
 Adapting station Phase 1 established the hardest merge/preparation model:
@@ -175,7 +176,7 @@ Important distinctions:
 - `Physical Tote` / `Load Unit` is the actual container.
 - `OrderType` controls start location, dependencies, routing intent, and lifecycle.
 - `ToteType` controls physical carrier role/capability.
-- `MANUAL_FLOW` is a flow characteristic, not an `OrderType`.
+- Historical `MANUAL_FLOW` data exists but is excluded from active simulation.
 
 Order types:
 
@@ -184,14 +185,12 @@ Order types:
 - `ASSOCIATED`
 - `FULL_PACK`
 
-Product classification:
+Data-source split:
 
-- `AUTOMATED`
-- `SORTABLE`
-- `MANUAL`
-- `isThirdParty` is orthogonal to category
-
-Product classification comes from product master data, not 12N.
+- 12N line type owns order-specific FULL_PACK/ADAPTED/MANUAL processing intent.
+- Product master owns Third Party bin location and physical dimensions.
+- A product may be automatable in general but appear on an ADAPTED line because Columbus made an order-specific labelling decision.
+- MANUAL line type is excluded from active simulation.
 
 ## Renderable Lifecycle / Performance
 
@@ -230,8 +229,7 @@ Threading status:
 
 These machines still need implementation using the established machine-state/install-result style:
 
-- third-party station Phase 1
-- manual station Phase 1
+- Third Party Area Phase 1 (active)
 - exception station Phase 1
 - lid opening machine
 - lid closing machine

@@ -95,7 +95,8 @@ To avoid ambiguity, the simulation shall use the following conventions consisten
 
 - **Separation of concerns**
   - *OrderType* defines how work starts and flows
-  - *Product classification* (AUTOMATED / SORTABLE / MANUAL) defines routing
+  - *12N line type* defines order-specific processing intent
+  - *Product master data* defines Third Party location and physical dimensions
   - *Route requirements* define which stations are visited
 
 These rules are mandatory for all subsequent sections of this document.
@@ -167,7 +168,7 @@ enum ToteType {
 ### ToteType controls:
 - Physical movement through stations
 - What kinds of items can be carried
-- Eligibility for manual merge / stations
+- Historical physical-carrier role; active MANUAL processing is excluded
 - Capacity and queueing behaviour
 
 ## 2.3 Relationship
@@ -311,36 +312,40 @@ if (order.type == EMPTY) {
 
 ---
 
-# 4. Product Classification Model
+# 4. Product Master And Order-Line Processing
 
-## 4.1 Categories
+Product location/capability data and order-specific processing instructions have different sources of truth.
 
-```java
-enum ProductCategory {
-    AUTOMATED,
-    SORTABLE,
-    MANUAL
-}
-```
+## 4.1 Product master
 
-Rules:
-- Mutually exclusive
+The DSP product-master export is loaded independently from 12N JSON. The current source is:
 
----
+`app/md/product_automation.csv`
 
-## 4.2 3rd Party Attribute
+The 12N `productId` joins to `dispensingProductPackColumbusCode`.
 
-```java
-boolean isThirdParty;
-```
+Initially useful master-data fields are:
 
-Orthogonal to category
+- product id
+- display name
+- optional `thirdPartyLocation`
+- physical length, width, and height
 
----
+A nonblank `thirdPartyLocation` means the product is sourced from the Third Party Area. Retain the location; do not reduce it permanently to a boolean.
 
-## 4.3 Source of Truth
+The approximately 5,500 records should be held in an in-memory repository. A relational database is not required.
 
-- Derived from product master data (NOT 12N)
+## 4.2 Order-specific processing
+
+12N line type is authoritative for processing required by that order line:
+
+- `05` / `FULL_PACK`: the line can use the P2P labelling flow for this order.
+- `02` / `ADAPTED`: the line requires adapting/preparation for this order.
+- `01` / `MANUAL`: excluded from the active simulator scope.
+
+Do not derive this processing decision from a fixed product category. Columbus may place an otherwise automatable product into an ADAPTED flow because order-specific label content cannot fit on a P2P label.
+
+Product master answers where the product is sourced and supplies dimensions. The 12N line answers how it is processed for this order.
 
 ---
 
@@ -356,8 +361,12 @@ Rules:
 - Manual tote order examples are always pharmacy-pure.
 - `ADAPTED` tote orders are preparation batches and may contain lines for multiple pharmacies.
 - `ADAPTED` must not be treated as a notional-tote-pure dispatch carrier.
-- Prepared adapted/manual lines reference their target dispatch work using `referenceOrderId` and `referenceSheetNumber`.
-- Scheduler readiness for adapted/manual work must be based on prepared target lines, not on a whole adapted notional tote being complete.
+- The 12N line reference is globally distinct and precisely correlates an ADAPTED preparation line with its target ASSOCIATED line.
+- `referenceOrderId` identifies/groups the target ASSOCIATED order.
+- `referenceSheetNumber` is retained for protocol fidelity but is always `001` and must not be used as a meaningful identity discriminator.
+- Prepared-line identity is `target order id + line reference`.
+- The 12N header `sheetNumber` remains the real sheet number for order sequencing.
+- Scheduler readiness must be based on terminal prepared-line outcomes, not on a whole adapted notional tote being complete.
 
 Implication:
 
@@ -365,7 +374,7 @@ Implication:
 serviceCentreId = release-window grouping
 pharmacyId = final dispatch/store purity, line-level
 notionalToteId = dispatch/consolidation grouping
-adapted/manual order = preparation source, may unlock target dispatch lines
+adapted order = preparation source, may unlock target dispatch lines
 ```
 
 ---
@@ -394,54 +403,38 @@ From KNAPP:
 
 ## 5.3 Routing Rules
 
-### 3rd Party
+### Third Party
 
-```java
-if (item.isThirdParty()) {
-    route.requiresThirdParty = true;
-}
-```
+Third Party work is line- and lifecycle-specific:
 
-### Sortable
+- an ADAPTED source line requires Third Party when its product has a Third Party location and outstanding quantity;
+- a `FULL_PACK` line in a `FULL_PACK`, `ASSOCIATED`, or `EMPTY` fulfilment order requires a direct Third Party pick when its product has a Third Party location and outstanding quantity;
+- an ADAPTED line in an ASSOCIATED or EMPTY order is collected through Adapting and must not be repicked at Third Party;
+- completed Third Party work must not cause a revisit.
 
-```java
-if (item.category == SORTABLE) {
-    route.requiresSortable = true;
-}
-```
+### Adapting
+
+- ADAPTED preparation orders visit Adapting after any required Third Party pick.
+- ASSOCIATED and EMPTY orders with adapted dependencies collect terminal preparation outcomes through Adapting.
+- FULL_PACK orders never collect adapted lines.
 
 ### Manual
 
-```java
-if (item.category == MANUAL) {
-    route.requiresManual = true;
-}
-```
+Manual work is no longer in active simulator scope. Ignore MANUAL preparation messages and MANUAL lines, report them during ingestion, and derive no manual route or merge requirement.
 
 ---
 
-# 6. Manual Integration Flow (Corrected)
+# 6. Manual Data Exclusion
 
-## 6.1 MANUAL_FLOW Flow
+Historical production datasets contain MANUAL work, but the production DSP is ceasing that flow and it is not simulated.
 
-```text
-MANUAL_FLOW → Manual Station → Items prepared → Stored
-```
+Rules:
 
-## 6.2 ASSOCIATED / EMPTY Flow
-
-```text
-→ P2P
-→ Manual Merge (POST-P2P)
-→ Dispatch
-```
-
-## 6.3 Rules
-
-- Manual items prepared BEFORE merge
-- Merge occurs AFTER P2P
-- Totes do NOT merge
-- Bags DO merge
+- Ignore MANUAL preparation messages.
+- Remove MANUAL lines from mixed dispatch messages.
+- Omit dispatch orders that contain no simulated lines after filtering.
+- Report ignored messages, lines, and orders.
+- Sequence retained simulated sheets without allowing an omitted manual-only sheet to block later retained work.
 
 ---
 
@@ -512,16 +505,16 @@ Dependencies shall be explicitly modelled.
 enum DependencyType {
     ADAPTED_COMPLETION,
     SHEET_SEQUENCE,
-    SERVICE_CENTRE_ORDER,
-    MANUAL_READY
+    SERVICE_CENTRE_ORDER
 }
 ```
 
 ### Rules
 
-- ASSOCIATED / EMPTY orders depend on required adapted prepared lines becoming ready
+- ASSOCIATED / EMPTY orders depend on every required adapted line reaching a terminal preparation outcome
+- Phase 1 adapting/Third Party work produces COMPLETE outcomes only
+- Future Exception work adds INCOMPLETE as another dependency-resolving outcome; only COMPLETE adds a physical pack
 - Sheets depend on previous sheet completion
-- Manual merge depends on required manual prepared lines being ready
 
 ---
 
@@ -544,7 +537,7 @@ Max consecutive releases per Service Centre
 
 Deadlock scenarios:
 
-- Waiting for manual items that are never scheduled
+- Waiting for preparation outcomes that are never produced
 - Waiting for downstream capacity while upstream is blocked
 
 Mitigation:
@@ -572,10 +565,10 @@ class StationCapacity {
 
 ### Stations to model capacity for:
 
-- 3rd Party Station
-- Sortable / Preparation
-- Manual Station
+- Third Party Area
+- Adapting Area
 - P2P
+- Exception Area when implemented
 
 ---
 
@@ -644,9 +637,10 @@ This rule applies to:
 1. Notional Tote = logical grouping
 2. Order Type defines start + behaviour
 3. EMPTY = creation of tote
-4. Routing = item-driven
-5. Manual merge = post-P2P
-6. MANUAL_FLOW prepares, ASSOCIATED consolidates
+4. Routing = line-lifecycle plus product-location driven
+5. Product master supplies Third Party location and dimensions
+6. 12N line type supplies order-specific processing intent
+7. MANUAL work is excluded from active simulation
 
 ---
 
@@ -662,17 +656,15 @@ ELSE:
     retrieve from OSR
 
 Process:
-    Adapted → complete
-    Associated/Empty → flow
+    Adapted -> terminal prepared-line outcome
+    Associated/Empty -> conservative release after dependencies resolve
 
 Routing:
-    3rd Party / Sortable / Manual
+    Third Party where line lifecycle and product bin location require it
+    Adapting for preparation/store or collection
 
 P2P:
     create bags
-
-Manual Merge:
-    add manual items
 
 Dispatch
 ```

@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support and adapting station Phase 1 are complete and merged. `feature/simulation-reset` is the active runtime interlude before Third-Party Station Phase 1.
+Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support, adapting station Phase 1, and simulation reset are complete and merged. `feature/third-party-station-phase-1` is active.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -145,6 +145,7 @@ Purpose:
 
 Notes:
 
+- This completed branch records the original JSON-loading implementation. Its combined product/12N model and active MANUAL preparation assumptions are superseded by `docs/machines/third-party-station-requirements.md` and `docs/machines/third-party-station-phase-1-plan.md`.
 - Jackson databind is available through the Gradle version catalog.
 - `online.davisfamily.warehouse.sim.dsp.io` now contains product master loaders, raw 12N DTOs, 12N dispatch/preparation mappers, `LoadedDspData`, and `LoadedDspSchedulerRuntimeFactory`.
 - 12N dispatch messages become existing `NotionalToteOrder` / `DspOrderItem` objects.
@@ -273,7 +274,7 @@ Notes:
 
 ### `feature/simulation-reset`
 
-Status: planned on the active branch.
+Status: complete and merged.
 
 Detailed implementation doc:
 
@@ -292,17 +293,37 @@ Explicit non-goals:
 - no rewind/forward history
 - no simulation/render thread split
 
+### `feature/third-party-station-phase-1`
+
+Status: active.
+
+Detailed documents:
+
+- `docs/machines/third-party-station-requirements.md`
+- `docs/machines/third-party-station-phase-1-plan.md`
+
+Purpose:
+
+- Separate CSV product-master loading from 12N JSON loading.
+- Correct prepared-line identity to target order id plus globally distinct line reference.
+- Exclude historical MANUAL data from active simulation and report it during ingestion.
+- Add line-aware direct and ADAPTED-preparation Third Party work selection.
+- Add a capacity-aware logical Third Party Area beside a through-track.
+- Update tote load plans after successful picks so ADAPTED work can continue to Adapting and fulfilment work can continue to P2P.
+- Preserve conservative dependency release and defer short picks/NS labels/Exception routing.
+
 ## Current Assumptions
 
 - `master` is the integration base for scheduler branches.
 - Service centres must not be mixed during release.
 - Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
 - Adapted preparation orders may contain lines for multiple pharmacies.
-- Manual tote order examples are pharmacy-pure and should unlock target dispatch work through line readiness.
-- Prepared-line readiness is keyed by target order id, target sheet, line id, and line type.
+- MANUAL messages and lines are excluded from active simulation and reported during ingestion.
+- Prepared-line identity is target order id plus globally distinct line reference; `referenceSheetNumber` is protocol-only and not an identity discriminator.
+- 12N line type owns order-specific processing intent. Product master owns Third Party bin location and physical dimensions.
 - Loaded ADAPTED prepared-line data is not automatically ready. Adapted readiness should be added when an adapting bench processes STORE work, except for explicit already-staged startup fixtures.
 - `FULL_PACK` orders never collect adapted lines.
 - A blocked active service centre blocks later service centres.
 - Scheduler v1 is threaded in the integrated debug path, with synchronous fallback still available.
 - Deeper scheduler behavior depends on Phase 1 station state, queue, and readiness surfaces.
-- JSON import, richer visual injection, database decisions, deadlock override timers, and command-button/manual exception handling are split into later branches.
+- Detailed shelving/operative visuals, short picks, NS labels, Exception routing, empty NS bags, deadlock override timers, and command-button exception handling are split into later branches.

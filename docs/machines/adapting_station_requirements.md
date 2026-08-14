@@ -13,7 +13,7 @@ The requirements are derived from:
 
 The Adapting Station is responsible for:
 
-- preparing products that require adaptation or manual labelling
+- preparing products that require order-specific adaptation
 - temporarily staging prepared products
 - enabling downstream fulfilment orders to retrieve prepared products later
 
@@ -83,7 +83,9 @@ The tote itself does not remain associated with the products after staging.
 Prepared products shall be staged using:
 
 - `ReferenceOrderId`
-- `ReferenceSheetNumber`
+- globally distinct order-line reference
+
+`ReferenceSheetNumber` is retained from 12N for protocol fidelity but is always `001` and must not be used as a meaningful storage/readiness discriminator. The target ASSOCIATED line is identified by target order id plus line reference. The 12N header `sheetNumber` remains the real sheet-sequencing value.
 
 The staged products represent a deferred dependency for later fulfilment orders.
 
@@ -135,7 +137,7 @@ When a fulfilment tote arrives:
 
 - staged products matching:
   - `ReferenceOrderId`
-  - `ReferenceSheetNumber`
+  - globally distinct order-line reference
 - shall be retrieved
 
 The products are then:
@@ -144,7 +146,6 @@ The products are then:
 - added to the collecting tote load plan
 - carried onward toward:
   - P2P
-  - manual merge
   - dispatch
 
 ---
