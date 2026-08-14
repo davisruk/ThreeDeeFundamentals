@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import online.davisfamily.warehouse.sim.dsp.model.DependencyType;
@@ -60,19 +61,21 @@ public class DspDependencyEvaluator {
         }
 
         String notionalToteId = candidate.order().notionalToteId();
-        int previousSheetNumber = candidateSheetNumber - 1;
         DspSchedulerOrderState previousSheet = snapshot.orderStates().stream()
                 .filter(orderState -> orderState.order().notionalToteId().equals(notionalToteId))
-                .filter(orderState -> orderState.order().sheetNumber() == previousSheetNumber)
-                .findFirst()
+                .filter(orderState -> orderState.order().sheetNumber() < candidateSheetNumber)
+                .max(Comparator.comparingInt(orderState -> orderState.order().sheetNumber()))
                 .orElse(null);
 
-        if (previousSheet == null
-                || (previousSheet.status() != DspOrderStatus.RELEASED
-                && previousSheet.status() != DspOrderStatus.COMPLETED)) {
+        if (previousSheet == null) {
+            return;
+        }
+        if (previousSheet.status() != DspOrderStatus.RELEASED
+                && previousSheet.status() != DspOrderStatus.COMPLETED) {
             blocks.add(new DependencyBlock(
                     DependencyType.SHEET_SEQUENCE,
-                    "Previous sheet " + previousSheetNumber + " is not released or completed for notional tote " + notionalToteId));
+                    "Previous retained sheet " + previousSheet.order().sheetNumber()
+                            + " is not released or completed for notional tote " + notionalToteId));
         }
     }
 

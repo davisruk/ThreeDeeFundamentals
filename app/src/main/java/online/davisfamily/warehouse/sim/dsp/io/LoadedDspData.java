@@ -10,25 +10,35 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public record LoadedDspData(
         List<ProductMasterRecord> products,
-        List<NotionalToteOrder> dispatchOrders,
+        List<NotionalToteOrder> orders,
         List<DspOrderItem> preparedLines,
         Set<PreparedLineKey> loadedPreparedLineKeys,
-        Set<PreparedLineKey> startupReadyPreparedLineKeys) {
+        Set<PreparedLineKey> startupReadyPreparedLineKeys,
+        DspDatasetLoadReport report) {
 
     public LoadedDspData(
             List<ProductMasterRecord> products,
-            List<NotionalToteOrder> dispatchOrders,
+            List<NotionalToteOrder> orders,
             List<DspOrderItem> preparedLines,
             Set<PreparedLineKey> loadedPreparedLineKeys) {
-        this(products, dispatchOrders, preparedLines, loadedPreparedLineKeys, Set.of());
+        this(products, orders, preparedLines, loadedPreparedLineKeys, Set.of(), DspDatasetLoadReport.empty());
+    }
+
+    public LoadedDspData(
+            List<ProductMasterRecord> products,
+            List<NotionalToteOrder> orders,
+            List<DspOrderItem> preparedLines,
+            Set<PreparedLineKey> loadedPreparedLineKeys,
+            Set<PreparedLineKey> startupReadyPreparedLineKeys) {
+        this(products, orders, preparedLines, loadedPreparedLineKeys, startupReadyPreparedLineKeys, DspDatasetLoadReport.empty());
     }
 
     public LoadedDspData {
         if (products == null) {
             throw new IllegalArgumentException("products must not be null");
         }
-        if (dispatchOrders == null) {
-            throw new IllegalArgumentException("dispatchOrders must not be null");
+        if (orders == null) {
+            throw new IllegalArgumentException("orders must not be null");
         }
         if (preparedLines == null) {
             throw new IllegalArgumentException("preparedLines must not be null");
@@ -39,8 +49,11 @@ public record LoadedDspData(
         if (startupReadyPreparedLineKeys == null) {
             throw new IllegalArgumentException("startupReadyPreparedLineKeys must not be null");
         }
+        if (report == null) {
+            throw new IllegalArgumentException("report must not be null");
+        }
         products = List.copyOf(products);
-        dispatchOrders = List.copyOf(dispatchOrders);
+        orders = List.copyOf(orders);
         preparedLines = List.copyOf(preparedLines);
         loadedPreparedLineKeys = Set.copyOf(loadedPreparedLineKeys);
         startupReadyPreparedLineKeys = Set.copyOf(startupReadyPreparedLineKeys);

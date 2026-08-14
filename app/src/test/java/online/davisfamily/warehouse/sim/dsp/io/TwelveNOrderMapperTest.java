@@ -20,7 +20,7 @@ class TwelveNOrderMapperTest {
 
     @Test
     void shouldConvertFullPackDispatchMessage() {
-        NotionalToteOrder order = orderMapper.toDispatchOrder(message("""
+        NotionalToteOrder order = orderMapper.toOrder(message("""
                 {
                   "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"05"},
@@ -57,7 +57,7 @@ class TwelveNOrderMapperTest {
 
     @Test
     void shouldConvertAssociatedDispatchMessageWithMixedLineTypes() {
-        NotionalToteOrder order = orderMapper.toDispatchOrder(message("""
+        NotionalToteOrder order = orderMapper.toOrder(message("""
                 {
                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"04"},
@@ -99,7 +99,7 @@ class TwelveNOrderMapperTest {
 
     @Test
     void shouldConvertEmptyDispatchMessage() {
-        NotionalToteOrder order = orderMapper.toDispatchOrder(message("""
+        NotionalToteOrder order = orderMapper.toOrder(message("""
                 {
                   "header": {"orderId":"TOTE0007179999","sheetNumber":"002"},
                   "toteIdentifier": {"payload":"03"},
@@ -129,7 +129,7 @@ class TwelveNOrderMapperTest {
 
     @Test
     void shouldConvertAdaptedPreparationLines() {
-        List<DspOrderItem> preparedLines = preparedLineMapper.toPreparedLines(message("""
+        TwelveNMessageJson adaptedMessage = message("""
                 {
                   "header": {"orderId":"TOTE0007168406","sheetNumber":"022"},
                   "toteIdentifier": {"payload":"02"},
@@ -160,13 +160,18 @@ class TwelveNOrderMapperTest {
                     ]
                   }
                 }
-                """));
+                """);
+        List<DspOrderItem> preparedLines = preparedLineMapper.toPreparedLines(adaptedMessage);
+        NotionalToteOrder order = orderMapper.toOrder(adaptedMessage, 4L);
 
         assertEquals(2, preparedLines.size());
         assertEquals(DspOrderLineType.ADAPTED, preparedLines.getFirst().lineType());
         assertEquals("0000310", preparedLines.getFirst().pharmacyId());
         assertEquals("TOTE0007168519", preparedLines.getFirst().referenceOrderId());
         assertEquals("0000388", preparedLines.get(1).pharmacyId());
+        assertEquals(OrderType.ADAPTED, order.orderType());
+        assertEquals(4L, order.sequenceNumber());
+        assertEquals(preparedLines, order.items());
     }
 
     @Test
@@ -203,7 +208,7 @@ class TwelveNOrderMapperTest {
     void shouldRejectLineCountMismatch() {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> orderMapper.toDispatchOrder(message("""
+                () -> orderMapper.toOrder(message("""
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
@@ -233,7 +238,7 @@ class TwelveNOrderMapperTest {
     void shouldRejectUnknownToteType() {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> orderMapper.toDispatchOrder(message("""
+                () -> orderMapper.toOrder(message("""
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"99"},
@@ -263,7 +268,7 @@ class TwelveNOrderMapperTest {
     void shouldRejectUnknownOrderLineType() {
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> orderMapper.toDispatchOrder(message("""
+                () -> orderMapper.toOrder(message("""
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},

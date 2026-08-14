@@ -169,6 +169,32 @@ class DspDependencyEvaluatorTest {
     }
 
     @Test
+    void shouldUseGreatestLowerRetainedSheetAndAllowFirstRetainedSheetWithGap() {
+        DspSchedulerOrderState sheet2Waiting = orderState(
+                dispatchOrder("order-2", "notional-a", 2, OrderType.FULL_PACK, line("line-2", DspOrderLineType.FULL_PACK)),
+                route(false, false),
+                DspOrderStatus.WAITING);
+        DspSchedulerOrderState sheet5Waiting = orderState(
+                dispatchOrder("order-5", "notional-a", 5, OrderType.FULL_PACK, line("line-5", DspOrderLineType.FULL_PACK)),
+                route(false, false),
+                DspOrderStatus.WAITING);
+
+        assertTrue(evaluator.findBlocks(sheet2Waiting, snapshot(List.of(sheet2Waiting, sheet5Waiting))).isEmpty());
+
+        List<DependencyBlock> blocked = evaluator.findBlocks(
+                sheet5Waiting,
+                snapshot(List.of(sheet2Waiting, sheet5Waiting)));
+        assertEquals(1, blocked.size());
+        assertEquals(DependencyType.SHEET_SEQUENCE, blocked.getFirst().type());
+        assertTrue(blocked.getFirst().reason().contains("sheet 2"));
+
+        WarehouseSchedulerSnapshot releasedSnapshot = snapshot(List.of(
+                sheet2Waiting.withStatus(DspOrderStatus.RELEASED),
+                sheet5Waiting));
+        assertTrue(evaluator.findBlocks(sheet5Waiting, releasedSnapshot).isEmpty());
+    }
+
+    @Test
     void shouldReturnAllApplicableDependencyBlocks() {
         DspSchedulerOrderState sheet1Waiting = orderState(
                 dispatchOrder(

@@ -15,7 +15,7 @@ public class TwelveNOrderMapper {
         this.messageKindMapper = messageKindMapper;
     }
 
-    public NotionalToteOrder toDispatchOrder(TwelveNMessageJson message, long sequenceNumber) {
+    public NotionalToteOrder toOrder(TwelveNMessageJson message, long sequenceNumber) {
         TwelveNLineMappingSupport.validateMessage(message);
         if (sequenceNumber < 0) {
             throw new IllegalArgumentException("sequenceNumber must be >= 0");
@@ -23,11 +23,12 @@ public class TwelveNOrderMapper {
 
         TwelveNMessageKind messageKind = messageKindMapper.map(message.toteIdentifier().payload());
         OrderType orderType = switch (messageKind) {
+            case ADAPTED_PREPARATION -> OrderType.ADAPTED;
             case EMPTY_DISPATCH -> OrderType.EMPTY;
             case ASSOCIATED_DISPATCH -> OrderType.ASSOCIATED;
             case FULL_PACK_DISPATCH -> OrderType.FULL_PACK;
-            case MANUAL_PREPARATION, ADAPTED_PREPARATION ->
-                    throw new IllegalArgumentException("12N message kind " + messageKind + " is not a dispatch order");
+            case MANUAL_PREPARATION ->
+                    throw new IllegalArgumentException("12N message kind " + messageKind + " is not a simulated order");
         };
 
         List<online.davisfamily.warehouse.sim.dsp.model.DspOrderItem> items = TwelveNLineMappingSupport.toItems(message);

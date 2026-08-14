@@ -11,24 +11,21 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
-import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderValidator;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
-class DspJsonDatasetLoaderTest {
-    private final DspJsonDatasetLoader loader = new DspJsonDatasetLoader(
-            new ProductMasterCsvLoader(),
+class DspDatasetAssemblerTest {
+    private final DspDatasetAssembler assembler = new DspDatasetAssembler(
             new TwelveNMessageKindMapper(),
             new TwelveNOrderMapper(new TwelveNMessageKindMapper()),
-            new TwelveNPreparedLineMapper(new TwelveNMessageKindMapper()),
             new DspOrderValidator());
 
     @Test
     void shouldLoadProductsAndOneFullPackDispatchOrder() {
-        LoadedDspData data = loader.load(
+        LoadedDspData data = assembler.assemble(
                 List.of(product("9114")),
                 List.of(message("""
                         {
@@ -54,8 +51,8 @@ class DspJsonDatasetLoaderTest {
                         """)));
 
         assertEquals(1, data.products().size());
-        assertEquals(1, data.dispatchOrders().size());
-        assertEquals(OrderType.FULL_PACK, data.dispatchOrders().getFirst().orderType());
+        assertEquals(1, data.orders().size());
+        assertEquals(OrderType.FULL_PACK, data.orders().getFirst().orderType());
         assertTrue(data.preparedLines().isEmpty());
         assertTrue(data.loadedPreparedLineKeys().isEmpty());
         assertTrue(data.startupReadyPreparedLineKeys().isEmpty());
@@ -63,7 +60,7 @@ class DspJsonDatasetLoaderTest {
 
     @Test
     void shouldLoadAdaptedPreparationLinesAndLoadedPreparedLineKeysWithoutDispatchOrder() {
-        LoadedDspData data = loader.load(
+        LoadedDspData data = assembler.assemble(
                 List.of(product("36550")),
                 List.of(message("""
                         {
@@ -98,7 +95,8 @@ class DspJsonDatasetLoaderTest {
                         }
                         """)));
 
-        assertTrue(data.dispatchOrders().isEmpty());
+        assertEquals(1, data.orders().size());
+        assertEquals(OrderType.ADAPTED, data.orders().getFirst().orderType());
         assertEquals(2, data.preparedLines().size());
         assertEquals(Set.of(
                 new PreparedLineKey("TOTE0007168519", "000243449262"),
@@ -108,14 +106,8 @@ class DspJsonDatasetLoaderTest {
     }
 
     @Test
-    void shouldRejectMixedPharmacyAssociatedDispatchOrder() {
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> loader.load(
-                        List.of(
-                                product("1809"),
-                                product("19959")),
-                        List.of(message("""
+    void shouldFilterManualLinesBeforeValidatingPharmacyPurity() {
+        String mixedOrderJson = """
                                 {
                                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
                                   "toteIdentifier": {"payload":"04"},
@@ -146,14 +138,30 @@ class DspJsonDatasetLoaderTest {
                                     ]
                                   }
                                 }
-                                """))));
+                                """;
+        LoadedDspData data = assembler.assemble(
+                List.of(product("1809"), product("19959")),
+                List.of(message(mixedOrderJson)));
+
+        assertEquals(1, data.orders().size());
+        assertEquals(1, data.orders().getFirst().items().size());
+        assertEquals("0006461", data.orders().getFirst().items().getFirst().pharmacyId());
+        assertEquals(1, data.report().ignoredManualLineCount());
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> assembler.assemble(
+                        List.of(product("1809"), product("19959")),
+                        List.of(message(mixedOrderJson.replace(
+                                "\"orderLineType\":\"01\"",
+                                "\"orderLineType\":\"05\"")))));
 
         assertTrue(exception.getMessage().contains("must be pharmacy-pure"));
     }
 
     @Test
-    void shouldPreserveStableDispatchSequenceNumbersAcrossMixedInput() {
-        LoadedDspData data = loader.load(
+    void shouldPreserveStableOrderSequenceNumbersAcrossMixedInput() {
+        LoadedDspData data = assembler.assemble(
                 List.of(
                         product("36550"),
                         product("9114"),
@@ -226,15 +234,16 @@ class DspJsonDatasetLoaderTest {
                                 }
                                 """)));
 
-        assertEquals(2, data.dispatchOrders().size());
-        assertEquals(0L, data.dispatchOrders().get(0).sequenceNumber());
-        assertEquals(1L, data.dispatchOrders().get(1).sequenceNumber());
+        assertEquals(3, data.orders().size());
+        assertEquals(0L, data.orders().get(0).sequenceNumber());
+        assertEquals(1L, data.orders().get(1).sequenceNumber());
+        assertEquals(2L, data.orders().get(2).sequenceNumber());
         assertEquals(1, data.preparedLines().size());
     }
 
     @Test
-    void shouldKeepManualMessagesOutOfDispatchOrders() {
-        LoadedDspData data = loader.load(
+    void shouldIgnoreManualPreparationMessages() {
+        LoadedDspData data = assembler.assemble(
                 List.of(product("6881")),
                 List.of(message("""
                         {
@@ -259,9 +268,77 @@ class DspJsonDatasetLoaderTest {
                         }
                         """)));
 
-        assertTrue(data.dispatchOrders().isEmpty());
-        assertEquals(1, data.preparedLines().size());
-        assertEquals(DspOrderLineType.MANUAL, data.preparedLines().getFirst().lineType());
+        assertTrue(data.orders().isEmpty());
+        assertTrue(data.preparedLines().isEmpty());
+        assertEquals(1, data.report().ignoredManualMessageCount());
+        assertEquals(1, data.report().ignoredManualLineCount());
+        assertEquals(0, data.report().omittedOrderCount());
+    }
+
+    @Test
+    void shouldOmitDispatchOrderWhenOnlyManualLinesRemain() {
+        LoadedDspData data = assembler.assemble(
+                List.of(product("6881")),
+                List.of(message("""
+                        {
+                          "header": {"orderId":"TOTE0007170196","sheetNumber":"003"},
+                          "toteIdentifier": {"payload":"04"},
+                          "serviceCentre": {"payload":"104"},
+                          "orderDetail": {
+                            "numberOfOrderLines": 1,
+                            "orderLines": [
+                              {
+                                "orderLineNumber":"000243560347",
+                                "orderLineType":"01",
+                                "pharmacyId":"0005984",
+                                "productId":"6881",
+                                "numberOfPacks":"0001",
+                                "referenceSheetNumber":"001",
+                                "numberOfPacksPicked":"0000",
+                                "referenceOrderId":"TOTE0007170196"
+                              }
+                            ]
+                          }
+                        }
+                        """)));
+
+        assertTrue(data.orders().isEmpty());
+        assertEquals(0, data.report().ignoredManualMessageCount());
+        assertEquals(1, data.report().ignoredManualLineCount());
+        assertEquals(1, data.report().omittedOrderCount());
+    }
+
+    @Test
+    void shouldRetainAndReportLinesMissingFromProductMaster() {
+        LoadedDspData data = assembler.assemble(
+                List.of(),
+                List.of(message("""
+                        {
+                          "header": {"orderId":"order-missing","sheetNumber":"001"},
+                          "toteIdentifier": {"payload":"05"},
+                          "serviceCentre": {"payload":"104"},
+                          "orderDetail": {
+                            "numberOfOrderLines": 1,
+                            "orderLines": [
+                              {
+                                "orderLineNumber":"line-missing",
+                                "orderLineType":"05",
+                                "pharmacyId":"0005984",
+                                "productId":"missing-product",
+                                "numberOfPacks":"0001",
+                                "referenceSheetNumber":"001",
+                                "numberOfPacksPicked":"0000",
+                                "referenceOrderId":"order-missing"
+                              }
+                            ]
+                          }
+                        }
+                        """)));
+
+        assertEquals(1, data.orders().size());
+        assertEquals(
+                List.of(new UnresolvedProductLine("order-missing", "line-missing", "missing-product")),
+                data.report().unresolvedProductLines());
     }
 
     private static TwelveNMessageJson message(String json) {

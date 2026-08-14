@@ -39,7 +39,7 @@ public class LoadedDspSchedulerRuntimeFactory {
         }
 
         List<DspSchedulerOrderState> orderStates = new ArrayList<>();
-        for (var order : data.dispatchOrders()) {
+        for (var order : data.orders()) {
             RouteRequirements routeRequirements = routeDeriver.derive(order);
             orderStates.add(new DspSchedulerOrderState(order, routeRequirements, DspOrderStatus.WAITING));
         }
