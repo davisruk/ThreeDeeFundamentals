@@ -1,12 +1,35 @@
 package online.davisfamily.warehouse.sim.dsp.model;
 
-public record ProductMasterRecord(String productId, ProductCategory category, boolean thirdParty) {
+import java.util.Optional;
+
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
+
+public record ProductMasterRecord(
+        String productId,
+        String displayName,
+        Optional<String> thirdPartyLocation,
+        Optional<PackDimensions> dimensions) {
+
     public ProductMasterRecord {
-        if (productId == null || productId.isBlank()) {
-            throw new IllegalArgumentException("productId must not be blank");
+        productId = requireTrimmedValue(productId, "productId");
+        displayName = requireTrimmedValue(displayName, "displayName");
+        if (thirdPartyLocation == null) {
+            throw new IllegalArgumentException("thirdPartyLocation must not be null");
         }
-        if (category == null) {
-            throw new IllegalArgumentException("category must not be null");
+        if (dimensions == null) {
+            throw new IllegalArgumentException("dimensions must not be null");
         }
+        thirdPartyLocation = thirdPartyLocation.map(location -> requireTrimmedValue(location, "thirdPartyLocation"));
+    }
+
+    public boolean thirdParty() {
+        return thirdPartyLocation.isPresent();
+    }
+
+    private static String requireTrimmedValue(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+        return value.trim();
     }
 }

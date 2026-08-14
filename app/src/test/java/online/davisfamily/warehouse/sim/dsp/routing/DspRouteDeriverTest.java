@@ -6,22 +6,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
-import online.davisfamily.warehouse.sim.dsp.model.ProductCategory;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class DspRouteDeriverTest {
 
     @Test
     void shouldStartEmptyOrdersAtAv02AndOthersAtOsr() {
         DspRouteDeriver deriver = newDeriver(
-                new ProductMasterRecord("product-1", ProductCategory.AUTOMATED, false));
+                product("product-1", null));
 
         assertEquals(StartLocation.AV02, deriver.derive(order(OrderType.EMPTY, item("product-1"))).startLocation());
         assertEquals(StartLocation.OSR, deriver.derive(order(OrderType.ADAPTED, item("product-1"))).startLocation());
@@ -32,7 +34,7 @@ class DspRouteDeriverTest {
     @Test
     void shouldRequireP2pForAssociatedEmptyAndFullPackOrdersOnly() {
         DspRouteDeriver deriver = newDeriver(
-                new ProductMasterRecord("product-1", ProductCategory.AUTOMATED, false));
+                product("product-1", null));
 
         assertTrue(deriver.derive(order(OrderType.ASSOCIATED, item("product-1"))).requiresP2p());
         assertTrue(deriver.derive(order(OrderType.EMPTY, item("product-1"))).requiresP2p());
@@ -41,17 +43,17 @@ class DspRouteDeriverTest {
     }
 
     @Test
-    void shouldDeriveThirdPartySortableAndManualRequirementsFromProductMaster() {
+    void shouldDeriveThirdPartyFromMasterAndProcessingRequirementsFromLineTypes() {
         DspRouteDeriver deriver = newDeriver(
-                new ProductMasterRecord("auto", ProductCategory.AUTOMATED, true),
-                new ProductMasterRecord("sortable", ProductCategory.SORTABLE, false),
-                new ProductMasterRecord("manual", ProductCategory.MANUAL, false));
+                product("auto", "Y74"),
+                product("sortable", null),
+                product("manual", null));
 
         RouteRequirements requirements = deriver.derive(order(
                 OrderType.ADAPTED,
-                item("auto"),
-                item("sortable"),
-                item("manual")));
+                item("auto", DspOrderLineType.FULL_PACK),
+                item("sortable", DspOrderLineType.ADAPTED),
+                item("manual", DspOrderLineType.MANUAL)));
 
         assertTrue(requirements.requiresThirdParty());
         assertTrue(requirements.requiresSortable());
@@ -63,18 +65,18 @@ class DspRouteDeriverTest {
     @Test
     void shouldRequireManualMergeForAssociatedOrEmptyOrdersWithManualItems() {
         DspRouteDeriver deriver = newDeriver(
-                new ProductMasterRecord("manual", ProductCategory.MANUAL, false));
+                product("manual", null));
 
-        assertTrue(deriver.derive(order(OrderType.ASSOCIATED, item("manual"))).requiresManualMerge());
-        assertTrue(deriver.derive(order(OrderType.EMPTY, item("manual"))).requiresManualMerge());
-        assertFalse(deriver.derive(order(OrderType.ADAPTED, item("manual"))).requiresManualMerge());
-        assertFalse(deriver.derive(order(OrderType.FULL_PACK, item("manual"))).requiresManualMerge());
+        assertTrue(deriver.derive(order(OrderType.ASSOCIATED, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
+        assertTrue(deriver.derive(order(OrderType.EMPTY, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
+        assertFalse(deriver.derive(order(OrderType.ADAPTED, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
+        assertFalse(deriver.derive(order(OrderType.FULL_PACK, item("manual", DspOrderLineType.MANUAL))).requiresManualMerge());
     }
 
     @Test
     void shouldRejectMissingProductMasterData() {
         DspRouteDeriver deriver = newDeriver(
-                new ProductMasterRecord("known", ProductCategory.AUTOMATED, false));
+                product("known", null));
 
         assertThrows(IllegalArgumentException.class,
                 () -> deriver.derive(order(OrderType.ASSOCIATED, item("missing"))));
@@ -96,6 +98,26 @@ class DspRouteDeriverTest {
     }
 
     private static DspOrderItem item(String productId) {
-        return new DspOrderItem("item-" + productId, productId, 1);
+        return item(productId, DspOrderLineType.FULL_PACK);
+    }
+
+    private static DspOrderItem item(String productId, DspOrderLineType lineType) {
+        return new DspOrderItem(
+                "item-" + productId,
+                productId,
+                1,
+                "0006515",
+                lineType,
+                "order-1",
+                1,
+                0);
+    }
+
+    private static ProductMasterRecord product(String productId, String thirdPartyLocation) {
+        return new ProductMasterRecord(
+                productId,
+                "Product " + productId,
+                Optional.ofNullable(thirdPartyLocation),
+                Optional.of(new PackDimensions(0.20f, 0.10f, 0.08f)));
     }
 }

@@ -44,7 +44,7 @@ Do not revisit these during implementation:
 - Load `app/md/product_automation.csv` into an in-memory repository; do not add a database.
 - Join 12N `productId` to CSV `dispensingProductPackColumbusCode` as strings.
 - A nonblank CSV `thirdPartyLocation` means Third Party and the location is retained.
-- Convert CSV dimensions from millimetres to metres.
+- Convert positive CSV dimensions from millimetres to metres; treat an exact `0 x 0 x 0` triple as missing dimensions.
 - 12N line type, not product master, owns order-specific FULL_PACK/ADAPTED/MANUAL processing.
 - MANUAL messages and lines are excluded from active simulation and reported.
 - Prepared-line identity is target order id plus globally distinct line reference.
@@ -174,7 +174,7 @@ Change `ProductMasterRecord` to contain:
 - trimmed Columbus product id;
 - display name;
 - optional normalized Third Party bin location;
-- `PackDimensions` in metres.
+- optional `PackDimensions` in metres.
 
 Provide `boolean thirdParty()` as a derived convenience method if useful. Do not retain `ProductCategory` as routing authority. Remove `ProductCategory` once all production/test references have migrated.
 
@@ -185,11 +185,12 @@ Provide `boolean thirdParty()` as a derived convenience method if useful. Do not
 - trim names and locations;
 - map blank `thirdPartyLocation` to empty optional;
 - parse positive `length`, `width`, and `height` millimetres and divide by 1000;
-- reject blank/duplicate product ids and invalid/nonpositive dimensions clearly;
+- map an exact `0 x 0 x 0` triple to missing dimensions so the product remains available for routing/identity lookup;
+- reject blank/duplicate product ids, partially missing dimension triples, and other invalid/nonpositive dimensions clearly;
 - ignore unused source columns after structured parsing;
 - support `load(Path)` and `loadString(String)` for focused tests.
 
-Keep `InMemoryProductMasterRepository` as the runtime repository and verify all 5,498 supplied records load with 78 Third Party locations. Do not use the full file as the only parser test; include small strings for edge cases.
+Keep `InMemoryProductMasterRepository` as the runtime repository and verify all 5,498 supplied records load with 78 Third Party locations and 8 missing-dimension records. Do not use the full file as the only parser test; include small strings for edge cases.
 
 Remove `ProductMasterJsonLoader` and `ProductMasterJsonRecord` only after all tests/callers have migrated. Do not leave JSON product master as a second source of truth.
 

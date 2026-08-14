@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -13,13 +14,13 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderValidator;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
-import online.davisfamily.warehouse.sim.dsp.model.ProductCategory;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class DspJsonDatasetLoaderTest {
     private final DspJsonDatasetLoader loader = new DspJsonDatasetLoader(
-            new ProductMasterJsonLoader(),
+            new ProductMasterCsvLoader(),
             new TwelveNMessageKindMapper(),
             new TwelveNOrderMapper(new TwelveNMessageKindMapper()),
             new TwelveNPreparedLineMapper(new TwelveNMessageKindMapper()),
@@ -28,7 +29,7 @@ class DspJsonDatasetLoaderTest {
     @Test
     void shouldLoadProductsAndOneFullPackDispatchOrder() {
         LoadedDspData data = loader.load(
-                List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
+                List.of(product("9114")),
                 List.of(message("""
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
@@ -63,7 +64,7 @@ class DspJsonDatasetLoaderTest {
     @Test
     void shouldLoadAdaptedPreparationLinesAndLoadedPreparedLineKeysWithoutDispatchOrder() {
         LoadedDspData data = loader.load(
-                List.of(new ProductMasterRecord("36550", ProductCategory.SORTABLE, false)),
+                List.of(product("36550")),
                 List.of(message("""
                         {
                           "header": {"orderId":"TOTE0007168406","sheetNumber":"022"},
@@ -112,8 +113,8 @@ class DspJsonDatasetLoaderTest {
                 IllegalArgumentException.class,
                 () -> loader.load(
                         List.of(
-                                new ProductMasterRecord("1809", ProductCategory.MANUAL, false),
-                                new ProductMasterRecord("19959", ProductCategory.AUTOMATED, false)),
+                                product("1809"),
+                                product("19959")),
                         List.of(message("""
                                 {
                                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
@@ -154,9 +155,9 @@ class DspJsonDatasetLoaderTest {
     void shouldPreserveStableDispatchSequenceNumbersAcrossMixedInput() {
         LoadedDspData data = loader.load(
                 List.of(
-                        new ProductMasterRecord("36550", ProductCategory.SORTABLE, false),
-                        new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false),
-                        new ProductMasterRecord("19959", ProductCategory.AUTOMATED, false)),
+                        product("36550"),
+                        product("9114"),
+                        product("19959")),
                 List.of(
                         message("""
                                 {
@@ -234,7 +235,7 @@ class DspJsonDatasetLoaderTest {
     @Test
     void shouldKeepManualMessagesOutOfDispatchOrders() {
         LoadedDspData data = loader.load(
-                List.of(new ProductMasterRecord("6881", ProductCategory.MANUAL, false)),
+                List.of(product("6881")),
                 List.of(message("""
                         {
                           "header": {"orderId":"TOTE0007171306","sheetNumber":"001"},
@@ -265,5 +266,13 @@ class DspJsonDatasetLoaderTest {
 
     private static TwelveNMessageJson message(String json) {
         return JsonLoaderSupport.readString(json, TwelveNMessageJson.class);
+    }
+
+    private static ProductMasterRecord product(String productId) {
+        return new ProductMasterRecord(
+                productId,
+                "Product " + productId,
+                Optional.empty(),
+                Optional.of(new PackDimensions(0.20f, 0.10f, 0.08f)));
     }
 }

@@ -41,7 +41,9 @@ Useful product-master fields for the simulation are initially:
 - `dispensingProductPackColumbusCode` as product id
 - `name` for inspection/debug display
 - `thirdPartyLocation`, optional
-- `length`, `width`, and `height`, converted from millimetres to metres
+- optional `length`, `width`, and `height`, converted from millimetres to metres when present
+
+Some active master records contain `0 x 0 x 0` because physical dimensions have not been supplied. These products must remain available for identity and routing lookup, but their dimensions are treated as missing rather than as valid geometry. Physical pack creation must fail or report the missing dimensions only when such a product actually enters a simulated run. Partially missing or otherwise nonpositive dimension triples are invalid master data.
 
 Other CSV fields should be parsed only if needed. Do not place source-specific CSV column names throughout the domain model.
 

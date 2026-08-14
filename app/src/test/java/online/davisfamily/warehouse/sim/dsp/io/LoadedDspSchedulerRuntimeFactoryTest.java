@@ -15,7 +15,6 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
-import online.davisfamily.warehouse.sim.dsp.model.ProductCategory;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.routing.DspRouteDeriver;
@@ -26,13 +25,14 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class LoadedDspSchedulerRuntimeFactoryTest {
 
     @Test
     void shouldCreateRuntimeStateFromLoadedDispatchOrders() {
         LoadedDspData data = new LoadedDspData(
-                List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
+                List.of(product("9114", null)),
                 List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "9114", "0006461", 0L)),
                 List.of(),
                 Set.of());
@@ -51,12 +51,12 @@ class LoadedDspSchedulerRuntimeFactoryTest {
     }
 
     @Test
-    void shouldUseProductMasterCategoriesForRouteDerivation() {
+    void shouldUseLineTypesAndThirdPartyLocationForRouteDerivation() {
         LoadedDspData data = new LoadedDspData(
                 List.of(
-                        new ProductMasterRecord("manual", ProductCategory.MANUAL, false),
-                        new ProductMasterRecord("sortable", ProductCategory.SORTABLE, false),
-                        new ProductMasterRecord("third-party", ProductCategory.AUTOMATED, true)),
+                        product("manual", null),
+                        product("sortable", null),
+                        product("third-party", "Y74")),
                 List.of(new NotionalToteOrder(
                         "order-1",
                         "order-1",
@@ -87,7 +87,7 @@ class LoadedDspSchedulerRuntimeFactoryTest {
                 new PreparedLineKey("target-1", "line-1"),
                 new PreparedLineKey("target-2", "line-2"));
         LoadedDspData data = new LoadedDspData(
-                List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
+                List.of(product("9114", null)),
                 List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "9114", "0006461", 0L)),
                 List.of(),
                 loadedPreparedLineKeys);
@@ -105,7 +105,7 @@ class LoadedDspSchedulerRuntimeFactoryTest {
                 new PreparedLineKey("target-1", "line-1"),
                 new PreparedLineKey("target-2", "line-2"));
         LoadedDspData data = new LoadedDspData(
-                List.of(new ProductMasterRecord("9114", ProductCategory.AUTOMATED, false)),
+                List.of(product("9114", null)),
                 List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "9114", "0006461", 0L)),
                 List.of(),
                 Set.of(),
@@ -120,7 +120,7 @@ class LoadedDspSchedulerRuntimeFactoryTest {
     @Test
     void shouldFailWhenProductMasterDataIsMissingForLoadedDispatchOrder() {
         LoadedDspData data = new LoadedDspData(
-                List.of(new ProductMasterRecord("known", ProductCategory.AUTOMATED, false)),
+                List.of(product("known", null)),
                 List.of(dispatchOrder("order-1", OrderType.FULL_PACK, "missing", "0006461", 0L)),
                 List.of(),
                 Set.of());
@@ -136,6 +136,14 @@ class LoadedDspSchedulerRuntimeFactoryTest {
     private static LoadedDspSchedulerRuntimeFactory factoryWithProducts(List<ProductMasterRecord> products) {
         return new LoadedDspSchedulerRuntimeFactory(
                 new DspRouteDeriver(new InMemoryProductMasterRepository(products)));
+    }
+
+    private static ProductMasterRecord product(String productId, String thirdPartyLocation) {
+        return new ProductMasterRecord(
+                productId,
+                "Product " + productId,
+                Optional.ofNullable(thirdPartyLocation),
+                Optional.of(new PackDimensions(0.20f, 0.10f, 0.08f)));
     }
 
     private static NotionalToteOrder dispatchOrder(

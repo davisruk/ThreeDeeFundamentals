@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +33,7 @@ class DspOrderModelTest {
         DspOrderItem item = validItem();
 
         assertThrows(IllegalArgumentException.class,
-                () -> new ProductMasterRecord(" ", ProductCategory.AUTOMATED, false));
+                () -> new ProductMasterRecord(" ", "Product", Optional.empty(), Optional.empty()));
         assertThrows(IllegalArgumentException.class,
                 () -> new DspOrderItem("", "product-1", 1));
         assertThrows(IllegalArgumentException.class,
@@ -95,9 +96,13 @@ class DspOrderModelTest {
     }
 
     @Test
-    void shouldRejectNullCategoryAndOrderType() {
+    void shouldRejectInvalidProductMasterFieldsAndNullOrderType() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ProductMasterRecord("product-1", null, false));
+                () -> new ProductMasterRecord("product-1", null, Optional.empty(), Optional.empty()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ProductMasterRecord("product-1", "Product", null, Optional.empty()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ProductMasterRecord("product-1", "Product", Optional.empty(), null));
         assertThrows(IllegalArgumentException.class,
                 () -> new NotionalToteOrder(
                         "order-1",

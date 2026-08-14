@@ -1,9 +1,9 @@
 package online.davisfamily.warehouse.sim.dsp.routing;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
-import online.davisfamily.warehouse.sim.dsp.model.ProductCategory;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 
@@ -31,10 +31,10 @@ public class DspRouteDeriver {
             if (product.thirdParty()) {
                 requiresThirdParty = true;
             }
-            if (product.category() == ProductCategory.SORTABLE) {
+            if (item.lineType() == DspOrderLineType.ADAPTED) {
                 requiresSortable = true;
             }
-            if (product.category() == ProductCategory.MANUAL) {
+            if (item.lineType() == DspOrderLineType.MANUAL) {
                 requiresManual = true;
             }
         }

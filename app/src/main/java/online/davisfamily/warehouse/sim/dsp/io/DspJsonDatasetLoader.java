@@ -13,20 +13,20 @@ import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public class DspJsonDatasetLoader {
-    private final ProductMasterJsonLoader productMasterJsonLoader;
+    private final ProductMasterCsvLoader productMasterCsvLoader;
     private final TwelveNMessageKindMapper messageKindMapper;
     private final TwelveNOrderMapper orderMapper;
     private final TwelveNPreparedLineMapper preparedLineMapper;
     private final DspOrderValidator orderValidator;
 
     public DspJsonDatasetLoader(
-            ProductMasterJsonLoader productMasterJsonLoader,
+            ProductMasterCsvLoader productMasterCsvLoader,
             TwelveNMessageKindMapper messageKindMapper,
             TwelveNOrderMapper orderMapper,
             TwelveNPreparedLineMapper preparedLineMapper,
             DspOrderValidator orderValidator) {
-        if (productMasterJsonLoader == null) {
-            throw new IllegalArgumentException("productMasterJsonLoader must not be null");
+        if (productMasterCsvLoader == null) {
+            throw new IllegalArgumentException("productMasterCsvLoader must not be null");
         }
         if (messageKindMapper == null) {
             throw new IllegalArgumentException("messageKindMapper must not be null");
@@ -40,7 +40,7 @@ public class DspJsonDatasetLoader {
         if (orderValidator == null) {
             throw new IllegalArgumentException("orderValidator must not be null");
         }
-        this.productMasterJsonLoader = productMasterJsonLoader;
+        this.productMasterCsvLoader = productMasterCsvLoader;
         this.messageKindMapper = messageKindMapper;
         this.orderMapper = orderMapper;
         this.preparedLineMapper = preparedLineMapper;
@@ -63,7 +63,7 @@ public class DspJsonDatasetLoader {
             messages.add(JsonLoaderSupport.read(twelveNPath, TwelveNMessageJson.class));
         }
 
-        return load(productMasterJsonLoader.load(productMasterPath), messages);
+        return load(productMasterCsvLoader.load(productMasterPath), messages);
     }
 
     public LoadedDspData load(List<ProductMasterRecord> products, List<TwelveNMessageJson> messages) {

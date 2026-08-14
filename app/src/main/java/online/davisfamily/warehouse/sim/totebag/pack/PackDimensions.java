@@ -9,6 +9,7 @@ import online.davisfamily.warehouse.sim.totebag.device.*;
 import online.davisfamily.warehouse.sim.totebag.assignment.*;
 import online.davisfamily.warehouse.sim.totebag.control.*;
 
+/** Physical pack dimensions in metres. */
 public record PackDimensions(float length, float width, float height) {
     public PackDimensions {
         if (length <= 0f) {
