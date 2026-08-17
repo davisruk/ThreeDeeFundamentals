@@ -61,6 +61,7 @@ public class TestScene extends BaseScene{
 	private DebugSceneRuntime installScene(DebugSceneKind sceneKind) {
 		return switch (sceneKind) {
 			case ADAPTING -> new AdaptingDebugRig(tr, sim, objects, inspectionRegistry);
+			case THIRD_PARTY -> new ThirdPartyDebugRig(tr, sim, objects, inspectionRegistry);
 			case TOTE_TO_BAG -> new ToteToBagDebugRig(tr, sim, objects, inspectionRegistry);
 			case TIPPER_TRACK -> new ToteTrackTipperDebugRig(tr, sim, objects, inspectionRegistry);
 			case TIPPER_TO_RECEIVER -> new TipperToReceiverDebugRig(tr, sim, objects, inspectionRegistry);

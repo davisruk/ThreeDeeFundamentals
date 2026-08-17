@@ -7,7 +7,7 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The active branch plan, currently `docs/machines/third-party-station-phase-1-plan.md`
+2. The current branch completion plan, `docs/machines/third-party-station-phase-1-plan.md`
 3. `docs/machines/third-party-station-requirements.md`
 4. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
@@ -79,7 +79,7 @@ The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`
 
 The adapting station Phase 1 and simulation-reset branches are complete and merged to `master`.
 
-The active branch is `feature/third-party-station-phase-1`. Follow `docs/machines/third-party-station-phase-1-plan.md` one verified step at a time.
+`feature/third-party-station-phase-1` is implementation-complete and verified, pending branch closure and merge. Use its plan as the completion record. Exception Station Phase 1 is the next planning target; do not begin its implementation without a decision-complete branch plan.
 
 Completed scheduler work:
 
@@ -113,7 +113,10 @@ Current scheduler decisions:
   - the integrated debug scene uses the threaded source
   - scheduler worker code receives immutable snapshots and returns evaluations; simulation-thread code still applies commands and mutates runtime state
 - Scheduler decisions are observable in the existing selection inspection overlay. The current integrated debug target is `tipper_slide`; longer term, composite machine selection should route child hits back to the root renderable.
-- The active branch separates product-master CSV loading from 12N JSON loading; neither loading path creates renderables.
+- Third Party Phase 1 separates product-master CSV loading from 12N JSON loading; neither loading path creates renderables.
+- Third Party visits use line-aware selection, candidate-specific immutable admission, configurable waiting/concurrency, and exactly-once completion application.
+- Direct picks update fulfilment tote plans. ADAPTED Third Party preparation participates in the existing Adapting store/collect lifecycle and is covered by an integration test through ASSOCIATED collection.
+- The `third-party` debug scene and inspection cover stopping, pass-through, downstream routing, and `ALT+R` reset. Focused tests, the complete suite, and visual verification are green.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
 - Machine wait queues are now the scheduler release boundary for the integrated debug P2P path:
   - scheduler release admission answers whether a tote can enter station waiting space
@@ -123,7 +126,7 @@ Current scheduler decisions:
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 - Simulation and rendering still run sequentially on the same game-loop thread. Only scheduler evaluation has been moved to a worker thread. A future render-thread split remains deferred and would use published render snapshots rather than live renderable mutation.
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Third Party Area Phase 1 is active; Exception Station Phase 1 follows it.
+Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Third Party Area Phase 1 is complete and verified pending merge; Exception Station Phase 1 follows it.
 
 ## Deferred Direction
 
@@ -136,8 +139,8 @@ Current larger direction:
 Known Phase 1 machine/station work:
 
 - adapting station: Phase 1 complete and merged
-- Third Party Area: active
-- Exception Area: next
+- Third Party Area: implementation complete and verified; pending merge
+- Exception Area: next planning and implementation target
 - lid opening machine
 - lid closing machine
 - scheduler-controlled tote buffer

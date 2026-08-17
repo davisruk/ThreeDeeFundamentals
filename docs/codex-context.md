@@ -87,7 +87,7 @@ The active major work is the DSP/OSR scheduler.
 
 Read:
 
-1. `docs/machines/third-party-station-phase-1-plan.md` while the current branch is active
+1. `docs/machines/third-party-station-phase-1-plan.md` for the completed and verified current branch
 2. `docs/machines/third-party-station-requirements.md`
 3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
@@ -97,11 +97,12 @@ Current scheduler decisions:
 
 - The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`.
 - Generic standalone transfer-machine support, adapting station Phase 1, and simulation reset are complete and merged.
-- The active branch is `feature/third-party-station-phase-1`.
+- `feature/third-party-station-phase-1` is implementation-complete and verified, pending branch closure and merge.
+- Exception Station Phase 1 is the next planning target.
 - Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, machine wait queues, and scheduler thread.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
-- The active branch separates the real CSV product-master export from 12N JSON loading. Loaded data must not create renderables.
+- Third Party Phase 1 separates the real CSV product-master export from 12N JSON loading. Loaded data does not create renderables.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped early in update/draw/pick, and current pack visual paths use visibility to hide contained or inactive packs.
 - Service centres are processed as whole release windows.
 - Totes from different service centres should not be mixed, except naturally when one service centre finishes and the next begins.
@@ -119,11 +120,11 @@ Current scheduler decisions:
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/machines/third-party-station-phase-1-plan.md` for the active branch and execute one verified step at a time.
+Use `docs/machines/third-party-station-phase-1-plan.md` as the completion record for the current branch. After it is merged, create a decision-complete Exception Station Phase 1 plan before implementation.
 
-## Active Work: Third Party Area Phase 1
+## Completed Work: Third Party Area Phase 1
 
-The active branch is `feature/third-party-station-phase-1`.
+The implementation is complete and verified on `feature/third-party-station-phase-1`, pending branch closure and merge.
 
 Current branch contract:
 
@@ -132,9 +133,12 @@ Current branch contract:
 - Use 12N line type for order-specific processing; product master does not decide FULL_PACK/ADAPTED/MANUAL flow.
 - Correct prepared-line identity to target order id plus line reference. `referenceSheetNumber` is protocol-only.
 - Exclude MANUAL messages/lines and report them during ingestion.
-- Add successful direct and ADAPTED-preparation Third Party picks with configurable area capacity.
+- Successful direct and ADAPTED-preparation Third Party picks use configurable area capacity and exactly-once completion handling.
 - Preserve conservative OSR dependency release.
 - Defer short picks, incomplete outcomes, NS labels, Exception routing, stock tracking, and detailed shelving/operative visuals.
+- The `third-party` debug scene covers ADAPTED preparation, ASSOCIATED direct fulfilment, pass-through, FULL_PACK Third Party routing, inspection, and reset.
+- An integration test proves a Third Party ADAPTED source line can be stored and later appear in the corresponding ASSOCIATED tote plan through Adapting collection.
+- Focused tests, the complete Gradle suite, visual checks, and `ALT+R` reset verification passed.
 
 ## Phase 1 Station Direction
 
@@ -152,8 +156,8 @@ Planned Phase 1 order:
 - inline transfer targets: complete
 - adapting station: Phase 1 complete and merged
 - simulation reset runtime interlude: complete and merged
-- Third Party Area: active
-- Exception Area: next after Third Party
+- Third Party Area: implementation complete and verified; pending merge
+- Exception Area: next planning and implementation target
 - tote lid open/close machines
 
 Adapting station Phase 1 established the hardest merge/preparation model:
@@ -229,8 +233,8 @@ Threading status:
 
 These machines still need implementation using the established machine-state/install-result style:
 
-- Third Party Area Phase 1 (active)
-- exception station Phase 1
+- Third Party Area Phase 1 (implementation complete and verified; pending merge)
+- exception station Phase 1 (next)
 - lid opening machine
 - lid closing machine
 - tote strapping machine

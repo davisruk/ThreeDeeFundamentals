@@ -2,6 +2,7 @@
     "version": "0.2.0",
     "configurations": [
 
+
         {
             "type": "java",
             "name": "Scene: Tote To Bag",
@@ -65,7 +66,15 @@
             "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
             "projectName": "app",
             "args": "--scene=adapting"
-        },                
+        },
+        {
+            "type": "java",
+            "name": "Scene: 3rd Party",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=third-party"
+        },                        
         {
             "type": "java",
             "name": "Scene: Default",

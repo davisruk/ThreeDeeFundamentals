@@ -8,7 +8,7 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
-The generic transfer-machine work, Adapting Station Phase 1, and simulation reset are complete and merged. `feature/third-party-station-phase-1` is active with agreed requirements and a branch-specific implementation plan.
+The generic transfer-machine work, Adapting Station Phase 1, and simulation reset are complete and merged. Third Party Area Phase 1 is implemented and verified on `feature/third-party-station-phase-1`, pending branch closure and merge. Exception Station Phase 1 is the next planning target.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -103,7 +103,7 @@ Purpose:
 
 ### 2. Third-Party Station Phase 1
 
-Status: active on `feature/third-party-station-phase-1`.
+Status: implementation complete and verified on `feature/third-party-station-phase-1`; pending merge to `master`.
 
 Detailed documents:
 
@@ -125,6 +125,14 @@ Phase 1 expectations:
 - Preserve conservative OSR dependency release.
 - Use minimal through-track placeholder geometry and inspection.
 - Defer stock tracking, short picks, NS labels, Exception routing, detailed shelving, and operative/pack animation.
+
+Implemented notes:
+
+- Product-master CSV loading is independent from 12N JSON ingestion.
+- Candidate-specific scheduler admission uses immutable Third Party capacity state.
+- Direct and ADAPTED-preparation visits complete exactly once and update the appropriate logical load/storage state.
+- The minimal `third-party` debug scene and inspection prove stopping, pass-through, downstream routing, and reset behavior.
+- Focused tests, the complete test suite, visual checks, and `ALT+R` reset verification are green.
 
 ### 3. Exception Station Phase 1
 

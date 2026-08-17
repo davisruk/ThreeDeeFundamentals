@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support, adapting station Phase 1, and simulation reset are complete and merged. `feature/third-party-station-phase-1` is active.
+Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support, adapting station Phase 1, and simulation reset are complete and merged. Third Party Area Phase 1 is implemented and verified, pending branch closure and merge; Exception Station Phase 1 is next.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -295,7 +295,7 @@ Explicit non-goals:
 
 ### `feature/third-party-station-phase-1`
 
-Status: active.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed documents:
 
@@ -311,6 +311,14 @@ Purpose:
 - Add a capacity-aware logical Third Party Area beside a through-track.
 - Update tote load plans after successful picks so ADAPTED work can continue to Adapting and fulfilment work can continue to P2P.
 - Preserve conservative dependency release and defer short picks/NS labels/Exception routing.
+
+Implemented outcome:
+
+- CSV product-master loading and JSON 12N ingestion are independent.
+- Third Party visits are derived at line level and admitted against immutable, candidate-specific capacity state.
+- Direct picks update fulfilment tote plans exactly once; ADAPTED preparation is available to the Adapting store/collect lifecycle.
+- The `third-party` debug scene, inspection, full tests, visual checks, and `ALT+R` reset verification are green.
+- Missing-master handling, short picks, incomplete outcomes, NS labels, and Exception routing remain assigned to the Exception Station branch.
 
 ## Current Assumptions
 

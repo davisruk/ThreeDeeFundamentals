@@ -19,6 +19,7 @@ public class ThirdPartyAreaController {
     private final ThirdPartyPackPlanFactory packPlanFactory;
     private final Set<String> completedLineReferences = new LinkedHashSet<>();
     private final Map<String, ThirdPartyCompletion> completionsByToteId = new LinkedHashMap<>();
+    private ThirdPartyCompletion lastCompletion;
 
     public ThirdPartyAreaController(
             ThirdPartyArea area,
@@ -60,6 +61,10 @@ public class ThirdPartyAreaController {
         return Optional.ofNullable(completionsByToteId.get(notionalToteId));
     }
 
+    public Optional<ThirdPartyCompletion> lastCompletion() {
+        return Optional.ofNullable(lastCompletion);
+    }
+
     private void applyCompletion(ThirdPartyCompletion completion) {
         ThirdPartyVisit visit = completion.visit();
         List<ThirdPartyLineWork> newLineWork = visit.lineWork().stream()
@@ -88,5 +93,6 @@ public class ThirdPartyAreaController {
             completedLineReferences.add(lineWork.lineReference());
         }
         completionsByToteId.put(visit.notionalToteId(), completion);
+        lastCompletion = completion;
     }
 }

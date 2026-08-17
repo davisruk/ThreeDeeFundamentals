@@ -2,7 +2,7 @@
 
 Branch: `feature/third-party-station-phase-1`
 
-Status: planned. Execute one step at a time and ask the user to run the focused Gradle command after each step.
+Status: implementation complete and verified on 2026-08-17. Pending branch closure and merge to `master`.
 
 ## Purpose
 
@@ -521,6 +521,26 @@ Before branch closure:
 - update the roadmap and scheduler branch roadmap;
 - record any deliberate deferrals discovered during implementation;
 - do not implement Exception behavior merely to make the historical full dataset runnable.
+
+Implementation and verification outcome:
+
+- Independent CSV product-master and JSON 12N loading is implemented.
+- MANUAL data is excluded and reported without disturbing retained order sequencing.
+- Third Party work is selected at line level for direct fulfilment and ADAPTED preparation.
+- The logical Third Party Area provides FIFO waiting, configurable concurrent processing, immutable admission state, and exactly-once completion application.
+- Successful direct picks update fulfilment tote load plans using product-master dimensions.
+- ADAPTED Third Party preparation is stored through the Adapting domain and can later be collected into the corresponding ASSOCIATED tote plan.
+- The `third-party` debug scene demonstrates ADAPTED preparation, ASSOCIATED direct fulfilment, pass-through, and FULL_PACK Third Party routing.
+- Focused tests, the complete Gradle test suite, the visual scene check, and `ALT+R` reset verification passed.
+
+Deliberate deferrals:
+
+- short-pick generation and incomplete outcomes;
+- NS labels and empty NS bags;
+- Exception Station routing and resolution;
+- Third Party stock decrement or replenishment tracking;
+- detailed shelving, bin, operative, and pack-transfer presentation;
+- a combined production-layout visual route containing both the real Adapting and Third Party areas.
 
 ## Completion Criteria
 
