@@ -35,6 +35,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
@@ -149,7 +150,7 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
                 loadPlanRegistry,
                 new ProductMasterThirdPartyPackPlanFactory(
                         productRepository,
-                        (visit, lineWork) -> visit.orderId()));
+                        (visit, lineWork) -> visit.orderSheetKey().orderId()));
         stopController = new ThirdPartyAreaStopController(
                 area,
                 areaController,
@@ -162,8 +163,10 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
         for (DspSchedulerOrderState orderState : orderStates) {
             NotionalToteOrder order = orderState.order();
             ordersById.put(order.orderId(), order);
-            ordersByToteId.put(order.notionalToteId(), order);
-            visitFactory.create(order).ifPresent(visit -> visitsByOrderId.put(order.orderId(), visit));
+            PhysicalToteId physicalToteId = physicalToteIdFor(order);
+            ordersByToteId.put(physicalToteId.value(), order);
+            visitFactory.create(physicalToteId, order)
+                    .ifPresent(visit -> visitsByOrderId.put(order.orderId(), visit));
         }
 
         Set<PreparedLineKey> preparedLines = Set.of(new PreparedLineKey(
@@ -320,7 +323,7 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
         List<ScheduledTipperToteRelease> releases = new ArrayList<>();
         for (NotionalToteOrder order : ordersById.values()) {
             List<PackPlan> initialPacks = initialPacksFor(order);
-            ToteLoadPlan loadPlan = new ToteLoadPlan(order.notionalToteId(), initialPacks);
+            ToteLoadPlan loadPlan = new ToteLoadPlan(physicalToteIdFor(order).value(), initialPacks);
             loadPlanRegistry.putLoadPlan(loadPlan);
             releases.add(new ScheduledTipperToteRelease(
                     order.orderId(),
@@ -328,6 +331,16 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
                     () -> createPayload(tr, toteGeometry, loadPlan)));
         }
         return new ScheduledTipperToteReleaseCatalog(releases);
+    }
+
+    private PhysicalToteId physicalToteIdFor(NotionalToteOrder order) {
+        return switch (order.orderId()) {
+            case "third-party-adapted" -> new PhysicalToteId("tote-third-party-adapted");
+            case "third-party-associated" -> new PhysicalToteId("tote-third-party-associated");
+            case "regular-full-pack" -> new PhysicalToteId("tote-regular-full-pack");
+            case "third-party-later" -> new PhysicalToteId("tote-third-party-later");
+            default -> throw new IllegalArgumentException("No physical tote configured for " + order.orderId());
+        };
     }
 
     private List<PackPlan> initialPacksFor(NotionalToteOrder order) {
@@ -370,19 +383,22 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
         lines.add("Type: Third Party Area");
         lines.add("Processing: " + snapshot.activeCount() + " / " + snapshot.config().maxConcurrentVisits());
         lines.add("Waiting: " + snapshot.waitingCount() + " / " + snapshot.config().waitingCapacity());
-        lines.add("Waiting totes: " + formatList(snapshot.waitingNotionalToteIds()));
+        lines.add("Waiting totes: " + formatList(snapshot.waitingPhysicalToteIds().stream()
+                .map(PhysicalToteId::value)
+                .toList()));
         if (snapshot.activeVisits().isEmpty()) {
             lines.add("Active visits: none");
         } else {
             snapshot.activeVisits().forEach(active -> {
-                lines.add("Active order/tote: " + active.orderId() + " / " + active.notionalToteId());
-                appendVisitDetails(lines, visitsByOrderId.get(active.orderId()));
+                lines.add("Active order/tote: " + active.orderSheetKey().orderId()
+                        + " / " + active.physicalToteId().value());
+                appendVisitDetails(lines, visitsByOrderId.get(active.orderSheetKey().orderId()));
             });
         }
         areaController.lastCompletion().ifPresentOrElse(
                 completion -> {
-                    lines.add("Last completion: " + completion.visit().orderId()
-                            + " / " + completion.visit().notionalToteId());
+                    lines.add("Last completion: " + completion.visit().orderSheetKey().orderId()
+                            + " / " + completion.visit().physicalToteId().value());
                     appendVisitDetails(lines, completion.visit());
                 },
                 () -> lines.add("Last completion: none"));

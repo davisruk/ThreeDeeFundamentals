@@ -33,16 +33,18 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingAreaController;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBench;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchId;
-import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingCollectVisitFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStorageMap;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisit;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitFactory;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitProfile;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
@@ -360,19 +362,17 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 new DefaultCollectedPackPlanFactory(PACK_DIMENSIONS));
 
         ScheduledTipperToteReleaseCatalog releaseCatalog = new ScheduledTipperToteReleaseCatalog(List.of(
-                releaseFor(tr, toteGeometry, storeOne.order(), List.of(new PackPlan("pack-store-1", "bag-store-1", PACK_DIMENSIONS))),
-                releaseFor(tr, toteGeometry, storeTwo.order(), List.of(new PackPlan("pack-store-2", "bag-store-2", PACK_DIMENSIONS))),
-                releaseFor(tr, toteGeometry, collectOne.order(), List.of(new PackPlan("pack-existing-1", "bag-existing", PACK_DIMENSIONS))),
-                releaseFor(tr, toteGeometry, collectTwo.order(), List.of(new PackPlan("pack-existing-2", "bag-existing-2", PACK_DIMENSIONS)))));
+                releaseFor(tr, toteGeometry, storeOne.order(), physicalToteIdFor(storeOne.order()), List.of(new PackPlan("pack-store-1", "bag-store-1", PACK_DIMENSIONS))),
+                releaseFor(tr, toteGeometry, storeTwo.order(), physicalToteIdFor(storeTwo.order()), List.of(new PackPlan("pack-store-2", "bag-store-2", PACK_DIMENSIONS))),
+                releaseFor(tr, toteGeometry, collectOne.order(), physicalToteIdFor(collectOne.order()), List.of(new PackPlan("pack-existing-1", "bag-existing", PACK_DIMENSIONS))),
+                releaseFor(tr, toteGeometry, collectTwo.order(), physicalToteIdFor(collectTwo.order()), List.of(new PackPlan("pack-existing-2", "bag-existing-2", PACK_DIMENSIONS)))));
 
-        visitsByOrderId.put(storeOne.order().orderId(), AdaptingVisit.store(storeOne.order().notionalToteId(), storeOne.order().items()));
-        visitsByOrderId.put(storeTwo.order().orderId(), AdaptingVisit.store(storeTwo.order().notionalToteId(), storeTwo.order().items()));
-        visitsByOrderId.put(collectOne.order().orderId(), new AdaptingCollectVisitFactory().create(
-                collectOne.order().notionalToteId(),
-                collectOne.order()));
-        visitsByOrderId.put(collectTwo.order().orderId(), new AdaptingCollectVisitFactory().create(
-                collectTwo.order().notionalToteId(),
-                collectTwo.order()));
+        AdaptingVisitFactory adaptingVisitFactory = new AdaptingVisitFactory();
+        for (DspSchedulerOrderState orderState : List.of(storeOne, storeTwo, collectOne, collectTwo)) {
+            NotionalToteOrder order = orderState.order();
+            PhysicalToteId physicalToteId = physicalToteIdFor(order);
+            visitsByOrderId.put(order.orderId(), adaptingVisitFactory.create(physicalToteId, order));
+        }
         toteLoadPlanRegistry.putLoadPlan(releaseCatalog.findByOrderId(collectOne.order().orderId()).orElseThrow().toteLoadPlan());
         toteLoadPlanRegistry.putLoadPlan(releaseCatalog.findByOrderId(collectTwo.order().orderId()).orElseThrow().toteLoadPlan());
 
@@ -582,9 +582,20 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
             TriangleRenderer tr,
             ToteGeometry toteGeometry,
             NotionalToteOrder order,
+            PhysicalToteId physicalToteId,
             List<PackPlan> packPlans) {
-        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(order.notionalToteId(), packPlans);
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(physicalToteId.value(), packPlans);
         return new ScheduledTipperToteRelease(order.orderId(), toteLoadPlan, () -> createPayload(tr, toteGeometry, toteLoadPlan));
+    }
+
+    private PhysicalToteId physicalToteIdFor(NotionalToteOrder order) {
+        return switch (order.orderId()) {
+            case "adapt-store-1" -> new PhysicalToteId("tote-store-1");
+            case "adapt-store-2" -> new PhysicalToteId("tote-store-2");
+            case "collect-1" -> new PhysicalToteId("tote-collect-1");
+            case "collect-2" -> new PhysicalToteId("tote-collect-2");
+            default -> throw new IllegalArgumentException("No physical tote configured for " + order.orderId());
+        };
     }
 
     private TipperTotePayload createPayload(TriangleRenderer tr, ToteGeometry toteGeometry, ToteLoadPlan toteLoadPlan) {
@@ -642,17 +653,15 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
     }
 
     private AdaptingBenchAdmissionSnapshot benchAdmission(AdaptingBenchId benchId) {
-        AdaptingAreaAdmissionSnapshot snapshot = adaptingArea.admissionSnapshotFor(dummyStoreVisit());
+        AdaptingAreaAdmissionSnapshot snapshot = adaptingArea.admissionSnapshotFor(dummyStoreProfile());
         return snapshot.benchAdmissions().stream()
                 .filter(admission -> admission.benchId().equals(benchId))
                 .findFirst()
                 .orElseThrow();
     }
 
-    private AdaptingVisit dummyStoreVisit() {
-        return AdaptingVisit.store(
-                "dummy",
-                List.of(new DspOrderItem(
+    private AdaptingVisitProfile dummyStoreProfile() {
+        return AdaptingVisitProfile.store(List.of(new DspOrderItem(
                         "dummy-line",
                         "dummy-product",
                         1,

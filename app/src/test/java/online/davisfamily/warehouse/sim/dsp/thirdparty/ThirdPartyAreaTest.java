@@ -10,6 +10,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
 class ThirdPartyAreaTest {
 
@@ -25,7 +27,7 @@ class ThirdPartyAreaTest {
         ThirdPartyAreaSnapshot snapshot = area.snapshot();
         assertEquals(1, snapshot.activeCount());
         assertEquals(1, snapshot.waitingCount());
-        assertEquals(List.of("order-2"), snapshot.waitingOrderIds());
+        assertEquals(List.of(new OrderSheetKey("order-2", 1)), snapshot.waitingOrderSheetKeys());
     }
 
     @Test
@@ -37,7 +39,9 @@ class ThirdPartyAreaTest {
 
         assertEquals(
                 List.of("order-1", "order-2"),
-                area.snapshot().activeVisits().stream().map(ThirdPartyVisitState::orderId).toList());
+                area.snapshot().activeVisits().stream()
+                        .map(state -> state.orderSheetKey().orderId())
+                        .toList());
     }
 
     @Test
@@ -50,9 +54,9 @@ class ThirdPartyAreaTest {
         area.update(5d);
 
         assertEquals(List.of("order-2"), area.snapshot().activeVisits().stream()
-                .map(ThirdPartyVisitState::orderId)
+                .map(state -> state.orderSheetKey().orderId())
                 .toList());
-        assertEquals(List.of("order-3"), area.snapshot().waitingOrderIds());
+        assertEquals(List.of(new OrderSheetKey("order-3", 1)), area.snapshot().waitingOrderSheetKeys());
     }
 
     @Test
@@ -75,8 +79,8 @@ class ThirdPartyAreaTest {
         area.submitVisit(visit("order-2"));
         ThirdPartyAreaSnapshot snapshot = area.snapshot();
 
-        assertThrows(UnsupportedOperationException.class, () -> snapshot.waitingOrderIds().clear());
-        assertThrows(UnsupportedOperationException.class, () -> snapshot.waitingNotionalToteIds().clear());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.waitingOrderSheetKeys().clear());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.waitingPhysicalToteIds().clear());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.activeVisits().clear());
     }
 
@@ -92,14 +96,15 @@ class ThirdPartyAreaTest {
 
     private ThirdPartyVisit visit(String orderId) {
         return new ThirdPartyVisit(
-                orderId,
-                "tote-" + orderId,
-                OrderType.FULL_PACK,
-                List.of(new ThirdPartyLineWork(
-                        "line-" + orderId,
-                        "product-1",
-                        1,
-                        "Y74",
-                        ThirdPartyWorkType.DIRECT_FULFILMENT)));
+                new PhysicalToteId("tote-" + orderId),
+                new ThirdPartyVisitPlan(
+                        new OrderSheetKey(orderId, 1),
+                        OrderType.FULL_PACK,
+                        List.of(new ThirdPartyLineWork(
+                                "line-" + orderId,
+                                "product-1",
+                                1,
+                                "Y74",
+                                ThirdPartyWorkType.DIRECT_FULFILMENT))));
     }
 }

@@ -15,6 +15,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
@@ -47,7 +48,7 @@ class AdaptingSchedulerIntegrationTest {
         DspReleaseScheduler scheduler = scheduler(area);
 
         DspOrderItem stagedLine = adaptedPreparedLine("line-1", "dispatch-1");
-        area.submitVisit(AdaptingVisit.store("store-tote-1", List.of(stagedLine)));
+        area.submitVisit(AdaptingVisit.store(new PhysicalToteId("store-tote-1"), List.of(stagedLine)));
         bench2.startProcessing();
         bench2.tick(1d);
         controller.applyBenchCompletion(new AdaptingBenchId("bench-2")).orElseThrow();
@@ -80,8 +81,12 @@ class AdaptingSchedulerIntegrationTest {
         assertTrue(blockedByDependency.blockedDecision().get().blockReasons().stream()
                 .anyMatch(reason -> reason.contains("Adapted work is not complete")));
 
-        bench1.acceptVisit(AdaptingVisit.store("busy-1", List.of(adaptedPreparedLine("busy-line-1", "other-order-1"))));
-        bench2.acceptVisit(AdaptingVisit.store("busy-2", List.of(adaptedPreparedLine("busy-line-2", "other-order-2"))));
+        bench1.acceptVisit(AdaptingVisit.store(
+                new PhysicalToteId("busy-1"),
+                List.of(adaptedPreparedLine("busy-line-1", "other-order-1"))));
+        bench2.acceptVisit(AdaptingVisit.store(
+                new PhysicalToteId("busy-2"),
+                List.of(adaptedPreparedLine("busy-line-2", "other-order-2"))));
         runtimeState.addPreparedLineKey(online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey.forDispatchLine(
                 collectingOrderState("dispatch-2").order(),
                 collectingOrderState("dispatch-2").order().items().getFirst()));

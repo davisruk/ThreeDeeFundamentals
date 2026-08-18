@@ -1,7 +1,5 @@
 package online.davisfamily.warehouse.sim.dsp.adapting;
 
-import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
-import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -11,16 +9,28 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 public class AdaptingStationAdmissionAdapter {
     private final AdaptingArea area;
     private final StationCapacity capacity;
+    private final AdaptingVisitFactory visitFactory;
 
     public AdaptingStationAdmissionAdapter(AdaptingArea area, StationCapacity capacity) {
+        this(area, capacity, new AdaptingVisitFactory());
+    }
+
+    AdaptingStationAdmissionAdapter(
+            AdaptingArea area,
+            StationCapacity capacity,
+            AdaptingVisitFactory visitFactory) {
         if (area == null) {
             throw new IllegalArgumentException("area must not be null");
         }
         if (capacity == null) {
             throw new IllegalArgumentException("capacity must not be null");
         }
+        if (visitFactory == null) {
+            throw new IllegalArgumentException("visitFactory must not be null");
+        }
         this.area = area;
         this.capacity = capacity;
+        this.visitFactory = visitFactory;
     }
 
     public StationAdmissionSnapshot admissionFor(DspSchedulerOrderState candidate) {
@@ -28,7 +38,8 @@ public class AdaptingStationAdmissionAdapter {
             throw new IllegalArgumentException("candidate must not be null");
         }
 
-        AdaptingBenchSelection selection = area.selectBenchFor(visitFor(candidate.order()));
+        AdaptingVisitProfile profile = visitFactory.profileFor(candidate.order());
+        AdaptingBenchSelection selection = area.selectBenchFor(profile);
         StationSnapshot snapshot = area.stationSnapshot();
         boolean capacityOpen = capacity.canAccept(snapshot);
         boolean admissionOpen = capacityOpen && selection.accepted();
@@ -51,10 +62,4 @@ public class AdaptingStationAdmissionAdapter {
                         : java.util.Optional.empty());
     }
 
-    private static AdaptingVisit visitFor(NotionalToteOrder order) {
-        if (order.orderType() == OrderType.ADAPTED) {
-            return AdaptingVisit.store(order.notionalToteId(), order.items());
-        }
-        return new AdaptingCollectVisitFactory().create(order.notionalToteId(), order);
-    }
 }

@@ -11,10 +11,10 @@ public class ThirdPartyStationAdmissionAdapter {
     private static final String CAPACITY_BLOCKED_REASON = "Third Party area has no capacity";
 
     public StationAdmissionSnapshot admissionFor(
-            Optional<ThirdPartyVisit> candidateVisit,
+            Optional<ThirdPartyVisitPlan> candidatePlan,
             ThirdPartyAreaSnapshot areaSnapshot) {
-        if (candidateVisit == null) {
-            throw new IllegalArgumentException("candidateVisit must not be null");
+        if (candidatePlan == null) {
+            throw new IllegalArgumentException("candidatePlan must not be null");
         }
         if (areaSnapshot == null) {
             throw new IllegalArgumentException("areaSnapshot must not be null");
@@ -27,7 +27,7 @@ public class ThirdPartyStationAdmissionAdapter {
                 StationType.THIRD_PARTY,
                 areaSnapshot.activeCount(),
                 areaSnapshot.waitingCount());
-        boolean admissionOpen = candidateVisit.isEmpty() || capacity.canAccept(stationSnapshot);
+        boolean admissionOpen = candidatePlan.isEmpty() || capacity.canAccept(stationSnapshot);
 
         return new StationAdmissionSnapshot(
                 StationType.THIRD_PARTY,

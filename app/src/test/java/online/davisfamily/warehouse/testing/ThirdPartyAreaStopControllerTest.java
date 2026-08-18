@@ -23,6 +23,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.routing.InMemoryProductMasterRepository;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyArea;
@@ -51,7 +52,7 @@ class ThirdPartyAreaStopControllerTest {
         assertEquals(1f, tote.getLastSnapshot().distanceAlongSegment(), 0.0001f);
         assertEquals(1, fixture.area().snapshot().activeCount());
         assertEquals(List.of("order-1"), fixture.area().snapshot().activeVisits().stream()
-                .map(visit -> visit.orderId())
+                .map(visit -> visit.orderSheetKey().orderId())
                 .toList());
     }
 
@@ -109,7 +110,8 @@ class ThirdPartyAreaStopControllerTest {
         assertEquals(ToteMotionState.HELD, second.getInteractionMode());
         assertEquals(1, fixture.area().snapshot().activeCount());
         assertEquals(1, fixture.area().snapshot().waitingCount());
-        assertEquals(List.of("order-4"), fixture.area().snapshot().waitingOrderIds());
+        assertEquals(List.of(new OrderSheetKey("order-4", 1)),
+                fixture.area().snapshot().waitingOrderSheetKeys());
     }
 
     private Fixture fixture(ThirdPartyAreaConfig config) {
@@ -132,7 +134,7 @@ class ThirdPartyAreaStopControllerTest {
                 registry,
                 (visit, lineWork, packOrdinal) -> new PackPlan(
                         "pack-" + lineWork.lineReference() + "-" + packOrdinal,
-                        visit.orderId(),
+                        visit.orderSheetKey().orderId(),
                         dimensions()));
         ThirdPartyAreaStopController controller = new ThirdPartyAreaStopController(
                 area,

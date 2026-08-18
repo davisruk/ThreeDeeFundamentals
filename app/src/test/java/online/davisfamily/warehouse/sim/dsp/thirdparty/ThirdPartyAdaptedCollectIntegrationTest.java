@@ -17,8 +17,8 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingAreaController;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBench;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchCompletion;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchId;
-import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingCollectVisitFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisit;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
@@ -26,6 +26,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.routing.InMemoryProductMasterRepository;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
@@ -59,6 +60,8 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                 "associated-tote-1",
                 OrderType.ASSOCIATED,
                 adaptedLine(ASSOCIATED_ORDER_ID));
+        PhysicalToteId adaptedToteId = new PhysicalToteId("adapted-tote-1");
+        PhysicalToteId associatedToteId = new PhysicalToteId("associated-tote-1");
         InMemoryProductMasterRepository products = new InMemoryProductMasterRepository(List.of(
                 new ProductMasterRecord(
                         PRODUCT_ID,
@@ -67,8 +70,8 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                         Optional.of(DIMENSIONS))));
         ThirdPartyVisitFactory visitFactory = new ThirdPartyVisitFactory(products);
         MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();
-        loadPlans.putLoadPlan(new ToteLoadPlan(adaptedOrder.notionalToteId(), List.of()));
-        loadPlans.putLoadPlan(new ToteLoadPlan(associatedOrder.notionalToteId(), List.of()));
+        loadPlans.putLoadPlan(new ToteLoadPlan(adaptedToteId.value(), List.of()));
+        loadPlans.putLoadPlan(new ToteLoadPlan(associatedToteId.value(), List.of()));
 
         ThirdPartyArea thirdPartyArea = new ThirdPartyArea(new ThirdPartyAreaConfig(0, 1, 0d));
         ThirdPartyAreaController thirdPartyController = new ThirdPartyAreaController(
@@ -76,18 +79,18 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                 loadPlans,
                 new ProductMasterThirdPartyPackPlanFactory(
                         products,
-                        (visit, lineWork) -> visit.orderId()));
-        ThirdPartyVisit adaptedThirdPartyVisit = visitFactory.create(adaptedOrder).orElseThrow();
+                        (visit, lineWork) -> visit.orderSheetKey().orderId()));
+        ThirdPartyVisit adaptedThirdPartyVisit = visitFactory.create(adaptedToteId, adaptedOrder).orElseThrow();
 
         assertEquals(ThirdPartyWorkType.ADAPTED_PREPARATION,
                 adaptedThirdPartyVisit.lineWork().getFirst().workType());
-        assertTrue(visitFactory.create(associatedOrder).isEmpty());
+        assertTrue(visitFactory.planFor(associatedOrder).isEmpty());
 
         thirdPartyArea.submitVisit(adaptedThirdPartyVisit);
         thirdPartyController.update(0d);
 
         assertEquals(List.of("pack-" + LINE_REFERENCE + "-1"),
-                loadPlans.getLoadPlanFor(adaptedOrder.notionalToteId()).getPackPlans().stream()
+                loadPlans.getLoadPlanFor(adaptedToteId.value()).getPackPlans().stream()
                         .map(PackPlan::packId)
                         .toList());
 
@@ -114,7 +117,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
         assertFalse(dependencyEvaluator.findBlocks(associatedState, runtimeState.snapshot()).isEmpty());
 
         adaptingArea.submitVisit(AdaptingVisit.store(
-                adaptedOrder.notionalToteId(),
+                adaptedToteId,
                 adaptedOrder.items()));
         bench.startProcessing();
         adaptingController.applyBenchCompletion(benchId).orElseThrow();
@@ -123,14 +126,12 @@ class ThirdPartyAdaptedCollectIntegrationTest {
         assertTrue(runtimeState.snapshot().preparedLineKeys().contains(preparedLineKey));
         assertTrue(dependencyEvaluator.findBlocks(associatedState, runtimeState.snapshot()).isEmpty());
 
-        adaptingArea.submitVisit(new AdaptingCollectVisitFactory().create(
-                associatedOrder.notionalToteId(),
-                associatedOrder));
+        adaptingArea.submitVisit(new AdaptingVisitFactory().create(associatedToteId, associatedOrder));
         bench.startProcessing();
         AdaptingBenchCompletion collectCompletion = adaptingController.applyBenchCompletion(benchId).orElseThrow();
 
         assertEquals(PRODUCT_ID, collectCompletion.collectedLines().getFirst().line().productId());
-        ToteLoadPlan associatedPlan = loadPlans.getLoadPlanFor(associatedOrder.notionalToteId());
+        ToteLoadPlan associatedPlan = loadPlans.getLoadPlanFor(associatedToteId.value());
         assertEquals(List.of("pack-" + LINE_REFERENCE + "-1"),
                 associatedPlan.getPackPlans().stream().map(PackPlan::packId).toList());
         assertEquals(List.of(LINE_REFERENCE),

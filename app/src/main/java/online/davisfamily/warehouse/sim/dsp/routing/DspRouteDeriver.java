@@ -21,7 +21,7 @@ public class DspRouteDeriver {
             throw new IllegalArgumentException("order must not be null");
         }
 
-        boolean requiresThirdParty = thirdPartyVisitFactory.create(order).isPresent();
+        boolean requiresThirdParty = thirdPartyVisitFactory.planFor(order).isPresent();
         boolean requiresSortable = order.orderType() == OrderType.ADAPTED
                 || order.items().stream().anyMatch(item -> item.lineType() == DspOrderLineType.ADAPTED);
 

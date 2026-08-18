@@ -5,16 +5,17 @@ import java.util.List;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
-public class AdaptingCollectVisitFactory {
+public final class AdaptingVisitFactory {
 
-    public AdaptingVisit create(String toteId, NotionalToteOrder order) {
-        if (toteId == null || toteId.isBlank()) {
-            throw new IllegalArgumentException("toteId must not be blank");
-        }
+    public AdaptingVisitProfile profileFor(NotionalToteOrder order) {
         if (order == null) {
             throw new IllegalArgumentException("order must not be null");
+        }
+        if (order.orderType() == OrderType.ADAPTED) {
+            return AdaptingVisitProfile.store(order.items());
         }
         if (order.orderType() == OrderType.FULL_PACK) {
             throw new IllegalArgumentException("FULL_PACK orders do not collect adapted lines");
@@ -34,7 +35,10 @@ public class AdaptingCollectVisitFactory {
         if (requestedLineKeys.isEmpty()) {
             throw new IllegalArgumentException("Collecting order must contain at least one ADAPTED line");
         }
+        return AdaptingVisitProfile.collect(requestedLineKeys, pharmacyIds);
+    }
 
-        return AdaptingVisit.collect(toteId.trim(), requestedLineKeys, pharmacyIds);
+    public AdaptingVisit create(PhysicalToteId physicalToteId, NotionalToteOrder order) {
+        return new AdaptingVisit(physicalToteId, profileFor(order));
     }
 }

@@ -14,12 +14,13 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.routing.InMemoryProductMasterRepository;
 
 class ThirdPartyVisitFactoryTest {
 
     @Test
-    void shouldSelectOutstandingThirdPartyLinesForAdaptedPreparation() {
+    void shouldCreateThirdPartyPlanWithoutPhysicalTote() {
         ThirdPartyVisitFactory factory = factory(
                 product("third-party", "Y74"),
                 product("regular", null),
@@ -30,19 +31,32 @@ class ThirdPartyVisitFactoryTest {
                 line("line-2", "regular", DspOrderLineType.ADAPTED, 1, 0),
                 line("line-3", "complete", DspOrderLineType.ADAPTED, 1, 1));
 
-        ThirdPartyVisit visit = factory.create(order).orElseThrow();
+        ThirdPartyVisitPlan plan = factory.planFor(order).orElseThrow();
 
-        assertEquals("order-1", visit.orderId());
-        assertEquals("notional-1", visit.notionalToteId());
-        assertEquals(OrderType.ADAPTED, visit.orderType());
-        assertEquals(2, visit.outstandingPackCount());
+        assertEquals(order.orderSheetKey(), plan.orderSheetKey());
+        assertEquals(OrderType.ADAPTED, plan.orderType());
+        assertEquals(2, plan.outstandingPackCount());
         assertEquals(List.of(new ThirdPartyLineWork(
                 "line-1",
                 "third-party",
                 2,
                 "Y74",
-                ThirdPartyWorkType.ADAPTED_PREPARATION)), visit.lineWork());
-        assertThrows(UnsupportedOperationException.class, () -> visit.lineWork().clear());
+                ThirdPartyWorkType.ADAPTED_PREPARATION)), plan.lineWork());
+        assertThrows(UnsupportedOperationException.class, () -> plan.lineWork().clear());
+    }
+
+    @Test
+    void shouldCreateThirdPartyVisitWithExplicitPhysicalTote() {
+        ThirdPartyVisitFactory factory = factory(product("third-party", "Y74"));
+        NotionalToteOrder order = order(
+                OrderType.FULL_PACK,
+                line("line-1", "third-party", DspOrderLineType.FULL_PACK, 1, 0));
+        PhysicalToteId physicalToteId = new PhysicalToteId("physical-90864875");
+
+        ThirdPartyVisit visit = factory.create(physicalToteId, order).orElseThrow();
+
+        assertEquals(physicalToteId, visit.physicalToteId());
+        assertEquals(order.orderSheetKey(), visit.orderSheetKey());
     }
 
     @Test
@@ -50,7 +64,7 @@ class ThirdPartyVisitFactoryTest {
         ThirdPartyVisitFactory factory = factory(product("third-party", "Y74"));
 
         for (OrderType orderType : List.of(OrderType.FULL_PACK, OrderType.ASSOCIATED, OrderType.EMPTY)) {
-            ThirdPartyLineWork lineWork = factory.create(order(
+            ThirdPartyLineWork lineWork = factory.planFor(order(
                     orderType,
                     line("line-1", "third-party", DspOrderLineType.FULL_PACK, 2, 0)))
                     .orElseThrow()
@@ -72,12 +86,12 @@ class ThirdPartyVisitFactoryTest {
                 line("direct-line", "direct", DspOrderLineType.FULL_PACK, 1, 0),
                 line("adapted-line", "adapted", DspOrderLineType.ADAPTED, 1, 0));
 
-        ThirdPartyVisit visit = factory.create(mixedOrder).orElseThrow();
+        ThirdPartyVisitPlan visit = factory.planFor(mixedOrder).orElseThrow();
 
         assertEquals(List.of("direct-line"), visit.lineWork().stream()
                 .map(ThirdPartyLineWork::lineReference)
                 .toList());
-        assertTrue(factory.create(order(
+        assertTrue(factory.planFor(order(
                 OrderType.EMPTY,
                 line("adapted-line", "adapted", DspOrderLineType.ADAPTED, 1, 0))).isEmpty());
     }
@@ -86,7 +100,7 @@ class ThirdPartyVisitFactoryTest {
     void shouldReturnNoVisitWhenThirdPartyWorkIsAlreadyComplete() {
         ThirdPartyVisitFactory factory = factory(product("third-party", "Y74"));
 
-        assertTrue(factory.create(order(
+        assertTrue(factory.planFor(order(
                 OrderType.FULL_PACK,
                 line("line-1", "third-party", DspOrderLineType.FULL_PACK, 1, 1))).isEmpty());
     }
@@ -97,14 +111,14 @@ class ThirdPartyVisitFactoryTest {
 
         IllegalArgumentException manualException = assertThrows(
                 IllegalArgumentException.class,
-                () -> factory.create(order(
+                () -> factory.planFor(order(
                         OrderType.ASSOCIATED,
                         line("manual-line", "manual", DspOrderLineType.MANUAL, 1, 0))));
         assertTrue(manualException.getMessage().contains("MANUAL line manual-line"));
 
         IllegalArgumentException missingException = assertThrows(
                 IllegalArgumentException.class,
-                () -> factory.create(order(
+                () -> factory.planFor(order(
                         OrderType.FULL_PACK,
                         line("missing-line", "missing", DspOrderLineType.FULL_PACK, 1, 0))));
         assertTrue(missingException.getMessage().contains("No product master data for missing"));

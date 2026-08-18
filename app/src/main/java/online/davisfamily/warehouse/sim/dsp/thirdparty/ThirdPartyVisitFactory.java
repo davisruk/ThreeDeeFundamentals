@@ -8,6 +8,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.routing.ProductMasterRepository;
 
@@ -21,7 +22,7 @@ public class ThirdPartyVisitFactory {
         this.productMasterRepository = productMasterRepository;
     }
 
-    public Optional<ThirdPartyVisit> create(NotionalToteOrder order) {
+    public Optional<ThirdPartyVisitPlan> planFor(NotionalToteOrder order) {
         if (order == null) {
             throw new IllegalArgumentException("order must not be null");
         }
@@ -58,11 +59,19 @@ public class ThirdPartyVisitFactory {
         if (lineWork.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new ThirdPartyVisit(
-                order.orderId(),
-                order.notionalToteId(),
+        return Optional.of(new ThirdPartyVisitPlan(
+                order.orderSheetKey(),
                 order.orderType(),
                 lineWork));
+    }
+
+    public Optional<ThirdPartyVisit> create(
+            PhysicalToteId physicalToteId,
+            NotionalToteOrder order) {
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
+        }
+        return planFor(order).map(plan -> new ThirdPartyVisit(physicalToteId, plan));
     }
 
     private ThirdPartyWorkType workType(OrderType orderType, DspOrderLineType lineType) {

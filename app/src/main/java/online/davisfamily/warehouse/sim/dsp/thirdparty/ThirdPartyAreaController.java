@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.adapting.MutableToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -18,7 +19,7 @@ public class ThirdPartyAreaController {
     private final MutableToteLoadPlanRegistry toteLoadPlanRegistry;
     private final ThirdPartyPackPlanFactory packPlanFactory;
     private final Set<String> completedLineReferences = new LinkedHashSet<>();
-    private final Map<String, ThirdPartyCompletion> completionsByToteId = new LinkedHashMap<>();
+    private final Map<PhysicalToteId, ThirdPartyCompletion> completionsByToteId = new LinkedHashMap<>();
     private ThirdPartyCompletion lastCompletion;
 
     public ThirdPartyAreaController(
@@ -54,11 +55,11 @@ public class ThirdPartyAreaController {
         return Collections.unmodifiableSet(new LinkedHashSet<>(completedLineReferences));
     }
 
-    public Optional<ThirdPartyCompletion> completionForTote(String notionalToteId) {
-        if (notionalToteId == null || notionalToteId.isBlank()) {
-            throw new IllegalArgumentException("notionalToteId must not be blank");
+    public Optional<ThirdPartyCompletion> completionForTote(PhysicalToteId physicalToteId) {
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
         }
-        return Optional.ofNullable(completionsByToteId.get(notionalToteId));
+        return Optional.ofNullable(completionsByToteId.get(physicalToteId));
     }
 
     public Optional<ThirdPartyCompletion> lastCompletion() {
@@ -71,13 +72,13 @@ public class ThirdPartyAreaController {
                 .filter(lineWork -> !completedLineReferences.contains(lineWork.lineReference()))
                 .toList();
         if (newLineWork.isEmpty()) {
-            completionsByToteId.putIfAbsent(visit.notionalToteId(), completion);
+            completionsByToteId.putIfAbsent(visit.physicalToteId(), completion);
             return;
         }
 
-        ToteLoadPlan existingPlan = toteLoadPlanRegistry.getLoadPlanFor(visit.notionalToteId());
+        ToteLoadPlan existingPlan = toteLoadPlanRegistry.getLoadPlanFor(visit.physicalToteId().value());
         if (existingPlan == null) {
-            throw new IllegalStateException("Missing tote load plan for " + visit.notionalToteId());
+            throw new IllegalStateException("Missing tote load plan for " + visit.physicalToteId().value());
         }
 
         List<PackPlan> additionalPackPlans = new ArrayList<>();
@@ -92,7 +93,7 @@ public class ThirdPartyAreaController {
         for (ThirdPartyLineWork lineWork : newLineWork) {
             completedLineReferences.add(lineWork.lineReference());
         }
-        completionsByToteId.put(visit.notionalToteId(), completion);
+        completionsByToteId.put(visit.physicalToteId(), completion);
         lastCompletion = completion;
     }
 }

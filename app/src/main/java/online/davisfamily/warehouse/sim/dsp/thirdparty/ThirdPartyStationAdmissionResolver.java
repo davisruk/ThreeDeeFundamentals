@@ -54,6 +54,6 @@ public class ThirdPartyStationAdmissionResolver implements StationAdmissionResol
         if (areaSnapshot == null) {
             throw new IllegalStateException("areaSnapshotSupplier returned null");
         }
-        return adapter.admissionFor(visitFactory.create(candidate.order()), areaSnapshot);
+        return adapter.admissionFor(visitFactory.planFor(candidate.order()), areaSnapshot);
     }
 }

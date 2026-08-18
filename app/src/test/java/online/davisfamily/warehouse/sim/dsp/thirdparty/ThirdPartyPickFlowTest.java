@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.routing.InMemoryProductMasterRepository;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
@@ -20,7 +22,7 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 class ThirdPartyPickFlowTest {
 
     @Test
-    void shouldAddDirectPicksToExistingPlanUsingProductMasterDimensions() {
+    void shouldKeepLogicalOrderAndPhysicalToteDistinctInStationCompletion() {
         MapBackedToteLoadPlanRegistry registry = registryWithPlan(
                 "tote-order-1",
                 List.of(pack("existing-pack", "existing-bag", dimensions(0.1f))));
@@ -37,8 +39,11 @@ class ThirdPartyPickFlowTest {
         assertEquals(dimensions(0.25f), updated.getPackPlans().get(1).dimensions());
         assertEquals(List.of("existing-bag", "order-1", "order-1"),
                 updated.getPackPlans().stream().map(PackPlan::correlationId).toList());
-        assertEquals("Y74", controller.completionForTote("tote-order-1").orElseThrow()
-                .visit().lineWork().getFirst().binLocation());
+        ThirdPartyVisit completedVisit = controller.completionForTote(new PhysicalToteId("tote-order-1"))
+                .orElseThrow().visit();
+        assertEquals("Y74", completedVisit.lineWork().getFirst().binLocation());
+        assertEquals("order-1", completedVisit.orderSheetKey().orderId());
+        assertEquals(new PhysicalToteId("tote-order-1"), completedVisit.physicalToteId());
     }
 
     @Test
@@ -66,7 +71,7 @@ class ThirdPartyPickFlowTest {
 
         assertEquals(1, registry.getLoadPlanFor("tote-order-3").getPackPlans().size());
         assertEquals(ThirdPartyWorkType.ADAPTED_PREPARATION,
-                controller.completionForTote("tote-order-3").orElseThrow()
+                controller.completionForTote(new PhysicalToteId("tote-order-3")).orElseThrow()
                         .visit().lineWork().getFirst().workType());
         assertEquals(List.of("line-order-3"), controller.completedLineReferences().stream().toList());
     }
@@ -93,7 +98,7 @@ class ThirdPartyPickFlowTest {
                 "product-1", "Third Party Product", Optional.of("Y74"), Optional.empty());
         ProductMasterThirdPartyPackPlanFactory factory = new ProductMasterThirdPartyPackPlanFactory(
                 new InMemoryProductMasterRepository(List.of(product)),
-                (visit, lineWork) -> visit.orderId());
+                (visit, lineWork) -> visit.orderSheetKey().orderId());
 
         assertThrows(
                 IllegalStateException.class,
@@ -113,7 +118,7 @@ class ThirdPartyPickFlowTest {
                 registry,
                 new ProductMasterThirdPartyPackPlanFactory(
                         new InMemoryProductMasterRepository(List.of(product)),
-                        (visit, lineWork) -> visit.orderId()));
+                        (visit, lineWork) -> visit.orderSheetKey().orderId()));
     }
 
     private ThirdPartyArea area() {
@@ -132,10 +137,11 @@ class ThirdPartyPickFlowTest {
             ThirdPartyWorkType workType,
             int quantity) {
         return new ThirdPartyVisit(
-                orderId,
-                "tote-" + orderId,
-                orderType,
-                List.of(lineWork(orderId, workType, quantity)));
+                new PhysicalToteId("tote-" + orderId),
+                new ThirdPartyVisitPlan(
+                        new OrderSheetKey(orderId, 1),
+                        orderType,
+                        List.of(lineWork(orderId, workType, quantity))));
     }
 
     private ThirdPartyLineWork lineWork(String orderId, ThirdPartyWorkType workType, int quantity) {

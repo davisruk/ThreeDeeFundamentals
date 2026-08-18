@@ -16,6 +16,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
@@ -41,7 +42,7 @@ class AdaptingCollectFlowTest {
                 emptyRuntimeState(),
                 loadPlans,
                 new DefaultCollectedPackPlanFactory(testDimensions()));
-        AdaptingCollectVisitFactory collectVisitFactory = new AdaptingCollectVisitFactory();
+        AdaptingVisitFactory visitFactory = new AdaptingVisitFactory();
 
         NotionalToteOrder collectingOrder = dispatchOrder(
                 "dispatch-1",
@@ -56,7 +57,7 @@ class AdaptingCollectFlowTest {
                         1,
                         0));
 
-        area.submitVisit(collectVisitFactory.create("collect-tote-1", collectingOrder));
+        area.submitVisit(visitFactory.create(new PhysicalToteId("collect-tote-1"), collectingOrder));
         bench.startProcessing();
         bench.tick(1d);
 
@@ -86,7 +87,7 @@ class AdaptingCollectFlowTest {
                 emptyRuntimeState(),
                 loadPlans,
                 new DefaultCollectedPackPlanFactory(testDimensions()));
-        AdaptingCollectVisitFactory collectVisitFactory = new AdaptingCollectVisitFactory();
+        AdaptingVisitFactory visitFactory = new AdaptingVisitFactory();
 
         NotionalToteOrder collectingOrder = dispatchOrder(
                 "dispatch-2",
@@ -101,7 +102,7 @@ class AdaptingCollectFlowTest {
                         1,
                         0));
 
-        area.submitVisit(collectVisitFactory.create("empty-tote-1", collectingOrder));
+        area.submitVisit(visitFactory.create(new PhysicalToteId("empty-tote-1"), collectingOrder));
         bench.startProcessing();
 
         controller.applyBenchCompletion(new AdaptingBenchId("bench-1")).orElseThrow();
@@ -115,7 +116,7 @@ class AdaptingCollectFlowTest {
 
     @Test
     void shouldRejectFullPackCollectVisitByContract() {
-        AdaptingCollectVisitFactory collectVisitFactory = new AdaptingCollectVisitFactory();
+        AdaptingVisitFactory visitFactory = new AdaptingVisitFactory();
         NotionalToteOrder fullPackOrder = dispatchOrder(
                 "dispatch-3",
                 OrderType.FULL_PACK,
@@ -131,7 +132,7 @@ class AdaptingCollectFlowTest {
 
         IllegalArgumentException ex = assertThrows(
                 IllegalArgumentException.class,
-                () -> collectVisitFactory.create("collect-tote-3", fullPackOrder));
+                () -> visitFactory.create(new PhysicalToteId("collect-tote-3"), fullPackOrder));
         assertTrue(ex.getMessage().contains("FULL_PACK"));
     }
 

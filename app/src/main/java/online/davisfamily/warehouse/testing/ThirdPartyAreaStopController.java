@@ -13,6 +13,7 @@ import online.davisfamily.threedee.behaviour.routing.transfer.RouteFollowerSnaps
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationController;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyArea;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaController;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaSnapshot;
@@ -60,14 +61,11 @@ public class ThirdPartyAreaStopController implements SimulationController {
         if (order == null) {
             throw new IllegalArgumentException("order must not be null");
         }
-        if (!tote.getId().equals(order.notionalToteId())) {
-            throw new IllegalArgumentException("tote id must match order notionalToteId");
-        }
         if (completedToteIds.contains(tote.getId()) || journeysByToteId.containsKey(tote.getId())) {
             return true;
         }
 
-        ThirdPartyVisit visit = visitFactory.create(order).orElse(null);
+        ThirdPartyVisit visit = visitFactory.create(new PhysicalToteId(tote.getId()), order).orElse(null);
         if (visit == null) {
             return true;
         }
@@ -86,7 +84,8 @@ public class ThirdPartyAreaStopController implements SimulationController {
         areaController.update(dtSeconds);
 
         for (Journey journey : new ArrayList<>(journeysByToteId.values())) {
-            if (journey.submitted && areaController.completionForTote(journey.tote.getId()).isPresent()) {
+            if (journey.submitted
+                    && areaController.completionForTote(new PhysicalToteId(journey.tote.getId())).isPresent()) {
                 release(journey);
                 continue;
             }

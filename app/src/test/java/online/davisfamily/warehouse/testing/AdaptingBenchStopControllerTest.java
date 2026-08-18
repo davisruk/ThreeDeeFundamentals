@@ -30,6 +30,7 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStorageMap;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisit;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
@@ -45,7 +46,9 @@ class AdaptingBenchStopControllerTest {
         benchLane.connectTo(completion);
         Tote tote = createTote("tote-a", benchLane, 0f, 4.0d);
         AdaptingBenchId benchId = new AdaptingBenchId("bench-1");
-        AdaptingVisit visit = AdaptingVisit.store("tote-a", List.of(adaptedLine("line-1", "collect-1", "0000310")));
+        AdaptingVisit visit = AdaptingVisit.store(
+                new PhysicalToteId("tote-a"),
+                List.of(adaptedLine("line-1", "collect-1", "0000310")));
         AdaptedLineStore store = new AdaptedLineStore();
         AdaptingArea area = area(new AdaptingBench("bench-1", store, 2d), storageMap("0000310", "bench-1"));
         area.submitVisit(visit);
@@ -84,7 +87,9 @@ class AdaptingBenchStopControllerTest {
         benchLane.connectTo(completion);
         Tote tote = createTote("tote-b", benchLane, 0f, 4.0d);
         AdaptingBenchId bench2 = new AdaptingBenchId("bench-2");
-        AdaptingVisit visit = AdaptingVisit.store("tote-b", List.of(adaptedLine("line-2", "collect-2", "0000311")));
+        AdaptingVisit visit = AdaptingVisit.store(
+                new PhysicalToteId("tote-b"),
+                List.of(adaptedLine("line-2", "collect-2", "0000311")));
         AdaptedLineStore store = new AdaptedLineStore();
         AdaptingArea area = area(
                 List.of(new AdaptingBench("bench-1", store, 2d), new AdaptingBench("bench-2", store, 2d)),
@@ -128,7 +133,7 @@ class AdaptingBenchStopControllerTest {
         Tote tote = createTote("tote-store", benchLane, 0f, 4.0d);
         AdaptingBenchId benchId = new AdaptingBenchId("bench-1");
         DspOrderItem line = adaptedLine("line-3", "collect-3", "0000310");
-        AdaptingVisit visit = AdaptingVisit.store("tote-store", List.of(line));
+        AdaptingVisit visit = AdaptingVisit.store(new PhysicalToteId("tote-store"), List.of(line));
         AdaptedLineStore store = new AdaptedLineStore();
         AdaptingArea area = area(new AdaptingBench("bench-1", store, 0d), storageMap("0000310", "bench-1"));
         DspSchedulerRuntimeState runtimeState = emptyRuntimeState();
@@ -173,7 +178,7 @@ class AdaptingBenchStopControllerTest {
         AdaptedLineStore store = new AdaptedLineStore();
         store.stage(line);
         AdaptingVisit visit = AdaptingVisit.collect(
-                "tote-collect",
+                new PhysicalToteId("tote-collect"),
                 List.of(PreparedLineKey.forPreparedLine(line)),
                 List.of("0000310"));
         AdaptingArea area = area(new AdaptingBench("bench-1", store, 0d), storageMap("0000310", "bench-1"));

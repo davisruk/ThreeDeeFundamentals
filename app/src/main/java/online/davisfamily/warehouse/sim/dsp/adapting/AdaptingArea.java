@@ -61,12 +61,12 @@ public class AdaptingArea {
         }
     }
 
-    public AdaptingBenchSelection selectBenchFor(AdaptingVisit visit) {
-        if (visit == null) {
-            throw new IllegalArgumentException("visit must not be null");
+    public AdaptingBenchSelection selectBenchFor(AdaptingVisitProfile profile) {
+        if (profile == null) {
+            throw new IllegalArgumentException("profile must not be null");
         }
 
-        for (AdaptingBenchId benchId : preferredBenchOrderFor(visit)) {
+        for (AdaptingBenchId benchId : preferredBenchOrderFor(profile)) {
             BenchSlot slot = benchSlots.get(benchId);
             if (slot.canAcceptVisit()) {
                 return AdaptingBenchSelection.accepted(benchId);
@@ -76,9 +76,9 @@ public class AdaptingArea {
         return AdaptingBenchSelection.blocked("No adapting bench has queue or processing capacity");
     }
 
-    public AdaptingAreaAdmissionSnapshot admissionSnapshotFor(AdaptingVisit visit) {
-        if (visit == null) {
-            throw new IllegalArgumentException("visit must not be null");
+    public AdaptingAreaAdmissionSnapshot admissionSnapshotFor(AdaptingVisitProfile profile) {
+        if (profile == null) {
+            throw new IllegalArgumentException("profile must not be null");
         }
 
         List<AdaptingBenchAdmissionSnapshot> admissions = new ArrayList<>();
@@ -92,7 +92,7 @@ public class AdaptingArea {
                     open,
                     open ? "" : "Bench queue and processing slot are full"));
         }
-        return new AdaptingAreaAdmissionSnapshot(admissions, selectBenchFor(visit));
+        return new AdaptingAreaAdmissionSnapshot(admissions, selectBenchFor(profile));
     }
 
     public AdaptingBenchSelection submitVisit(AdaptingVisit visit) {
@@ -100,7 +100,7 @@ public class AdaptingArea {
             throw new IllegalArgumentException("visit must not be null");
         }
 
-        AdaptingBenchSelection selection = selectBenchFor(visit);
+        AdaptingBenchSelection selection = selectBenchFor(visit.profile());
         if (!selection.accepted()) {
             return selection;
         }
@@ -109,7 +109,7 @@ public class AdaptingArea {
         if (slot.bench.canAcceptVisit() && slot.pendingVisits.isEmpty()) {
             slot.bench.acceptVisit(visit);
         } else {
-            slot.queue.enqueue(visit.toteId());
+            slot.queue.enqueue(visit.physicalToteId().value());
             slot.pendingVisits.addLast(visit);
         }
         return selection;
@@ -145,9 +145,9 @@ public class AdaptingArea {
         return new StationSnapshot(StationType.ADAPTING, inProgress, queued);
     }
 
-    private List<AdaptingBenchId> preferredBenchOrderFor(AdaptingVisit visit) {
+    private List<AdaptingBenchId> preferredBenchOrderFor(AdaptingVisitProfile profile) {
         Map<AdaptingBenchId, Integer> scores = new LinkedHashMap<>();
-        for (String pharmacyId : visit.pharmacyIds()) {
+        for (String pharmacyId : profile.pharmacyIds()) {
             AdaptingBenchId preferredBench = storageMap.preferredBenchFor(pharmacyId);
             scores.merge(preferredBench, 1, Integer::sum);
         }

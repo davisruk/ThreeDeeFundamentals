@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 class AdaptingAreaAdmissionTest {
@@ -22,7 +23,8 @@ class AdaptingAreaAdmissionTest {
                 new AdaptingBench("bench-2", sharedStore, 1d),
                 new AdaptingBench("bench-1", sharedStore, 1d)), 1, storageMap);
 
-        AdaptingBenchSelection selection = area.selectBenchFor(storeVisit("tote-1", "line-1", "target-1"));
+        AdaptingBenchSelection selection = area.selectBenchFor(
+                storeVisit("tote-1", "line-1", "target-1").profile());
 
         assertTrue(selection.accepted());
         assertEquals(new AdaptingBenchId("bench-1"), selection.benchId());
@@ -42,7 +44,8 @@ class AdaptingAreaAdmissionTest {
         assertTrue(queuedSelection.accepted());
         assertEquals(benchId, queuedSelection.benchId());
         assertTrue(area.peekQueuedVisit(benchId).isPresent());
-        assertEquals("tote-2", area.peekQueuedVisit(benchId).orElseThrow().toteId());
+        assertEquals(new PhysicalToteId("tote-2"),
+                area.peekQueuedVisit(benchId).orElseThrow().physicalToteId());
 
         area.bench(benchId).tick(5d);
         area.bench(benchId).consumeCompletion().orElseThrow();
@@ -66,7 +69,8 @@ class AdaptingAreaAdmissionTest {
         bench1.startProcessing();
         area.submitVisit(storeVisit("tote-2", "line-2", "target-2"));
 
-        AdaptingBenchSelection selection = area.selectBenchFor(storeVisit("tote-3", "line-3", "target-3"));
+        AdaptingBenchSelection selection = area.selectBenchFor(
+                storeVisit("tote-3", "line-3", "target-3").profile());
 
         assertTrue(selection.accepted());
         assertEquals(new AdaptingBenchId("bench-2"), selection.benchId());
@@ -82,7 +86,8 @@ class AdaptingAreaAdmissionTest {
         area.submitVisit(storeVisit("tote-1", "line-1", "target-1"));
         area.submitVisit(storeVisit("tote-2", "line-2", "target-2"));
 
-        AdaptingAreaAdmissionSnapshot snapshot = area.admissionSnapshotFor(storeVisit("tote-3", "line-3", "target-3"));
+        AdaptingAreaAdmissionSnapshot snapshot = area.admissionSnapshotFor(
+                storeVisit("tote-3", "line-3", "target-3").profile());
 
         assertFalse(snapshot.admissionOpen());
         assertFalse(snapshot.selection().accepted());
@@ -100,7 +105,8 @@ class AdaptingAreaAdmissionTest {
         bench1.startProcessing();
         area.submitVisit(storeVisit("tote-2", "line-2", "target-2"));
 
-        AdaptingAreaAdmissionSnapshot snapshot = area.admissionSnapshotFor(storeVisit("tote-3", "line-3", "target-3"));
+        AdaptingAreaAdmissionSnapshot snapshot = area.admissionSnapshotFor(
+                storeVisit("tote-3", "line-3", "target-3").profile());
         AdaptingBenchAdmissionSnapshot bench1Snapshot = snapshot.benchAdmissions().stream()
                 .filter(admission -> admission.benchId().equals(new AdaptingBenchId("bench-1")))
                 .findFirst()
@@ -121,8 +127,7 @@ class AdaptingAreaAdmissionTest {
                 new AdaptingBench("bench-1", sharedStore, 1d),
                 new AdaptingBench("bench-2", sharedStore, 1d)), 1, storageMap);
 
-        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisit.collect(
-                "collect-1",
+        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisitProfile.collect(
                 List.of(new PreparedLineKey("dispatch-1", "line-1")),
                 List.of("0000388")));
 
@@ -140,7 +145,7 @@ class AdaptingAreaAdmissionTest {
                 new AdaptingBench("bench-1", sharedStore, 1d),
                 new AdaptingBench("bench-2", sharedStore, 1d)), 1, storageMap);
 
-        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisit.store("store-1", List.of(
+        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisitProfile.store(List.of(
                 adaptedLine("line-1", "target-1", "0000388"),
                 adaptedLine("line-2", "target-2", "0000388"),
                 adaptedLine("line-3", "target-3", "0000310"))));
@@ -150,7 +155,9 @@ class AdaptingAreaAdmissionTest {
     }
 
     private static AdaptingVisit storeVisit(String toteId, String lineId, String targetOrderId) {
-        return AdaptingVisit.store(toteId, List.of(adaptedLine(lineId, targetOrderId, "0000310")));
+        return AdaptingVisit.store(
+                new PhysicalToteId(toteId),
+                List.of(adaptedLine(lineId, targetOrderId, "0000310")));
     }
 
     private static DspOrderItem adaptedLine(String lineId, String targetOrderId, String pharmacyId) {

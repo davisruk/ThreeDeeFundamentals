@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 class AdaptingBenchTest {
@@ -24,7 +25,7 @@ class AdaptingBenchTest {
         DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
         DspOrderItem line2 = adaptedLine("line-2", "target-2", "0000388");
 
-        bench.acceptVisit(AdaptingVisit.store("tote-store", List.of(line1, line2)));
+        bench.acceptVisit(AdaptingVisit.store(new PhysicalToteId("tote-store"), List.of(line1, line2)));
         assertEquals(AdaptingBenchState.QUEUED, bench.state());
         assertEquals("tote-store", bench.snapshot().activeToteId());
         assertEquals(AdaptingVisitType.STORE, bench.snapshot().activeVisitType());
@@ -61,7 +62,7 @@ class AdaptingBenchTest {
         store.stage(line2);
 
         bench.acceptVisit(AdaptingVisit.collect(
-                "tote-collect",
+                new PhysicalToteId("tote-collect"),
                 List.of(PreparedLineKey.forPreparedLine(line2), PreparedLineKey.forPreparedLine(line1)),
                 List.of("0000388", "0000310")));
         bench.startProcessing();
@@ -88,7 +89,7 @@ class AdaptingBenchTest {
         store.stage(line1);
 
         bench.acceptVisit(AdaptingVisit.collect(
-                "tote-collect",
+                new PhysicalToteId("tote-collect"),
                 List.of(PreparedLineKey.forPreparedLine(line1), PreparedLineKey.forPreparedLine(missingLine)),
                 List.of("0000310", "0000388")));
         bench.startProcessing();
@@ -105,11 +106,15 @@ class AdaptingBenchTest {
     void shouldRejectVisitWhileBenchIsNotIdle() {
         AdaptedLineStore store = new AdaptedLineStore();
         AdaptingBench bench = new AdaptingBench("bench-1", store, 1d);
-        bench.acceptVisit(AdaptingVisit.store("tote-store", List.of(adaptedLine("line-1", "target-1", "0000310"))));
+        bench.acceptVisit(AdaptingVisit.store(
+                new PhysicalToteId("tote-store"),
+                List.of(adaptedLine("line-1", "target-1", "0000310"))));
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
-                () -> bench.acceptVisit(AdaptingVisit.store("tote-store-2", List.of(adaptedLine("line-2", "target-2", "0000388")))));
+                () -> bench.acceptVisit(AdaptingVisit.store(
+                        new PhysicalToteId("tote-store-2"),
+                        List.of(adaptedLine("line-2", "target-2", "0000388")))));
 
         assertTrue(exception.getMessage().contains("Bench is not idle"));
     }

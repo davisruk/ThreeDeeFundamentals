@@ -2,34 +2,36 @@ package online.davisfamily.warehouse.sim.dsp.thirdparty;
 
 import java.util.List;
 
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
 public record ThirdPartyVisit(
-        String orderId,
-        String notionalToteId,
-        OrderType orderType,
-        List<ThirdPartyLineWork> lineWork) {
+        PhysicalToteId physicalToteId,
+        ThirdPartyVisitPlan plan) {
 
     public ThirdPartyVisit {
-        orderId = requireValue(orderId, "orderId");
-        notionalToteId = requireValue(notionalToteId, "notionalToteId");
-        if (orderType == null) {
-            throw new IllegalArgumentException("orderType must not be null");
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
         }
-        if (lineWork == null || lineWork.isEmpty()) {
-            throw new IllegalArgumentException("lineWork must not be empty");
+        if (plan == null) {
+            throw new IllegalArgumentException("plan must not be null");
         }
-        lineWork = List.copyOf(lineWork);
+    }
+
+    public OrderSheetKey orderSheetKey() {
+        return plan.orderSheetKey();
+    }
+
+    public OrderType orderType() {
+        return plan.orderType();
+    }
+
+    public List<ThirdPartyLineWork> lineWork() {
+        return plan.lineWork();
     }
 
     public int outstandingPackCount() {
-        return lineWork.stream().mapToInt(ThirdPartyLineWork::outstandingQuantity).sum();
-    }
-
-    private static String requireValue(String value, String fieldName) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " must not be blank");
-        }
-        return value.trim();
+        return plan.outstandingPackCount();
     }
 }

@@ -2,35 +2,38 @@ package online.davisfamily.warehouse.sim.dsp.thirdparty;
 
 import java.util.List;
 
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+
 public record ThirdPartyAreaSnapshot(
         ThirdPartyAreaConfig config,
-        List<String> waitingOrderIds,
-        List<String> waitingNotionalToteIds,
+        List<OrderSheetKey> waitingOrderSheetKeys,
+        List<PhysicalToteId> waitingPhysicalToteIds,
         List<ThirdPartyVisitState> activeVisits) {
 
     public ThirdPartyAreaSnapshot {
         if (config == null) {
             throw new IllegalArgumentException("config must not be null");
         }
-        if (waitingOrderIds == null) {
-            throw new IllegalArgumentException("waitingOrderIds must not be null");
+        if (waitingOrderSheetKeys == null) {
+            throw new IllegalArgumentException("waitingOrderSheetKeys must not be null");
         }
-        if (waitingNotionalToteIds == null) {
-            throw new IllegalArgumentException("waitingNotionalToteIds must not be null");
+        if (waitingPhysicalToteIds == null) {
+            throw new IllegalArgumentException("waitingPhysicalToteIds must not be null");
         }
         if (activeVisits == null) {
             throw new IllegalArgumentException("activeVisits must not be null");
         }
-        waitingOrderIds = List.copyOf(waitingOrderIds);
-        waitingNotionalToteIds = List.copyOf(waitingNotionalToteIds);
+        waitingOrderSheetKeys = List.copyOf(waitingOrderSheetKeys);
+        waitingPhysicalToteIds = List.copyOf(waitingPhysicalToteIds);
         activeVisits = List.copyOf(activeVisits);
-        if (waitingOrderIds.size() != waitingNotionalToteIds.size()) {
-            throw new IllegalArgumentException("waiting order and tote ids must have equal sizes");
+        if (waitingOrderSheetKeys.size() != waitingPhysicalToteIds.size()) {
+            throw new IllegalArgumentException("waiting order sheets and physical tote ids must have equal sizes");
         }
     }
 
     public int waitingCount() {
-        return waitingOrderIds.size();
+        return waitingOrderSheetKeys.size();
     }
 
     public int activeCount() {

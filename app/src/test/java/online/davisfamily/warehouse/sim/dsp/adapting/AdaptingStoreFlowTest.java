@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import online.davisfamily.warehouse.sim.dsp.model.DependencyType;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
@@ -50,7 +51,7 @@ class AdaptingStoreFlowTest {
         assertEquals(1, beforeProcessing.size());
         assertEquals(DependencyType.ADAPTED_COMPLETION, beforeProcessing.getFirst().type());
 
-        area.submitVisit(AdaptingVisit.store("source-tote-1", List.of(preparedLine)));
+        area.submitVisit(AdaptingVisit.store(new PhysicalToteId("source-tote-1"), List.of(preparedLine)));
         bench.startProcessing();
 
         assertFalse(runtimeState.snapshot().preparedLineKeys().contains(PreparedLineKey.forPreparedLine(preparedLine)));

@@ -117,7 +117,7 @@ public class AdaptingBench {
         return new AdaptingBenchSnapshot(
                 id,
                 state,
-                activeVisit != null ? activeVisit.toteId() : "",
+                activeVisit != null ? activeVisit.physicalToteId().value() : "",
                 activeVisit != null ? activeVisit.visitType() : null,
                 remainingProcessingSeconds,
                 blockedReason);

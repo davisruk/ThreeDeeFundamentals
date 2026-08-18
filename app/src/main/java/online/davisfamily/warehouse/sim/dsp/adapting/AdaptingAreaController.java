@@ -68,12 +68,13 @@ public class AdaptingAreaController {
             throw new IllegalStateException("Collect completion requires a toteLoadPlanRegistry");
         }
 
-        ToteLoadPlan existingLoadPlan = toteLoadPlanRegistry.getLoadPlanFor(completion.visit().toteId());
+        String physicalToteId = completion.visit().physicalToteId().value();
+        ToteLoadPlan existingLoadPlan = toteLoadPlanRegistry.getLoadPlanFor(physicalToteId);
         java.util.List<PackPlan> combinedPackPlans = new java.util.ArrayList<>();
         if (existingLoadPlan != null) {
             combinedPackPlans.addAll(existingLoadPlan.getPackPlans());
         }
         combinedPackPlans.addAll(collectedPackPlanFactory.createPackPlans(completion.collectedLines()));
-        toteLoadPlanRegistry.putLoadPlan(new ToteLoadPlan(completion.visit().toteId(), combinedPackPlans));
+        toteLoadPlanRegistry.putLoadPlan(new ToteLoadPlan(physicalToteId, combinedPackPlans));
     }
 }

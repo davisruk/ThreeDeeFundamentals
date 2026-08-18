@@ -17,6 +17,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.routing.InMemoryProductMasterRepository;
@@ -40,7 +41,9 @@ class ThirdPartySchedulerIntegrationTest {
     @Test
     void shouldBlockQualifyingOrderWhenThirdPartyAreaIsFullWithoutMutatingArea() {
         Fixture fixture = fixture(new ThirdPartyAreaConfig(0, 1, 10d));
-        fixture.area().submitVisit(fixture.visitFactory().create(fullPackOrder("active-order")).orElseThrow());
+        fixture.area().submitVisit(fixture.visitFactory().create(
+                new PhysicalToteId("physical-active-order"),
+                fullPackOrder("active-order")).orElseThrow());
         ThirdPartyAreaSnapshot before = fixture.area().snapshot();
         DspSchedulerOrderState candidate = state(
                 fullPackOrder("candidate-order"),
@@ -57,7 +60,9 @@ class ThirdPartySchedulerIntegrationTest {
     @Test
     void shouldLeaveNonThirdPartyOrderUnaffectedByFullArea() {
         Fixture fixture = fixture(new ThirdPartyAreaConfig(0, 1, 10d));
-        fixture.area().submitVisit(fixture.visitFactory().create(fullPackOrder("active-order")).orElseThrow());
+        fixture.area().submitVisit(fixture.visitFactory().create(
+                new PhysicalToteId("physical-active-order"),
+                fullPackOrder("active-order")).orElseThrow());
         DspSchedulerOrderState candidate = state(
                 nonThirdPartyOrder("regular-order"),
                 route(false, false, true));

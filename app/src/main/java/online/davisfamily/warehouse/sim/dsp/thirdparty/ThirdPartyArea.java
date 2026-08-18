@@ -72,8 +72,8 @@ public class ThirdPartyArea {
     public ThirdPartyAreaSnapshot snapshot() {
         return new ThirdPartyAreaSnapshot(
                 config,
-                waitingVisits.stream().map(ThirdPartyVisit::orderId).toList(),
-                waitingVisits.stream().map(ThirdPartyVisit::notionalToteId).toList(),
+                waitingVisits.stream().map(ThirdPartyVisit::orderSheetKey).toList(),
+                waitingVisits.stream().map(ThirdPartyVisit::physicalToteId).toList(),
                 activeVisits.stream().map(ActiveVisit::snapshot).toList());
     }
 
@@ -98,8 +98,8 @@ public class ThirdPartyArea {
 
         private ThirdPartyVisitState snapshot() {
             return new ThirdPartyVisitState(
-                    visit.orderId(),
-                    visit.notionalToteId(),
+                    visit.orderSheetKey(),
+                    visit.physicalToteId(),
                     visit.lineWork().size(),
                     visit.outstandingPackCount(),
                     remainingProcessingSeconds);
