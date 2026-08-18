@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: deeper scheduler behavior work is paused while Phase 1 station implementations are introduced. See `docs/machines/phase-1-stations-roadmap.md`. Generic transfer-machine support, adapting station Phase 1, and simulation reset are complete and merged. Third Party Area Phase 1 is implemented and verified, pending branch closure and merge; Exception Station Phase 1 is next.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Lifecycle analysis established that inbound FULL_PACK and ASSOCIATED physical totes are never outbound dispatch totes. The active programme therefore corrects logical/physical identity and lifecycle before Exception Station work and deeper scheduler policy.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -295,7 +295,7 @@ Explicit non-goals:
 
 ### `feature/third-party-station-phase-1`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: complete, verified, and merged.
 
 Detailed documents:
 
@@ -319,6 +319,32 @@ Implemented outcome:
 - Direct picks update fulfilment tote plans exactly once; ADAPTED preparation is available to the Adapting store/collect lifecycle.
 - The `third-party` debug scene, inspection, full tests, visual checks, and `ALT+R` reset verification are green.
 - Missing-master handling, short picks, incomplete outcomes, NS labels, and Exception routing remain assigned to the Exception Station branch.
+
+### `feature/dsp-logical-physical-identity`
+
+Status: plan ready; implementation is the current branch.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-logical-physical-identity-plan.md`
+
+Purpose:
+
+- Add typed logical `OrderSheetKey` and physical `PhysicalToteId` identities.
+- Replace the unused logical-valued `ToteType` with an explicitly physical tote role.
+- Add physical tote lifecycle states and validated transitions.
+- Add simulation-thread-owned assignment history with logical/physical cardinality enforcement.
+- Publish immutable lifecycle snapshots for later scheduler and inspection integration.
+
+Explicit non-goals:
+
+- no 12N `transportContainer` mapping;
+- no station, tote-load-plan, scheduler-command, machine, or renderable migration;
+- no bag planning, outbound tote allocation, generated sheets, or Exception behavior.
+
+Follow-on branch:
+
+- `feature/dsp-inbound-tote-lifecycle`
 
 ## Current Assumptions
 
