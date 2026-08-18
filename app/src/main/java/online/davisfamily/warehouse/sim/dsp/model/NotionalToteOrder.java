@@ -35,4 +35,8 @@ public record NotionalToteOrder(
         }
         items = List.copyOf(items);
     }
+
+    public OrderSheetKey orderSheetKey() {
+        return new OrderSheetKey(orderId, sheetNumber);
+    }
 }
