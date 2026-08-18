@@ -5,6 +5,8 @@ public record DspOrderItem(
         String productId,
         int quantity,
         String pharmacyId,
+        String patientId,
+        String prescriptionId,
         DspOrderLineType lineType,
         String referenceOrderId,
         int referenceSheetNumber,
@@ -14,6 +16,8 @@ public record DspOrderItem(
         lineReference = requireTrimmedValue(lineReference, "lineReference");
         productId = requireTrimmedValue(productId, "productId");
         pharmacyId = requireTrimmedValue(pharmacyId, "pharmacyId");
+        patientId = requireTrimmedValue(patientId, "patientId");
+        prescriptionId = requireTrimmedValue(prescriptionId, "prescriptionId");
         referenceOrderId = requireTrimmedValue(referenceOrderId, "referenceOrderId");
         if (quantity <= 0) {
             throw new IllegalArgumentException("quantity must be positive");
@@ -29,6 +33,29 @@ public record DspOrderItem(
         }
     }
 
+    @Deprecated
+    public DspOrderItem(
+            String lineReference,
+            String productId,
+            int quantity,
+            String pharmacyId,
+            DspOrderLineType lineType,
+            String referenceOrderId,
+            int referenceSheetNumber,
+            int numberOfPacksPicked) {
+        this(
+                lineReference,
+                productId,
+                quantity,
+                pharmacyId,
+                fixtureIdentity("patient", lineReference),
+                fixtureIdentity("prescription", lineReference),
+                lineType,
+                referenceOrderId,
+                referenceSheetNumber,
+                numberOfPacksPicked);
+    }
+
     public DspOrderItem(String lineReference, String productId, int quantity) {
         this(
                 lineReference,
@@ -39,6 +66,10 @@ public record DspOrderItem(
                 lineReference,
                 1,
                 0);
+    }
+
+    private static String fixtureIdentity(String identityType, String lineReference) {
+        return "fixture-" + identityType + "-" + requireTrimmedValue(lineReference, "lineReference");
     }
 
     private static String requireTrimmedValue(String value, String fieldName) {

@@ -47,12 +47,14 @@ class DspOrderModelTest {
     }
 
     @Test
-    void shouldStoreTrimmedLineLevelMetadata() {
+    void shouldTrimPatientAndPrescriptionIdentity() {
         DspOrderItem item = new DspOrderItem(
                 " item-1 ",
                 " product-1 ",
                 2,
                 " 0006515 ",
+                " patient-1 ",
+                " prescription-1 ",
                 DspOrderLineType.ADAPTED,
                 " TOTE0007170299 ",
                 3,
@@ -61,10 +63,24 @@ class DspOrderModelTest {
         assertEquals("item-1", item.lineReference());
         assertEquals("product-1", item.productId());
         assertEquals("0006515", item.pharmacyId());
+        assertEquals("patient-1", item.patientId());
+        assertEquals("prescription-1", item.prescriptionId());
         assertEquals(DspOrderLineType.ADAPTED, item.lineType());
         assertEquals("TOTE0007170299", item.referenceOrderId());
         assertEquals(3, item.referenceSheetNumber());
         assertEquals(1, item.numberOfPacksPicked());
+    }
+
+    @Test
+    void shouldRejectMissingPatientOrPrescriptionIdentity() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new DspOrderItem(
+                        "item-1", "product-1", 1, "0006515", null, "prescription-1",
+                        DspOrderLineType.FULL_PACK, "order-1", 1, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DspOrderItem(
+                        "item-1", "product-1", 1, "0006515", "patient-1", " ",
+                        DspOrderLineType.FULL_PACK, "order-1", 1, 0));
     }
 
     @Test
@@ -89,6 +105,8 @@ class DspOrderModelTest {
         assertEquals("product-1", item.productId());
         assertEquals(1, item.quantity());
         assertEquals("UNKNOWN", item.pharmacyId());
+        assertEquals("fixture-patient-item-1", item.patientId());
+        assertEquals("fixture-prescription-item-1", item.prescriptionId());
         assertEquals(DspOrderLineType.FULL_PACK, item.lineType());
         assertEquals("item-1", item.referenceOrderId());
         assertEquals(1, item.referenceSheetNumber());

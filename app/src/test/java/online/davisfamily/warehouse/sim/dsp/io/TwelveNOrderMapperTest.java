@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -20,6 +23,35 @@ class TwelveNOrderMapperTest {
     private final TwelveNPreparedLineMapper preparedLineMapper = new TwelveNPreparedLineMapper(messageKindMapper);
 
     @Test
+    void shouldRetainPatientAndPrescriptionIdentityFromTwelveN() throws IOException {
+        assertFirstMappedIdentity(
+                "12N_Adapted_Order_Tote_Type.txt", "NP2651011106", "20004390000486210", false);
+        assertFirstMappedIdentity(
+                "12N_Associated_Order_Tote_Type.txt", "17496941", "20019020000411897", false);
+        assertFirstMappedIdentity(
+                "12N_Full_Pack_Order_Tote_Type.txt", "NP253177242", "20018720000140736", false);
+        assertFirstMappedIdentity(
+                "12N_Manual_Order_Tote_Type.txt", "NP2083436219", "20021300000211641", true);
+    }
+
+    @Test
+    void shouldKeepDifferentPrescriptionsDistinctWithinOneLogicalSheet() {
+        List<DspOrderItem> items = orderMapper.map(adaptedMessage(), 0L).order().items();
+
+        assertEquals(List.of("prescription-1", "prescription-2"),
+                items.stream().map(DspOrderItem::prescriptionId).toList());
+    }
+
+    @Test
+    void shouldRejectTwelveNWithoutPatientOrPrescriptionIdentity() {
+        TwelveNMessageJson missingPatient = message(singleLineMessage(null, "prescription-1"));
+        TwelveNMessageJson missingPrescription = message(singleLineMessage("patient-1", null));
+
+        assertThrows(IllegalArgumentException.class, () -> orderMapper.map(missingPatient, 0L));
+        assertThrows(IllegalArgumentException.class, () -> orderMapper.map(missingPrescription, 0L));
+    }
+
+    @Test
     void shouldMapFullPackLogicalOrderAndPhysicalTransportContainer() {
         MappedTwelveNOrder mappedOrder = orderMapper.map(message("""
                 {
@@ -34,6 +66,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243548241",
                         "orderLineType":"05",
                         "pharmacyId":"0006461",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
                         "productId":"        9114",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"001",
@@ -78,6 +112,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243560310",
                         "orderLineType":"01",
                         "pharmacyId":"0006515",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
                         "productId":"        1809",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"001",
@@ -88,6 +124,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243567994",
                         "orderLineType":"05",
                         "pharmacyId":"0006515",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
                         "productId":"       19959",
                         "numberOfPacks":"0002",
                         "referenceSheetNumber":"001",
@@ -127,6 +165,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243999999",
                         "orderLineType":"05",
                         "pharmacyId":"0000310",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
                         "productId":"       36550",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"002",
@@ -176,6 +216,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243548241",
                         "orderLineType":"05",
                         "pharmacyId":"0006461",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
                         "productId":"9114",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"001",
@@ -208,6 +250,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243999999",
                         "orderLineType":"05",
                         "pharmacyId":"0000310",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
                         "productId":"36550",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"002",
@@ -239,6 +283,8 @@ class TwelveNOrderMapperTest {
                                 "orderLineNumber":"000243548241",
                                 "orderLineType":"05",
                                 "pharmacyId":"0006461",
+                                "patientId":"fixture-patient",
+                                "prescriptionId":"fixture-prescription",
                                 "productId":"9114",
                                 "numberOfPacks":"0001",
                                 "referenceSheetNumber":"001",
@@ -267,6 +313,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243560347",
                         "orderLineType":"01",
                         "pharmacyId":"0005984",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
                         "productId":"        6881",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"001",
@@ -300,6 +348,8 @@ class TwelveNOrderMapperTest {
                                 "orderLineNumber":"000243548241",
                                 "orderLineType":"05",
                                 "pharmacyId":"0006461",
+                                "patientId":"fixture-patient",
+                                "prescriptionId":"fixture-prescription",
                                 "productId":"        9114",
                                 "numberOfPacks":"0001",
                                 "referenceSheetNumber":"001",
@@ -330,6 +380,8 @@ class TwelveNOrderMapperTest {
                                 "orderLineNumber":"000243548241",
                                 "orderLineType":"05",
                                 "pharmacyId":"0006461",
+                                "patientId":"fixture-patient",
+                                "prescriptionId":"fixture-prescription",
                                 "productId":"        9114",
                                 "numberOfPacks":"0001",
                                 "referenceSheetNumber":"001",
@@ -361,6 +413,8 @@ class TwelveNOrderMapperTest {
                                 "orderLineNumber":"000243548241",
                                 "orderLineType":"07",
                                 "pharmacyId":"0006461",
+                                "patientId":"fixture-patient",
+                                "prescriptionId":"fixture-prescription",
                                 "productId":"        9114",
                                 "numberOfPacks":"0001",
                                 "referenceSheetNumber":"001",
@@ -379,6 +433,58 @@ class TwelveNOrderMapperTest {
         return JsonLoaderSupport.readString(json, TwelveNMessageJson.class);
     }
 
+    private void assertFirstMappedIdentity(
+            String fileName,
+            String expectedPatientId,
+            String expectedPrescriptionId,
+            boolean preparationOnly) throws IOException {
+        TwelveNMessageJson message = message(Files.readString(
+                messageExamplePath(fileName)));
+        List<DspOrderItem> items = preparationOnly
+                ? preparedLineMapper.toPreparedLines(message)
+                : orderMapper.map(message, 0L).order().items();
+
+        assertEquals(expectedPatientId, items.getFirst().patientId());
+        assertEquals(expectedPrescriptionId, items.getFirst().prescriptionId());
+    }
+
+    private static Path messageExamplePath(String fileName) {
+        Path repositoryRelativePath = Path.of("docs", "message-examples", fileName);
+        return Files.exists(repositoryRelativePath)
+                ? repositoryRelativePath
+                : Path.of("..", "docs", "message-examples", fileName);
+    }
+
+    private static String singleLineMessage(String patientId, String prescriptionId) {
+        String patientProperty = patientId == null ? "" : "\"patientId\":\"" + patientId + "\",";
+        String prescriptionProperty = prescriptionId == null
+                ? ""
+                : "\"prescriptionId\":\"" + prescriptionId + "\",";
+        return """
+                {
+                  "header": {"orderId":"order-1","sheetNumber":"001"},
+                  "toteIdentifier": {"payload":"05"},
+                  "transportContainer": {"payload":"tote-1"},
+                  "serviceCentre": {"payload":"104"},
+                  "orderDetail": {
+                    "numberOfOrderLines": 1,
+                    "orderLines": [{
+                      "orderLineNumber":"line-1",
+                      "orderLineType":"05",
+                      "pharmacyId":"pharmacy-1",
+                      %s
+                      %s
+                      "productId":"product-1",
+                      "numberOfPacks":"0001",
+                      "referenceSheetNumber":"001",
+                      "numberOfPacksPicked":"0001",
+                      "referenceOrderId":"order-1"
+                    }]
+                  }
+                }
+                """.formatted(patientProperty, prescriptionProperty);
+    }
+
     private static TwelveNMessageJson adaptedMessage() {
         return message("""
                 {
@@ -393,6 +499,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243449262",
                         "orderLineType":"02",
                         "pharmacyId":"0000310",
+                        "patientId":"patient-1",
+                        "prescriptionId":"prescription-1",
                         "productId":"       36550",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"001",
@@ -403,6 +511,8 @@ class TwelveNOrderMapperTest {
                         "orderLineNumber":"000243450449",
                         "orderLineType":"02",
                         "pharmacyId":"0000388",
+                        "patientId":"patient-2",
+                        "prescriptionId":"prescription-2",
                         "productId":"       36550",
                         "numberOfPacks":"0001",
                         "referenceSheetNumber":"001",

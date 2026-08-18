@@ -21,6 +21,8 @@ final class TwelveNLineMappingSupport {
                     requireTrimmedValue(orderLine.productId(), "productId"),
                     parsePositiveInt(orderLine.numberOfPacks(), "numberOfPacks"),
                     requireTrimmedValue(orderLine.pharmacyId(), "pharmacyId"),
+                    requireTrimmedValue(orderLine.patientId(), "patientId"),
+                    requireTrimmedValue(orderLine.prescriptionId(), "prescriptionId"),
                     DspOrderLineType.fromCode(orderLine.orderLineType()),
                     requireTrimmedValue(orderLine.referenceOrderId(), "referenceOrderId"),
                     parsePositiveInt(orderLine.referenceSheetNumber(), "referenceSheetNumber"),
