@@ -48,7 +48,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
     private static final PackDimensions DIMENSIONS = new PackDimensions(0.18f, 0.08f, 0.05f);
 
     @Test
-    void shouldCollectAdaptedThirdPartyItemIntoAssociatedTotePlan() {
+    void shouldUpdateAdaptingAndThirdPartyPlansByPhysicalToteId() {
         DspOrderItem sourceLine = adaptedLine(ASSOCIATED_ORDER_ID);
         NotionalToteOrder adaptedOrder = order(
                 "adapted-source-1",
@@ -70,8 +70,8 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                         Optional.of(DIMENSIONS))));
         ThirdPartyVisitFactory visitFactory = new ThirdPartyVisitFactory(products);
         MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();
-        loadPlans.putLoadPlan(new ToteLoadPlan(adaptedToteId.value(), List.of()));
-        loadPlans.putLoadPlan(new ToteLoadPlan(associatedToteId.value(), List.of()));
+        loadPlans.putLoadPlan(new ToteLoadPlan(adaptedToteId, List.of()));
+        loadPlans.putLoadPlan(new ToteLoadPlan(associatedToteId, List.of()));
 
         ThirdPartyArea thirdPartyArea = new ThirdPartyArea(new ThirdPartyAreaConfig(0, 1, 0d));
         ThirdPartyAreaController thirdPartyController = new ThirdPartyAreaController(
@@ -90,7 +90,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
         thirdPartyController.update(0d);
 
         assertEquals(List.of("pack-" + LINE_REFERENCE + "-1"),
-                loadPlans.getLoadPlanFor(adaptedToteId.value()).getPackPlans().stream()
+                loadPlans.getLoadPlanFor(adaptedToteId).getPackPlans().stream()
                         .map(PackPlan::packId)
                         .toList());
 
@@ -131,7 +131,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
         AdaptingBenchCompletion collectCompletion = adaptingController.applyBenchCompletion(benchId).orElseThrow();
 
         assertEquals(PRODUCT_ID, collectCompletion.collectedLines().getFirst().line().productId());
-        ToteLoadPlan associatedPlan = loadPlans.getLoadPlanFor(associatedToteId.value());
+        ToteLoadPlan associatedPlan = loadPlans.getLoadPlanFor(associatedToteId);
         assertEquals(List.of("pack-" + LINE_REFERENCE + "-1"),
                 associatedPlan.getPackPlans().stream().map(PackPlan::packId).toList());
         assertEquals(List.of(LINE_REFERENCE),

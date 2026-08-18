@@ -76,7 +76,7 @@ public class ThirdPartyAreaController {
             return;
         }
 
-        ToteLoadPlan existingPlan = toteLoadPlanRegistry.getLoadPlanFor(visit.physicalToteId().value());
+        ToteLoadPlan existingPlan = toteLoadPlanRegistry.getLoadPlanFor(visit.physicalToteId());
         if (existingPlan == null) {
             throw new IllegalStateException("Missing tote load plan for " + visit.physicalToteId().value());
         }

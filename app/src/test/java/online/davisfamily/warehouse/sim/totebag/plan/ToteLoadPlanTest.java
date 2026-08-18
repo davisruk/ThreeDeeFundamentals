@@ -8,9 +8,30 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class ToteLoadPlanTest {
+
+    @Test
+    void shouldStoreTypedPhysicalToteIdentityInLoadPlan() {
+        PhysicalToteId physicalToteId = new PhysicalToteId("physical-tote-1");
+
+        ToteLoadPlan plan = new ToteLoadPlan(physicalToteId, List.of());
+
+        assertEquals(physicalToteId, plan.physicalToteId());
+        assertEquals("physical-tote-1", plan.getToteId());
+    }
+
+    @Test
+    void shouldPreservePhysicalIdentityWhenAddingPackPlans() {
+        PhysicalToteId physicalToteId = new PhysicalToteId("physical-tote-2");
+        ToteLoadPlan plan = new ToteLoadPlan(physicalToteId, List.of());
+
+        ToteLoadPlan updatedPlan = plan.withAdditionalPackPlans(List.of(pack("pack-added")));
+
+        assertEquals(physicalToteId, updatedPlan.physicalToteId());
+    }
 
     @Test
     void shouldAllowAnEmptyPlanAndAppendPacksImmutably() {

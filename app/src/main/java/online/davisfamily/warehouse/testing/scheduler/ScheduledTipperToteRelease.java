@@ -21,6 +21,17 @@ public record ScheduledTipperToteRelease(
     }
 
     public TipperTotePayload createPayload() {
-        return payloadFactory.createPayload();
+        TipperTotePayload payload = payloadFactory.createPayload();
+        if (payload == null) {
+            throw new IllegalStateException("Payload factory returned null for order " + orderId);
+        }
+        String payloadToteId = payload.getTote().getId();
+        String plannedToteId = toteLoadPlan.physicalToteId().value();
+        if (!plannedToteId.equals(payloadToteId)) {
+            throw new IllegalStateException(
+                    "Scheduled release physical tote mismatch for order " + orderId
+                            + ": plan=" + plannedToteId + ", payload=" + payloadToteId);
+        }
+        return payload;
     }
 }

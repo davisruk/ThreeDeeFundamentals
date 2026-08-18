@@ -3,17 +3,18 @@ package online.davisfamily.warehouse.sim.dsp.adapting;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 public class MapBackedToteLoadPlanRegistry implements MutableToteLoadPlanRegistry {
-    private final Map<String, ToteLoadPlan> loadPlansByToteId = new LinkedHashMap<>();
+    private final Map<PhysicalToteId, ToteLoadPlan> loadPlansByToteId = new LinkedHashMap<>();
 
     @Override
-    public ToteLoadPlan getLoadPlanFor(String toteId) {
-        if (toteId == null || toteId.isBlank()) {
-            throw new IllegalArgumentException("toteId must not be blank");
+    public ToteLoadPlan getLoadPlanFor(PhysicalToteId physicalToteId) {
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
         }
-        return loadPlansByToteId.get(toteId);
+        return loadPlansByToteId.get(physicalToteId);
     }
 
     @Override
@@ -21,6 +22,6 @@ public class MapBackedToteLoadPlanRegistry implements MutableToteLoadPlanRegistr
         if (toteLoadPlan == null) {
             throw new IllegalArgumentException("toteLoadPlan must not be null");
         }
-        loadPlansByToteId.put(toteLoadPlan.getToteId(), toteLoadPlan);
+        loadPlansByToteId.put(toteLoadPlan.physicalToteId(), toteLoadPlan);
     }
 }

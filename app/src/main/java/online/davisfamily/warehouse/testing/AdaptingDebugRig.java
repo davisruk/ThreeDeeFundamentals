@@ -80,6 +80,18 @@ import online.davisfamily.warehouse.testing.scheduler.SchedulerDebugInspectable;
 
 public class AdaptingDebugRig implements DebugSceneRuntime {
     private static final String SERVICE_CENTRE_ID = "SC-ADAPTING";
+    private static final String STORE_ONE_ORDER_ID = "adapt-store-1";
+    private static final String STORE_ONE_NOTIONAL_TOTE_ID = "tote-store-1";
+    private static final String STORE_ONE_PHYSICAL_TOTE_ID = "tote-store-1";
+    private static final String STORE_TWO_ORDER_ID = "adapt-store-2";
+    private static final String STORE_TWO_NOTIONAL_TOTE_ID = "tote-store-2";
+    private static final String STORE_TWO_PHYSICAL_TOTE_ID = "tote-store-2";
+    private static final String COLLECT_ONE_ORDER_ID = "collect-1";
+    private static final String COLLECT_ONE_NOTIONAL_TOTE_ID = "tote-collect-1";
+    private static final String COLLECT_ONE_PHYSICAL_TOTE_ID = "tote-collect-1";
+    private static final String COLLECT_TWO_ORDER_ID = "collect-2";
+    private static final String COLLECT_TWO_NOTIONAL_TOTE_ID = "tote-collect-2";
+    private static final String COLLECT_TWO_PHYSICAL_TOTE_ID = "tote-collect-2";
     private static final PackDimensions PACK_DIMENSIONS = new PackDimensions(0.20f, 0.10f, 0.08f);
     private static final float TOTE_SPEED = 0.9f;
     private static final float BENCH_PATH_LENGTH = 5.4f;
@@ -323,24 +335,24 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
         RouteRequirements collectRoute = new RouteRequirements(false, true, false, true, false, StartLocation.OSR);
 
         DspSchedulerOrderState storeOne = orderState(adaptedOrder(
-                "adapt-store-1",
-                "tote-store-1",
-                adaptedPreparedLine("line-c1", "collect-1", "0000310")),
+                STORE_ONE_ORDER_ID,
+                STORE_ONE_NOTIONAL_TOTE_ID,
+                adaptedPreparedLine("line-c1", COLLECT_ONE_ORDER_ID, "0000310")),
                 storeRoute);
         DspSchedulerOrderState storeTwo = orderState(adaptedOrder(
-                "adapt-store-2",
-                "tote-store-2",
-                adaptedPreparedLine("line-unused", "collect-2", "0000388")),
+                STORE_TWO_ORDER_ID,
+                STORE_TWO_NOTIONAL_TOTE_ID,
+                adaptedPreparedLine("line-unused", COLLECT_TWO_ORDER_ID, "0000388")),
                 storeRoute);
         DspSchedulerOrderState collectOne = orderState(associatedCollectOrder(
-                "collect-1",
-                "tote-collect-1",
+                COLLECT_ONE_ORDER_ID,
+                COLLECT_ONE_NOTIONAL_TOTE_ID,
                 "line-c1",
                 "0000310"),
                 collectRoute);
         DspSchedulerOrderState collectTwo = orderState(associatedCollectOrder(
-                "collect-2",
-                "tote-collect-2",
+                COLLECT_TWO_ORDER_ID,
+                COLLECT_TWO_NOTIONAL_TOTE_ID,
                 "line-unused",
                 "0000388"),
                 collectRoute);
@@ -584,16 +596,16 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
             NotionalToteOrder order,
             PhysicalToteId physicalToteId,
             List<PackPlan> packPlans) {
-        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(physicalToteId.value(), packPlans);
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(physicalToteId, packPlans);
         return new ScheduledTipperToteRelease(order.orderId(), toteLoadPlan, () -> createPayload(tr, toteGeometry, toteLoadPlan));
     }
 
     private PhysicalToteId physicalToteIdFor(NotionalToteOrder order) {
         return switch (order.orderId()) {
-            case "adapt-store-1" -> new PhysicalToteId("tote-store-1");
-            case "adapt-store-2" -> new PhysicalToteId("tote-store-2");
-            case "collect-1" -> new PhysicalToteId("tote-collect-1");
-            case "collect-2" -> new PhysicalToteId("tote-collect-2");
+            case STORE_ONE_ORDER_ID -> new PhysicalToteId(STORE_ONE_PHYSICAL_TOTE_ID);
+            case STORE_TWO_ORDER_ID -> new PhysicalToteId(STORE_TWO_PHYSICAL_TOTE_ID);
+            case COLLECT_ONE_ORDER_ID -> new PhysicalToteId(COLLECT_ONE_PHYSICAL_TOTE_ID);
+            case COLLECT_TWO_ORDER_ID -> new PhysicalToteId(COLLECT_TWO_PHYSICAL_TOTE_ID);
             default -> throw new IllegalArgumentException("No physical tote configured for " + order.orderId());
         };
     }

@@ -68,7 +68,7 @@ public class AdaptingAreaController {
             throw new IllegalStateException("Collect completion requires a toteLoadPlanRegistry");
         }
 
-        String physicalToteId = completion.visit().physicalToteId().value();
+        var physicalToteId = completion.visit().physicalToteId();
         ToteLoadPlan existingLoadPlan = toteLoadPlanRegistry.getLoadPlanFor(physicalToteId);
         java.util.List<PackPlan> combinedPackPlans = new java.util.ArrayList<>();
         if (existingLoadPlan != null) {

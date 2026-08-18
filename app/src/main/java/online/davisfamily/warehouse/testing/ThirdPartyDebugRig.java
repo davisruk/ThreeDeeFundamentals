@@ -78,6 +78,18 @@ import online.davisfamily.warehouse.testing.scheduler.SchedulerDebugInspectable;
 
 public class ThirdPartyDebugRig implements DebugSceneRuntime {
     private static final String SERVICE_CENTRE_ID = "SC-THIRD-PARTY";
+    private static final String ADAPTED_ORDER_ID = "third-party-adapted";
+    private static final String ADAPTED_NOTIONAL_TOTE_ID = "tote-third-party-adapted";
+    private static final String ADAPTED_PHYSICAL_TOTE_ID = "tote-third-party-adapted";
+    private static final String ASSOCIATED_ORDER_ID = "third-party-associated";
+    private static final String ASSOCIATED_NOTIONAL_TOTE_ID = "tote-third-party-associated";
+    private static final String ASSOCIATED_PHYSICAL_TOTE_ID = "tote-third-party-associated";
+    private static final String REGULAR_ORDER_ID = "regular-full-pack";
+    private static final String REGULAR_NOTIONAL_TOTE_ID = "tote-regular-full-pack";
+    private static final String REGULAR_PHYSICAL_TOTE_ID = "tote-regular-full-pack";
+    private static final String LATER_ORDER_ID = "third-party-later";
+    private static final String LATER_NOTIONAL_TOTE_ID = "tote-third-party-later";
+    private static final String LATER_PHYSICAL_TOTE_ID = "tote-third-party-later";
     private static final String THIRD_PARTY_PRODUCT_ID = "100001";
     private static final String SECOND_THIRD_PARTY_PRODUCT_ID = "100002";
     private static final String REGULAR_PRODUCT_ID = "100003";
@@ -170,7 +182,7 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
         }
 
         Set<PreparedLineKey> preparedLines = Set.of(new PreparedLineKey(
-                "third-party-associated",
+                ASSOCIATED_ORDER_ID,
                 "associated-adapted-line"));
         runtimeState = new DspSchedulerRuntimeState(new WarehouseSchedulerSnapshot(
                 orderStates,
@@ -275,42 +287,42 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
 
     private List<DspSchedulerOrderState> createOrderStates() {
         NotionalToteOrder adapted = order(
-                "third-party-adapted",
-                "tote-third-party-adapted",
+                ADAPTED_ORDER_ID,
+                ADAPTED_NOTIONAL_TOTE_ID,
                 OrderType.ADAPTED,
                 0L,
                 line(
                         "adapted-third-party-line",
                         THIRD_PARTY_PRODUCT_ID,
                         DspOrderLineType.ADAPTED,
-                        "third-party-associated"));
+                        ASSOCIATED_ORDER_ID));
         NotionalToteOrder associated = order(
-                "third-party-associated",
-                "tote-third-party-associated",
+                ASSOCIATED_ORDER_ID,
+                ASSOCIATED_NOTIONAL_TOTE_ID,
                 OrderType.ASSOCIATED,
                 1L,
                 line(
                         "associated-direct-line",
                         SECOND_THIRD_PARTY_PRODUCT_ID,
                         DspOrderLineType.FULL_PACK,
-                        "third-party-associated"),
+                        ASSOCIATED_ORDER_ID),
                 line(
                         "associated-adapted-line",
                         ADAPTED_PRODUCT_ID,
                         DspOrderLineType.ADAPTED,
-                        "third-party-associated"));
+                        ASSOCIATED_ORDER_ID));
         NotionalToteOrder regular = order(
-                "regular-full-pack",
-                "tote-regular-full-pack",
+                REGULAR_ORDER_ID,
+                REGULAR_NOTIONAL_TOTE_ID,
                 OrderType.FULL_PACK,
                 2L,
-                line("regular-line", REGULAR_PRODUCT_ID, DspOrderLineType.FULL_PACK, "regular-full-pack"));
+                line("regular-line", REGULAR_PRODUCT_ID, DspOrderLineType.FULL_PACK, REGULAR_ORDER_ID));
         NotionalToteOrder later = order(
-                "third-party-later",
-                "tote-third-party-later",
+                LATER_ORDER_ID,
+                LATER_NOTIONAL_TOTE_ID,
                 OrderType.FULL_PACK,
                 3L,
-                line("later-third-party-line", THIRD_PARTY_PRODUCT_ID, DspOrderLineType.FULL_PACK, "third-party-later"));
+                line("later-third-party-line", THIRD_PARTY_PRODUCT_ID, DspOrderLineType.FULL_PACK, LATER_ORDER_ID));
 
         return List.of(
                 state(adapted, route(true, true, false)),
@@ -323,7 +335,7 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
         List<ScheduledTipperToteRelease> releases = new ArrayList<>();
         for (NotionalToteOrder order : ordersById.values()) {
             List<PackPlan> initialPacks = initialPacksFor(order);
-            ToteLoadPlan loadPlan = new ToteLoadPlan(physicalToteIdFor(order).value(), initialPacks);
+            ToteLoadPlan loadPlan = new ToteLoadPlan(physicalToteIdFor(order), initialPacks);
             loadPlanRegistry.putLoadPlan(loadPlan);
             releases.add(new ScheduledTipperToteRelease(
                     order.orderId(),
@@ -335,21 +347,21 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
 
     private PhysicalToteId physicalToteIdFor(NotionalToteOrder order) {
         return switch (order.orderId()) {
-            case "third-party-adapted" -> new PhysicalToteId("tote-third-party-adapted");
-            case "third-party-associated" -> new PhysicalToteId("tote-third-party-associated");
-            case "regular-full-pack" -> new PhysicalToteId("tote-regular-full-pack");
-            case "third-party-later" -> new PhysicalToteId("tote-third-party-later");
+            case ADAPTED_ORDER_ID -> new PhysicalToteId(ADAPTED_PHYSICAL_TOTE_ID);
+            case ASSOCIATED_ORDER_ID -> new PhysicalToteId(ASSOCIATED_PHYSICAL_TOTE_ID);
+            case REGULAR_ORDER_ID -> new PhysicalToteId(REGULAR_PHYSICAL_TOTE_ID);
+            case LATER_ORDER_ID -> new PhysicalToteId(LATER_PHYSICAL_TOTE_ID);
             default -> throw new IllegalArgumentException("No physical tote configured for " + order.orderId());
         };
     }
 
     private List<PackPlan> initialPacksFor(NotionalToteOrder order) {
         return switch (order.orderId()) {
-            case "third-party-associated" -> List.of(new PackPlan(
+            case ASSOCIATED_ORDER_ID -> List.of(new PackPlan(
                     "pack-associated-adapted-ready",
                     order.orderId(),
                     PACK_DIMENSIONS));
-            case "regular-full-pack" -> List.of(new PackPlan(
+            case REGULAR_ORDER_ID -> List.of(new PackPlan(
                     "pack-regular-existing",
                     order.orderId(),
                     PACK_DIMENSIONS));

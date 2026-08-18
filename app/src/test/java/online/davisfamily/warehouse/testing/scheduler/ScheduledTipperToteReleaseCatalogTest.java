@@ -7,10 +7,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.threedee.behaviour.routing.RouteFollower;
+import online.davisfamily.threedee.behaviour.routing.RouteSegment;
+import online.davisfamily.threedee.matrices.Mat4;
+import online.davisfamily.threedee.matrices.Vec3;
+import online.davisfamily.threedee.matrices.Vec4;
+import online.davisfamily.threedee.model.Mesh;
+import online.davisfamily.threedee.path.LinearSegment3;
+import online.davisfamily.threedee.rendering.RenderableObject;
+import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
@@ -63,7 +74,7 @@ class ScheduledTipperToteReleaseCatalogTest {
         AtomicInteger invocationCount = new AtomicInteger();
         ScheduledTipperToteRelease release = release("order-a", "tote-a", () -> {
             invocationCount.incrementAndGet();
-            return null;
+            return payload("tote-a");
         });
 
         ScheduledTipperToteReleaseCatalog catalog = new ScheduledTipperToteReleaseCatalog(List.of(release));
@@ -71,6 +82,22 @@ class ScheduledTipperToteReleaseCatalogTest {
         assertEquals(0, invocationCount.get());
         catalog.findByOrderId("order-a").orElseThrow().createPayload();
         assertEquals(1, invocationCount.get());
+    }
+
+    @Test
+    void shouldRejectScheduledReleaseWhenPayloadAndPlanToteIdsDiffer() {
+        AtomicInteger invocationCount = new AtomicInteger();
+        ScheduledTipperToteRelease release = release("order-a", "planned-tote", () -> {
+            invocationCount.incrementAndGet();
+            return payload("different-tote");
+        });
+
+        assertEquals(0, invocationCount.get());
+        IllegalStateException exception = assertThrows(IllegalStateException.class, release::createPayload);
+
+        assertEquals(1, invocationCount.get());
+        assertTrue(exception.getMessage().contains("planned-tote"));
+        assertTrue(exception.getMessage().contains("different-tote"));
     }
 
     private static ScheduledTipperToteRelease release(String orderId, String toteId, TipperTotePayloadFactory payloadFactory) {
@@ -81,5 +108,39 @@ class ScheduledTipperToteReleaseCatalogTest {
         return new ToteLoadPlan(
                 toteId,
                 List.of(new PackPlan("pack-" + toteId, "bag-" + toteId, TEST_PACK)));
+    }
+
+    private static TipperTotePayload payload(String toteId) {
+        RenderableObject renderable = RenderableObject.create(
+                toteId,
+                null,
+                anchorMesh(),
+                new Mat4.ObjectTransformation(0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
+                triangleIndex -> 0,
+                false);
+        Tote tote = new Tote(
+                toteId,
+                new RouteFollower(toteId, routeSegment(), 0f, 1d),
+                renderable,
+                new Vec3(),
+                0f);
+        return new TipperTotePayload(tote, renderable, 0f, Map.of());
+    }
+
+    private static RouteSegment routeSegment() {
+        return new RouteSegment(
+                "infeed",
+                new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(2f, 0f, 0f), false));
+    }
+
+    private static Mesh anchorMesh() {
+        return new Mesh(
+                new Vec4[] {
+                        new Vec4(0f, 0f, 0f, 1f),
+                        new Vec4(0f, 0f, 0f, 1f),
+                        new Vec4(0f, 0f, 0f, 1f)
+                },
+                new int[][] { {0, 1, 2} },
+                "anchor");
     }
 }

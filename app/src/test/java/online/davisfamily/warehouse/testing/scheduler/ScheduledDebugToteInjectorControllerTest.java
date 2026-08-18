@@ -413,7 +413,7 @@ class ScheduledDebugToteInjectorControllerTest {
                 List.of(new PackPlan("pack-" + toteId, "bag-" + toteId, TEST_PACK)));
         return new ScheduledTipperToteRelease(orderId, toteLoadPlan, () -> {
             factoryCount.incrementAndGet();
-            return null;
+            return ScheduledTotePayloadTestFixtures.payload(toteId);
         });
     }
 

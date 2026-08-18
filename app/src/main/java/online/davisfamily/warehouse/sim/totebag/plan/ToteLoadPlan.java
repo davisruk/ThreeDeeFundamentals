@@ -1,14 +1,5 @@
 package online.davisfamily.warehouse.sim.totebag.plan;
 
-import online.davisfamily.warehouse.sim.totebag.plan.*;
-import online.davisfamily.warehouse.sim.totebag.pack.*;
-import online.davisfamily.warehouse.sim.totebag.machine.*;
-import online.davisfamily.warehouse.sim.totebag.conveyor.*;
-import online.davisfamily.warehouse.sim.totebag.transfer.*;
-import online.davisfamily.warehouse.sim.totebag.device.*;
-import online.davisfamily.warehouse.sim.totebag.assignment.*;
-import online.davisfamily.warehouse.sim.totebag.control.*;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -17,23 +8,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+
 public class ToteLoadPlan {
-    private final String toteId;
+    private final PhysicalToteId physicalToteId;
     private final List<PackPlan> packPlans;
 
     public ToteLoadPlan(String toteId, List<PackPlan> packPlans) {
-        if (toteId == null || toteId.isBlank()) {
-            throw new IllegalArgumentException("toteId must not be blank");
+        this(new PhysicalToteId(toteId), packPlans);
+    }
+
+    public ToteLoadPlan(PhysicalToteId physicalToteId, List<PackPlan> packPlans) {
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
         }
         if (packPlans == null) {
             throw new IllegalArgumentException("packPlans must not be null");
         }
-        this.toteId = toteId;
+        this.physicalToteId = physicalToteId;
         this.packPlans = validatedPackPlans(packPlans);
     }
 
+    public PhysicalToteId physicalToteId() {
+        return physicalToteId;
+    }
+
+    @Deprecated(forRemoval = false)
     public String getToteId() {
-        return toteId;
+        return physicalToteId.value();
     }
 
     public List<PackPlan> getPackPlans() {
@@ -47,7 +49,7 @@ public class ToteLoadPlan {
 
         List<PackPlan> combinedPackPlans = new ArrayList<>(packPlans);
         combinedPackPlans.addAll(additionalPackPlans);
-        return new ToteLoadPlan(toteId, combinedPackPlans);
+        return new ToteLoadPlan(physicalToteId, combinedPackPlans);
     }
 
     public Map<String, List<PackPlan>> packPlansByCorrelationId() {
