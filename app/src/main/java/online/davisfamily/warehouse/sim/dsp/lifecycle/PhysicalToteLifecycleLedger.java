@@ -130,6 +130,10 @@ public class PhysicalToteLifecycleLedger {
                 .toList();
     }
 
+    public PhysicalToteLifecycleSnapshot snapshot() {
+        return new PhysicalToteLifecycleSnapshot(totes, assignments);
+    }
+
     private PhysicalToteRecord requireTote(PhysicalToteId toteId) {
         if (toteId == null) {
             throw new IllegalArgumentException("toteId must not be null");
