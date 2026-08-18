@@ -83,31 +83,32 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is the DSP/OSR scheduler.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. Recent requirements analysis established that FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Correcting that model is the prerequisite for the next scheduler and Exception Station work.
 
 Read:
 
-1. `docs/machines/third-party-station-phase-1-plan.md` for the completed and verified current branch
-2. `docs/machines/third-party-station-requirements.md`
+1. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+2. `docs/scheduler/dsp-operational-scheduling-requirements.md`
 3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-5. `docs/machines/phase-1-stations-roadmap.md`
+5. `docs/machines/exceptions-station-requirements.md`
+6. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
-- The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`.
-- Generic standalone transfer-machine support, adapting station Phase 1, and simulation reset are complete and merged.
-- `feature/third-party-station-phase-1` is implementation-complete and verified, pending branch closure and merge.
-- Exception Station Phase 1 is the next planning target.
+- Generic standalone transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged.
 - Completed scheduler branches: domain, line readiness, OSR integration, live P2P admission, debug observability, JSON loading, renderable visibility/lifecycle, machine wait queues, and scheduler thread.
 - Scheduler decisions are visible in the existing selection overlay through scheduler debug state.
 - The integrated debug scene currently exposes scheduler inspection by selecting `tipper_slide`.
 - Third Party Phase 1 separates the real CSV product-master export from 12N JSON loading. Loaded data does not create renderables.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped early in update/draw/pick, and current pack visual paths use visibility to hide contained or inactive packs.
-- Service centres are processed as whole release windows.
-- Totes from different service centres should not be mixed, except naturally when one service centre finishes and the next begins.
-- If the active service centre is blocked by dependencies or capacity, hold the active window rather than skipping to the next service centre.
-- The scheduler should model P2P as an admission/capacity boundary first.
+- Service-centre supply authorization and individual OSR processing release are distinct operations.
+- Letchworth (`104`) and Swansea (`108`) physical inbound totes are preloaded in OSR at the 06:00 start; later service centres are authorized in descending configured priority as OSR occupancy reaches a configurable low-water mark.
+- Authorization feeds physical totes into OSR through a configurable rate-limited stream. Baselines are 1,200 totes/hour peak and 400 totes/hour for a representative busy hour.
+- Upstream supply for an authorized service centre is ADAPTED first, followed by FULL_PACK and ASSOCIATED. EMPTY remains logical until AV02 supplies a physical tote.
+- The OSR may contain more than one authorized service centre. ADAPTED and FULL_PACK may process concurrently, and an ASSOCIATED/EMPTY order becomes eligible when its own preparation dependencies are terminal.
+- P2P service-centre isolation is enforced through sticky line ownership rather than a single global service-centre release window. A line cannot change service centre until it is fully quiescent and its current outbound tote is closed.
+- Candidate ranking is pharmacy-grouped and deterministic. There is no confirmed ASSOCIATED/EMPTY-before-FULL_PACK priority.
 - Machine wait queues now separate scheduler release admission from machine processing admission in the integrated debug P2P path:
   - release admission means there is station input waiting space
   - machine processing admission remains local to the downstream machine
@@ -120,11 +121,25 @@ Current scheduler decisions:
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
 
-Use `docs/machines/third-party-station-phase-1-plan.md` as the completion record for the current branch. After it is merged, create a decision-complete Exception Station Phase 1 plan before implementation.
+The agreed next programme is split into short-lived branches from `master`:
+
+1. logical/physical identity domain;
+2. inbound physical tote lifecycle and 12N mapping;
+3. bag planning and provenance;
+4. outbound physical tote allocation;
+5. OSR physical inventory and preload;
+6. operational simulation clock;
+7. rate-limited service-centre supply;
+8. dependency-ready operational release and pharmacy-grouped ranking;
+9. sticky P2P service-centre leases;
+10. deadline-aware elastic line allocation;
+11. full-day analysis, metrics, and inspection.
+
+Each branch must have its own decision-complete, step-based plan before implementation. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
 ## Completed Work: Third Party Area Phase 1
 
-The implementation is complete and verified on `feature/third-party-station-phase-1`, pending branch closure and merge.
+The implementation is complete, verified, and merged.
 
 Current branch contract:
 
@@ -156,8 +171,9 @@ Planned Phase 1 order:
 - inline transfer targets: complete
 - adapting station: Phase 1 complete and merged
 - simulation reset runtime interlude: complete and merged
-- Third Party Area: implementation complete and verified; pending merge
-- Exception Area: next planning and implementation target
+- Third Party Area: Phase 1 complete and merged
+- logical/physical tote lifecycle, bag provenance, and outbound allocation: next programme foundation
+- Exception Area: resume after the required lifecycle foundation
 - tote lid open/close machines
 
 Adapting station Phase 1 established the hardest merge/preparation model:
@@ -176,11 +192,23 @@ Use the terminology in `docs/scheduler/dsp_osr_scheduler_requirements.md`.
 
 Important distinctions:
 
-- `Notional Tote` is the logical grouping/correlation unit.
-- `Physical Tote` / `Load Unit` is the actual container.
+- A logical order sheet is the planning, dependency, and reporting unit identified by `orderId + sheetNumber`; it is not a physical tote.
+- A physical tote/load unit is an independently identified carrier whose assignments change over its lifecycle.
+- One logical order sheet may be manifested by multiple inbound physical totes.
+- Inbound FULL_PACK and ASSOCIATED physical totes terminate at P2P and are never reused as outbound dispatch totes.
+- Outbound physical totes are introduced at bagging output, are pharmacy- and service-centre-pure, and contain completed bags rather than inbound loose packs.
 - `OrderType` controls start location, dependencies, routing intent, and lifecycle.
 - `ToteType` controls physical carrier role/capability.
 - Historical `MANUAL_FLOW` data exists but is excluded from active simulation.
+
+Additional lifecycle rules:
+
+- `lineReference` is the globally distinct ADAPTED-to-ASSOCIATED line correlation.
+- `referenceOrderId` identifies the target ASSOCIATED logical order; `referenceSheetNumber` remains protocol data and is not used as a meaningful discriminator.
+- Bag grouping is prescription-based where possible and may split when configured bag capacity is reached.
+- Each P2P instance has one current outbound receiving tote, with configurable bag-count capacity and best-effort patient affinity.
+- EMPTY receives its physical tote at AV02. If exceptional work requires an empty NS bag, allocate a dedicated pharmacy-pure outbound tote rather than introducing cross-pharmacy complexity.
+- Physical tote assignment history and pack/bag provenance must remain inspectable; a mutable current owner field alone is insufficient.
 
 Order types:
 
@@ -233,8 +261,7 @@ Threading status:
 
 These machines still need implementation using the established machine-state/install-result style:
 
-- Third Party Area Phase 1 (implementation complete and verified; pending merge)
-- exception station Phase 1 (next)
+- exception station Phase 1 (resume after lifecycle, bag-provenance, and outbound-tote foundations)
 - lid opening machine
 - lid closing machine
 - tote strapping machine
