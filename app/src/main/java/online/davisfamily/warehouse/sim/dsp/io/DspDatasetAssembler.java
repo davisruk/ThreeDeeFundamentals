@@ -1,14 +1,19 @@
 package online.davisfamily.warehouse.sim.dsp.io;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderValidator;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
@@ -55,13 +60,15 @@ public class DspDatasetAssembler {
         }
         retainedProducts = List.copyOf(retainedProducts);
 
-        List<NotionalToteOrder> orders = new ArrayList<>();
+        Map<OrderSheetKey, LogicalOrderGroup> orderGroups = new LinkedHashMap<>();
+        List<InboundToteManifest> inboundToteManifests = new ArrayList<>();
         List<DspOrderItem> preparedLines = new ArrayList<>();
         Set<PreparedLineKey> loadedPreparedLineKeys = new LinkedHashSet<>();
         List<UnresolvedProductLine> unresolvedProductLines = new ArrayList<>();
         int ignoredManualMessageCount = 0;
         int ignoredManualLineCount = 0;
         int omittedOrderCount = 0;
+        long nextSourceSequenceNumber = 0;
 
         for (TwelveNMessageJson message : messages) {
             if (message == null) {
@@ -75,7 +82,8 @@ public class DspDatasetAssembler {
                 continue;
             }
 
-            NotionalToteOrder mappedOrder = orderMapper.map(message, orders.size()).order();
+            MappedTwelveNOrder mapped = orderMapper.map(message, nextSourceSequenceNumber);
+            NotionalToteOrder mappedOrder = mapped.order();
             List<DspOrderItem> retainedLines = mappedOrder.items().stream()
                     .filter(line -> line.lineType() != DspOrderLineType.MANUAL)
                     .toList();
@@ -88,8 +96,16 @@ public class DspDatasetAssembler {
             NotionalToteOrder retainedOrder = retainedLines.size() == mappedOrder.items().size()
                     ? mappedOrder
                     : withItems(mappedOrder, retainedLines);
-            orderValidator.validateForScheduler(retainedOrder);
-            orders.add(retainedOrder);
+            mapped.inboundToteManifest()
+                    .map(manifest -> retainedLines.size() == mappedOrder.items().size()
+                            ? manifest
+                            : manifest.withItems(retainedLines))
+                    .ifPresent(inboundToteManifests::add);
+            orderGroups.computeIfAbsent(
+                    retainedOrder.orderSheetKey(),
+                    ignored -> new LogicalOrderGroup(retainedOrder))
+                    .add(retainedOrder);
+            nextSourceSequenceNumber++;
 
             for (DspOrderItem line : retainedLines) {
                 if (!knownProductIds.contains(line.productId())) {
@@ -108,6 +124,12 @@ public class DspDatasetAssembler {
             }
         }
 
+        List<NotionalToteOrder> orders = orderGroups.values().stream()
+                .map(LogicalOrderGroup::toOrder)
+                .toList();
+        orders.forEach(orderValidator::validateForScheduler);
+        InboundToteManifestCatalog manifestCatalog = new InboundToteManifestCatalog(inboundToteManifests);
+
         DspDatasetLoadReport report = new DspDatasetLoadReport(
                 ignoredManualMessageCount,
                 ignoredManualLineCount,
@@ -119,6 +141,7 @@ public class DspDatasetAssembler {
                 preparedLines,
                 loadedPreparedLineKeys,
                 Set.of(),
+                manifestCatalog.manifests(),
                 report);
     }
 
@@ -131,5 +154,46 @@ public class DspDatasetAssembler {
                 order.orderType(),
                 items,
                 order.sequenceNumber());
+    }
+
+    private static final class LogicalOrderGroup {
+        private final NotionalToteOrder firstContribution;
+        private final List<DspOrderItem> items = new ArrayList<>();
+        private final Set<String> lineReferences = new LinkedHashSet<>();
+
+        private LogicalOrderGroup(NotionalToteOrder firstContribution) {
+            this.firstContribution = firstContribution;
+        }
+
+        private void add(NotionalToteOrder contribution) {
+            if (!firstContribution.serviceCentreId().equals(contribution.serviceCentreId())) {
+                throw new IllegalArgumentException(
+                        "Conflicting serviceCentreId for logical order sheet "
+                                + contribution.orderSheetKey());
+            }
+            if (firstContribution.orderType() != contribution.orderType()) {
+                throw new IllegalArgumentException(
+                        "Conflicting orderType for logical order sheet " + contribution.orderSheetKey());
+            }
+            for (DspOrderItem item : contribution.items()) {
+                if (!lineReferences.add(item.lineReference())) {
+                    throw new IllegalArgumentException(
+                            "Duplicate lineReference " + item.lineReference()
+                                    + " for logical order sheet " + contribution.orderSheetKey());
+                }
+                items.add(item);
+            }
+        }
+
+        private NotionalToteOrder toOrder() {
+            return new NotionalToteOrder(
+                    firstContribution.orderId(),
+                    firstContribution.notionalToteId(),
+                    firstContribution.serviceCentreId(),
+                    firstContribution.sheetNumber(),
+                    firstContribution.orderType(),
+                    items,
+                    firstContribution.sequenceNumber());
+        }
     }
 }

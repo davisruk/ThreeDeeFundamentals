@@ -24,13 +24,14 @@ class DspDatasetAssemblerTest {
             new DspOrderValidator());
 
     @Test
-    void shouldLoadProductsAndOneFullPackDispatchOrder() {
+    void shouldRetainInboundManifestAlongsideLogicalOrder() {
         LoadedDspData data = assembler.assemble(
                 List.of(product("9114")),
                 List.of(message("""
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
+                          "transportContainer": {"payload":"tote-full-pack"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
                             "numberOfOrderLines": 1,
@@ -56,6 +57,10 @@ class DspDatasetAssemblerTest {
         assertTrue(data.preparedLines().isEmpty());
         assertTrue(data.loadedPreparedLineKeys().isEmpty());
         assertTrue(data.startupReadyPreparedLineKeys().isEmpty());
+        assertEquals(1, data.inboundToteManifests().size());
+        assertEquals("tote-full-pack", data.inboundToteManifests().getFirst().physicalToteId().value());
+        assertEquals(data.orders().getFirst().orderSheetKey(),
+                data.inboundToteManifests().getFirst().orderSheetKey());
     }
 
     @Test
@@ -66,6 +71,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"TOTE0007168406","sheetNumber":"022"},
                           "toteIdentifier": {"payload":"02"},
+                          "transportContainer": {"payload":"tote-adapted"},
                           "serviceCentre": {"payload":"116"},
                           "orderDetail": {
                             "numberOfOrderLines": 2,
@@ -106,11 +112,131 @@ class DspDatasetAssemblerTest {
     }
 
     @Test
-    void shouldFilterManualLinesBeforeValidatingPharmacyPurity() {
+    void shouldGroupSeveralInboundManifestsIntoOneLogicalSheet() {
+        LoadedDspData data = assembler.assemble(
+                List.of(product("product-1"), product("product-2")),
+                List.of(
+                        physicalMessage(
+                                "order-1", "001", "05", "tote-1", "104",
+                                line("line-1", "05", "pharmacy-1", "product-1")),
+                        physicalMessage(
+                                "order-1", "001", "05", "tote-2", "104",
+                                line("line-2", "05", "pharmacy-1", "product-2"))));
+
+        assertEquals(1, data.orders().size());
+        assertEquals(2, data.inboundToteManifests().size());
+        assertEquals(List.of("tote-1", "tote-2"), data.inboundToteManifests().stream()
+                .map(manifest -> manifest.physicalToteId().value())
+                .toList());
+        assertEquals(0L, data.orders().getFirst().sequenceNumber());
+        assertEquals(List.of(0L, 1L), data.inboundToteManifests().stream()
+                .map(manifest -> manifest.sourceSequenceNumber())
+                .toList());
+    }
+
+    @Test
+    void shouldPreserveManifestSpecificItemsAndCombinedLogicalItems() {
+        LoadedDspData data = assembler.assemble(
+                List.of(product("product-1"), product("product-2")),
+                List.of(
+                        physicalMessage(
+                                "order-1", "001", "05", "tote-1", "104",
+                                line("line-1", "05", "pharmacy-1", "product-1")),
+                        physicalMessage(
+                                "order-1", "001", "05", "tote-2", "104",
+                                line("line-2", "05", "pharmacy-1", "product-2"))));
+
+        assertEquals(List.of("line-1", "line-2"), data.orders().getFirst().items().stream()
+                .map(DspOrderItem::lineReference)
+                .toList());
+        assertEquals(List.of("line-1"), data.inboundToteManifests().get(0).items().stream()
+                .map(DspOrderItem::lineReference)
+                .toList());
+        assertEquals(List.of("line-2"), data.inboundToteManifests().get(1).items().stream()
+                .map(DspOrderItem::lineReference)
+                .toList());
+    }
+
+    @Test
+    void shouldRejectConflictingMetadataForSameLogicalSheet() {
+        TwelveNMessageJson first = physicalMessage(
+                "order-1", "001", "05", "tote-1", "104",
+                line("line-1", "05", "pharmacy-1", "product-1"));
+        TwelveNMessageJson conflictingServiceCentre = physicalMessage(
+                "order-1", "001", "05", "tote-2", "116",
+                line("line-2", "05", "pharmacy-1", "product-2"));
+        TwelveNMessageJson conflictingOrderType = physicalMessage(
+                "order-1", "001", "04", "tote-2", "104",
+                line("line-2", "05", "pharmacy-1", "product-2"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> assembler.assemble(
+                        List.of(product("product-1"), product("product-2")),
+                        List.of(first, conflictingServiceCentre)));
+        assertThrows(IllegalArgumentException.class,
+                () -> assembler.assemble(
+                        List.of(product("product-1"), product("product-2")),
+                        List.of(first, conflictingOrderType)));
+    }
+
+    @Test
+    void shouldRejectDuplicateLineReferencesAcrossManifests() {
+        List<TwelveNMessageJson> messages = List.of(
+                physicalMessage(
+                        "order-1", "001", "05", "tote-1", "104",
+                        line("line-1", "05", "pharmacy-1", "product-1")),
+                physicalMessage(
+                        "order-1", "001", "05", "tote-2", "104",
+                        line("line-1", "05", "pharmacy-1", "product-2")));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> assembler.assemble(
+                        List.of(product("product-1"), product("product-2")),
+                        messages));
+
+        assertTrue(exception.getMessage().contains("Duplicate lineReference"));
+    }
+
+    @Test
+    void shouldRejectDuplicatePhysicalToteIds() {
+        List<TwelveNMessageJson> messages = List.of(
+                physicalMessage(
+                        "order-1", "001", "05", "tote-1", "104",
+                        line("line-1", "05", "pharmacy-1", "product-1")),
+                physicalMessage(
+                        "order-2", "001", "05", "tote-1", "104",
+                        line("line-2", "05", "pharmacy-1", "product-2")));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> assembler.assemble(
+                        List.of(product("product-1"), product("product-2")),
+                        messages));
+
+        assertTrue(exception.getMessage().contains("Duplicate physical tote ID"));
+    }
+
+    @Test
+    void shouldKeepEmptyOrderManifestFree() {
+        LoadedDspData data = assembler.assemble(
+                List.of(product("product-1")),
+                List.of(physicalMessage(
+                        "order-1", "001", "03", null, "104",
+                        line("line-1", "05", "pharmacy-1", "product-1"))));
+
+        assertEquals(1, data.orders().size());
+        assertEquals(OrderType.EMPTY, data.orders().getFirst().orderType());
+        assertTrue(data.inboundToteManifests().isEmpty());
+    }
+
+    @Test
+    void shouldRemoveIgnoredManualLinesFromManifestAndLogicalOrder() {
         String mixedOrderJson = """
                                 {
                                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
                                   "toteIdentifier": {"payload":"04"},
+                                  "transportContainer": {"payload":"tote-associated"},
                                   "serviceCentre": {"payload":"104"},
                                   "orderDetail": {
                                     "numberOfOrderLines": 2,
@@ -146,6 +272,8 @@ class DspDatasetAssemblerTest {
         assertEquals(1, data.orders().size());
         assertEquals(1, data.orders().getFirst().items().size());
         assertEquals("0006461", data.orders().getFirst().items().getFirst().pharmacyId());
+        assertEquals(1, data.inboundToteManifests().size());
+        assertEquals(data.orders().getFirst().items(), data.inboundToteManifests().getFirst().items());
         assertEquals(1, data.report().ignoredManualLineCount());
 
         IllegalArgumentException exception = assertThrows(
@@ -171,6 +299,7 @@ class DspDatasetAssemblerTest {
                                 {
                                   "header": {"orderId":"TOTE0007168406","sheetNumber":"022"},
                                   "toteIdentifier": {"payload":"02"},
+                                  "transportContainer": {"payload":"tote-adapted"},
                                   "serviceCentre": {"payload":"116"},
                                   "orderDetail": {
                                     "numberOfOrderLines": 1,
@@ -193,6 +322,7 @@ class DspDatasetAssemblerTest {
                                 {
                                   "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                                   "toteIdentifier": {"payload":"05"},
+                                  "transportContainer": {"payload":"tote-full-pack"},
                                   "serviceCentre": {"payload":"104"},
                                   "orderDetail": {
                                     "numberOfOrderLines": 1,
@@ -215,6 +345,7 @@ class DspDatasetAssemblerTest {
                                 {
                                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
                                   "toteIdentifier": {"payload":"04"},
+                                  "transportContainer": {"payload":"tote-associated"},
                                   "serviceCentre": {"payload":"104"},
                                   "orderDetail": {
                                     "numberOfOrderLines": 1,
@@ -270,6 +401,7 @@ class DspDatasetAssemblerTest {
 
         assertTrue(data.orders().isEmpty());
         assertTrue(data.preparedLines().isEmpty());
+        assertTrue(data.inboundToteManifests().isEmpty());
         assertEquals(1, data.report().ignoredManualMessageCount());
         assertEquals(1, data.report().ignoredManualLineCount());
         assertEquals(0, data.report().omittedOrderCount());
@@ -283,6 +415,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"TOTE0007170196","sheetNumber":"003"},
                           "toteIdentifier": {"payload":"04"},
+                          "transportContainer": {"payload":"tote-associated"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
                             "numberOfOrderLines": 1,
@@ -303,6 +436,7 @@ class DspDatasetAssemblerTest {
                         """)));
 
         assertTrue(data.orders().isEmpty());
+        assertTrue(data.inboundToteManifests().isEmpty());
         assertEquals(0, data.report().ignoredManualMessageCount());
         assertEquals(1, data.report().ignoredManualLineCount());
         assertEquals(1, data.report().omittedOrderCount());
@@ -316,6 +450,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"order-missing","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
+                          "transportContainer": {"payload":"tote-full-pack"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
                             "numberOfOrderLines": 1,
@@ -343,6 +478,55 @@ class DspDatasetAssemblerTest {
 
     private static TwelveNMessageJson message(String json) {
         return JsonLoaderSupport.readString(json, TwelveNMessageJson.class);
+    }
+
+    private static TwelveNMessageJson physicalMessage(
+            String orderId,
+            String sheetNumber,
+            String toteType,
+            String physicalToteId,
+            String serviceCentreId,
+            TwelveNOrderLineJson... lines) {
+        return new TwelveNMessageJson(
+                new TwelveNHeaderJson(null, null, orderId, sheetNumber),
+                new TwelveNFieldJson(null, null, toteType),
+                physicalToteId == null ? null : new TwelveNFieldJson(null, null, physicalToteId),
+                null,
+                null,
+                new TwelveNFieldJson(null, null, serviceCentreId),
+                new TwelveNOrderDetailJson(
+                        lines.length,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of(lines)));
+    }
+
+    private static TwelveNOrderLineJson line(
+            String lineReference,
+            String lineType,
+            String pharmacyId,
+            String productId) {
+        return new TwelveNOrderLineJson(
+                lineReference,
+                lineType,
+                pharmacyId,
+                null,
+                null,
+                productId,
+                "0001",
+                null,
+                "reference-" + lineReference,
+                "001",
+                "0000");
     }
 
     private static ProductMasterRecord product(String productId) {
