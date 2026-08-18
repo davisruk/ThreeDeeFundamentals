@@ -322,7 +322,7 @@ Implemented outcome:
 
 ### `feature/dsp-logical-physical-identity`
 
-Status: plan ready; implementation is the current branch.
+Status: complete, green, and merged.
 
 Detailed implementation doc:
 
@@ -346,18 +346,49 @@ Follow-on branch:
 
 - `feature/dsp-inbound-tote-lifecycle`
 
+### `feature/dsp-inbound-tote-lifecycle`
+
+Status: plan ready; implementation is the current branch.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-inbound-tote-lifecycle-plan.md`
+
+Purpose:
+
+- Retain 12N `transportContainer` as typed physical inbound tote identity.
+- Keep logical order sheets separate from physical inbound manifests.
+- Group several inbound manifests under one logical `OrderSheetKey` while preserving manifest contents.
+- Register and advance inbound physical totes through the lifecycle ledger without activating all loaded data.
+- Keep EMPTY manifest-free until AV02 allocates a PRE_P2P physical tote.
+- Separate logical station admission profiles from physical Adapting and Third Party visits.
+- Make tote load plans explicitly physical while retaining narrow generic string bridges.
+
+Explicit non-goals:
+
+- no OSR inventory/replenishment policy;
+- no bag planning or patient/prescription provenance;
+- no outbound tote allocation or output-sheet splitting;
+- no Exception Station behavior or 32R.
+
+Follow-on branch:
+
+- `feature/dsp-bag-planning-provenance`
+
 ## Current Assumptions
 
 - `master` is the integration base for scheduler branches.
-- Service centres must not be mixed during release.
+- The OSR may contain physical totes from several authorized service centres; service-centre isolation is enforced through sticky ownership on each P2P line.
+- A P2P line cannot accept another service centre until it is fully quiescent and its current outbound tote is closed.
 - Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
 - Adapted preparation orders may contain lines for multiple pharmacies.
+- Logical order sheets use `orderId + sheetNumber`; physical inbound totes use 12N `transportContainer` and are represented separately.
 - MANUAL messages and lines are excluded from active simulation and reported during ingestion.
 - Prepared-line identity is target order id plus globally distinct line reference; `referenceSheetNumber` is protocol-only and not an identity discriminator.
 - 12N line type owns order-specific processing intent. Product master owns Third Party bin location and physical dimensions.
 - Loaded ADAPTED prepared-line data is not automatically ready. Adapted readiness should be added when an adapting bench processes STORE work, except for explicit already-staged startup fixtures.
 - `FULL_PACK` orders never collect adapted lines.
-- A blocked active service centre blocks later service centres.
+- ADAPTED and FULL_PACK work may overlap, and ASSOCIATED/EMPTY work becomes eligible when its own preparation dependencies are terminal.
 - Scheduler v1 is threaded in the integrated debug path, with synchronous fallback still available.
 - Deeper scheduler behavior depends on Phase 1 station state, queue, and readiness surfaces.
 - Detailed shelving/operative visuals, short picks, NS labels, Exception routing, empty NS bags, deadlock override timers, and command-button exception handling are split into later branches.

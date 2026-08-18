@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-logical-physical-identity`
 
-Status: ready for implementation.
+Status: complete, green, and merged to `master`.
 
 ## Purpose
 
