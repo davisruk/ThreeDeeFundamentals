@@ -348,7 +348,7 @@ Follow-on branch:
 
 ### `feature/dsp-inbound-tote-lifecycle`
 
-Status: plan ready; implementation is the current branch.
+Status: complete, green, and merged.
 
 Detailed implementation doc:
 
@@ -374,6 +374,33 @@ Explicit non-goals:
 Follow-on branch:
 
 - `feature/dsp-bag-planning-provenance`
+
+### `feature/dsp-bag-planning-provenance`
+
+Status: plan ready; implementation is the current branch.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-bag-planning-provenance-plan.md`
+
+Purpose:
+
+- Retain 12N patient and prescription identity at line level.
+- Add deterministic typed bag identity using prescription plus ordinal.
+- Preserve immutable physical-pack source provenance through Third Party and Adapting work.
+- Plan actual physical packs into configurable pack-count bags.
+- Emit P2P-compatible correlation groups while retaining source, fulfilment, physical input tote, and bag traces.
+
+Explicit non-goals:
+
+- no outbound physical tote allocation or reservoir;
+- no pharmacy/service-centre tote closure policy;
+- no output-sheet splitting;
+- no short-pick outcome, NS bag, Exception Station, or 32R behavior.
+
+Follow-on branch:
+
+- `feature/dsp-outbound-tote-allocation`
 
 ## Current Assumptions
 

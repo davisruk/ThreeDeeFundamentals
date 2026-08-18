@@ -7,9 +7,9 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The current branch completion plan, `docs/machines/third-party-station-phase-1-plan.md`
-3. `docs/machines/third-party-station-requirements.md`
-4. `docs/scheduler/dsp_osr_scheduler_requirements.md`
+2. The current branch plan, `docs/scheduler/dsp-bag-planning-provenance-plan.md`
+3. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+4. `docs/scheduler/dsp-operational-scheduling-requirements.md`
 5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 6. `docs/machines/phase-1-stations-roadmap.md`
 
@@ -79,7 +79,9 @@ The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`
 
 The adapting station Phase 1 and simulation-reset branches are complete and merged to `master`.
 
-`feature/third-party-station-phase-1` is implementation-complete and verified, pending branch closure and merge. Use its plan as the completion record. Exception Station Phase 1 is the next planning target; do not begin its implementation without a decision-complete branch plan.
+Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
+
+`feature/dsp-bag-planning-provenance` is the current planned branch. Follow `docs/scheduler/dsp-bag-planning-provenance-plan.md` step by step. Outbound tote allocation and Exception Station behavior remain later branches.
 
 Completed scheduler work:
 

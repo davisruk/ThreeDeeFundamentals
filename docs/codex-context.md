@@ -137,6 +137,14 @@ The agreed next programme is split into short-lived branches from `master`:
 
 Each branch must have its own decision-complete, step-based plan before implementation. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
+Current programme position:
+
+- logical/physical identity: complete and merged;
+- inbound physical tote lifecycle and 12N transport-container mapping: complete and merged;
+- bag planning and provenance: current branch, with detailed plan at `docs/scheduler/dsp-bag-planning-provenance-plan.md`;
+- outbound physical tote allocation: next branch after bag planning/provenance;
+- Exception Station Phase 1 remains deferred until those foundations are complete.
+
 ## Completed Work: Third Party Area Phase 1
 
 The implementation is complete, verified, and merged.
