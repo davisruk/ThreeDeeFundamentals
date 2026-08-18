@@ -75,7 +75,7 @@ public class DspDatasetAssembler {
                 continue;
             }
 
-            NotionalToteOrder mappedOrder = orderMapper.toOrder(message, orders.size());
+            NotionalToteOrder mappedOrder = orderMapper.map(message, orders.size()).order();
             List<DspOrderItem> retainedLines = mappedOrder.items().stream()
                     .filter(line -> line.lineType() != DspOrderLineType.MANUAL)
                     .toList();
