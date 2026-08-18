@@ -364,8 +364,9 @@ public Optional<PhysicalToteRecord> tote(PhysicalToteId toteId)
 public Optional<PhysicalToteAssignment> activeAssignmentFor(OrderSheetKey orderSheetKey)
 public List<PhysicalToteAssignment> activeAssignmentsFor(PhysicalToteId toteId)
 public List<PhysicalToteAssignment> assignmentHistoryFor(OrderSheetKey orderSheetKey)
-public PhysicalToteLifecycleSnapshot snapshot()
 ```
+
+`PhysicalToteLifecycleSnapshot` and the ledger's `snapshot()` method are added together in Step 5 so every implementation checkpoint compiles independently.
 
 Registration rules:
 
@@ -441,6 +442,12 @@ Rules:
 - the snapshot contains no ledger reference and no mutable simulation/controller object.
 
 `PhysicalToteLifecycleLedger.snapshot()` must return a fresh snapshot representing one consistent simulation-thread state.
+
+Add this method to `PhysicalToteLifecycleLedger` in this step:
+
+```java
+public PhysicalToteLifecycleSnapshot snapshot()
+```
 
 Create `PhysicalToteLifecycleSnapshotTest`.
 
