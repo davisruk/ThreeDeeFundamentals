@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, and bag planning/provenance are now implemented. Outbound physical tote allocation is the next foundation before Exception Station work and deeper scheduling policy.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, and bag planning/provenance are complete and merged. Outbound physical tote allocation is the current planned foundation before Exception Station work and deeper scheduling policy.
 
 Read:
 
@@ -144,8 +144,8 @@ Current programme position:
 
 - logical/physical identity: complete and merged;
 - inbound physical tote lifecycle and 12N transport-container mapping: complete and merged;
-- bag planning and provenance: implementation complete and verified, pending merge, with detailed plan at `docs/scheduler/dsp-bag-planning-provenance-plan.md`;
-- outbound physical tote allocation: next branch, with its detailed plan still to be created;
+- bag planning and provenance: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-bag-planning-provenance-plan.md`;
+- outbound physical tote allocation: current branch, with detailed plan at `docs/scheduler/dsp-outbound-tote-allocation-plan.md`;
 - Exception Station Phase 1 remains deferred until those foundations are complete.
 
 Compatibility note:

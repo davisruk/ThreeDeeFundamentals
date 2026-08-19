@@ -7,7 +7,7 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The completed current branch plan, `docs/scheduler/dsp-bag-planning-provenance-plan.md`
+2. The current branch plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
 3. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
 4. `docs/scheduler/dsp-operational-scheduling-requirements.md`
 5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
@@ -81,7 +81,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance` is implementation-complete and verified pending merge to `master`. Do not add further scope to that branch. After merge, create a decision-complete detailed plan for `feature/dsp-outbound-tote-allocation` before implementation. Exception Station behavior remains later work.
+`feature/dsp-bag-planning-provenance` is complete, verified, and merged. `feature/dsp-outbound-tote-allocation` is the current branch. Follow `docs/scheduler/dsp-outbound-tote-allocation-plan.md` step by step. Exception Station behavior remains later work.
 
 Completed bag-planning behavior:
 
@@ -152,8 +152,8 @@ Known Phase 1 machine/station work:
 
 - adapting station: Phase 1 complete and merged
 - Third Party Area: Phase 1 complete and merged
-- bag planning/provenance: implementation complete and verified; pending merge
-- outbound physical tote allocation: next planning and implementation target
+- bag planning/provenance: complete, verified, and merged
+- outbound physical tote allocation: current planned branch
 - Exception Area: resume after outbound tote allocation
 - lid opening machine
 - lid closing machine

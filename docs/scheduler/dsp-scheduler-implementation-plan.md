@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity and inbound tote lifecycle are complete and merged. Bag planning and provenance is complete and verified pending merge. Outbound physical tote allocation is the next programme branch before Exception Station work and deeper scheduler policy.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, and bag planning/provenance are complete and merged. Outbound physical tote allocation is the current planned branch before Exception Station work and deeper scheduler policy.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -377,7 +377,7 @@ Follow-on branch:
 
 ### `feature/dsp-bag-planning-provenance`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -415,6 +415,36 @@ Explicit non-goals:
 Follow-on branch:
 
 - `feature/dsp-outbound-tote-allocation`
+
+### `feature/dsp-outbound-tote-allocation`
+
+Status: detailed plan ready; implementation is the current branch.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+
+Purpose:
+
+- Allocate completed planned bags to independently supplied outbound physical totes per P2P line.
+- Enforce service-centre purity, pharmacy purity, configurable bag-count capacity, and closed-tote immutability.
+- Preserve best-effort patient affinity without reordering or violating hard constraints.
+- Record bag-to-outbound-tote and source-to-output-sheet allocation separately from immutable provenance.
+- Generate deterministic output sheets when one logical source sheet would otherwise be active on two outbound totes.
+- Advance outbound tote and logical-sheet assignment history through the existing physical lifecycle ledger.
+- Bridge the existing generic stored bag receiver to DSP allocation through a simulation controller.
+
+Explicit non-goals:
+
+- no OSR physical inventory or service-centre supply;
+- no scheduler P2P line leases;
+- no finite empty-tote reservoir or reservoir geometry;
+- no Exception behavior, all-missing NS bag, or 32R;
+- no outbound tote renderable, database, or new thread.
+
+Follow-on branch:
+
+- `feature/dsp-osr-physical-inventory`
 
 ## Current Assumptions
 
