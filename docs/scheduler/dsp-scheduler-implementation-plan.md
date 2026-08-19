@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, and outbound physical tote allocation are complete, verified, and merged. OSR physical inventory is the current planned branch.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, and outbound physical tote allocation are complete, verified, and merged. OSR physical inventory is complete and verified on its feature branch, pending merge to `master`. The operational simulation clock is the next planned feature.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -465,7 +465,7 @@ Follow-on branch:
 
 ### `feature/dsp-osr-physical-inventory`
 
-Status: detailed plan ready; implementation is the current branch.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -479,6 +479,22 @@ Purpose:
 - Preserve multiple physical manifests for one logical sheet without collapsing identity.
 - Expose immutable inventory, capacity, grouping, and departure snapshots for later supply and scheduler work.
 - Keep inventory membership separate from lifecycle registration, activation, and scheduler order status.
+
+Implemented outcome:
+
+- `OsrInventoryConfig` provides configurable capacity and deterministic preload service-centre configuration, with production defaults of 1,200 totes and service centres `104` and `108`.
+- `OsrInventoryBootstrapFactory` creates an atomic preload from assembled physical manifests while preserving dataset order and keeping EMPTY startup authorization separate.
+- `OsrPhysicalInventory` owns physical admission and explicit departure commits on the simulation thread.
+- `OsrInventorySnapshot` exposes immutable occupancy, remaining capacity, physical lookup, departure history, and deterministic service-centre/order-type grouping.
+- Multiple physical manifests for one logical sheet remain distinct throughout inventory and scenario coverage.
+- Focused tests, the complete suite, visual smoke checks, and reset checks are green.
+
+Contracts for later supply and release branches:
+
+- physical inventory transitions must not be conflated with lifecycle activation or scheduler status;
+- a release path commits `recordDeparture(...)` only after downstream acceptance succeeds;
+- EMPTY authorization consumes no physical OSR slot;
+- supply and release logic must operate per physical manifest and derive logical-sheet summaries when required.
 
 Explicit non-goals:
 

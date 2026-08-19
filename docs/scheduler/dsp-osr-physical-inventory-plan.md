@@ -2,7 +2,14 @@
 
 Branch: `feature/dsp-osr-physical-inventory`
 
-Status: ready for implementation.
+Status: implementation complete and verified; pending merge to `master`.
+
+Verification completed:
+
+- all focused implementation-step tests are green;
+- the Step 9 focused regression coverage and complete Gradle suite are green;
+- the Adapting, Third Party, and integrated tote-to-bag/P2P visual smoke checks are green;
+- `ALT+R` reset behavior remains correct in the checked scenes.
 
 ## Purpose
 
@@ -420,10 +427,23 @@ Visual smoke tests:
 
 Before branch closure:
 
-- update this plan status to implementation complete and verified;
-- update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- record any implementation detail that the later supply or physical-release plans must preserve.
+- [x] update this plan status to implementation complete and verified;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] record implementation details that the later supply or physical-release plans must preserve.
+
+## Preserved Contracts For Follow-On Work
+
+- OSR occupancy is counted by distinct physical inbound manifests, never by logical sheets, packs, or EMPTY authorization.
+- One logical sheet may have several physical manifests; later supply and release work must not collapse them into one inventory entry or one lifecycle status.
+- `OsrPhysicalInventory` is simulation-thread-owned mutable state. Consumers observe immutable `OsrInventorySnapshot` values.
+- Inventory admission/departure, inbound lifecycle registration/activation, and scheduler order status remain separate transitions.
+- Startup-authorized EMPTY sheets are held separately in `OsrBootstrapState`; they do not create physical manifests or consume OSR capacity.
+- `recordDeparture(...)` is the explicit physical inventory commit. A future physical-release command path must call it only after downstream release acceptance succeeds.
+- The bootstrap operation validates capacity before publishing state and preserves assembled dataset order for configured preload service centres.
+- Future rate-limited supply must admit individual physical manifests through `store(...)` or atomic `storeAll(...)`, respect remaining capacity, and preserve the configured upstream ordering policy.
+- Future supply state must remain physical-manifest aware. Any logical-sheet summary must be derived because manifests for one sheet may be in different physical states.
+- OSR inventory snapshots remain independent of `WarehouseSchedulerSnapshot` until a later branch explicitly introduces the required scheduler contract.
 
 ## Completion Criteria
 
