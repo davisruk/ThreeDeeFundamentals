@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, and bag planning/provenance are complete and merged. Outbound physical tote allocation is complete and verified on its feature branch, pending merge. OSR physical inventory is the next planned scheduler branch.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, and outbound physical tote allocation are complete, verified, and merged. OSR physical inventory is the current planned branch.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -418,7 +418,7 @@ Follow-on branch:
 
 ### `feature/dsp-outbound-tote-allocation`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -462,6 +462,35 @@ Deferred all-missing/NS behavior:
 Follow-on branch:
 
 - `feature/dsp-osr-physical-inventory`
+
+### `feature/dsp-osr-physical-inventory`
+
+Status: detailed plan ready; implementation is the current branch.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+
+Purpose:
+
+- Add configurable physical OSR capacity with a production baseline of 1,200 totes.
+- Bootstrap every retained physical inbound manifest for Letchworth `104` and Swansea `108` at the 06:00 start.
+- Keep EMPTY startup authorization separate from physical occupancy.
+- Preserve multiple physical manifests for one logical sheet without collapsing identity.
+- Expose immutable inventory, capacity, grouping, and departure snapshots for later supply and scheduler work.
+- Keep inventory membership separate from lifecycle registration, activation, and scheduler order status.
+
+Explicit non-goals:
+
+- no low-water service-centre authorization;
+- no rate-limited inbound supply;
+- no operational clock implementation;
+- no scheduler physical-release command integration;
+- no OSR renderables, metrics history, database, or new thread.
+
+Follow-on branch:
+
+- `feature/dsp-operational-simulation-clock`
 
 ## Current Assumptions
 

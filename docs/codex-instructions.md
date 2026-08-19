@@ -8,10 +8,11 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-4. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-5. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-6. `docs/machines/phase-1-stations-roadmap.md`
+3. The current branch plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+4. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+5. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+6. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+7. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -75,13 +76,13 @@ Architectural boundaries to maintain:
 
 ## Current Direction
 
-The latest completed scheduler-adjacent branch is `feature/dsp-scheduler-thread`, merged back to `master`.
+The scheduler evaluation thread boundary from `feature/dsp-scheduler-thread` is complete and merged; later lifecycle branches continue to preserve that snapshot/command boundary.
 
 The adapting station Phase 1 and simulation-reset branches are complete and merged to `master`.
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance` is complete, verified, and merged. `feature/dsp-outbound-tote-allocation` is complete and verified, pending merge to `master`. The next planned scheduler feature is `feature/dsp-osr-physical-inventory`; create its decision-complete detailed plan from updated `master` before implementation. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance` and `feature/dsp-outbound-tote-allocation` are complete, verified, and merged. `feature/dsp-osr-physical-inventory` is the current branch. Follow `docs/scheduler/dsp-osr-physical-inventory-plan.md` step by step. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -163,8 +164,8 @@ Known Phase 1 machine/station work:
 - adapting station: Phase 1 complete and merged
 - Third Party Area: Phase 1 complete and merged
 - bag planning/provenance: complete, verified, and merged
-- outbound physical tote allocation: complete and verified, pending merge
-- OSR physical inventory and preload: next planned scheduler branch
+- outbound physical tote allocation: complete, verified, and merged
+- OSR physical inventory and preload: current planned scheduler branch
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine
