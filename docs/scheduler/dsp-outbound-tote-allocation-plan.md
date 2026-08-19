@@ -2,7 +2,14 @@
 
 Branch: `feature/dsp-outbound-tote-allocation`
 
-Status: ready for implementation.
+Status: implementation complete and verified; pending merge to `master`.
+
+Verification completed:
+
+- focused Step 1-9 tests are green;
+- focused branch regression coverage and the complete test suite are green;
+- the Adapting, Third Party, and integrated tote-to-bag/P2P scenes passed visual checks;
+- `ALT+R` reset remains correct in each checked scene.
 
 ## Purpose
 
@@ -555,6 +562,14 @@ Before branch closure:
 - update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
 - update `docs/codex-context.md` and `docs/codex-instructions.md`;
 - record any deliberately deferred all-missing/NS allocation behavior.
+
+Deferred all-missing/NS behavior:
+
+- Missing logical lines still create no physical pack, planned bag, or runtime bag.
+- An all-missing prescription therefore produces no outbound allocation in this branch.
+- Exception Station work must introduce the terminal line outcome and physical empty NS bag before outbound allocation can occur.
+- The future empty NS bag should use a dedicated pharmacy-pure outbound tote. Do not fabricate a normal `PlannedBag`, synthetic scheduler order, or output sheet in the current allocation path.
+- NS labels, Exception resolution, and any later dispatch/32R representation remain outside this branch.
 
 ## Completion Criteria
 

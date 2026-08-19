@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, and bag planning/provenance are complete and merged. Outbound physical tote allocation is the current planned branch before Exception Station work and deeper scheduler policy.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, and bag planning/provenance are complete and merged. Outbound physical tote allocation is complete and verified on its feature branch, pending merge. OSR physical inventory is the next planned scheduler branch.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -418,7 +418,7 @@ Follow-on branch:
 
 ### `feature/dsp-outbound-tote-allocation`
 
-Status: detailed plan ready; implementation is the current branch.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -434,6 +434,17 @@ Purpose:
 - Advance outbound tote and logical-sheet assignment history through the existing physical lifecycle ledger.
 - Bridge the existing generic stored bag receiver to DSP allocation through a simulation controller.
 
+Implemented outcome:
+
+- Each P2P line independently supplies deterministic outbound physical tote identities and maintains at most one open receiving tote.
+- Completed bags are allocated in receiver order with service-centre purity, pharmacy purity, and configurable bag-count capacity.
+- Inbound physical totes remain consumed at P2P and are never reused for outbound dispatch.
+- Outbound tote closure advances lifecycle assignments from `OUTBOUND_BAG` to terminal-tote `OUTBOUND` state without reopening closed totes.
+- Deterministic generated output sheets prevent one logical output sheet from being active on two physical outbound totes while preserving source order ID and immutable pack/bag provenance.
+- `OutboundToteAllocationController` resolves authoritative planned bag correlations, validates ordered physical pack IDs, and removes runtime bags only after successful allocation.
+- Multi-line and end-to-end scenarios verify independent line state, capacity splitting, pharmacy changes, lifecycle separation, and generated-sheet behavior.
+- Focused tests, the complete suite, visual checks, and `ALT+R` reset verification are green.
+
 Explicit non-goals:
 
 - no OSR physical inventory or service-centre supply;
@@ -441,6 +452,12 @@ Explicit non-goals:
 - no finite empty-tote reservoir or reservoir geometry;
 - no Exception behavior, all-missing NS bag, or 32R;
 - no outbound tote renderable, database, or new thread.
+
+Deferred all-missing/NS behavior:
+
+- All-missing prescriptions currently create no physical or planned bag and therefore no outbound allocation.
+- Exception Station work must create the physical empty NS bag and route it to a dedicated pharmacy-pure outbound tote.
+- NS labels, Exception outcomes, and 32R remain deferred; the current allocator does not fabricate scheduler orders or bags.
 
 Follow-on branch:
 

@@ -7,10 +7,10 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The current branch plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-3. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-4. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+3. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+4. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+5. `docs/scheduler/dsp-operational-scheduling-requirements.md`
 6. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
@@ -81,7 +81,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance` is complete, verified, and merged. `feature/dsp-outbound-tote-allocation` is the current branch. Follow `docs/scheduler/dsp-outbound-tote-allocation-plan.md` step by step. Exception Station behavior remains later work.
+`feature/dsp-bag-planning-provenance` is complete, verified, and merged. `feature/dsp-outbound-tote-allocation` is complete and verified, pending merge to `master`. The next planned scheduler feature is `feature/dsp-osr-physical-inventory`; create its decision-complete detailed plan from updated `master` before implementation. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -92,6 +92,16 @@ Completed bag-planning behavior:
 - Planning traces join source sheet, fulfilment sheet, input physical tote, and bag.
 - Missing logical lines do not create fake physical packs or bags.
 - The deprecated eight-argument `DspOrderItem` constructor remains only as a transitional fixture bridge with line-specific placeholder identities.
+
+Completed outbound-allocation behavior:
+
+- Each P2P line has independent deterministic outbound tote identity and at most one open receiving tote.
+- Allocation preserves completed receiver order and enforces service-centre purity, pharmacy purity, and configurable bag-count capacity.
+- Inbound physical totes terminate at P2P and are never reused as outbound totes.
+- Output sheets are allocated separately from immutable planned bag and pack provenance; deterministic generated sheets handle physical tote overflow.
+- Closed tote assignments advance from `OUTBOUND_BAG` to `OUTBOUND` and remain active for later dispatch/32R work.
+- `OutboundToteAllocationController` validates planned correlation and ordered pack identity before removing a completed runtime bag from `StoredBagReceiver`.
+- All-missing prescriptions still produce no bag. Future Exception work must create an empty NS bag for a dedicated pharmacy-pure outbound tote rather than fabricating one in normal bag planning/allocation.
 
 Completed scheduler work:
 
@@ -138,7 +148,7 @@ Current scheduler decisions:
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 - Simulation and rendering still run sequentially on the same game-loop thread. Only scheduler evaluation has been moved to a worker thread. A future render-thread split remains deferred and would use published render snapshots rather than live renderable mutation.
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the machine roadmap. Third Party Area Phase 1 is merged. Exception Station Phase 1 remains deferred until outbound physical tote allocation provides the required bag/tote lifecycle foundation.
+Use `docs/machines/phase-1-stations-roadmap.md` as the machine roadmap. Third Party Area Phase 1 is merged. Outbound physical tote allocation now provides the bag/tote lifecycle foundation required by Exception Station Phase 1, but Exception implementation remains deferred to its own planned branch.
 
 ## Deferred Direction
 
@@ -153,8 +163,9 @@ Known Phase 1 machine/station work:
 - adapting station: Phase 1 complete and merged
 - Third Party Area: Phase 1 complete and merged
 - bag planning/provenance: complete, verified, and merged
-- outbound physical tote allocation: current planned branch
-- Exception Area: resume after outbound tote allocation
+- outbound physical tote allocation: complete and verified, pending merge
+- OSR physical inventory and preload: next planned scheduler branch
+- Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine
 - scheduler-controlled tote buffer
