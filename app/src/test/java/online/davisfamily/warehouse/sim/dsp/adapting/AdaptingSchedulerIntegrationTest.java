@@ -15,6 +15,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
@@ -48,7 +49,11 @@ class AdaptingSchedulerIntegrationTest {
         DspReleaseScheduler scheduler = scheduler(area);
 
         DspOrderItem stagedLine = adaptedPreparedLine("line-1", "dispatch-1");
-        area.submitVisit(AdaptingVisit.store(new PhysicalToteId("store-tote-1"), List.of(stagedLine)));
+        area.submitVisit(AdaptingVisit.store(
+                new PhysicalToteId("store-tote-1"),
+                new OrderSheetKey("adapted-source-1", 1),
+                "SC-1",
+                List.of(stagedLine)));
         bench2.startProcessing();
         bench2.tick(1d);
         controller.applyBenchCompletion(new AdaptingBenchId("bench-2")).orElseThrow();
@@ -83,9 +88,13 @@ class AdaptingSchedulerIntegrationTest {
 
         bench1.acceptVisit(AdaptingVisit.store(
                 new PhysicalToteId("busy-1"),
+                new OrderSheetKey("adapted-busy-1", 1),
+                "SC-1",
                 List.of(adaptedPreparedLine("busy-line-1", "other-order-1"))));
         bench2.acceptVisit(AdaptingVisit.store(
                 new PhysicalToteId("busy-2"),
+                new OrderSheetKey("adapted-busy-2", 1),
+                "SC-1",
                 List.of(adaptedPreparedLine("busy-line-2", "other-order-2"))));
         runtimeState.addPreparedLineKey(online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey.forDispatchLine(
                 collectingOrderState("dispatch-2").order(),

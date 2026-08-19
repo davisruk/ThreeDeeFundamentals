@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.adapting;
 import java.util.List;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
@@ -37,16 +38,23 @@ public record AdaptingVisit(
 
     public static AdaptingVisit store(
             PhysicalToteId physicalToteId,
+            OrderSheetKey orderSheetKey,
+            String serviceCentreId,
             List<DspOrderItem> preparedLines) {
-        return new AdaptingVisit(physicalToteId, AdaptingVisitProfile.store(preparedLines));
+        return new AdaptingVisit(
+                physicalToteId,
+                AdaptingVisitProfile.store(orderSheetKey, serviceCentreId, preparedLines));
     }
 
     public static AdaptingVisit collect(
             PhysicalToteId physicalToteId,
+            OrderSheetKey orderSheetKey,
+            String serviceCentreId,
             List<PreparedLineKey> requestedLineKeys,
             List<String> pharmacyIds) {
         return new AdaptingVisit(
                 physicalToteId,
-                AdaptingVisitProfile.collect(requestedLineKeys, pharmacyIds));
+                AdaptingVisitProfile.collect(
+                        orderSheetKey, serviceCentreId, requestedLineKeys, pharmacyIds));
     }
 }

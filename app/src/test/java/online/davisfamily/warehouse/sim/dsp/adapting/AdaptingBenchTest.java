@@ -11,10 +11,13 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 class AdaptingBenchTest {
+    private static final OrderSheetKey SOURCE_ORDER_SHEET = new OrderSheetKey("adapted-source", 7);
+    private static final String SERVICE_CENTRE_ID = "104";
 
     @Test
     void shouldStageAdaptedLinesAfterStoreVisitCompletes() {
@@ -25,7 +28,11 @@ class AdaptingBenchTest {
         DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
         DspOrderItem line2 = adaptedLine("line-2", "target-2", "0000388");
 
-        bench.acceptVisit(AdaptingVisit.store(new PhysicalToteId("tote-store"), List.of(line1, line2)));
+        bench.acceptVisit(AdaptingVisit.store(
+                new PhysicalToteId("tote-store"),
+                SOURCE_ORDER_SHEET,
+                SERVICE_CENTRE_ID,
+                List.of(line1, line2)));
         assertEquals(AdaptingBenchState.QUEUED, bench.state());
         assertEquals("tote-store", bench.snapshot().activeToteId());
         assertEquals(AdaptingVisitType.STORE, bench.snapshot().activeVisitType());
@@ -51,18 +58,20 @@ class AdaptingBenchTest {
     }
 
     @Test
-    void shouldReturnCollectedLinesAfterCollectVisitCompletes() {
+    void shouldReturnOriginalSourceSheetWhenAdaptedLineIsCollected() {
         AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
                 AdaptingStorageConfig.defaults(),
                 storageMap("0000310", "bench-1", "0000388", "bench-2")));
         AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
         DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
         DspOrderItem line2 = adaptedLine("line-2", "target-2", "0000388");
-        store.stage(line1);
-        store.stage(line2);
+        stage(store, line1);
+        stage(store, line2);
 
         bench.acceptVisit(AdaptingVisit.collect(
                 new PhysicalToteId("tote-collect"),
+                new OrderSheetKey("associated-collect", 3),
+                SERVICE_CENTRE_ID,
                 List.of(PreparedLineKey.forPreparedLine(line2), PreparedLineKey.forPreparedLine(line1)),
                 List.of("0000388", "0000310")));
         bench.startProcessing();
@@ -74,6 +83,8 @@ class AdaptingBenchTest {
                 PreparedLineKey.forPreparedLine(line2),
                 PreparedLineKey.forPreparedLine(line1)),
                 completion.collectedLines().stream().map(AdaptedLineRecord::key).toList());
+        assertEquals(List.of(SOURCE_ORDER_SHEET, SOURCE_ORDER_SHEET),
+                completion.collectedLines().stream().map(AdaptedLineRecord::sourceOrderSheetKey).toList());
         assertEquals(0, store.snapshot().stagedLineCount());
         assertEquals(AdaptingBenchState.IDLE, bench.state());
     }
@@ -86,10 +97,12 @@ class AdaptingBenchTest {
         AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
         DspOrderItem line1 = adaptedLine("line-1", "target-1", "0000310");
         DspOrderItem missingLine = adaptedLine("line-2", "target-2", "0000388");
-        store.stage(line1);
+        stage(store, line1);
 
         bench.acceptVisit(AdaptingVisit.collect(
                 new PhysicalToteId("tote-collect"),
+                new OrderSheetKey("associated-collect", 3),
+                SERVICE_CENTRE_ID,
                 List.of(PreparedLineKey.forPreparedLine(line1), PreparedLineKey.forPreparedLine(missingLine)),
                 List.of("0000310", "0000388")));
         bench.startProcessing();
@@ -108,15 +121,23 @@ class AdaptingBenchTest {
         AdaptingBench bench = new AdaptingBench("bench-1", store, 1d);
         bench.acceptVisit(AdaptingVisit.store(
                 new PhysicalToteId("tote-store"),
+                SOURCE_ORDER_SHEET,
+                SERVICE_CENTRE_ID,
                 List.of(adaptedLine("line-1", "target-1", "0000310"))));
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
                 () -> bench.acceptVisit(AdaptingVisit.store(
                         new PhysicalToteId("tote-store-2"),
+                        new OrderSheetKey("adapted-source-2", 1),
+                        SERVICE_CENTRE_ID,
                         List.of(adaptedLine("line-2", "target-2", "0000388")))));
 
         assertTrue(exception.getMessage().contains("Bench is not idle"));
+    }
+
+    private static void stage(AdaptedLineStore store, DspOrderItem line) {
+        store.stage(line, SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID);
     }
 
     private static DspOrderItem adaptedLine(String lineId, String targetOrderId, String pharmacyId) {

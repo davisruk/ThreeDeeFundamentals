@@ -17,6 +17,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DependencyBlock;
@@ -51,7 +52,11 @@ class AdaptingStoreFlowTest {
         assertEquals(1, beforeProcessing.size());
         assertEquals(DependencyType.ADAPTED_COMPLETION, beforeProcessing.getFirst().type());
 
-        area.submitVisit(AdaptingVisit.store(new PhysicalToteId("source-tote-1"), List.of(preparedLine)));
+        area.submitVisit(AdaptingVisit.store(
+                new PhysicalToteId("source-tote-1"),
+                new OrderSheetKey("adapted-source-1", 1),
+                "SC-1",
+                List.of(preparedLine)));
         bench.startProcessing();
 
         assertFalse(runtimeState.snapshot().preparedLineKeys().contains(PreparedLineKey.forPreparedLine(preparedLine)));

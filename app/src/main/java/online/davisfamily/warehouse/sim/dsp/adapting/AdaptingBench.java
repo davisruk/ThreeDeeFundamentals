@@ -131,7 +131,10 @@ public class AdaptingBench {
         try {
             if (activeVisit.visitType() == AdaptingVisitType.STORE) {
                 for (var line : activeVisit.preparedLines()) {
-                    store.stage(line);
+                    store.stage(
+                            line,
+                            activeVisit.profile().orderSheetKey(),
+                            activeVisit.profile().serviceCentreId());
                 }
                 lastCompletion = new AdaptingBenchCompletion(activeVisit, List.of());
             } else {

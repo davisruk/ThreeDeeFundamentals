@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public class AdaptingStorageLayout {
@@ -34,7 +35,10 @@ public class AdaptingStorageLayout {
         this.storageMap = storageMap;
     }
 
-    public AdaptedLineRecord stage(DspOrderItem line) {
+    public AdaptedLineRecord stage(
+            DspOrderItem line,
+            OrderSheetKey sourceOrderSheetKey,
+            String sourceServiceCentreId) {
         if (line == null) {
             throw new IllegalArgumentException("line must not be null");
         }
@@ -48,7 +52,8 @@ public class AdaptingStorageLayout {
         }
 
         AdaptingStorageLocation location = cursor.currentLocation();
-        AdaptedLineRecord record = AdaptedLineRecord.fromPreparedLine(line, location);
+        AdaptedLineRecord record = AdaptedLineRecord.fromPreparedLine(
+                line, sourceOrderSheetKey, sourceServiceCentreId, location);
         stagedRecords.put(record.key(), record);
         cursor.advance(config);
         return record;

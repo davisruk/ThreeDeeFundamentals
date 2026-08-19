@@ -11,9 +11,12 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 class AdaptedLineStoreTest {
+    private static final OrderSheetKey SOURCE_ORDER_SHEET = new OrderSheetKey("adapted-source", 7);
+    private static final String SOURCE_SERVICE_CENTRE = "104";
 
     @Test
     void shouldStageAndTakeSingleAdaptedLine() {
@@ -23,7 +26,7 @@ class AdaptedLineStoreTest {
         DspOrderItem preparedLine = adaptedLine("line-1", "order-1", "0000310");
         PreparedLineKey key = PreparedLineKey.forPreparedLine(preparedLine);
 
-        store.stage(preparedLine);
+        stage(store, preparedLine);
 
         assertTrue(store.contains(key));
         assertEquals(1, store.snapshot().stagedLineCount());
@@ -32,6 +35,8 @@ class AdaptedLineStoreTest {
         AdaptedLineRecord record = store.take(key).orElseThrow();
 
         assertEquals(key, record.key());
+        assertEquals(SOURCE_ORDER_SHEET, record.sourceOrderSheetKey());
+        assertEquals(SOURCE_SERVICE_CENTRE, record.sourceServiceCentreId());
         assertEquals(preparedLine, record.line());
         assertEquals(new AdaptingBenchId("bench-1"), record.location().benchId());
         assertFalse(store.contains(key));
@@ -50,9 +55,9 @@ class AdaptedLineStoreTest {
         DspOrderItem line2 = adaptedLine("line-2", "order-2", "0000388");
         DspOrderItem line3 = adaptedLine("line-3", "order-3", "0000456");
 
-        store.stage(line1);
-        store.stage(line2);
-        store.stage(line3);
+        stage(store, line1);
+        stage(store, line2);
+        stage(store, line3);
 
         List<AdaptedLineRecord> records = store.takeAll(List.of(
                 PreparedLineKey.forPreparedLine(line2),
@@ -77,7 +82,7 @@ class AdaptedLineStoreTest {
         DspOrderItem missingLine = adaptedLine("line-2", "order-2", "0000388");
         PreparedLineKey presentKey = PreparedLineKey.forPreparedLine(presentLine);
         PreparedLineKey missingKey = PreparedLineKey.forPreparedLine(missingLine);
-        store.stage(presentLine);
+        stage(store, presentLine);
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
@@ -102,7 +107,8 @@ class AdaptedLineStoreTest {
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> AdaptedLineRecord.fromPreparedLine(manualLine));
+                () -> AdaptedLineRecord.fromPreparedLine(
+                        manualLine, SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE));
 
         assertEquals("line must be ADAPTED", exception.getMessage());
     }
@@ -113,11 +119,11 @@ class AdaptedLineStoreTest {
                 new AdaptingStorageConfig(1, 2, 2),
                 storageMap("0000310", "bench-2")));
 
-        store.stage(adaptedLine("line-1", "order-1", "0000310"));
-        store.stage(adaptedLine("line-2", "order-2", "0000310"));
-        store.stage(adaptedLine("line-3", "order-3", "0000310"));
-        store.stage(adaptedLine("line-4", "order-4", "0000310"));
-        store.stage(adaptedLine("line-5", "order-5", "0000310"));
+        stage(store, adaptedLine("line-1", "order-1", "0000310"));
+        stage(store, adaptedLine("line-2", "order-2", "0000310"));
+        stage(store, adaptedLine("line-3", "order-3", "0000310"));
+        stage(store, adaptedLine("line-4", "order-4", "0000310"));
+        stage(store, adaptedLine("line-5", "order-5", "0000310"));
 
         AdaptedLineRecord line1 = store.take(PreparedLineKey.forPreparedLine(adaptedLine("line-1", "order-1", "0000310"))).orElseThrow();
         AdaptedLineRecord line3 = store.take(PreparedLineKey.forPreparedLine(adaptedLine("line-3", "order-3", "0000310"))).orElseThrow();
@@ -126,6 +132,34 @@ class AdaptedLineStoreTest {
         assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 0, 0), line1.location());
         assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 1, 0), line3.location());
         assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 1, 0, 0), line5.location());
+    }
+
+    @Test
+    void shouldRetainAdaptedSourceOrderSheetWhileLineIsStored() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        DspOrderItem line = adaptedLine("line-1", "associated-target", "0000310");
+
+        stage(store, line);
+
+        AdaptedLineRecord record = store.take(PreparedLineKey.forPreparedLine(line)).orElseThrow();
+        assertEquals(SOURCE_ORDER_SHEET, record.sourceOrderSheetKey());
+        assertEquals(SOURCE_SERVICE_CENTRE, record.sourceServiceCentreId());
+    }
+
+    @Test
+    void shouldKeepPreparedTargetKeySeparateFromSourceSheetIdentity() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        DspOrderItem line = adaptedLine("line-1", "associated-target", "0000310");
+
+        stage(store, line);
+
+        AdaptedLineRecord record = store.take(PreparedLineKey.forPreparedLine(line)).orElseThrow();
+        assertEquals(new PreparedLineKey("associated-target", "line-1"), record.key());
+        assertEquals(new OrderSheetKey("adapted-source", 7), record.sourceOrderSheetKey());
+    }
+
+    private static void stage(AdaptedLineStore store, DspOrderItem line) {
+        store.stage(line, SOURCE_ORDER_SHEET, " " + SOURCE_SERVICE_CENTRE + " ");
     }
 
     private static AdaptingStorageMap storageMap(String... values) {

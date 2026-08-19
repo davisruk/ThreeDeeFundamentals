@@ -118,6 +118,8 @@ class ThirdPartyAdaptedCollectIntegrationTest {
 
         adaptingArea.submitVisit(AdaptingVisit.store(
                 adaptedToteId,
+                adaptedOrder.orderSheetKey(),
+                adaptedOrder.serviceCentreId(),
                 adaptedOrder.items()));
         bench.startProcessing();
         adaptingController.applyBenchCompletion(benchId).orElseThrow();

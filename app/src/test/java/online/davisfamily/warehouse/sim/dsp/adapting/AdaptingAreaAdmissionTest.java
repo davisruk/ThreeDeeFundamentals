@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
@@ -128,6 +129,8 @@ class AdaptingAreaAdmissionTest {
                 new AdaptingBench("bench-2", sharedStore, 1d)), 1, storageMap);
 
         AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisitProfile.collect(
+                new OrderSheetKey("associated-1", 1),
+                "104",
                 List.of(new PreparedLineKey("dispatch-1", "line-1")),
                 List.of("0000388")));
 
@@ -145,10 +148,13 @@ class AdaptingAreaAdmissionTest {
                 new AdaptingBench("bench-1", sharedStore, 1d),
                 new AdaptingBench("bench-2", sharedStore, 1d)), 1, storageMap);
 
-        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisitProfile.store(List.of(
-                adaptedLine("line-1", "target-1", "0000388"),
-                adaptedLine("line-2", "target-2", "0000388"),
-                adaptedLine("line-3", "target-3", "0000310"))));
+        AdaptingBenchSelection selection = area.selectBenchFor(AdaptingVisitProfile.store(
+                new OrderSheetKey("adapted-source", 1),
+                "104",
+                List.of(
+                        adaptedLine("line-1", "target-1", "0000388"),
+                        adaptedLine("line-2", "target-2", "0000388"),
+                        adaptedLine("line-3", "target-3", "0000310"))));
 
         assertTrue(selection.accepted());
         assertEquals(new AdaptingBenchId("bench-2"), selection.benchId());
@@ -157,6 +163,8 @@ class AdaptingAreaAdmissionTest {
     private static AdaptingVisit storeVisit(String toteId, String lineId, String targetOrderId) {
         return AdaptingVisit.store(
                 new PhysicalToteId(toteId),
+                new OrderSheetKey("source-" + toteId, 1),
+                "104",
                 List.of(adaptedLine(lineId, targetOrderId, "0000310")));
     }
 

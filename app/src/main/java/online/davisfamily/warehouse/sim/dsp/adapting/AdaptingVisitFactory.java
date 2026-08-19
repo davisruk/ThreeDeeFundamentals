@@ -15,7 +15,8 @@ public final class AdaptingVisitFactory {
             throw new IllegalArgumentException("order must not be null");
         }
         if (order.orderType() == OrderType.ADAPTED) {
-            return AdaptingVisitProfile.store(order.items());
+            return AdaptingVisitProfile.store(
+                    order.orderSheetKey(), order.serviceCentreId(), order.items());
         }
         if (order.orderType() == OrderType.FULL_PACK) {
             throw new IllegalArgumentException("FULL_PACK orders do not collect adapted lines");
@@ -35,7 +36,8 @@ public final class AdaptingVisitFactory {
         if (requestedLineKeys.isEmpty()) {
             throw new IllegalArgumentException("Collecting order must contain at least one ADAPTED line");
         }
-        return AdaptingVisitProfile.collect(requestedLineKeys, pharmacyIds);
+        return AdaptingVisitProfile.collect(
+                order.orderSheetKey(), order.serviceCentreId(), requestedLineKeys, pharmacyIds);
     }
 
     public AdaptingVisit create(PhysicalToteId physicalToteId, NotionalToteOrder order) {

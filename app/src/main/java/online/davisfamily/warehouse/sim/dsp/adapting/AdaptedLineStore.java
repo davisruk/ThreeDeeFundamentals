@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public class AdaptedLineStore {
@@ -25,8 +26,11 @@ public class AdaptedLineStore {
         layout.bindStorageMap(storageMap);
     }
 
-    public void stage(DspOrderItem line) {
-        layout.stage(line);
+    public void stage(
+            DspOrderItem line,
+            OrderSheetKey sourceOrderSheetKey,
+            String sourceServiceCentreId) {
+        layout.stage(line, sourceOrderSheetKey, sourceServiceCentreId);
     }
 
     public void stage(AdaptedLineRecord record) {

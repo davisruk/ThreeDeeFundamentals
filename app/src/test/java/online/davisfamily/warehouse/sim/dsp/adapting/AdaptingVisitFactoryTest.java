@@ -21,6 +21,8 @@ class AdaptingVisitFactoryTest {
         AdaptingVisitProfile profile = new AdaptingVisitFactory().profileFor(order);
 
         assertEquals(AdaptingVisitType.STORE, profile.visitType());
+        assertEquals(order.orderSheetKey(), profile.orderSheetKey());
+        assertEquals(order.serviceCentreId(), profile.serviceCentreId());
         assertEquals(order.items(), profile.preparedLines());
         assertEquals(List.of("0000310"), profile.pharmacyIds());
     }
@@ -33,6 +35,8 @@ class AdaptingVisitFactoryTest {
         AdaptingVisit visit = new AdaptingVisitFactory().create(physicalToteId, order);
 
         assertEquals(physicalToteId, visit.physicalToteId());
+        assertEquals(order.orderSheetKey(), visit.profile().orderSheetKey());
+        assertEquals(order.serviceCentreId(), visit.profile().serviceCentreId());
         assertEquals(order.items(), visit.preparedLines());
     }
 

@@ -43,6 +43,7 @@ import online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFac
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
@@ -673,7 +674,10 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
     }
 
     private AdaptingVisitProfile dummyStoreProfile() {
-        return AdaptingVisitProfile.store(List.of(new DspOrderItem(
+        return AdaptingVisitProfile.store(
+                new OrderSheetKey("dummy-source-order", 1),
+                SERVICE_CENTRE_ID,
+                List.of(new DspOrderItem(
                         "dummy-line",
                         "dummy-product",
                         1,

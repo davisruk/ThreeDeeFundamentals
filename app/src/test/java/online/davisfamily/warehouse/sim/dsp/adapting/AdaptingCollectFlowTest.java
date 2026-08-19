@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
@@ -30,7 +31,7 @@ class AdaptingCollectFlowTest {
     void shouldAppendCollectedAdaptedLinesToAssociatedToteLoadPlan() {
         AdaptedLineStore store = new AdaptedLineStore();
         DspOrderItem collectedLine = adaptedPreparedLine("line-1", "dispatch-1", 2);
-        store.stage(collectedLine);
+        store.stage(collectedLine, new OrderSheetKey("adapted-source-1", 1), "SC-1");
         AdaptingBench bench = new AdaptingBench("bench-1", store, 1d);
         AdaptingArea area = new AdaptingArea(List.of(bench), 0);
         MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();
@@ -78,7 +79,7 @@ class AdaptingCollectFlowTest {
     void shouldCreateLoadPlanForEmptyCollectingTote() {
         AdaptedLineStore store = new AdaptedLineStore();
         DspOrderItem collectedLine = adaptedPreparedLine("line-2", "dispatch-2", 1);
-        store.stage(collectedLine);
+        store.stage(collectedLine, new OrderSheetKey("adapted-source-2", 1), "SC-1");
         AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
         AdaptingArea area = new AdaptingArea(List.of(bench), 0);
         MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();

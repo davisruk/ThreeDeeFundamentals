@@ -4,10 +4,13 @@ import java.util.List;
 
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public record AdaptingVisitProfile(
         AdaptingVisitType visitType,
+        OrderSheetKey orderSheetKey,
+        String serviceCentreId,
         List<DspOrderItem> preparedLines,
         List<PreparedLineKey> requestedLineKeys,
         List<String> pharmacyIds) {
@@ -16,6 +19,13 @@ public record AdaptingVisitProfile(
         if (visitType == null) {
             throw new IllegalArgumentException("visitType must not be null");
         }
+        if (orderSheetKey == null) {
+            throw new IllegalArgumentException("orderSheetKey must not be null");
+        }
+        if (serviceCentreId == null || serviceCentreId.isBlank()) {
+            throw new IllegalArgumentException("serviceCentreId must not be blank");
+        }
+        serviceCentreId = serviceCentreId.trim();
         if (preparedLines == null) {
             throw new IllegalArgumentException("preparedLines must not be null");
         }
@@ -65,18 +75,33 @@ public record AdaptingVisitProfile(
         }
     }
 
-    public static AdaptingVisitProfile store(List<DspOrderItem> preparedLines) {
+    public static AdaptingVisitProfile store(
+            OrderSheetKey orderSheetKey,
+            String serviceCentreId,
+            List<DspOrderItem> preparedLines) {
         List<String> pharmacyIds = preparedLines.stream()
                 .map(DspOrderItem::pharmacyId)
                 .toList();
         return new AdaptingVisitProfile(
-                AdaptingVisitType.STORE, preparedLines, List.of(), pharmacyIds);
+                AdaptingVisitType.STORE,
+                orderSheetKey,
+                serviceCentreId,
+                preparedLines,
+                List.of(),
+                pharmacyIds);
     }
 
     public static AdaptingVisitProfile collect(
+            OrderSheetKey orderSheetKey,
+            String serviceCentreId,
             List<PreparedLineKey> requestedLineKeys,
             List<String> pharmacyIds) {
         return new AdaptingVisitProfile(
-                AdaptingVisitType.COLLECT, List.of(), requestedLineKeys, pharmacyIds);
+                AdaptingVisitType.COLLECT,
+                orderSheetKey,
+                serviceCentreId,
+                List.of(),
+                requestedLineKeys,
+                pharmacyIds);
     }
 }
