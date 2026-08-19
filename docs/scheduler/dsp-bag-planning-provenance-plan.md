@@ -2,7 +2,16 @@
 
 Branch: `feature/dsp-bag-planning-provenance`
 
-Status: ready for implementation.
+Status: implementation complete and verified; pending merge to `master`.
+
+Verification completed:
+
+- focused Step 1-8 tests are green;
+- focused branch regression coverage and the complete test suite are green;
+- the Adapting, Third Party, and integrated tote-to-bag/P2P scenes passed visual checks;
+- `ALT+R` reset remains correct in each checked scene.
+
+The deprecated eight-argument `DspOrderItem` constructor is intentionally retained as a transitional fixture bridge. It creates line-specific placeholder patient and prescription identities so legacy fixtures cannot accidentally combine unrelated lines into one bag. Modified DSP production paths use the full constructor with real 12N identity.
 
 ## Purpose
 

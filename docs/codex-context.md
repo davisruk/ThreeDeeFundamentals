@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. Recent requirements analysis established that FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Correcting that model is the prerequisite for the next scheduler and Exception Station work.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, and bag planning/provenance are now implemented. Outbound physical tote allocation is the next foundation before Exception Station work and deeper scheduling policy.
 
 Read:
 
@@ -120,6 +120,9 @@ Current scheduler decisions:
   - simulation thread applies commands/mutations
   - synchronous evaluation remains available as a fallback
   - integrated debug inspection exposes scheduler mode, in-flight state, and last completed evaluation sequence
+- Bag planning now preserves patient and prescription identity from 12N, assigns deterministic prescription-plus-ordinal `BagKey` values, and retains immutable physical-pack source provenance.
+- Planned DSP tote loads preserve physical tote, pack, dimensions, and order while replacing legacy correlations with planned bag correlations at the P2P boundary.
+- Missing logical lines do not create synthetic physical packs or bags.
 
 The agreed next programme is split into short-lived branches from `master`:
 
@@ -141,9 +144,13 @@ Current programme position:
 
 - logical/physical identity: complete and merged;
 - inbound physical tote lifecycle and 12N transport-container mapping: complete and merged;
-- bag planning and provenance: current branch, with detailed plan at `docs/scheduler/dsp-bag-planning-provenance-plan.md`;
-- outbound physical tote allocation: next branch after bag planning/provenance;
+- bag planning and provenance: implementation complete and verified, pending merge, with detailed plan at `docs/scheduler/dsp-bag-planning-provenance-plan.md`;
+- outbound physical tote allocation: next branch, with its detailed plan still to be created;
 - Exception Station Phase 1 remains deferred until those foundations are complete.
+
+Compatibility note:
+
+- The deprecated eight-argument `DspOrderItem` constructor remains intentionally available for legacy fixtures. It generates line-specific placeholder patient and prescription identities; modified DSP production paths use real 12N identity.
 
 ## Completed Work: Third Party Area Phase 1
 

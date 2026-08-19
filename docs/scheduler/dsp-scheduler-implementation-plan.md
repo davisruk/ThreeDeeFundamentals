@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Lifecycle analysis established that inbound FULL_PACK and ASSOCIATED physical totes are never outbound dispatch totes. The active programme therefore corrects logical/physical identity and lifecycle before Exception Station work and deeper scheduler policy.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity and inbound tote lifecycle are complete and merged. Bag planning and provenance is complete and verified pending merge. Outbound physical tote allocation is the next programme branch before Exception Station work and deeper scheduler policy.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -377,7 +377,7 @@ Follow-on branch:
 
 ### `feature/dsp-bag-planning-provenance`
 
-Status: plan ready; implementation is the current branch.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -390,6 +390,20 @@ Purpose:
 - Preserve immutable physical-pack source provenance through Third Party and Adapting work.
 - Plan actual physical packs into configurable pack-count bags.
 - Emit P2P-compatible correlation groups while retaining source, fulfilment, physical input tote, and bag traces.
+
+Implemented outcome:
+
+- 12N line mapping retains validated patient and prescription identity.
+- `BagKey` provides deterministic prescription-plus-ordinal bag identity.
+- A simulation-owned provenance registry retains immutable physical-pack source facts through Third Party and Adapting creation paths.
+- Deterministic bag planning groups actual physical packs by prescription behind a replaceable pack-count capacity policy.
+- Rewritten P2P tote load plans preserve physical tote, pack, dimension, and ordering identity while replacing only bag correlation.
+- Cross-station tests prove source/fulfilment/input-tote/bag traceability, deterministic overflow, and absence of fabricated packs for missing logical lines.
+- Focused tests, complete tests, visual checks, and `ALT+R` reset checks are green.
+
+Compatibility note:
+
+- The deprecated eight-argument `DspOrderItem` constructor remains as a fixture bridge with line-specific placeholder patient and prescription values; modified production code uses complete 12N identity.
 
 Explicit non-goals:
 

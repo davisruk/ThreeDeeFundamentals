@@ -7,7 +7,7 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The current branch plan, `docs/scheduler/dsp-bag-planning-provenance-plan.md`
+2. The completed current branch plan, `docs/scheduler/dsp-bag-planning-provenance-plan.md`
 3. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
 4. `docs/scheduler/dsp-operational-scheduling-requirements.md`
 5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
@@ -81,7 +81,17 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance` is the current planned branch. Follow `docs/scheduler/dsp-bag-planning-provenance-plan.md` step by step. Outbound tote allocation and Exception Station behavior remain later branches.
+`feature/dsp-bag-planning-provenance` is implementation-complete and verified pending merge to `master`. Do not add further scope to that branch. After merge, create a decision-complete detailed plan for `feature/dsp-outbound-tote-allocation` before implementation. Exception Station behavior remains later work.
+
+Completed bag-planning behavior:
+
+- 12N mapping retains patient and prescription identity.
+- `BagKey` is prescription plus deterministic one-based ordinal.
+- Physical packs retain immutable source provenance through Third Party and Adapting flows.
+- Deterministic pack-count planning emits P2P-compatible correlations without changing generic machine contracts.
+- Planning traces join source sheet, fulfilment sheet, input physical tote, and bag.
+- Missing logical lines do not create fake physical packs or bags.
+- The deprecated eight-argument `DspOrderItem` constructor remains only as a transitional fixture bridge with line-specific placeholder identities.
 
 Completed scheduler work:
 
@@ -128,7 +138,7 @@ Current scheduler decisions:
 - The integrated debug rig uses a rig-only lid controller so inbound source tote lids open after actual motion starts. This supports visual verification that contained pack renderables stay hidden while lids are closed.
 - Simulation and rendering still run sequentially on the same game-loop thread. Only scheduler evaluation has been moved to a worker thread. A future render-thread split remains deferred and would use published render snapshots rather than live renderable mutation.
 
-Use `docs/machines/phase-1-stations-roadmap.md` as the active machine roadmap. Third Party Area Phase 1 is complete and verified pending merge; Exception Station Phase 1 follows it.
+Use `docs/machines/phase-1-stations-roadmap.md` as the machine roadmap. Third Party Area Phase 1 is merged. Exception Station Phase 1 remains deferred until outbound physical tote allocation provides the required bag/tote lifecycle foundation.
 
 ## Deferred Direction
 
@@ -141,8 +151,10 @@ Current larger direction:
 Known Phase 1 machine/station work:
 
 - adapting station: Phase 1 complete and merged
-- Third Party Area: implementation complete and verified; pending merge
-- Exception Area: next planning and implementation target
+- Third Party Area: Phase 1 complete and merged
+- bag planning/provenance: implementation complete and verified; pending merge
+- outbound physical tote allocation: next planning and implementation target
+- Exception Area: resume after outbound tote allocation
 - lid opening machine
 - lid closing machine
 - scheduler-controlled tote buffer
