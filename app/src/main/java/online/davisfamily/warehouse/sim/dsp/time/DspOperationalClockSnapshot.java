@@ -46,7 +46,7 @@ public record DspOperationalClockSnapshot(
                     "businessDateTime must match operatingDate and operatingDayTime");
         }
 
-        DspOperatingPhase expectedPhase = expectedPhase(businessDateTime, normalEndDateTime, hardCutoffDateTime);
+        DspOperatingPhase expectedPhase = phaseFor(businessDateTime, normalEndDateTime, hardCutoffDateTime);
         if (phase != expectedPhase) {
             throw new IllegalArgumentException(
                     "phase does not match businessDateTime and configured boundaries");
@@ -61,7 +61,7 @@ public record DspOperationalClockSnapshot(
         return !businessDateTime.isBefore(hardCutoffDateTime);
     }
 
-    private static DspOperatingPhase expectedPhase(
+    static DspOperatingPhase phaseFor(
             LocalDateTime businessDateTime,
             LocalDateTime normalEndDateTime,
             LocalDateTime hardCutoffDateTime) {
