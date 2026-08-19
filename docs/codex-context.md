@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, and outbound physical tote allocation are complete, verified, and merged. OSR physical inventory is complete and verified on its feature branch, pending merge to `master`. The operational simulation clock is the next planned feature.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, and OSR physical inventory are complete, verified, and merged. The operational simulation clock is the current planned feature.
 
 Read:
 
@@ -156,8 +156,8 @@ Current programme position:
 - inbound physical tote lifecycle and 12N transport-container mapping: complete and merged;
 - bag planning and provenance: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-bag-planning-provenance-plan.md`;
 - outbound physical tote allocation: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-outbound-tote-allocation-plan.md`;
-- OSR physical inventory and preload: complete and verified, pending merge to `master`, with detailed plan at `docs/scheduler/dsp-osr-physical-inventory-plan.md`;
-- operational simulation clock: next planned feature; create its detailed branch plan after the OSR inventory branch is merged;
+- OSR physical inventory and preload: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-physical-inventory-plan.md`;
+- operational simulation clock: current branch, with detailed plan at `docs/scheduler/dsp-operational-simulation-clock-plan.md`;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -200,8 +200,8 @@ Planned Phase 1 order:
 - simulation reset runtime interlude: complete and merged
 - Third Party Area: Phase 1 complete and merged
 - logical/physical tote lifecycle, bag provenance, and outbound allocation: complete, verified, and merged
-- OSR physical inventory and preload: complete and verified; pending merge to `master`
-- operational simulation clock: next planned scheduler branch
+- OSR physical inventory and preload: complete, verified, and merged
+- operational simulation clock: current planned scheduler branch
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

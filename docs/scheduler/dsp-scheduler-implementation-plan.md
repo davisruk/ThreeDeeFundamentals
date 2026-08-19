@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, and outbound physical tote allocation are complete, verified, and merged. OSR physical inventory is complete and verified on its feature branch, pending merge to `master`. The operational simulation clock is the next planned feature.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, and OSR physical inventory are complete, verified, and merged. The operational simulation clock is the current planned branch.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -465,7 +465,7 @@ Follow-on branch:
 
 ### `feature/dsp-osr-physical-inventory`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -507,6 +507,35 @@ Explicit non-goals:
 Follow-on branch:
 
 - `feature/dsp-operational-simulation-clock`
+
+### `feature/dsp-operational-simulation-clock`
+
+Status: detailed plan ready; implementation is the current branch.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+
+Purpose:
+
+- Map absolute simulation elapsed time to configurable DSP operating date/time starting at `06:00`.
+- Represent post-midnight time with an explicit operating-day offset.
+- Expose immutable normal-operation, overtime, and hard-cutoff clock snapshots.
+- Provide generic bounded fixed-step execution for realtime, accelerated visual, and headless semantics.
+- Preserve pending simulation backlog under a configured work budget and report requested/achieved speed.
+- Bridge business-time snapshots to `SimulationWorld` without changing existing machine duration units.
+
+Explicit non-goals:
+
+- no service-centre timetable or completion outcome;
+- no low-water authorization or rate-limited supply;
+- no physical OSR release or scheduler command changes;
+- no renderer-loop decimation wiring or complete headless warehouse runner;
+- no render-thread separation, metrics history, or full-day execution.
+
+Follow-on branch:
+
+- `feature/dsp-rate-limited-service-centre-supply`
 
 ## Current Assumptions
 

@@ -8,11 +8,12 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-4. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-5. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-6. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-7. `docs/machines/phase-1-stations-roadmap.md`
+3. The current branch plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+4. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+5. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+6. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+7. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+8. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -82,7 +83,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance` and `feature/dsp-outbound-tote-allocation` are complete, verified, and merged. `feature/dsp-osr-physical-inventory` is complete and verified, pending merge to `master`. After that merge, the next scheduler feature is `feature/dsp-operational-simulation-clock`; create its decision-complete detailed plan from updated `master` before implementation. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, and `feature/dsp-osr-physical-inventory` are complete, verified, and merged. `feature/dsp-operational-simulation-clock` is the current branch. Follow `docs/scheduler/dsp-operational-simulation-clock-plan.md` step by step. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -176,8 +177,8 @@ Known Phase 1 machine/station work:
 - Third Party Area: Phase 1 complete and merged
 - bag planning/provenance: complete, verified, and merged
 - outbound physical tote allocation: complete, verified, and merged
-- OSR physical inventory and preload: complete and verified; pending merge to `master`
-- operational simulation clock: next planned scheduler branch
+- OSR physical inventory and preload: complete, verified, and merged
+- operational simulation clock: current planned scheduler branch
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine
