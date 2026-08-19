@@ -34,11 +34,11 @@ class ThirdPartyVisitFactoryTest {
         ThirdPartyVisitPlan plan = factory.planFor(order).orElseThrow();
 
         assertEquals(order.orderSheetKey(), plan.orderSheetKey());
+        assertEquals(order.serviceCentreId(), plan.serviceCentreId());
         assertEquals(OrderType.ADAPTED, plan.orderType());
         assertEquals(2, plan.outstandingPackCount());
         assertEquals(List.of(new ThirdPartyLineWork(
-                "line-1",
-                "third-party",
+                order.items().getFirst(),
                 2,
                 "Y74",
                 ThirdPartyWorkType.ADAPTED_PREPARATION)), plan.lineWork());

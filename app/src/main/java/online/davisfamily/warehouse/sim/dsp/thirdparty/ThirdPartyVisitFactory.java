@@ -49,8 +49,7 @@ public class ThirdPartyVisitFactory {
                 continue;
             }
             lineWork.add(new ThirdPartyLineWork(
-                    line.lineReference(),
-                    line.productId(),
+                    line,
                     outstandingQuantity,
                     product.thirdPartyLocation().orElseThrow(),
                     workType));
@@ -61,6 +60,7 @@ public class ThirdPartyVisitFactory {
         }
         return Optional.of(new ThirdPartyVisitPlan(
                 order.orderSheetKey(),
+                order.serviceCentreId(),
                 order.orderType(),
                 lineWork));
     }

@@ -1,15 +1,17 @@
 package online.davisfamily.warehouse.sim.dsp.thirdparty;
 
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+
 public record ThirdPartyLineWork(
-        String lineReference,
-        String productId,
+        DspOrderItem line,
         int outstandingQuantity,
         String binLocation,
         ThirdPartyWorkType workType) {
 
     public ThirdPartyLineWork {
-        lineReference = requireValue(lineReference, "lineReference");
-        productId = requireValue(productId, "productId");
+        if (line == null) {
+            throw new IllegalArgumentException("line must not be null");
+        }
         binLocation = requireValue(binLocation, "binLocation");
         if (outstandingQuantity <= 0) {
             throw new IllegalArgumentException("outstandingQuantity must be positive");
@@ -17,6 +19,14 @@ public record ThirdPartyLineWork(
         if (workType == null) {
             throw new IllegalArgumentException("workType must not be null");
         }
+    }
+
+    public String lineReference() {
+        return line.lineReference();
+    }
+
+    public String productId() {
+        return line.productId();
     }
 
     private static String requireValue(String value, String fieldName) {

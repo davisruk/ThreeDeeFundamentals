@@ -16,7 +16,7 @@ public class AdaptingAreaController {
     private final CollectedPackPlanFactory collectedPackPlanFactory;
 
     public AdaptingAreaController(AdaptingArea area, DspSchedulerRuntimeState runtimeState) {
-        this(area, runtimeState, null, new DefaultCollectedPackPlanFactory());
+        this(area, runtimeState, null, null);
     }
 
     public AdaptingAreaController(
@@ -30,8 +30,9 @@ public class AdaptingAreaController {
         if (runtimeState == null) {
             throw new IllegalArgumentException("runtimeState must not be null");
         }
-        if (collectedPackPlanFactory == null) {
-            throw new IllegalArgumentException("collectedPackPlanFactory must not be null");
+        if ((toteLoadPlanRegistry == null) != (collectedPackPlanFactory == null)) {
+            throw new IllegalArgumentException(
+                    "toteLoadPlanRegistry and collectedPackPlanFactory must either both be set or both be null");
         }
         this.area = area;
         this.runtimeState = runtimeState;

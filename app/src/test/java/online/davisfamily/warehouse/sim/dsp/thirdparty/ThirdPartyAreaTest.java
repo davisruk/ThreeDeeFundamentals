@@ -9,6 +9,8 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
@@ -99,10 +101,18 @@ class ThirdPartyAreaTest {
                 new PhysicalToteId("tote-" + orderId),
                 new ThirdPartyVisitPlan(
                         new OrderSheetKey(orderId, 1),
+                        "SC-1",
                         OrderType.FULL_PACK,
                         List.of(new ThirdPartyLineWork(
-                                "line-" + orderId,
-                                "product-1",
+                                new DspOrderItem(
+                                        "line-" + orderId,
+                                        "product-1",
+                                        1,
+                                        "pharmacy-1",
+                                        DspOrderLineType.FULL_PACK,
+                                        orderId,
+                                        1,
+                                        0),
                                 1,
                                 "Y74",
                                 ThirdPartyWorkType.DIRECT_FULFILMENT))));

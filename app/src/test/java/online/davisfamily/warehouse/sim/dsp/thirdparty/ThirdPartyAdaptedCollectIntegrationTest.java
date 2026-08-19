@@ -21,6 +21,8 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisit;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
@@ -48,7 +50,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
     private static final PackDimensions DIMENSIONS = new PackDimensions(0.18f, 0.08f, 0.05f);
 
     @Test
-    void shouldUpdateAdaptingAndThirdPartyPlansByPhysicalToteId() {
+    void shouldPreservePatientAndPrescriptionForAdaptedThirdPartyCollection() {
         DspOrderItem sourceLine = adaptedLine(ASSOCIATED_ORDER_ID);
         NotionalToteOrder adaptedOrder = order(
                 "adapted-source-1",
@@ -70,6 +72,8 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                         Optional.of(DIMENSIONS))));
         ThirdPartyVisitFactory visitFactory = new ThirdPartyVisitFactory(products);
         MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();
+        PackProvenanceRegistry provenanceRegistry = new PackProvenanceRegistry();
+        DspPackPlanFactory dspPackPlanFactory = new DspPackPlanFactory(provenanceRegistry);
         loadPlans.putLoadPlan(new ToteLoadPlan(adaptedToteId, List.of()));
         loadPlans.putLoadPlan(new ToteLoadPlan(associatedToteId, List.of()));
 
@@ -79,7 +83,8 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                 loadPlans,
                 new ProductMasterThirdPartyPackPlanFactory(
                         products,
-                        (visit, lineWork) -> visit.orderSheetKey().orderId()));
+                        (visit, lineWork) -> visit.orderSheetKey().orderId(),
+                        dspPackPlanFactory));
         ThirdPartyVisit adaptedThirdPartyVisit = visitFactory.create(adaptedToteId, adaptedOrder).orElseThrow();
 
         assertEquals(ThirdPartyWorkType.ADAPTED_PREPARATION,
@@ -110,7 +115,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                 adaptingArea,
                 runtimeState,
                 loadPlans,
-                new DefaultCollectedPackPlanFactory(DIMENSIONS));
+                new DefaultCollectedPackPlanFactory(DIMENSIONS, dspPackPlanFactory));
         AdaptingBenchId benchId = new AdaptingBenchId("bench-1");
         DspDependencyEvaluator dependencyEvaluator = new DspDependencyEvaluator();
 
@@ -140,6 +145,10 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                 associatedPlan.getPackPlans().stream().map(PackPlan::correlationId).toList());
         assertEquals(List.of(DIMENSIONS),
                 associatedPlan.getPackPlans().stream().map(PackPlan::dimensions).toList());
+        var provenance = provenanceRegistry.find("pack-" + LINE_REFERENCE + "-1").orElseThrow();
+        assertEquals(adaptedOrder.orderSheetKey(), provenance.sourceOrderSheetKey());
+        assertEquals("patient-1", provenance.patientId());
+        assertEquals("prescription-1", provenance.prescriptionId());
         assertFalse(adaptedLineStore.contains(preparedLineKey));
     }
 
@@ -149,6 +158,8 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                 PRODUCT_ID,
                 1,
                 "0000310",
+                "patient-1",
+                "prescription-1",
                 DspOrderLineType.ADAPTED,
                 referenceOrderId,
                 1,

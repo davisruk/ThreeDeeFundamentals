@@ -2,6 +2,8 @@ package online.davisfamily.warehouse.sim.dsp.thirdparty;
 
 import java.util.function.BiFunction;
 
+import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.routing.ProductMasterRepository;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
@@ -10,18 +12,24 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 public class ProductMasterThirdPartyPackPlanFactory implements ThirdPartyPackPlanFactory {
     private final ProductMasterRepository productMasterRepository;
     private final BiFunction<ThirdPartyVisit, ThirdPartyLineWork, String> correlationIdResolver;
+    private final DspPackPlanFactory packPlanFactory;
 
     public ProductMasterThirdPartyPackPlanFactory(
             ProductMasterRepository productMasterRepository,
-            BiFunction<ThirdPartyVisit, ThirdPartyLineWork, String> correlationIdResolver) {
+            BiFunction<ThirdPartyVisit, ThirdPartyLineWork, String> correlationIdResolver,
+            DspPackPlanFactory packPlanFactory) {
         if (productMasterRepository == null) {
             throw new IllegalArgumentException("productMasterRepository must not be null");
         }
         if (correlationIdResolver == null) {
             throw new IllegalArgumentException("correlationIdResolver must not be null");
         }
+        if (packPlanFactory == null) {
+            throw new IllegalArgumentException("packPlanFactory must not be null");
+        }
         this.productMasterRepository = productMasterRepository;
         this.correlationIdResolver = correlationIdResolver;
+        this.packPlanFactory = packPlanFactory;
     }
 
     @Override
@@ -47,9 +55,17 @@ public class ProductMasterThirdPartyPackPlanFactory implements ThirdPartyPackPla
             throw new IllegalStateException("Resolved correlationId must not be blank");
         }
 
-        return new PackPlan(
+        return packPlanFactory.createPackPlan(
                 "pack-" + lineWork.lineReference() + "-" + packOrdinal,
                 correlationId.trim(),
-                dimensions);
+                dimensions,
+                new PackSourceProvenance(
+                        visit.orderSheetKey(),
+                        lineWork.lineReference(),
+                        lineWork.productId(),
+                        visit.serviceCentreId(),
+                        lineWork.line().pharmacyId(),
+                        lineWork.line().patientId(),
+                        lineWork.line().prescriptionId()));
     }
 }

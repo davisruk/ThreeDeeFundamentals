@@ -31,6 +31,8 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackDriveType;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseRouteBuilder;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
@@ -155,6 +157,7 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
         }
 
         InMemoryProductMasterRepository productRepository = new InMemoryProductMasterRepository(products());
+        DspPackPlanFactory dspPackPlanFactory = new DspPackPlanFactory(new PackProvenanceRegistry());
         ThirdPartyVisitFactory visitFactory = new ThirdPartyVisitFactory(productRepository);
         area = new ThirdPartyArea(new ThirdPartyAreaConfig(1, 1, PROCESSING_DURATION_SECONDS));
         areaController = new ThirdPartyAreaController(
@@ -162,7 +165,8 @@ public class ThirdPartyDebugRig implements DebugSceneRuntime {
                 loadPlanRegistry,
                 new ProductMasterThirdPartyPackPlanFactory(
                         productRepository,
-                        (visit, lineWork) -> visit.orderSheetKey().orderId()));
+                        (visit, lineWork) -> visit.orderSheetKey().orderId(),
+                        dspPackPlanFactory));
         stopController = new ThirdPartyAreaStopController(
                 area,
                 areaController,

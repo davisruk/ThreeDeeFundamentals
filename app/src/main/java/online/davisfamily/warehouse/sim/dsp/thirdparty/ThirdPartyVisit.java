@@ -27,6 +27,10 @@ public record ThirdPartyVisit(
         return plan.orderType();
     }
 
+    public String serviceCentreId() {
+        return plan.serviceCentreId();
+    }
+
     public List<ThirdPartyLineWork> lineWork() {
         return plan.lineWork();
     }

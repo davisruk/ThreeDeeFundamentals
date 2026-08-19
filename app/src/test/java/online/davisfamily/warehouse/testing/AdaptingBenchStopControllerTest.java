@@ -208,7 +208,13 @@ class AdaptingBenchStopControllerTest {
         sim.addTrackableObject(tote);
         sim.addController(new AdaptingBenchStopController(
                 area,
-                new AdaptingAreaController(area, emptyRuntimeState(), new online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry(), new online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory()),
+                new AdaptingAreaController(
+                        area,
+                        emptyRuntimeState(),
+                        new online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry(),
+                        new online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory(
+                                new online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory(
+                                        new online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry()))),
                 journeys,
                 Map.of(benchId, new AdaptingBenchStop(benchId, benchLane, 1.0f)),
                 completion,

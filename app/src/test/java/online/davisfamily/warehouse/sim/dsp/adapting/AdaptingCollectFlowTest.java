@@ -12,6 +12,8 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
@@ -28,8 +30,9 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 class AdaptingCollectFlowTest {
 
     @Test
-    void shouldAppendCollectedAdaptedLinesToAssociatedToteLoadPlan() {
+    void shouldRegisterCollectedAdaptedPackAgainstOriginalSourceLine() {
         AdaptedLineStore store = new AdaptedLineStore();
+        PackProvenanceRegistry provenanceRegistry = new PackProvenanceRegistry();
         DspOrderItem collectedLine = adaptedPreparedLine("line-1", "dispatch-1", 2);
         store.stage(collectedLine, new OrderSheetKey("adapted-source-1", 1), "SC-1");
         AdaptingBench bench = new AdaptingBench("bench-1", store, 1d);
@@ -42,7 +45,8 @@ class AdaptingCollectFlowTest {
                 area,
                 emptyRuntimeState(),
                 loadPlans,
-                new DefaultCollectedPackPlanFactory(testDimensions()));
+                new DefaultCollectedPackPlanFactory(
+                        testDimensions(), new DspPackPlanFactory(provenanceRegistry)));
         AdaptingVisitFactory visitFactory = new AdaptingVisitFactory();
 
         NotionalToteOrder collectingOrder = dispatchOrder(
@@ -72,6 +76,12 @@ class AdaptingCollectFlowTest {
                 updatedLoadPlan.getPackPlans().stream().map(PackPlan::correlationId).toList());
         assertEquals(List.of("pack-existing-1", "pack-line-1-1", "pack-line-1-2"),
                 updatedLoadPlan.getPackPlans().stream().map(PackPlan::packId).toList());
+        var provenance = provenanceRegistry.find("pack-line-1-1").orElseThrow();
+        assertEquals(new OrderSheetKey("adapted-source-1", 1), provenance.sourceOrderSheetKey());
+        assertEquals("line-1", provenance.lineReference());
+        assertEquals("SC-1", provenance.serviceCentreId());
+        assertEquals(collectedLine.patientId(), provenance.patientId());
+        assertEquals(collectedLine.prescriptionId(), provenance.prescriptionId());
         assertFalse(store.contains(PreparedLineKey.forPreparedLine(collectedLine)));
     }
 
@@ -87,7 +97,9 @@ class AdaptingCollectFlowTest {
                 area,
                 emptyRuntimeState(),
                 loadPlans,
-                new DefaultCollectedPackPlanFactory(testDimensions()));
+                new DefaultCollectedPackPlanFactory(
+                        testDimensions(),
+                        new DspPackPlanFactory(new PackProvenanceRegistry())));
         AdaptingVisitFactory visitFactory = new AdaptingVisitFactory();
 
         NotionalToteOrder collectingOrder = dispatchOrder(

@@ -7,6 +7,7 @@ import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 
 public record ThirdPartyVisitPlan(
         OrderSheetKey orderSheetKey,
+        String serviceCentreId,
         OrderType orderType,
         List<ThirdPartyLineWork> lineWork) {
 
@@ -14,6 +15,10 @@ public record ThirdPartyVisitPlan(
         if (orderSheetKey == null) {
             throw new IllegalArgumentException("orderSheetKey must not be null");
         }
+        if (serviceCentreId == null || serviceCentreId.isBlank()) {
+            throw new IllegalArgumentException("serviceCentreId must not be blank");
+        }
+        serviceCentreId = serviceCentreId.trim();
         if (orderType == null) {
             throw new IllegalArgumentException("orderType must not be null");
         }

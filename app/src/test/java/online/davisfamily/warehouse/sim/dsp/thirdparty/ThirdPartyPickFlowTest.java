@@ -9,6 +9,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
@@ -22,12 +26,13 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 class ThirdPartyPickFlowTest {
 
     @Test
-    void shouldKeepLogicalOrderAndPhysicalToteDistinctInStationCompletion() {
+    void shouldRegisterThirdPartyPackAgainstVisitSourceSheet() {
         MapBackedToteLoadPlanRegistry registry = registryWithPlan(
                 "tote-order-1",
                 List.of(pack("existing-pack", "existing-bag", dimensions(0.1f))));
+        PackProvenanceRegistry provenanceRegistry = new PackProvenanceRegistry();
         ThirdPartyArea area = area();
-        ThirdPartyAreaController controller = controller(area, registry);
+        ThirdPartyAreaController controller = controller(area, registry, provenanceRegistry);
         ThirdPartyVisit visit = visit("order-1", OrderType.FULL_PACK, ThirdPartyWorkType.DIRECT_FULFILMENT, 2);
 
         area.submitVisit(visit);
@@ -44,6 +49,11 @@ class ThirdPartyPickFlowTest {
         assertEquals("Y74", completedVisit.lineWork().getFirst().binLocation());
         assertEquals("order-1", completedVisit.orderSheetKey().orderId());
         assertEquals(new PhysicalToteId("tote-order-1"), completedVisit.physicalToteId());
+        var provenance = provenanceRegistry.find("pack-line-order-1-1").orElseThrow();
+        assertEquals(new OrderSheetKey("order-1", 1), provenance.sourceOrderSheetKey());
+        assertEquals("SC-1", provenance.serviceCentreId());
+        assertEquals("patient-order-1", provenance.patientId());
+        assertEquals("prescription-order-1", provenance.prescriptionId());
     }
 
     @Test
@@ -93,12 +103,14 @@ class ThirdPartyPickFlowTest {
     }
 
     @Test
-    void shouldFailPhysicalPackCreationWhenMasterDimensionsAreMissing() {
+    void shouldNotCreateProvenanceForMissingPhysicalPack() {
         ProductMasterRecord product = new ProductMasterRecord(
                 "product-1", "Third Party Product", Optional.of("Y74"), Optional.empty());
+        PackProvenanceRegistry provenanceRegistry = new PackProvenanceRegistry();
         ProductMasterThirdPartyPackPlanFactory factory = new ProductMasterThirdPartyPackPlanFactory(
                 new InMemoryProductMasterRepository(List.of(product)),
-                (visit, lineWork) -> visit.orderSheetKey().orderId());
+                (visit, lineWork) -> visit.orderSheetKey().orderId(),
+                new DspPackPlanFactory(provenanceRegistry));
 
         assertThrows(
                 IllegalStateException.class,
@@ -106,11 +118,19 @@ class ThirdPartyPickFlowTest {
                         visit("order-5", OrderType.FULL_PACK, ThirdPartyWorkType.DIRECT_FULFILMENT, 1),
                         lineWork("order-5", ThirdPartyWorkType.DIRECT_FULFILMENT, 1),
                         1));
+        assertEquals(0, provenanceRegistry.snapshot().provenanceByPackId().size());
     }
 
     private ThirdPartyAreaController controller(
             ThirdPartyArea area,
             MapBackedToteLoadPlanRegistry registry) {
+        return controller(area, registry, new PackProvenanceRegistry());
+    }
+
+    private ThirdPartyAreaController controller(
+            ThirdPartyArea area,
+            MapBackedToteLoadPlanRegistry registry,
+            PackProvenanceRegistry provenanceRegistry) {
         ProductMasterRecord product = new ProductMasterRecord(
                 "product-1", "Third Party Product", Optional.of("Y74"), Optional.of(dimensions(0.25f)));
         return new ThirdPartyAreaController(
@@ -118,7 +138,8 @@ class ThirdPartyPickFlowTest {
                 registry,
                 new ProductMasterThirdPartyPackPlanFactory(
                         new InMemoryProductMasterRepository(List.of(product)),
-                        (visit, lineWork) -> visit.orderSheetKey().orderId()));
+                        (visit, lineWork) -> visit.orderSheetKey().orderId(),
+                        new DspPackPlanFactory(provenanceRegistry)));
     }
 
     private ThirdPartyArea area() {
@@ -140,12 +161,29 @@ class ThirdPartyPickFlowTest {
                 new PhysicalToteId("tote-" + orderId),
                 new ThirdPartyVisitPlan(
                         new OrderSheetKey(orderId, 1),
+                        "SC-1",
                         orderType,
                         List.of(lineWork(orderId, workType, quantity))));
     }
 
     private ThirdPartyLineWork lineWork(String orderId, ThirdPartyWorkType workType, int quantity) {
-        return new ThirdPartyLineWork("line-" + orderId, "product-1", quantity, "Y74", workType);
+        return new ThirdPartyLineWork(
+                new DspOrderItem(
+                        "line-" + orderId,
+                        "product-1",
+                        quantity,
+                        "pharmacy-1",
+                        "patient-" + orderId,
+                        "prescription-" + orderId,
+                        workType == ThirdPartyWorkType.ADAPTED_PREPARATION
+                                ? DspOrderLineType.ADAPTED
+                                : DspOrderLineType.FULL_PACK,
+                        orderId,
+                        1,
+                        0),
+                quantity,
+                "Y74",
+                workType);
     }
 
     private PackPlan pack(String packId, String correlationId, PackDimensions dimensions) {

@@ -40,6 +40,8 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitProfile;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
@@ -372,7 +374,9 @@ public class AdaptingDebugRig implements DebugSceneRuntime {
                 adaptingArea,
                 runtimeState,
                 toteLoadPlanRegistry,
-                new DefaultCollectedPackPlanFactory(PACK_DIMENSIONS));
+                new DefaultCollectedPackPlanFactory(
+                        PACK_DIMENSIONS,
+                        new DspPackPlanFactory(new PackProvenanceRegistry())));
 
         ScheduledTipperToteReleaseCatalog releaseCatalog = new ScheduledTipperToteReleaseCatalog(List.of(
                 releaseFor(tr, toteGeometry, storeOne.order(), physicalToteIdFor(storeOne.order()), List.of(new PackPlan("pack-store-1", "bag-store-1", PACK_DIMENSIONS))),
