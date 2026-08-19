@@ -12,6 +12,7 @@ import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
 
 class DeterministicBagPlannerTest {
     private static final PackDimensions DIMENSIONS = new PackDimensions(0.20f, 0.10f, 0.08f);
@@ -35,7 +36,7 @@ class DeterministicBagPlannerTest {
                 List.of(new OrderSheetKey("fulfilment-1", 1), new OrderSheetKey("fulfilment-2", 1)),
                 bag.owningOrderSheetKeys());
         assertEquals(2, result.packTraces().size());
-        assertTrue(result.p2pToteLoadPlans().isEmpty());
+        assertEquals(2, result.p2pToteLoadPlans().size());
     }
 
     @Test
@@ -111,7 +112,71 @@ class DeterministicBagPlannerTest {
 
         assertTrue(result.plannedBags().isEmpty());
         assertTrue(result.packTraces().isEmpty());
-        assertTrue(result.p2pToteLoadPlans().isEmpty());
+        assertEquals(1, result.p2pToteLoadPlans().size());
+        assertEquals(emptyTote.toteLoadPlan().physicalToteId(),
+                result.p2pToteLoadPlans().get(0).physicalToteId());
+        assertTrue(result.p2pToteLoadPlans().get(0).getPackPlans().isEmpty());
+    }
+
+    @Test
+    void shouldRewriteOnlyCorrelationWhenApplyingBagPlanToToteLoads() {
+        PackProvenanceRegistry registry = new PackProvenanceRegistry();
+        register(registry, "pack-1", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
+        PackDimensions dimensions = new PackDimensions(0.31f, 0.17f, 0.09f);
+        PackPlan inputPack = new PackPlan("pack-1", "original-correlation", dimensions);
+        ToteLoadPlan inputLoad = new ToteLoadPlan("tote-1", List.of(inputPack));
+        BagPlanningTote inputTote = new BagPlanningTote(
+                new OrderSheetKey("fulfilment-1", 1), "SC-1", inputLoad);
+
+        BagPlanningResult result = planner(registry, 2).plan(request(inputTote));
+
+        ToteLoadPlan rewrittenLoad = result.p2pToteLoadPlans().get(0);
+        PackPlan rewrittenPack = rewrittenLoad.getPackPlans().get(0);
+        assertEquals(inputLoad.physicalToteId(), rewrittenLoad.physicalToteId());
+        assertEquals(inputPack.packId(), rewrittenPack.packId());
+        assertEquals(inputPack.dimensions(), rewrittenPack.dimensions());
+        assertEquals("rx-1/bag-1", rewrittenPack.correlationId());
+        assertEquals("original-correlation", inputPack.correlationId());
+    }
+
+    @Test
+    void shouldAggregateOnePlannedBagAcrossSeveralInputTotes() {
+        PackProvenanceRegistry registry = new PackProvenanceRegistry();
+        register(registry, "pack-1", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
+        register(registry, "pack-2", "source-2", "rx-1", "patient-1", "pharmacy-1", "SC-1");
+
+        BagPlanningResult result = planner(registry, 3).plan(request(
+                planningTote("fulfilment-1", "tote-1", "SC-1", "pack-1"),
+                planningTote("fulfilment-2", "tote-2", "SC-1", "pack-2")));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlans(result.p2pToteLoadPlans());
+
+        assertEquals(List.of("rx-1/bag-1"), batchPlan.orderedCorrelationIds());
+        assertEquals(2, batchPlan.expectedPackCountFor("rx-1/bag-1"));
+        assertEquals(
+                List.of("tote-1", "tote-2"),
+                result.p2pToteLoadPlans().stream()
+                        .map(loadPlan -> loadPlan.physicalToteId().value())
+                        .toList());
+    }
+
+    @Test
+    void shouldKeepSeparateBagOrdinalsAsSeparateP2pCorrelations() {
+        PackProvenanceRegistry registry = new PackProvenanceRegistry();
+        register(registry, "pack-1", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
+        register(registry, "pack-2", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
+        register(registry, "pack-3", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
+
+        BagPlanningResult result = planner(registry, 2).plan(request(
+                planningTote("fulfilment-1", "tote-1", "SC-1", "pack-1", "pack-2", "pack-3")));
+        ToteLoadPlan rewrittenLoad = result.p2pToteLoadPlans().get(0);
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlans(result.p2pToteLoadPlans());
+
+        assertEquals(
+                List.of("rx-1/bag-1", "rx-1/bag-1", "rx-1/bag-2"),
+                rewrittenLoad.getPackPlans().stream().map(PackPlan::correlationId).toList());
+        assertEquals(List.of("rx-1/bag-1", "rx-1/bag-2"), batchPlan.orderedCorrelationIds());
+        assertEquals(2, batchPlan.expectedPackCountFor("rx-1/bag-1"));
+        assertEquals(1, batchPlan.expectedPackCountFor("rx-1/bag-2"));
     }
 
     @Test

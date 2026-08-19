@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 public final class DeterministicBagPlanner {
     private final BagCapacityPolicy capacityPolicy;
@@ -38,7 +39,35 @@ public final class DeterministicBagPlanner {
             planPrescription(group, plannedBags, packTraces);
         }
 
-        return new BagPlanningResult(plannedBags, List.of(), packTraces);
+        List<ToteLoadPlan> p2pToteLoadPlans = createP2pToteLoadPlans(request, packTraces);
+        return new BagPlanningResult(plannedBags, p2pToteLoadPlans, packTraces);
+    }
+
+    private static List<ToteLoadPlan> createP2pToteLoadPlans(
+            BagPlanningRequest request,
+            List<PlannedPackTrace> packTraces) {
+        Map<String, BagKey> bagKeysByPackId = new LinkedHashMap<>();
+        for (PlannedPackTrace packTrace : packTraces) {
+            bagKeysByPackId.put(packTrace.physicalPackId(), packTrace.bagKey());
+        }
+
+        List<ToteLoadPlan> p2pToteLoadPlans = new ArrayList<>();
+        for (BagPlanningTote planningTote : request.planningTotes()) {
+            ToteLoadPlan inputLoadPlan = planningTote.toteLoadPlan();
+            List<PackPlan> rewrittenPackPlans = inputLoadPlan.getPackPlans().stream()
+                    .map(packPlan -> rewriteCorrelation(packPlan, bagKeysByPackId))
+                    .toList();
+            p2pToteLoadPlans.add(new ToteLoadPlan(inputLoadPlan.physicalToteId(), rewrittenPackPlans));
+        }
+        return List.copyOf(p2pToteLoadPlans);
+    }
+
+    private static PackPlan rewriteCorrelation(PackPlan packPlan, Map<String, BagKey> bagKeysByPackId) {
+        BagKey bagKey = bagKeysByPackId.get(packPlan.packId());
+        if (bagKey == null) {
+            throw new IllegalStateException("No planned bag found for physical pack: " + packPlan.packId());
+        }
+        return new PackPlan(packPlan.packId(), bagKey.correlationId(), packPlan.dimensions());
     }
 
     private List<EncounteredPack> resolveProvenance(BagPlanningRequest request) {
