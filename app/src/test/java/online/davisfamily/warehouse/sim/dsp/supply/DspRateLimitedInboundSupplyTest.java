@@ -78,6 +78,38 @@ class DspRateLimitedInboundSupplyTest {
     }
 
     @Test
+    void shouldNotTreatFutureArrivalAsCapacityBlocked() {
+        Fixture fixture = fixture(3, laterManifests());
+
+        fixture.coordinator().advance(clockAtSeconds(0));
+        fixture.coordinator().advance(clockAtSeconds(6));
+
+        DspSupplySnapshot fullBeforeNextDueTime = fixture.coordinator().snapshot();
+        assertEquals(3, fullBeforeNextDueTime.osrOccupancy());
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(fullBeforeNextDueTime, "full-1").state());
+        assertEquals(
+                Optional.of(Duration.ofSeconds(9)),
+                fullBeforeNextDueTime.nextPhysicalAdmissionElapsedTime());
+
+        fixture.bootstrapState().inventory().recordDeparture(new PhysicalToteId("preloaded"));
+        fixture.bootstrapState().inventory().recordDeparture(new PhysicalToteId("adapted-1"));
+        fixture.coordinator().advance(clockAtSeconds(12));
+
+        DspSupplySnapshot caughtUp = fixture.coordinator().snapshot();
+        assertEquals(
+                PhysicalToteSupplyState.STORED_IN_OSR,
+                physicalTote(caughtUp, "full-1").state());
+        assertEquals(
+                PhysicalToteSupplyState.STORED_IN_OSR,
+                physicalTote(caughtUp, "associated-1").state());
+        assertEquals(
+                ServiceCentreAuthorizationState.SUPPLY_COMPLETE,
+                serviceCentre(caughtUp, "sc-later").authorizationState());
+    }
+
+    @Test
     void shouldStoreEveryRepeatedSheetManifestByPhysicalIdentity() {
         Fixture fixture = fixture(10, laterManifests());
 

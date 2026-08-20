@@ -168,14 +168,14 @@ public final class DspServiceCentreSupplyCoordinator {
                 completeActiveBatch(activeBatch);
                 return;
             }
+            Duration scheduledDueTime = nextPhysicalAdmissionElapsedTime;
+            if (elapsedSimulationTime.compareTo(scheduledDueTime) < 0) {
+                return;
+            }
             if (inventorySnapshot.full()) {
                 physicalToteStates.put(
                         nextManifest.physicalToteId(),
                         PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY);
-                return;
-            }
-            Duration scheduledDueTime = nextPhysicalAdmissionElapsedTime;
-            if (elapsedSimulationTime.compareTo(scheduledDueTime) < 0) {
                 return;
             }
 
