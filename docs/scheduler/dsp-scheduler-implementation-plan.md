@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, and the operational simulation clock are complete, verified, and merged. Rate-limited service-centre supply is the current planned feature on `feature/dsp-rate-limited-service-centre-supply`.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, and the operational simulation clock are complete, verified, and merged. Rate-limited service-centre supply is complete and verified on `feature/dsp-rate-limited-service-centre-supply`, pending merge. Physical OSR processing release is the next detailed planning target after that merge.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -557,7 +557,7 @@ Follow-on branch:
 
 ### `feature/dsp-rate-limited-service-centre-supply`
 
-Status: detailed plan ready; implementation not started.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -578,6 +578,18 @@ Explicit non-goals:
 - no scheduler candidate ranking or P2P allocation;
 - no trunker timetable/deadline outcome;
 - no renderables, visual rig wiring, complete full-day run, or new thread.
+
+Implemented contracts to preserve:
+
+- `DspServiceCentreSupplyPlanFactory` derives immutable priority-ordered service-centre batches from retained 12N priority and physical manifests.
+- `DspServiceCentreSupplyCoordinator` owns live authorization and rate-limited admission progress on the simulation thread.
+- `DspServiceCentreSupplyController` advances that coordinator from authoritative `DspOperationalClockSnapshot` values and ignores frame delta for supply timing.
+- `DspSupplySnapshot` is the immutable boundary for later scheduler, inspection, and metrics consumers.
+- OSR capacity is checked only for a manifest that is due. Genuine capacity blocks retain the head and resume without a burst; capacity that clears before a future due time preserves normal catch-up behavior.
+
+Follow-on planning target:
+
+- physical OSR processing release, connecting stored physical manifest identity to downstream acceptance, inventory departure, lifecycle activation, and scheduler commands without collapsing those transitions.
 
 ## Current Assumptions
 

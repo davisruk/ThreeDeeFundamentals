@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-rate-limited-service-centre-supply`
 
-Status: plan ready; implementation not started.
+Status: implementation complete and verified; pending merge to `master`.
 
 ## Purpose
 
@@ -556,10 +556,10 @@ Visual smoke tests:
 
 Before branch closure:
 
-- [ ] update this plan status to implementation complete and verified;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] record final type names or implementation details that later OSR release, scheduler, inspection, and metrics plans must preserve.
+- [x] update this plan status to implementation complete and verified;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] record final type names or implementation details that later OSR release, scheduler, inspection, and metrics plans must preserve.
 
 ## Preserved Contracts For Follow-On Work
 
@@ -574,6 +574,7 @@ Before branch closure:
 - The OSR may hold several authorized service centres even though this first inbound stream supplies one post-start centre batch at a time.
 - Rate scheduling is based on absolute simulation elapsed time. The fixed-step size and render frequency do not define the arrival rate.
 - Capacity-blocked supply resumes from the blocked physical manifest without reordering and without a catch-up burst.
+- Capacity is evaluated only when the head manifest is due. A full OSR before a future due time leaves that manifest `AUTHORIZED_WAITING`, preserving legitimate catch-up if capacity becomes available before it is due.
 - Runtime reset reconstructs inventory bootstrap, plan, coordinator, controller, and clock controller.
 - Supply snapshots are immutable and may later cross the scheduler-worker boundary; the coordinator and inventory never do.
 
