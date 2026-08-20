@@ -35,14 +35,31 @@ public final class InboundToteLifecycleController {
     public PhysicalToteAssignment activate(
             PhysicalToteId toteId,
             Duration activationTime) {
+        validateActivation(toteId, activationTime);
         InboundToteManifest manifest = requireManifest(toteId);
-        requireNonNegative(activationTime, "activationTime");
-        requireState(toteId, PhysicalToteLifecycleState.INBOUND_PACK_TOTE);
         return ledger.assign(
                 manifest.orderSheetKey(),
                 toteId,
                 PhysicalToteAssignmentStage.INBOUND_PACK,
                 activationTime);
+    }
+
+    public void validateActivation(
+            PhysicalToteId toteId,
+            Duration activationTime) {
+        InboundToteManifest manifest = requireManifest(toteId);
+        requireNonNegative(activationTime, "activationTime");
+        requireState(toteId, PhysicalToteLifecycleState.INBOUND_PACK_TOTE);
+        if (ledger.activeAssignmentFor(manifest.orderSheetKey()).isPresent()) {
+            throw new IllegalStateException(
+                    "Logical sheet already has an active physical tote assignment: "
+                            + manifest.orderSheetKey());
+        }
+        if (!ledger.activeAssignmentsFor(toteId).isEmpty()) {
+            throw new IllegalStateException(
+                    "Physical tote already has an active logical sheet assignment: "
+                            + toteId.value());
+        }
     }
 
     public PhysicalToteAssignment advanceToPreP2p(

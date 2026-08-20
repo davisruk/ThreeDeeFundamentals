@@ -140,6 +140,82 @@ class InboundToteLifecycleControllerTest {
     }
 
     @Test
+    void shouldValidateActivationWithoutCreatingAssignment() {
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        InboundToteManifest manifest = manifest(
+                "tote-1", sheet("order-1"), OrderType.FULL_PACK, 0);
+        InboundToteLifecycleController controller = controller(ledger, manifest);
+        PhysicalToteLifecycleSnapshot before = controller.snapshot();
+
+        controller.validateActivation(manifest.physicalToteId(), Duration.ofSeconds(3));
+
+        assertEquals(before, controller.snapshot());
+        assertTrue(controller.snapshot().assignments().isEmpty());
+    }
+
+    @Test
+    void shouldShareValidationBetweenValidateAndActivate() {
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        InboundToteManifest manifest = manifest(
+                "tote-1", sheet("order-1"), OrderType.ASSOCIATED, 0);
+        InboundToteLifecycleController controller = controller(ledger, manifest);
+        controller.activate(manifest.physicalToteId(), Duration.ZERO);
+
+        IllegalStateException validationFailure = assertThrows(
+                IllegalStateException.class,
+                () -> controller.validateActivation(
+                        manifest.physicalToteId(), Duration.ofSeconds(1)));
+        IllegalStateException activationFailure = assertThrows(
+                IllegalStateException.class,
+                () -> controller.activate(
+                        manifest.physicalToteId(), Duration.ofSeconds(1)));
+
+        assertEquals(validationFailure.getMessage(), activationFailure.getMessage());
+        assertEquals(1, controller.snapshot().assignments().size());
+    }
+
+    @Test
+    void shouldRejectValidationWhileAnotherManifestForSheetIsActive() {
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        OrderSheetKey sharedSheet = sheet("order-1");
+        InboundToteManifest first = manifest(
+                "tote-1", sharedSheet, OrderType.ADAPTED, 0);
+        InboundToteManifest second = manifest(
+                "tote-2", sharedSheet, OrderType.ADAPTED, 1);
+        InboundToteLifecycleController controller = controller(ledger, first, second);
+        controller.activate(first.physicalToteId(), Duration.ZERO);
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> controller.validateActivation(
+                        second.physicalToteId(), Duration.ofSeconds(1)));
+        assertEquals(first.physicalToteId(), controller.snapshot()
+                .activeAssignmentFor(sharedSheet)
+                .orElseThrow()
+                .physicalToteId());
+    }
+
+    @Test
+    void shouldLeaveLifecycleSnapshotUnchangedAfterRejectedValidation() {
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        OrderSheetKey sharedSheet = sheet("order-1");
+        InboundToteManifest first = manifest(
+                "tote-1", sharedSheet, OrderType.ADAPTED, 0);
+        InboundToteManifest second = manifest(
+                "tote-2", sharedSheet, OrderType.ADAPTED, 1);
+        InboundToteLifecycleController controller = controller(ledger, first, second);
+        controller.activate(first.physicalToteId(), Duration.ofSeconds(2));
+        PhysicalToteLifecycleSnapshot before = controller.snapshot();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> controller.validateActivation(
+                        second.physicalToteId(), Duration.ofSeconds(3)));
+
+        assertEquals(before, controller.snapshot());
+    }
+
+    @Test
     void shouldNotPartiallyMutateOnRejectedTransition() {
         PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
         InboundToteManifest manifest = manifest("tote-1", sheet("order-1"), OrderType.ASSOCIATED, 0);
