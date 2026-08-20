@@ -8,12 +8,13 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-4. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-5. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-6. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-7. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-8. `docs/machines/phase-1-stations-roadmap.md`
+3. The current supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+4. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+5. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+6. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+7. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+8. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+9. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -83,7 +84,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, and `feature/dsp-osr-physical-inventory` are complete, verified, and merged. `feature/dsp-operational-simulation-clock` is complete and verified, pending merge to `master`. After that merge, create the decision-complete plan for `feature/dsp-rate-limited-service-centre-supply` from updated `master`. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, and `feature/dsp-operational-simulation-clock` are complete, verified, and merged. `feature/dsp-rate-limited-service-centre-supply` is the current feature and has a decision-complete plan at `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -189,8 +190,8 @@ Known Phase 1 machine/station work:
 - bag planning/provenance: complete, verified, and merged
 - outbound physical tote allocation: complete, verified, and merged
 - OSR physical inventory and preload: complete, verified, and merged
-- operational simulation clock: complete and verified; pending merge to `master`
-- rate-limited service-centre supply: next planned scheduler branch
+- operational simulation clock: complete, verified, and merged
+- rate-limited service-centre supply: detailed plan ready; current feature branch
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

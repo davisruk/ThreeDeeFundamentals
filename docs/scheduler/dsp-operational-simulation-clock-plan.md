@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-operational-simulation-clock`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 Verification completed:
 

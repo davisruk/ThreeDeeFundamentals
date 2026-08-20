@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, and OSR physical inventory are complete, verified, and merged. The operational simulation clock is complete and verified on its feature branch, pending merge to `master`. Rate-limited service-centre supply is the next planned feature.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, and the operational simulation clock are complete, verified, and merged. Rate-limited service-centre supply is the current planned feature on `feature/dsp-rate-limited-service-centre-supply`.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -510,7 +510,7 @@ Follow-on branch:
 
 ### `feature/dsp-operational-simulation-clock`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -554,6 +554,30 @@ Explicit non-goals:
 Follow-on branch:
 
 - `feature/dsp-rate-limited-service-centre-supply`
+
+### `feature/dsp-rate-limited-service-centre-supply`
+
+Status: detailed plan ready; implementation not started.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+
+Purpose:
+
+- Retain 12N `orderPriority` and derive deterministic service-centre supply order.
+- Authorize later service centres when physical OSR occupancy reaches a configurable inclusive low-water mark.
+- Admit authorized physical manifests individually at a configurable simulation-time rate.
+- Preserve ADAPTED-first upstream order, physical manifest identity, and OSR capacity.
+- Authorize EMPTY sheets logically without consuming an OSR slot.
+- Publish immutable supply state for later scheduler, inspection, and metrics work.
+
+Explicit non-goals:
+
+- no physical OSR processing release or lifecycle activation;
+- no scheduler candidate ranking or P2P allocation;
+- no trunker timetable/deadline outcome;
+- no renderables, visual rig wiring, complete full-day run, or new thread.
 
 ## Current Assumptions
 
