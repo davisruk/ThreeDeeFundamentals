@@ -2,7 +2,15 @@
 
 Branch: `feature/dsp-operational-simulation-clock`
 
-Status: ready for implementation.
+Status: implementation complete and verified; pending merge to `master`.
+
+Verification completed:
+
+- all focused Step 1-8 tests are green;
+- the Step 9 focused regression coverage and complete Gradle suite are green;
+- the Adapting, Third Party, and integrated tote-to-bag/P2P visual smoke checks are green;
+- existing scene motion remains unchanged because fixed-step execution is not yet wired into `SoftwareRenderer`;
+- `ALT+R` reset behavior remains correct in the checked scenes.
 
 ## Purpose
 
@@ -486,10 +494,28 @@ Visual smoke tests:
 
 Before branch closure:
 
-- update this plan status to implementation complete and verified;
-- update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- record any implementation detail that later supply, deadline, renderer-loop, or headless-runner plans must preserve.
+- [x] update this plan status to implementation complete and verified;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] record implementation details that later supply, deadline, renderer-loop, or headless-runner plans must preserve.
+
+## Preserved Contracts For Follow-On Work
+
+- `SimulationContext.getSimulationTimeSeconds()` remains the authoritative absolute elapsed simulation time.
+- `DspOperationalClock` is a stateless mapper. Do not introduce a separately accumulated mutable business clock that can drift from the simulation context.
+- Simulation elapsed zero maps to the configured normal start. The production baseline is day 0 `06:00`, day 0 `22:00` normal end, and day 1 `00:00` hard cutoff.
+- `OperationalDayTime` carries a non-negative day offset explicitly; later timetable and deadline work must preserve day +1 semantics rather than comparing wrapped `LocalTime` values.
+- Exact normal end is `OVERTIME`; exact hard cutoff and all later times are `HARD_CUTOFF_REACHED`.
+- Hard cutoff is observational in this foundation. A later command/application branch owns tote closure, terminal outcomes, or run termination.
+- `DspOperationalClockController` derives its latest immutable snapshot from the context's absolute time and ignores `dtSeconds` for business-clock arithmetic.
+- Register the clock controller before any controller that builds a scheduler snapshot containing clock state.
+- Existing lifecycle timestamps remain simulation-relative `Duration` values. Business date/time is a derived view and does not replace those records.
+- `FixedStepExecutionDriver` uses integer nanosecond accumulation, emits only the configured fixed step, retains unexecuted backlog, and enforces a per-advance work budget.
+- Visual render decimation is represented by `FixedStepAdvance.renderDue()` but is not connected to `SoftwareRenderer` in this branch.
+- `HEADLESS_ANALYSIS` emits the configured step batch without requesting rendering. The eventual headless runner supplies measured real duration for achieved-speed reporting; the driver does not read a system clock.
+- Requested and achieved speed, cumulative real/simulation durations, completed steps, and backlog are exposed through immutable `FixedStepExecutionSnapshot` values.
+- Runtime reset reconstructs the clock controller and fixed-step driver. Do not add a global reset registry for these types.
+- Later rate-limited supply must consume immutable operational clock snapshots and OSR inventory APIs without coupling either domain to renderer frame timing.
 
 ## Completion Criteria
 

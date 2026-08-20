@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, and OSR physical inventory are complete, verified, and merged. The operational simulation clock is the current planned branch.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, and OSR physical inventory are complete, verified, and merged. The operational simulation clock is complete and verified on its feature branch, pending merge to `master`. Rate-limited service-centre supply is the next planned feature.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -510,7 +510,7 @@ Follow-on branch:
 
 ### `feature/dsp-operational-simulation-clock`
 
-Status: detailed plan ready; implementation is the current branch.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -524,6 +524,24 @@ Purpose:
 - Provide generic bounded fixed-step execution for realtime, accelerated visual, and headless semantics.
 - Preserve pending simulation backlog under a configured work budget and report requested/achieved speed.
 - Bridge business-time snapshots to `SimulationWorld` without changing existing machine duration units.
+
+Implemented outcome:
+
+- `OperationalDayTime` represents local operating time with an explicit non-negative day offset.
+- `DspOperationalClockConfig` provides configurable operating boundaries and the production `06:00`/`22:00`/day +1 midnight baseline.
+- Stateless `DspOperationalClock` maps absolute elapsed simulation time to immutable business-time snapshots using rounded nanoseconds.
+- `DspOperationalClockController` follows authoritative `SimulationContext` time without accumulating an independent clock.
+- `FixedStepExecutionDriver` supports realtime, accelerated visual, and headless semantics through repeated bounded steps, retained backlog, render-due signals, and immutable speed snapshots.
+- Deterministic scenario coverage advances a complete operating window, proves exact boundary semantics, and proves reconstruction/reset behavior.
+- Focused tests, complete tests, visual smoke checks, and reset checks are green.
+
+Contracts for later branches:
+
+- scheduler and supply logic consume immutable clock snapshots rather than wall-clock time;
+- day offsets remain explicit for post-midnight timetable and deadline values;
+- renderer integration applies each emitted fixed step separately and must not pass a scaled frame delta to the world;
+- hard cutoff remains observational until a later command/application plan defines its mutations;
+- achieved-speed measurement uses caller-supplied real duration and never enters pure scheduler evaluation.
 
 Explicit non-goals:
 

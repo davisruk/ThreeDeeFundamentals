@@ -8,7 +8,7 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The current branch plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+3. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
 4. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
 5. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
 6. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
@@ -83,7 +83,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, and `feature/dsp-osr-physical-inventory` are complete, verified, and merged. `feature/dsp-operational-simulation-clock` is the current branch. Follow `docs/scheduler/dsp-operational-simulation-clock-plan.md` step by step. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, and `feature/dsp-osr-physical-inventory` are complete, verified, and merged. `feature/dsp-operational-simulation-clock` is complete and verified, pending merge to `master`. After that merge, create the decision-complete plan for `feature/dsp-rate-limited-service-centre-supply` from updated `master`. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -115,6 +115,17 @@ Completed OSR physical-inventory behavior:
 - Inventory admission/departure, lifecycle registration/activation, and scheduler order status remain separate.
 - Future physical release must commit `recordDeparture(...)` only after downstream acceptance succeeds.
 - Future rate-limited supply must operate per physical manifest and use inventory admission APIs rather than replacing inventory state.
+
+Completed operational-clock behavior:
+
+- `SimulationContext` elapsed seconds remain authoritative; business time is a stateless derived view.
+- Production defaults map elapsed zero to day 0 `06:00`, normal end to day 0 `22:00`, and hard cutoff to day 1 `00:00`.
+- `OperationalDayTime` preserves explicit day offsets for post-midnight scheduling values.
+- Immutable snapshots distinguish normal operations, overtime, and hard cutoff reached.
+- `DspOperationalClockController` follows absolute context time and performs no cutoff mutation.
+- Generic fixed-step execution emits bounded steps, retains backlog under a work budget, and exposes immutable requested/achieved-speed state.
+- Realtime, accelerated visual, and headless semantics are represented, but fixed-step/render-decimation behavior is not yet wired into `SoftwareRenderer`.
+- Future supply and scheduler logic must consume immutable clock snapshots; it must not read wall-clock time or independently accumulate business time.
 
 Completed scheduler work:
 
@@ -178,7 +189,8 @@ Known Phase 1 machine/station work:
 - bag planning/provenance: complete, verified, and merged
 - outbound physical tote allocation: complete, verified, and merged
 - OSR physical inventory and preload: complete, verified, and merged
-- operational simulation clock: current planned scheduler branch
+- operational simulation clock: complete and verified; pending merge to `master`
+- rate-limited service-centre supply: next planned scheduler branch
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

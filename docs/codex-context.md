@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, and OSR physical inventory are complete, verified, and merged. The operational simulation clock is the current planned feature.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, and OSR physical inventory are complete, verified, and merged. The operational simulation clock is complete and verified on its feature branch, pending merge to `master`. Rate-limited service-centre supply is the next planned feature.
 
 Read:
 
@@ -133,6 +133,13 @@ Current scheduler decisions:
 - Outbound allocation now supplies independent physical tote identities per P2P line, enforces service-centre/pharmacy purity and bag-count capacity, and records deterministic source-to-output sheet allocation without mutating provenance.
 - The generic `StoredBagReceiver` remains the bagger boundary; `OutboundToteAllocationController` applies completed runtime bags to DSP allocation state on the simulation thread.
 - Closed outbound totes retain active `OUTBOUND` sheet assignments for later dispatch/32R work. Generated sheets prevent one source output sheet from being active on two outbound totes.
+- DSP business time now derives from absolute elapsed simulation time through stateless `DspOperationalClock` mapping.
+- Production clock defaults are day 0 `06:00`, day 0 `22:00`, and day 1 `00:00` hard cutoff. Post-midnight time retains an explicit day offset.
+- Immutable clock snapshots distinguish normal operations, overtime, and hard cutoff reached. Exact `22:00` is overtime; exact day +1 midnight is hard cutoff reached.
+- `DspOperationalClockController` follows `SimulationContext` absolute time and must be registered before later scheduler-snapshot consumers.
+- Generic fixed-step execution supports realtime, accelerated visual, and headless semantics with bounded steps, retained backlog, render-due signals, and requested/achieved speed snapshots.
+- Fixed-step execution is not yet wired into `SoftwareRenderer`; current visual scene timing and rendering remain unchanged.
+- Hard cutoff is currently observational and performs no tote closure, fulfilment mutation, scheduler command, or run termination.
 
 The agreed next programme is split into short-lived branches from `master`:
 
@@ -157,7 +164,8 @@ Current programme position:
 - bag planning and provenance: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-bag-planning-provenance-plan.md`;
 - outbound physical tote allocation: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-outbound-tote-allocation-plan.md`;
 - OSR physical inventory and preload: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-physical-inventory-plan.md`;
-- operational simulation clock: current branch, with detailed plan at `docs/scheduler/dsp-operational-simulation-clock-plan.md`;
+- operational simulation clock: complete and verified, pending merge to `master`, with detailed plan at `docs/scheduler/dsp-operational-simulation-clock-plan.md`;
+- rate-limited service-centre supply: next planned feature; create its detailed branch plan after the clock branch is merged;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -201,7 +209,8 @@ Planned Phase 1 order:
 - Third Party Area: Phase 1 complete and merged
 - logical/physical tote lifecycle, bag provenance, and outbound allocation: complete, verified, and merged
 - OSR physical inventory and preload: complete, verified, and merged
-- operational simulation clock: current planned scheduler branch
+- operational simulation clock: complete and verified; pending merge to `master`
+- rate-limited service-centre supply: next planned scheduler branch
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 
