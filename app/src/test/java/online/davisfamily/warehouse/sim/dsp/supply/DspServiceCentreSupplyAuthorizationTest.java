@@ -117,7 +117,7 @@ class DspServiceCentreSupplyAuthorizationTest {
         fixture.bootstrapState().inventory().recordDeparture(fixture.preloadedToteId());
 
         fixture.coordinator().advance(clockAtSeconds(5));
-        fixture.coordinator().advance(clockAtSeconds(8));
+        fixture.coordinator().advance(clockAtSeconds(7));
 
         DspSupplySnapshot snapshot = fixture.coordinator().snapshot();
         assertEquals("sc-high", snapshot.activeInboundServiceCentreId().orElseThrow());
