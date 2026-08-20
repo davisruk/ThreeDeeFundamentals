@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, and the operational simulation clock are complete, verified, and merged. Rate-limited service-centre supply is complete and verified on `feature/dsp-rate-limited-service-centre-supply`, pending merge. Physical OSR processing release is the next detailed planning target after that merge.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, and rate-limited service-centre supply are complete, verified, and merged. Physical OSR processing release is the current planned feature on `feature/dsp-osr-processing-release`.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -557,7 +557,7 @@ Follow-on branch:
 
 ### `feature/dsp-rate-limited-service-centre-supply`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -590,6 +590,33 @@ Implemented contracts to preserve:
 Follow-on planning target:
 
 - physical OSR processing release, connecting stored physical manifest identity to downstream acceptance, inventory departure, lifecycle activation, and scheduler commands without collapsing those transitions.
+
+### `feature/dsp-osr-processing-release`
+
+Status: detailed plan ready; implementation not started.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-osr-processing-release-plan.md`
+
+Purpose:
+
+- Derive immutable per-physical-tote release candidates from current OSR inventory and lifecycle state.
+- Preserve multiple physical manifests for one logical sheet while enforcing one active sheet assignment.
+- Add a typed physical OSR release command alongside the legacy order-centric debug command.
+- Revalidate worker-produced commands against live simulation-thread inventory, lifecycle, identity, target, and clock state.
+- Obtain downstream acceptance before committing OSR departure and lifecycle activation.
+- Free OSR capacity for the completed rate-limited supply stream.
+
+Explicit non-goals:
+
+- no scheduler candidate ranking or physical command emission;
+- no changes to `WarehouseSchedulerSnapshot`, `DspReleaseScheduler`, or existing visual debug release behavior;
+- no EMPTY/AV02 allocation, sticky P2P leases, deadline-aware line allocation, renderables, or full-day execution.
+
+Follow-on planning target:
+
+- dependency-ready operational release with pharmacy-grouped ranking and physical command emission.
 
 ## Current Assumptions
 

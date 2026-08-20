@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-rate-limited-service-centre-supply`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 ## Purpose
 
@@ -597,4 +597,4 @@ Before branch closure:
 
 ## Follow-On Branch
 
-After this branch is green and merged, reassess the roadmap against the operational requirements. The likely next feature is the physical OSR processing-release boundary that connects stored manifest identity to lifecycle activation and scheduler commands. Create its detailed branch plan from updated `master`; do not implement it as an unplanned extension of this branch.
+The roadmap reassessment confirmed that the next feature is the physical OSR processing-release boundary. Its detailed plan is `docs/scheduler/dsp-osr-processing-release-plan.md` on `feature/dsp-osr-processing-release`.
