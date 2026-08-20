@@ -75,10 +75,25 @@ public final class DspServiceCentreSupplyCoordinator {
         }
         latestClockElapsedTime = elapsedSimulationTime;
 
-        OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
+        boolean activeAtStart = activeInboundServiceCentreId != null;
+        if (!activeAtStart) {
+            if (authorizeNextServiceCentre(
+                    bootstrapState.inventorySnapshot(),
+                    elapsedSimulationTime)) {
+                return;
+            }
+            return;
+        }
+
+        admitDuePhysicalManifests(elapsedSimulationTime);
+    }
+
+    private boolean authorizeNextServiceCentre(
+            OsrInventorySnapshot inventorySnapshot,
+            Duration elapsedSimulationTime) {
         if (activeInboundServiceCentreId != null
                 || inventorySnapshot.occupancy() > config.lowWaterMark()) {
-            return;
+            return false;
         }
 
         ServiceCentreSupplyBatch batch = plan.batches().stream()
@@ -87,9 +102,14 @@ public final class DspServiceCentreSupplyCoordinator {
                 .findFirst()
                 .orElse(null);
         if (batch == null) {
-            return;
+            return false;
         }
 
+        Duration firstInterval = null;
+        if (!batch.physicalManifests().isEmpty()) {
+            firstInterval = positiveArrivalInterval(
+                    batch.physicalManifests().getFirst());
+        }
         authorizationStates.put(
                 batch.serviceCentreId(),
                 batch.physicalManifests().isEmpty()
@@ -101,7 +121,7 @@ public final class DspServiceCentreSupplyCoordinator {
         authorizedEmptyOrderSheetKeys.addAll(batch.emptyOrderSheetKeys());
 
         if (batch.physicalManifests().isEmpty()) {
-            return;
+            return true;
         }
 
         activeInboundServiceCentreId = batch.serviceCentreId();
@@ -110,14 +130,130 @@ public final class DspServiceCentreSupplyCoordinator {
                     manifest.physicalToteId(),
                     PhysicalToteSupplyState.AUTHORIZED_WAITING);
         }
+        nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(firstInterval);
+        return true;
+    }
+
+    private void admitDuePhysicalManifests(Duration elapsedSimulationTime) {
+        ServiceCentreSupplyBatch activeBatch = activeBatch();
+        OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
+        InboundToteManifest nextManifest = nextPendingManifest(activeBatch, inventorySnapshot);
+        if (nextManifest == null) {
+            completeActiveBatch(activeBatch);
+            return;
+        }
+        if (nextPhysicalAdmissionElapsedTime == null) {
+            throw new IllegalStateException(
+                    "Active inbound service centre has no next physical admission time");
+        }
+        if (elapsedSimulationTime.compareTo(nextPhysicalAdmissionElapsedTime) < 0) {
+            return;
+        }
+
+        boolean wasCapacityBlocked = physicalToteStates.get(nextManifest.physicalToteId())
+                == PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY;
+        if (wasCapacityBlocked) {
+            if (inventorySnapshot.full()) {
+                return;
+            }
+            admitManifest(nextManifest, inventorySnapshot);
+            scheduleAfterCapacityBlock(activeBatch, elapsedSimulationTime);
+            return;
+        }
+
+        while (true) {
+            inventorySnapshot = bootstrapState.inventorySnapshot();
+            nextManifest = nextPendingManifest(activeBatch, inventorySnapshot);
+            if (nextManifest == null) {
+                completeActiveBatch(activeBatch);
+                return;
+            }
+            if (inventorySnapshot.full()) {
+                physicalToteStates.put(
+                        nextManifest.physicalToteId(),
+                        PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY);
+                return;
+            }
+            Duration scheduledDueTime = nextPhysicalAdmissionElapsedTime;
+            if (elapsedSimulationTime.compareTo(scheduledDueTime) < 0) {
+                return;
+            }
+
+            admitManifest(nextManifest, inventorySnapshot);
+            inventorySnapshot = bootstrapState.inventorySnapshot();
+            InboundToteManifest followingManifest = nextPendingManifest(
+                    activeBatch,
+                    inventorySnapshot);
+            if (followingManifest == null) {
+                completeActiveBatch(activeBatch);
+                return;
+            }
+            nextPhysicalAdmissionElapsedTime = scheduledDueTime.plus(
+                    positiveArrivalInterval(followingManifest));
+        }
+    }
+
+    private void scheduleAfterCapacityBlock(
+            ServiceCentreSupplyBatch activeBatch,
+            Duration elapsedSimulationTime) {
+        InboundToteManifest followingManifest = nextPendingManifest(
+                activeBatch,
+                bootstrapState.inventorySnapshot());
+        if (followingManifest == null) {
+            completeActiveBatch(activeBatch);
+            return;
+        }
+        nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(
+                positiveArrivalInterval(followingManifest));
+    }
+
+    private void admitManifest(
+            InboundToteManifest manifest,
+            OsrInventorySnapshot inventorySnapshot) {
+        if (inventorySnapshot.full()) {
+            throw new IllegalStateException("OSR capacity is full");
+        }
+        bootstrapState.inventory().store(manifest);
+        physicalToteStates.put(
+                manifest.physicalToteId(),
+                PhysicalToteSupplyState.STORED_IN_OSR);
+        admittedAfterStartupCount++;
+    }
+
+    private ServiceCentreSupplyBatch activeBatch() {
+        return plan.findBatch(activeInboundServiceCentreId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "No supply batch for active service centre: "
+                                + activeInboundServiceCentreId));
+    }
+
+    private InboundToteManifest nextPendingManifest(
+            ServiceCentreSupplyBatch batch,
+            OsrInventorySnapshot inventorySnapshot) {
+        return batch.physicalManifests().stream()
+                .filter(manifest -> !inventorySnapshot.contains(manifest.physicalToteId())
+                        && !inventorySnapshot.hasDeparted(manifest.physicalToteId()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void completeActiveBatch(ServiceCentreSupplyBatch batch) {
+        authorizationStates.put(
+                batch.serviceCentreId(),
+                ServiceCentreAuthorizationState.SUPPLY_COMPLETE);
+        activeInboundServiceCentreId = null;
+        nextPhysicalAdmissionElapsedTime = null;
+    }
+
+    private Duration positiveArrivalInterval(InboundToteManifest nextManifest) {
         Duration interval = arrivalPolicy.intervalBeforeNextTote(
-                batch.physicalManifests().getFirst(),
+                nextManifest,
                 admittedAfterStartupCount);
         if (interval == null || interval.isZero() || interval.isNegative()) {
             throw new IllegalStateException(
                     "Inbound tote arrival policy must return a positive interval");
         }
-        nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(interval);
+        return interval;
     }
 
     public DspSupplySnapshot snapshot() {
