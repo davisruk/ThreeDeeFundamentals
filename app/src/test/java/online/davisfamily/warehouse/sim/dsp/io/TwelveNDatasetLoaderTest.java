@@ -53,6 +53,7 @@ class TwelveNDatasetLoaderTest {
                 {
                   "header": {"orderId":"%s","sheetNumber":"%s"},
                   "toteIdentifier": {"payload":"05"},
+                  "orderPriority": {"payload":"999"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {"numberOfOrderLines":0,"orderLines":[]}
                 }

@@ -153,6 +153,7 @@ public class DspDatasetAssembler {
                 order.sheetNumber(),
                 order.orderType(),
                 items,
+                order.orderPriority(),
                 order.sequenceNumber());
     }
 
@@ -175,6 +176,11 @@ public class DspDatasetAssembler {
                 throw new IllegalArgumentException(
                         "Conflicting orderType for logical order sheet " + contribution.orderSheetKey());
             }
+            if (firstContribution.orderPriority() != contribution.orderPriority()) {
+                throw new IllegalArgumentException(
+                        "Conflicting orderPriority for logical order sheet "
+                                + contribution.orderSheetKey());
+            }
             for (DspOrderItem item : contribution.items()) {
                 if (!lineReferences.add(item.lineReference())) {
                     throw new IllegalArgumentException(
@@ -193,6 +199,7 @@ public class DspDatasetAssembler {
                     firstContribution.sheetNumber(),
                     firstContribution.orderType(),
                     items,
+                    firstContribution.orderPriority(),
                     firstContribution.sequenceNumber());
         }
     }

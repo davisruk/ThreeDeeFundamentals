@@ -9,7 +9,23 @@ public record NotionalToteOrder(
         int sheetNumber,
         OrderType orderType,
         List<DspOrderItem> items,
+        int orderPriority,
         long sequenceNumber) {
+
+    /**
+     * Compatibility constructor for hand-built fixtures that predate 12N priority retention.
+     */
+    @Deprecated
+    public NotionalToteOrder(
+            String orderId,
+            String notionalToteId,
+            String serviceCentreId,
+            int sheetNumber,
+            OrderType orderType,
+            List<DspOrderItem> items,
+            long sequenceNumber) {
+        this(orderId, notionalToteId, serviceCentreId, sheetNumber, orderType, items, 0, sequenceNumber);
+    }
 
     public NotionalToteOrder {
         if (orderId == null || orderId.isBlank()) {
@@ -29,6 +45,9 @@ public record NotionalToteOrder(
         }
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("items must not be empty");
+        }
+        if (orderPriority < 0) {
+            throw new IllegalArgumentException("orderPriority must be >= 0");
         }
         if (sequenceNumber < 0) {
             throw new IllegalArgumentException("sequenceNumber must be >= 0");

@@ -41,6 +41,9 @@ final class TwelveNLineMappingSupport {
         if (message.toteIdentifier() == null) {
             throw new IllegalArgumentException("message.toteIdentifier must not be null");
         }
+        if (message.orderPriority() == null) {
+            throw new IllegalArgumentException("message.orderPriority must not be null");
+        }
         if (message.serviceCentre() == null) {
             throw new IllegalArgumentException("message.serviceCentre must not be null");
         }

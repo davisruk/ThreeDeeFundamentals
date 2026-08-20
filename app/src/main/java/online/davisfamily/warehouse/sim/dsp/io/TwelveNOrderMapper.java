@@ -42,6 +42,8 @@ public class TwelveNOrderMapper {
                 message.serviceCentre().payload(), "serviceCentre.payload");
         int sheetNumber = TwelveNLineMappingSupport.parsePositiveInt(
                 message.header().sheetNumber(), "header.sheetNumber");
+        int orderPriority = TwelveNLineMappingSupport.parsePositiveInt(
+                message.orderPriority().payload(), "orderPriority.payload");
         NotionalToteOrder order = new NotionalToteOrder(
                 orderId,
                 orderId,
@@ -49,6 +51,7 @@ public class TwelveNOrderMapper {
                 sheetNumber,
                 orderType,
                 items,
+                orderPriority,
                 sourceSequenceNumber);
 
         if (orderType == OrderType.EMPTY) {

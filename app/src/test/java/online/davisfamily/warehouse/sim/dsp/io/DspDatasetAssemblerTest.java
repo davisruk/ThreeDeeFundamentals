@@ -31,6 +31,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
+                          "orderPriority": {"payload":"999"},
                           "transportContainer": {"payload":"tote-full-pack"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
@@ -56,6 +57,7 @@ class DspDatasetAssemblerTest {
         assertEquals(1, data.products().size());
         assertEquals(1, data.orders().size());
         assertEquals(OrderType.FULL_PACK, data.orders().getFirst().orderType());
+        assertEquals(999, data.orders().getFirst().orderPriority());
         assertTrue(data.preparedLines().isEmpty());
         assertTrue(data.loadedPreparedLineKeys().isEmpty());
         assertTrue(data.startupReadyPreparedLineKeys().isEmpty());
@@ -73,6 +75,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"TOTE0007168406","sheetNumber":"022"},
                           "toteIdentifier": {"payload":"02"},
+                          "orderPriority": {"payload":"999"},
                           "transportContainer": {"payload":"tote-adapted"},
                           "serviceCentre": {"payload":"116"},
                           "orderDetail": {
@@ -174,6 +177,9 @@ class DspDatasetAssemblerTest {
         TwelveNMessageJson conflictingOrderType = physicalMessage(
                 "order-1", "001", "04", "tote-2", "104",
                 line("line-2", "05", "pharmacy-1", "product-2"));
+        TwelveNMessageJson conflictingPriority = physicalMessage(
+                "order-1", "001", "05", "tote-3", "104", 998,
+                line("line-3", "05", "pharmacy-1", "product-2"));
 
         assertThrows(IllegalArgumentException.class,
                 () -> assembler.assemble(
@@ -183,6 +189,10 @@ class DspDatasetAssemblerTest {
                 () -> assembler.assemble(
                         List.of(product("product-1"), product("product-2")),
                         List.of(first, conflictingOrderType)));
+        assertThrows(IllegalArgumentException.class,
+                () -> assembler.assemble(
+                        List.of(product("product-1"), product("product-2")),
+                        List.of(first, conflictingPriority)));
     }
 
     @Test
@@ -242,6 +252,7 @@ class DspDatasetAssemblerTest {
                                 {
                                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
                                   "toteIdentifier": {"payload":"04"},
+                                  "orderPriority": {"payload":"999"},
                                   "transportContainer": {"payload":"tote-associated"},
                                   "serviceCentre": {"payload":"104"},
                                   "orderDetail": {
@@ -281,6 +292,7 @@ class DspDatasetAssemblerTest {
 
         assertEquals(1, data.orders().size());
         assertEquals(1, data.orders().getFirst().items().size());
+        assertEquals(999, data.orders().getFirst().orderPriority());
         assertEquals("0006461", data.orders().getFirst().items().getFirst().pharmacyId());
         assertEquals(1, data.inboundToteManifests().size());
         assertEquals(data.orders().getFirst().items(), data.inboundToteManifests().getFirst().items());
@@ -309,6 +321,7 @@ class DspDatasetAssemblerTest {
                                 {
                                   "header": {"orderId":"TOTE0007168406","sheetNumber":"022"},
                                   "toteIdentifier": {"payload":"02"},
+                                  "orderPriority": {"payload":"999"},
                                   "transportContainer": {"payload":"tote-adapted"},
                                   "serviceCentre": {"payload":"116"},
                                   "orderDetail": {
@@ -334,6 +347,7 @@ class DspDatasetAssemblerTest {
                                 {
                                   "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                                   "toteIdentifier": {"payload":"05"},
+                                  "orderPriority": {"payload":"999"},
                                   "transportContainer": {"payload":"tote-full-pack"},
                                   "serviceCentre": {"payload":"104"},
                                   "orderDetail": {
@@ -359,6 +373,7 @@ class DspDatasetAssemblerTest {
                                 {
                                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
                                   "toteIdentifier": {"payload":"04"},
+                                  "orderPriority": {"payload":"999"},
                                   "transportContainer": {"payload":"tote-associated"},
                                   "serviceCentre": {"payload":"104"},
                                   "orderDetail": {
@@ -396,6 +411,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"TOTE0007171306","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"01"},
+                          "orderPriority": {"payload":"999"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
                             "numberOfOrderLines": 1,
@@ -433,6 +449,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"TOTE0007170196","sheetNumber":"003"},
                           "toteIdentifier": {"payload":"04"},
+                          "orderPriority": {"payload":"999"},
                           "transportContainer": {"payload":"tote-associated"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
@@ -470,6 +487,7 @@ class DspDatasetAssemblerTest {
                         {
                           "header": {"orderId":"order-missing","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
+                          "orderPriority": {"payload":"999"},
                           "transportContainer": {"payload":"tote-full-pack"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
@@ -509,11 +527,29 @@ class DspDatasetAssemblerTest {
             String physicalToteId,
             String serviceCentreId,
             TwelveNOrderLineJson... lines) {
+        return physicalMessage(
+                orderId,
+                sheetNumber,
+                toteType,
+                physicalToteId,
+                serviceCentreId,
+                999,
+                lines);
+    }
+
+    private static TwelveNMessageJson physicalMessage(
+            String orderId,
+            String sheetNumber,
+            String toteType,
+            String physicalToteId,
+            String serviceCentreId,
+            int orderPriority,
+            TwelveNOrderLineJson... lines) {
         return new TwelveNMessageJson(
                 new TwelveNHeaderJson(null, null, orderId, sheetNumber),
                 new TwelveNFieldJson(null, null, toteType),
                 physicalToteId == null ? null : new TwelveNFieldJson(null, null, physicalToteId),
-                null,
+                new TwelveNFieldJson(null, null, Integer.toString(orderPriority)),
                 null,
                 new TwelveNFieldJson(null, null, serviceCentreId),
                 new TwelveNOrderDetailJson(

@@ -232,6 +232,7 @@ class DspBagPlanningProvenanceScenarioTest {
                 {
                   "header": {"orderId":"full-order-1","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"05"},
+                  "orderPriority": {"payload":"999"},
                   "transportContainer": {"payload":"full-tote-1"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {
@@ -284,6 +285,7 @@ class DspBagPlanningProvenanceScenarioTest {
                 {
                   "header": {"orderId":"adapted-source-1","sheetNumber":"002"},
                   "toteIdentifier": {"payload":"02"},
+                  "orderPriority": {"payload":"999"},
                   "transportContainer": {"payload":"adapted-tote-1"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {

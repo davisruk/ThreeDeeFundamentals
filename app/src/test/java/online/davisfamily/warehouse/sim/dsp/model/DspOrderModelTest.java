@@ -176,6 +176,40 @@ class DspOrderModelTest {
                         OrderType.ASSOCIATED,
                         List.of(validItem()),
                         -1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new NotionalToteOrder(
+                        "order-1",
+                        "notional-1",
+                        "sc-1",
+                        1,
+                        OrderType.ASSOCIATED,
+                        List.of(validItem()),
+                        -1,
+                        0));
+    }
+
+    @Test
+    void shouldRetainOrderPriorityAndSupportLegacyConstructor() {
+        NotionalToteOrder prioritized = new NotionalToteOrder(
+                "order-1",
+                "notional-1",
+                "sc-1",
+                1,
+                OrderType.ASSOCIATED,
+                List.of(validItem()),
+                999,
+                0);
+        NotionalToteOrder legacy = new NotionalToteOrder(
+                "order-2",
+                "notional-2",
+                "sc-1",
+                1,
+                OrderType.ASSOCIATED,
+                List.of(validItem()),
+                1);
+
+        assertEquals(999, prioritized.orderPriority());
+        assertEquals(0, legacy.orderPriority());
     }
 
     @Test

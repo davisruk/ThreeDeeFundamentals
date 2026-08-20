@@ -57,6 +57,7 @@ class TwelveNOrderMapperTest {
                 {
                   "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"05"},
+                  "orderPriority": {"payload":"999"},
                   "transportContainer": {"payload":" 90784872 "},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {
@@ -85,6 +86,7 @@ class TwelveNOrderMapperTest {
         assertEquals("TOTE0007170720", order.notionalToteId());
         assertEquals("104", order.serviceCentreId());
         assertEquals(1, order.sheetNumber());
+        assertEquals(999, order.orderPriority());
         assertEquals(OrderType.FULL_PACK, order.orderType());
         assertEquals(7L, order.sequenceNumber());
         assertEquals(1, order.items().size());
@@ -98,11 +100,26 @@ class TwelveNOrderMapperTest {
     }
 
     @Test
+    void shouldRejectMissingBlankZeroAndNonnumericOrderPriority() {
+        TwelveNMessageJson base = message(singleLineMessage("patient-1", "prescription-1"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> orderMapper.map(withOrderPriority(base, null), 0L));
+        assertThrows(IllegalArgumentException.class,
+                () -> orderMapper.map(withOrderPriority(base, " "), 0L));
+        assertThrows(IllegalArgumentException.class,
+                () -> orderMapper.map(withOrderPriority(base, "000"), 0L));
+        assertThrows(IllegalArgumentException.class,
+                () -> orderMapper.map(withOrderPriority(base, "priority"), 0L));
+    }
+
+    @Test
     void shouldMapAssociatedAndAdaptedPhysicalTransportContainers() {
         MappedTwelveNOrder mappedAssociated = orderMapper.map(message("""
                 {
                   "header": {"orderId":"TOTE0007170299","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"04"},
+                  "orderPriority": {"payload":"999"},
                   "transportContainer": {"payload":"90864874"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {
@@ -157,6 +174,7 @@ class TwelveNOrderMapperTest {
                 {
                   "header": {"orderId":"TOTE0007179999","sheetNumber":"002"},
                   "toteIdentifier": {"payload":"03"},
+                  "orderPriority": {"payload":"999"},
                   "serviceCentre": {"payload":"116"},
                   "orderDetail": {
                     "numberOfOrderLines": 1,
@@ -207,6 +225,7 @@ class TwelveNOrderMapperTest {
                 {
                   "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"05"},
+                  "orderPriority": {"payload":"999"},
                   "transportContainer": {"payload":"90784872"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {
@@ -241,6 +260,7 @@ class TwelveNOrderMapperTest {
                 {
                   "header": {"orderId":"TOTE0007179999","sheetNumber":"002"},
                   "toteIdentifier": {"payload":"03"},
+                  "orderPriority": {"payload":"999"},
                   "transportContainer": {"payload":"PLACEHOLDER"},
                   "serviceCentre": {"payload":"116"},
                   "orderDetail": {
@@ -275,6 +295,7 @@ class TwelveNOrderMapperTest {
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
+                          "orderPriority": {"payload":"999"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
                             "numberOfOrderLines": 1,
@@ -305,6 +326,7 @@ class TwelveNOrderMapperTest {
                 {
                   "header": {"orderId":"TOTE0007171306","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"01"},
+                  "orderPriority": {"payload":"999"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {
                     "numberOfOrderLines": 1,
@@ -339,6 +361,7 @@ class TwelveNOrderMapperTest {
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
+                          "orderPriority": {"payload":"999"},
                           "transportContainer": {"payload":"90784872"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
@@ -372,6 +395,7 @@ class TwelveNOrderMapperTest {
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"99"},
+                          "orderPriority": {"payload":"999"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
                             "numberOfOrderLines": 1,
@@ -404,6 +428,7 @@ class TwelveNOrderMapperTest {
                         {
                           "header": {"orderId":"TOTE0007170720","sheetNumber":"001"},
                           "toteIdentifier": {"payload":"05"},
+                          "orderPriority": {"payload":"999"},
                           "transportContainer": {"payload":"90784872"},
                           "serviceCentre": {"payload":"104"},
                           "orderDetail": {
@@ -431,6 +456,19 @@ class TwelveNOrderMapperTest {
 
     private static TwelveNMessageJson message(String json) {
         return JsonLoaderSupport.readString(json, TwelveNMessageJson.class);
+    }
+
+    private static TwelveNMessageJson withOrderPriority(
+            TwelveNMessageJson message,
+            String payload) {
+        return new TwelveNMessageJson(
+                message.header(),
+                message.toteIdentifier(),
+                message.transportContainer(),
+                payload == null ? null : new TwelveNFieldJson(null, null, payload),
+                message.departureTime(),
+                message.serviceCentre(),
+                message.orderDetail());
     }
 
     private void assertFirstMappedIdentity(
@@ -464,6 +502,7 @@ class TwelveNOrderMapperTest {
                 {
                   "header": {"orderId":"order-1","sheetNumber":"001"},
                   "toteIdentifier": {"payload":"05"},
+                  "orderPriority": {"payload":"999"},
                   "transportContainer": {"payload":"tote-1"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {
@@ -490,6 +529,7 @@ class TwelveNOrderMapperTest {
                 {
                   "header": {"orderId":"TOTE0007168406","sheetNumber":"022"},
                   "toteIdentifier": {"payload":"02"},
+                  "orderPriority": {"payload":"997"},
                   "transportContainer": {"payload":"90864875"},
                   "serviceCentre": {"payload":"116"},
                   "orderDetail": {
