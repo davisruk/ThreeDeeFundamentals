@@ -14,6 +14,7 @@ import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrBootstrapState;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventorySnapshot;
+import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockSnapshot;
 
 public final class DspServiceCentreSupplyCoordinator {
     private final DspServiceCentreSupplyPlan plan;
@@ -31,6 +32,7 @@ public final class DspServiceCentreSupplyCoordinator {
     private long admittedAfterStartupCount;
     private String activeInboundServiceCentreId;
     private Duration nextPhysicalAdmissionElapsedTime;
+    private Duration latestClockElapsedTime;
 
     public DspServiceCentreSupplyCoordinator(
             DspServiceCentreSupplyPlan plan,
@@ -58,6 +60,64 @@ public final class DspServiceCentreSupplyCoordinator {
         this.arrivalPolicy = arrivalPolicy;
         this.bootstrapState = bootstrapState;
         initializeFromBootstrap();
+    }
+
+    public void advance(DspOperationalClockSnapshot clockSnapshot) {
+        if (clockSnapshot == null) {
+            throw new IllegalArgumentException("clockSnapshot must not be null");
+        }
+
+        Duration elapsedSimulationTime = clockSnapshot.elapsedSimulationTime();
+        if (latestClockElapsedTime != null
+                && elapsedSimulationTime.compareTo(latestClockElapsedTime) < 0) {
+            throw new IllegalArgumentException(
+                    "clockSnapshot elapsedSimulationTime must not move backwards");
+        }
+        latestClockElapsedTime = elapsedSimulationTime;
+
+        OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
+        if (activeInboundServiceCentreId != null
+                || inventorySnapshot.occupancy() > config.lowWaterMark()) {
+            return;
+        }
+
+        ServiceCentreSupplyBatch batch = plan.batches().stream()
+                .filter(candidate -> authorizationStates.get(candidate.serviceCentreId())
+                        == ServiceCentreAuthorizationState.HELD_UPSTREAM)
+                .findFirst()
+                .orElse(null);
+        if (batch == null) {
+            return;
+        }
+
+        authorizationStates.put(
+                batch.serviceCentreId(),
+                batch.physicalManifests().isEmpty()
+                        ? ServiceCentreAuthorizationState.SUPPLY_COMPLETE
+                        : ServiceCentreAuthorizationState.AUTHORIZED);
+        authorizationElapsedTimes.put(
+                batch.serviceCentreId(),
+                Optional.of(elapsedSimulationTime));
+        authorizedEmptyOrderSheetKeys.addAll(batch.emptyOrderSheetKeys());
+
+        if (batch.physicalManifests().isEmpty()) {
+            return;
+        }
+
+        activeInboundServiceCentreId = batch.serviceCentreId();
+        for (InboundToteManifest manifest : batch.physicalManifests()) {
+            physicalToteStates.put(
+                    manifest.physicalToteId(),
+                    PhysicalToteSupplyState.AUTHORIZED_WAITING);
+        }
+        Duration interval = arrivalPolicy.intervalBeforeNextTote(
+                batch.physicalManifests().getFirst(),
+                admittedAfterStartupCount);
+        if (interval == null || interval.isZero() || interval.isNegative()) {
+            throw new IllegalStateException(
+                    "Inbound tote arrival policy must return a positive interval");
+        }
+        nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(interval);
     }
 
     public DspSupplySnapshot snapshot() {
