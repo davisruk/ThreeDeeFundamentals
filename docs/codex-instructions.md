@@ -8,14 +8,15 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
-4. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
-5. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-6. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-7. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-8. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-9. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-10. `docs/machines/phase-1-stations-roadmap.md`
+3. The current operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+4. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+5. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+6. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+7. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+8. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+9. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+10. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+11. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -85,7 +86,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, and `feature/dsp-rate-limited-service-centre-supply` are complete, verified, and merged. `feature/dsp-osr-processing-release` is complete and verified, pending merge to `master`. Its detailed plan is `docs/scheduler/dsp-osr-processing-release-plan.md`. The next planning target is `feature/dsp-dependency-ready-operational-release`. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, `feature/dsp-rate-limited-service-centre-supply`, and `feature/dsp-osr-processing-release` are complete, verified, and merged. `feature/dsp-dependency-ready-operational-release` is the current feature and has a decision-complete plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -215,8 +216,8 @@ Known Phase 1 machine/station work:
 - OSR physical inventory and preload: complete, verified, and merged
 - operational simulation clock: complete, verified, and merged
 - rate-limited service-centre supply: complete, verified, and merged
-- physical OSR processing release: complete and verified; pending merge to `master`
-- dependency-ready operational release: next feature to plan after merge
+- physical OSR processing release: complete, verified, and merged
+- dependency-ready operational release: detailed plan ready; current feature branch
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

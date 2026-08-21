@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, and rate-limited service-centre supply are complete, verified, and merged. Physical OSR processing release is complete and verified on `feature/dsp-osr-processing-release`, pending merge. Dependency-ready operational release is the next planning target.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, and physical OSR processing release are complete, verified, and merged. Dependency-ready operational release is the current planned feature on `feature/dsp-dependency-ready-operational-release`.
 
 Read:
 
@@ -174,8 +174,8 @@ Current programme position:
 - OSR physical inventory and preload: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-physical-inventory-plan.md`;
 - operational simulation clock: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-operational-simulation-clock-plan.md`;
 - rate-limited service-centre supply: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`;
-- physical OSR processing release: complete and verified, pending merge, with detailed plan at `docs/scheduler/dsp-osr-processing-release-plan.md`;
-- dependency-ready operational release and pharmacy-grouped ranking: next planning target;
+- physical OSR processing release: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-processing-release-plan.md`;
+- dependency-ready operational release and pharmacy-grouped ranking: current planned feature, with detailed plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -221,8 +221,8 @@ Planned Phase 1 order:
 - OSR physical inventory and preload: complete, verified, and merged
 - operational simulation clock: complete, verified, and merged
 - rate-limited service-centre supply: complete, verified, and merged
-- physical OSR processing release: complete and verified; pending merge to `master`
-- dependency-ready operational release: next feature to plan after merge
+- physical OSR processing release: complete, verified, and merged
+- dependency-ready operational release: detailed plan ready; current feature branch
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

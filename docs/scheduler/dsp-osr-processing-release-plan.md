@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-osr-processing-release`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 ## Purpose
 

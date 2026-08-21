@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, and rate-limited service-centre supply are complete, verified, and merged. Physical OSR processing release is complete and verified on `feature/dsp-osr-processing-release`, pending merge. Dependency-ready operational release is the next planning target.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, and physical OSR processing release are complete, verified, and merged. Dependency-ready operational release is the current planned feature on `feature/dsp-dependency-ready-operational-release`.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -593,7 +593,7 @@ Follow-on planning target:
 
 ### `feature/dsp-osr-processing-release`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -627,6 +627,34 @@ Implemented contracts to preserve:
 Follow-on planning target:
 
 - `feature/dsp-dependency-ready-operational-release`, composing physical candidate snapshots into scheduler evaluation, adding pharmacy-grouped deterministic ranking, and emitting the typed physical command.
+
+### `feature/dsp-dependency-ready-operational-release`
+
+Status: detailed plan ready; implementation not started.
+
+Detailed implementation doc:
+
+- `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+
+Purpose:
+
+- Join immutable physical OSR candidates to exact logical order/dependency state.
+- Make ADAPTED and FULL_PACK independently eligible and ASSOCIATED dependent only on its own prepared lines.
+- Rank fully eligible physical work by service-centre cohort, stable pharmacy groups, and deterministic source order without order-type priority.
+- Select only the first route-entry target and emit `ReleasePhysicalToteFromOsrCommand`.
+- Preserve worker-thread evaluation and simulation-thread command application through the completed physical handler.
+- Keep legacy order-centric scheduler/debug behavior unchanged.
+
+Explicit non-goals:
+
+- no EMPTY/AV02 physical allocation;
+- no sticky P2P leases or active-line pharmacy affinity;
+- no deadline-aware elastic line allocation;
+- no production visual target migration, renderables, calibrated timing, or full-day run.
+
+Follow-on planning target:
+
+- sticky P2P service-centre leases, subject to reassessment of route-target integration readiness.
 
 ## Current Assumptions
 
