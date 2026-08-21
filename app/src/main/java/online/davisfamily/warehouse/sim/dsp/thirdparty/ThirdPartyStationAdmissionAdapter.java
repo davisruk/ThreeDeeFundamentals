@@ -9,6 +9,18 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 
 public class ThirdPartyStationAdmissionAdapter {
     private static final String CAPACITY_BLOCKED_REASON = "Third Party area has no capacity";
+    private final Optional<String> selectedTargetId;
+
+    public ThirdPartyStationAdmissionAdapter() {
+        this.selectedTargetId = Optional.empty();
+    }
+
+    public ThirdPartyStationAdmissionAdapter(String targetId) {
+        if (targetId == null || targetId.isBlank()) {
+            throw new IllegalArgumentException("targetId must not be blank");
+        }
+        this.selectedTargetId = Optional.of(targetId.trim());
+    }
 
     public StationAdmissionSnapshot admissionFor(
             Optional<ThirdPartyVisitPlan> candidatePlan,
@@ -34,6 +46,7 @@ public class ThirdPartyStationAdmissionAdapter {
                 capacity,
                 stationSnapshot,
                 admissionOpen,
-                admissionOpen ? "" : CAPACITY_BLOCKED_REASON);
+                admissionOpen ? "" : CAPACITY_BLOCKED_REASON,
+                admissionOpen ? selectedTargetId : Optional.empty());
     }
 }

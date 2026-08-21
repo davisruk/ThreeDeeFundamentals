@@ -108,7 +108,7 @@ class ThirdPartySchedulerIntegrationTest {
                 snapshot(List.of(candidate), Set.of()));
 
         assertTrue(admission.admissionOpen());
-        assertTrue(admission.selectedTargetId().isEmpty());
+        assertEquals("third-party-ingress", admission.selectedTargetId().orElseThrow());
     }
 
     private Fixture fixture(ThirdPartyAreaConfig config) {
@@ -121,7 +121,8 @@ class ThirdPartySchedulerIntegrationTest {
         ThirdPartyStationAdmissionResolver resolver = new ThirdPartyStationAdmissionResolver(
                 new SnapshotStationAdmissionResolver(),
                 visitFactory,
-                area::snapshot);
+                area::snapshot,
+                "third-party-ingress");
         DspReleaseScheduler scheduler = new DspReleaseScheduler(
                 new ServiceCentreWindowPolicy(new ServiceCentrePriority(List.of("sc-1"))),
                 new DspDependencyEvaluator(),

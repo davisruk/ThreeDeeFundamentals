@@ -12,12 +12,36 @@ public class ThirdPartyStationAdmissionResolver implements StationAdmissionResol
     private final StationAdmissionResolver fallbackResolver;
     private final ThirdPartyVisitFactory visitFactory;
     private final Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier;
-    private final ThirdPartyStationAdmissionAdapter adapter = new ThirdPartyStationAdmissionAdapter();
+    private final ThirdPartyStationAdmissionAdapter adapter;
 
     public ThirdPartyStationAdmissionResolver(
             StationAdmissionResolver fallbackResolver,
             ThirdPartyVisitFactory visitFactory,
             Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier) {
+        this(
+                fallbackResolver,
+                visitFactory,
+                areaSnapshotSupplier,
+                new ThirdPartyStationAdmissionAdapter());
+    }
+
+    public ThirdPartyStationAdmissionResolver(
+            StationAdmissionResolver fallbackResolver,
+            ThirdPartyVisitFactory visitFactory,
+            Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier,
+            String targetId) {
+        this(
+                fallbackResolver,
+                visitFactory,
+                areaSnapshotSupplier,
+                new ThirdPartyStationAdmissionAdapter(targetId));
+    }
+
+    private ThirdPartyStationAdmissionResolver(
+            StationAdmissionResolver fallbackResolver,
+            ThirdPartyVisitFactory visitFactory,
+            Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier,
+            ThirdPartyStationAdmissionAdapter adapter) {
         if (fallbackResolver == null) {
             throw new IllegalArgumentException("fallbackResolver must not be null");
         }
@@ -30,6 +54,7 @@ public class ThirdPartyStationAdmissionResolver implements StationAdmissionResol
         this.fallbackResolver = fallbackResolver;
         this.visitFactory = visitFactory;
         this.areaSnapshotSupplier = areaSnapshotSupplier;
+        this.adapter = adapter;
     }
 
     @Override

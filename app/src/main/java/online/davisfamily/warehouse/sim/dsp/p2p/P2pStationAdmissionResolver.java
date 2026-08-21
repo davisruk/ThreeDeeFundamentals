@@ -1,5 +1,6 @@
 package online.davisfamily.warehouse.sim.dsp.p2p;
 
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
@@ -16,6 +17,7 @@ public class P2pStationAdmissionResolver implements StationAdmissionResolver {
     private final Supplier<P2pAdmissionSnapshot> p2pSnapshotSupplier;
     private final StationCapacity p2pCapacity;
     private final Supplier<StationSnapshot> p2pStationSnapshotSupplier;
+    private final Optional<String> selectedTargetId;
 
     public P2pStationAdmissionResolver(
             StationAdmissionResolver fallbackResolver,
@@ -23,6 +25,38 @@ public class P2pStationAdmissionResolver implements StationAdmissionResolver {
             Supplier<P2pAdmissionSnapshot> p2pSnapshotSupplier,
             StationCapacity p2pCapacity,
             Supplier<StationSnapshot> p2pStationSnapshotSupplier) {
+        this(
+                fallbackResolver,
+                p2pAdmission,
+                p2pSnapshotSupplier,
+                p2pCapacity,
+                p2pStationSnapshotSupplier,
+                Optional.empty());
+    }
+
+    public P2pStationAdmissionResolver(
+            StationAdmissionResolver fallbackResolver,
+            P2pAdmission p2pAdmission,
+            Supplier<P2pAdmissionSnapshot> p2pSnapshotSupplier,
+            StationCapacity p2pCapacity,
+            Supplier<StationSnapshot> p2pStationSnapshotSupplier,
+            String targetId) {
+        this(
+                fallbackResolver,
+                p2pAdmission,
+                p2pSnapshotSupplier,
+                p2pCapacity,
+                p2pStationSnapshotSupplier,
+                Optional.of(requireTargetId(targetId)));
+    }
+
+    private P2pStationAdmissionResolver(
+            StationAdmissionResolver fallbackResolver,
+            P2pAdmission p2pAdmission,
+            Supplier<P2pAdmissionSnapshot> p2pSnapshotSupplier,
+            StationCapacity p2pCapacity,
+            Supplier<StationSnapshot> p2pStationSnapshotSupplier,
+            Optional<String> selectedTargetId) {
         if (fallbackResolver == null) {
             throw new IllegalArgumentException("fallbackResolver must not be null");
         }
@@ -43,6 +77,7 @@ public class P2pStationAdmissionResolver implements StationAdmissionResolver {
         this.p2pSnapshotSupplier = p2pSnapshotSupplier;
         this.p2pCapacity = p2pCapacity;
         this.p2pStationSnapshotSupplier = p2pStationSnapshotSupplier;
+        this.selectedTargetId = selectedTargetId;
     }
 
     @Override
@@ -63,11 +98,25 @@ public class P2pStationAdmissionResolver implements StationAdmissionResolver {
             return fallbackResolver.admissionFor(stationType, candidate, snapshot);
         }
 
-        P2pCapacityStationAdapter adapter = new P2pCapacityStationAdapter(
-                p2pAdmission,
-                p2pSnapshotSupplier.get(),
-                p2pCapacity,
-                p2pStationSnapshotSupplier.get());
+        P2pCapacityStationAdapter adapter = selectedTargetId
+                .map(targetId -> new P2pCapacityStationAdapter(
+                        p2pAdmission,
+                        p2pSnapshotSupplier.get(),
+                        p2pCapacity,
+                        p2pStationSnapshotSupplier.get(),
+                        targetId))
+                .orElseGet(() -> new P2pCapacityStationAdapter(
+                        p2pAdmission,
+                        p2pSnapshotSupplier.get(),
+                        p2pCapacity,
+                        p2pStationSnapshotSupplier.get()));
         return adapter.admissionFor(candidate.order());
+    }
+
+    private static String requireTargetId(String targetId) {
+        if (targetId == null || targetId.isBlank()) {
+            throw new IllegalArgumentException("targetId must not be blank");
+        }
+        return targetId.trim();
     }
 }

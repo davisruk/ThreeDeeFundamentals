@@ -38,7 +38,8 @@ class P2pStationAdmissionResolverTest {
                 new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
                 this::p2pSnapshot,
                 new StationCapacity(1, 1),
-                () -> new StationSnapshot(StationType.P2P, 0, 0));
+                () -> new StationSnapshot(StationType.P2P, 0, 0),
+                "  p2p-ingress  ");
 
         StationAdmissionSnapshot admission = resolver.admissionFor(
                 StationType.P2P,
@@ -48,6 +49,7 @@ class P2pStationAdmissionResolverTest {
         assertNotNull(admission);
         assertEquals(StationType.P2P, admission.stationType());
         assertTrue(admission.canAccept());
+        assertEquals("p2p-ingress", admission.selectedTargetId().orElseThrow());
     }
 
     @Test
@@ -132,6 +134,14 @@ class P2pStationAdmissionResolverTest {
                         this::p2pSnapshot,
                         new StationCapacity(1, 1),
                         null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new P2pStationAdmissionResolver(
+                        new SnapshotStationAdmissionResolver(),
+                        new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
+                        this::p2pSnapshot,
+                        new StationCapacity(1, 1),
+                        () -> new StationSnapshot(StationType.P2P, 0, 0),
+                        " "));
     }
 
     private P2pAdmissionSnapshot p2pSnapshot() {

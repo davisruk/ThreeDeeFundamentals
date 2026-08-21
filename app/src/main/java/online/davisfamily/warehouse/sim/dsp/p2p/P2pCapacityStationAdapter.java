@@ -1,5 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.p2p;
 
+import java.util.Optional;
+
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -11,12 +13,36 @@ public class P2pCapacityStationAdapter {
     private final P2pAdmissionSnapshot p2pSnapshot;
     private final StationCapacity capacity;
     private final StationSnapshot stationSnapshot;
+    private final Optional<String> selectedTargetId;
 
     public P2pCapacityStationAdapter(
             P2pAdmission p2pAdmission,
             P2pAdmissionSnapshot p2pSnapshot,
             StationCapacity capacity,
             StationSnapshot stationSnapshot) {
+        this(p2pAdmission, p2pSnapshot, capacity, stationSnapshot, Optional.empty());
+    }
+
+    public P2pCapacityStationAdapter(
+            P2pAdmission p2pAdmission,
+            P2pAdmissionSnapshot p2pSnapshot,
+            StationCapacity capacity,
+            StationSnapshot stationSnapshot,
+            String targetId) {
+        this(
+                p2pAdmission,
+                p2pSnapshot,
+                capacity,
+                stationSnapshot,
+                Optional.of(requireTargetId(targetId)));
+    }
+
+    private P2pCapacityStationAdapter(
+            P2pAdmission p2pAdmission,
+            P2pAdmissionSnapshot p2pSnapshot,
+            StationCapacity capacity,
+            StationSnapshot stationSnapshot,
+            Optional<String> selectedTargetId) {
         if (p2pAdmission == null) {
             throw new IllegalArgumentException("p2pAdmission must not be null");
         }
@@ -36,6 +62,7 @@ public class P2pCapacityStationAdapter {
         this.p2pSnapshot = p2pSnapshot;
         this.capacity = capacity;
         this.stationSnapshot = stationSnapshot;
+        this.selectedTargetId = selectedTargetId;
     }
 
     public StationAdmissionSnapshot admissionFor(NotionalToteOrder order) {
@@ -59,6 +86,14 @@ public class P2pCapacityStationAdapter {
                 capacity,
                 stationSnapshot,
                 admissionOpen,
-                blockedReason);
+                blockedReason,
+                admissionOpen ? selectedTargetId : Optional.empty());
+    }
+
+    private static String requireTargetId(String targetId) {
+        if (targetId == null || targetId.isBlank()) {
+            throw new IllegalArgumentException("targetId must not be blank");
+        }
+        return targetId.trim();
     }
 }

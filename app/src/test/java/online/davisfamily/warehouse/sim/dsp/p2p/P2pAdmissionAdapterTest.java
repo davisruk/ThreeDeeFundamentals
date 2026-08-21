@@ -27,13 +27,15 @@ class P2pAdmissionAdapterTest {
                 new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
                 validP2pSnapshot(),
                 new StationCapacity(1, 1),
-                new StationSnapshot(StationType.P2P, 0, 0));
+                new StationSnapshot(StationType.P2P, 0, 0),
+                "  p2p-ingress  ");
 
         StationAdmissionSnapshot admission = adapter.admissionFor(validOrder());
 
         assertTrue(admission.canAccept());
         assertEquals(StationType.P2P, admission.stationType());
         assertTrue(admission.blockedReason().isBlank());
+        assertEquals("p2p-ingress", admission.selectedTargetId().orElseThrow());
     }
 
     @Test
@@ -42,12 +44,14 @@ class P2pAdmissionAdapterTest {
                 new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
                 validP2pSnapshot(),
                 new StationCapacity(1, 1),
-                new StationSnapshot(StationType.P2P, 1, 1));
+                new StationSnapshot(StationType.P2P, 1, 1),
+                "p2p-ingress");
 
         StationAdmissionSnapshot admission = adapter.admissionFor(validOrder());
 
         assertFalse(admission.canAccept());
         assertEquals("Station P2P has no capacity", admission.blockedReason());
+        assertTrue(admission.selectedTargetId().isEmpty());
     }
 
     @Test
@@ -56,12 +60,28 @@ class P2pAdmissionAdapterTest {
                 new StaticP2pAdmission(P2pAdmissionResult.rejectedResult("No idle PRL available")),
                 validP2pSnapshot(),
                 new StationCapacity(1, 1),
-                new StationSnapshot(StationType.P2P, 0, 0));
+                new StationSnapshot(StationType.P2P, 0, 0),
+                "p2p-ingress");
 
         StationAdmissionSnapshot admission = adapter.admissionFor(validOrder());
 
         assertFalse(admission.canAccept());
         assertEquals("No idle PRL available", admission.blockedReason());
+        assertTrue(admission.selectedTargetId().isEmpty());
+    }
+
+    @Test
+    void shouldKeepCompatibilityAdmissionTargetless() {
+        P2pCapacityStationAdapter adapter = new P2pCapacityStationAdapter(
+                new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
+                validP2pSnapshot(),
+                new StationCapacity(1, 1),
+                new StationSnapshot(StationType.P2P, 0, 0));
+
+        StationAdmissionSnapshot admission = adapter.admissionFor(validOrder());
+
+        assertTrue(admission.canAccept());
+        assertTrue(admission.selectedTargetId().isEmpty());
     }
 
     @Test
@@ -105,6 +125,13 @@ class P2pAdmissionAdapterTest {
                         validP2pSnapshot(),
                         new StationCapacity(1, 1),
                         new StationSnapshot(StationType.MANUAL, 0, 0)));
+        assertThrows(IllegalArgumentException.class,
+                () -> new P2pCapacityStationAdapter(
+                        new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
+                        validP2pSnapshot(),
+                        new StationCapacity(1, 1),
+                        new StationSnapshot(StationType.P2P, 0, 0),
+                        " "));
     }
 
     private static P2pAdmissionSnapshot validP2pSnapshot() {
