@@ -12,6 +12,9 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueueSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetDefinition;
@@ -40,8 +43,35 @@ class DspOperationalReleaseRuntimeTest {
 
         assertSame(controller, runtime.controller());
         assertSame(registry, runtime.routeTargetRegistry());
+        assertEquals(0, runtime.routeTargetAdmissionSnapshots().get(0).occupancy());
         assertEquals(0, before.get(0).occupancy());
         assertThrows(UnsupportedOperationException.class, before::clear);
+        assertThrows(
+                IllegalStateException.class,
+                runtime::outboundRouteLaunchQueueSnapshot);
+    }
+
+    @Test
+    void shouldExposeLaunchInspectionAndRejectCompatibilityQueueInspection() {
+        CloseTrackingEvaluationSource source = new CloseTrackingEvaluationSource();
+        DspOperationalReleaseController controller = new DspOperationalReleaseController(
+                source,
+                () -> new DspOperationalReleaseSnapshot(
+                        List.of(), List.of(), Map.of(), Set.of()),
+                command -> SchedulerCommandApplicationResult.appliedResult());
+        OsrOutboundRouteLaunchQueue queue =
+                new OsrOutboundRouteLaunchQueue("outbound", 2);
+        OsrOutboundRouteLaunchTargetRegistry registry =
+                new OsrOutboundRouteLaunchTargetRegistry(queue, List.of(
+                        new OperationalRouteDestination(StationType.P2P, "p2p-1")));
+        DspOperationalReleaseRuntime runtime = new DspOperationalReleaseRuntime(
+                controller, registry);
+
+        assertSame(controller, runtime.controller());
+        assertEquals(0, runtime.outboundRouteLaunchQueueSnapshot().occupancy());
+        assertEquals(1, runtime.routeTargetAdmissionSnapshots().size());
+        assertThrows(IllegalStateException.class, runtime::routeTargetRegistry);
+        assertThrows(IllegalStateException.class, runtime::routeEntryQueueSnapshots);
     }
 
     @Test

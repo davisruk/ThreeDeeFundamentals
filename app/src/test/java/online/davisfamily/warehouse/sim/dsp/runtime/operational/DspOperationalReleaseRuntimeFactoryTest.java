@@ -30,6 +30,11 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrPhysicalInventory;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionCatalog;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetDefinition;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
@@ -91,6 +96,56 @@ class DspOperationalReleaseRuntimeFactoryTest {
 
         assertEquals("threaded", runtime.controller().snapshot().evaluationMode());
         runtime.close();
+    }
+
+    @Test
+    void shouldBlockThenCommitThroughExactSharedLaunchRegistry() {
+        Fixture fixture = new Fixture();
+        OsrOutboundRouteLaunchQueue launchQueue =
+                new OsrOutboundRouteLaunchQueue("outbound", 1);
+        OsrOutboundRouteLaunchTargetRegistry launchRegistry =
+                new OsrOutboundRouteLaunchTargetRegistry(launchQueue, List.of(
+                        new OperationalRouteDestination(StationType.P2P, "p2p-1")));
+        OsrOutboundRouteLaunchRequest blocker = new OsrOutboundRouteLaunchRequest(
+                new OsrProcessingReleaseRequest(fixture.blockerManifest, Duration.ZERO),
+                new OperationalRouteDestination(StationType.P2P, "p2p-1"));
+        launchQueue.enqueue(blocker);
+
+        try (DspOperationalReleaseRuntime runtime = fixture.create(
+                new SynchronousOperationalReleaseEvaluationSource(
+                        new DspOperationalReleaseScheduler()),
+                launchRegistry)) {
+            assertEquals(1, runtime.outboundRouteLaunchQueueSnapshot().occupancy());
+            assertFalse(runtime.routeTargetAdmissionSnapshots().get(0).canAccept());
+            assertThrows(IllegalStateException.class, runtime::routeEntryQueueSnapshots);
+
+            runtime.controller().update(new SimulationContext(), 0.1d);
+
+            assertTrue(fixture.inventory.snapshot().findStored(
+                    fixture.manifest.physicalToteId()).isPresent());
+            assertTrue(fixture.lifecycleController.snapshot().assignments().isEmpty());
+            assertSame(blocker, launchQueue.peek().orElseThrow());
+
+            assertSame(blocker, launchQueue.dequeue().orElseThrow());
+            assertTrue(runtime.routeTargetAdmissionSnapshots().get(0).canAccept());
+            runtime.controller().update(new SimulationContext(), 0.1d);
+
+            assertFalse(fixture.inventory.snapshot().findStored(
+                    fixture.manifest.physicalToteId()).isPresent());
+            OsrOutboundRouteLaunchRequest queued = launchQueue.peek().orElseThrow();
+            assertSame(fixture.manifest, queued.releaseRequest().manifest());
+            assertEquals("p2p-1", queued.destination().targetId());
+            assertEquals(StationType.P2P, queued.destination().stationType());
+            assertEquals(
+                    queued.releaseRequest().releaseTime(),
+                    fixture.lifecycleController.snapshot()
+                            .activeAssignmentFor(fixture.manifest.orderSheetKey())
+                            .orElseThrow()
+                            .activatedAt());
+            assertEquals(
+                    DspOrderStatus.WAITING,
+                    fixture.runtimeState.snapshot().orderStates().get(0).status());
+        }
     }
 
     @Test
@@ -165,6 +220,20 @@ class DspOperationalReleaseRuntimeFactoryTest {
                     clock::initialSnapshot,
                     this::admission,
                     registry);
+        }
+
+        private DspOperationalReleaseRuntime create(
+                OperationalReleaseEvaluationSource evaluationSource,
+                OperationalRouteTargetAdmissionCatalog targetAdmissionCatalog) {
+            return new DspOperationalReleaseRuntimeFactory().create(
+                    evaluationSource,
+                    inventory,
+                    lifecycleController,
+                    catalog,
+                    runtimeState::snapshot,
+                    clock::initialSnapshot,
+                    this::admission,
+                    targetAdmissionCatalog);
         }
 
         private StationAdmissionSnapshot admission(
