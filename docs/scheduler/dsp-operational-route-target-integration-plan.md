@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-operational-route-target-integration`
 
-Status: plan ready; implementation not started.
+Status: implementation complete and verified; awaiting merge.
 
 ## Purpose
 
@@ -512,13 +512,13 @@ Expected behavior: unchanged legacy visuals and reset behavior.
 
 Before branch closure:
 
-- [ ] update this plan status to implementation complete and verified;
-- [ ] record final route queue, candidate-admission, target, and runtime composition contracts;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] confirm focused tests, complete suite, visual smoke checks, and reset checks are green;
-- [ ] reassess whether sticky P2P leases can consume the new P2P target queue directly or require a
-  small physical-tote hydration/queue-consumer slice first.
+- [x] update this plan status to implementation complete and verified;
+- [x] record final route queue, candidate-admission, target, and runtime composition contracts;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] confirm focused tests, complete suite, visual smoke checks, and reset checks are green;
+- [x] reassess whether sticky P2P leases can consume the new P2P target queue directly or require a
+    small physical-tote hydration/queue-consumer slice first.
 
 ## Preserved Contracts For Follow-On Work
 
@@ -531,14 +531,32 @@ Before branch closure:
 - Sticky P2P lease policy may choose among P2P target queues later, but it must not change queue,
   handler, inventory, or lifecycle commit semantics.
 
+Final verified contracts:
+
+- `OperationalRouteEntryQueue` is the bounded FIFO owner of exact release requests; its immutable
+  snapshots expose physical identity and capacity without mutable queue references.
+- Candidate admission captures the exact first-route station and target ID from live simulation
+  state before worker evaluation. The default operational scheduler consumes this candidate-specific
+  admission rather than the legacy station-wide map.
+- Target lookup and queue capacity are validated while snapshotting and revalidated by the same live
+  queue target during command application.
+- `DspOperationalReleaseRuntimeFactory` builds a fresh physical and operational snapshot for each
+  submission and wires the supplied evaluation source without creating another executor.
+- Runtime closure is idempotent and owns only controller/evaluation-source closure; inventory,
+  lifecycle, logical runtime state, station components, and route queues remain externally owned.
+- Focused tests, complete Gradle coverage, existing P2P/Adapting/Third Party visual smoke checks, and
+  `ALT+R` reset checks are green.
+
 ## Follow-On Branch
 
-After this branch is green and merged, reassess and normally create:
+Reassessment result: create a narrow queue-consumer/hydration branch before sticky leases:
 
 ```text
-feature/dsp-p2p-sticky-service-centre-leases
+feature/dsp-p2p-route-entry-queue-consumer
 ```
 
-If a real P2P line cannot consume the non-rendering ingress request without another architectural
-decision, create a narrowly scoped hydration/queue-consumer plan first. Do not hide renderable
-creation or track placement inside the sticky lease policy.
+The P2P ingress queue currently retains non-rendering release requests and is not consumed by a real
+P2P line. The next slice must define deterministic dequeue, physical-tote hydration, and handoff to
+the existing P2P input waiting boundary. It must not implement sticky lease selection. After that
+slice is complete, create `feature/dsp-p2p-sticky-service-centre-leases` without changing queue,
+handler, inventory, or lifecycle commit semantics.

@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, and dependency-ready operational release are complete, verified, and merged. Production operational route-target integration is the current planned feature on `feature/dsp-operational-route-target-integration`.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, and dependency-ready operational release are complete, verified, and merged. Production operational route-target integration is complete and verified on `feature/dsp-operational-route-target-integration`, awaiting merge. The next planned slice is P2P route-entry queue consumption and physical-tote hydration before sticky service-centre leases.
 
 Read:
 
@@ -118,6 +118,15 @@ Current scheduler decisions:
 - Candidate ranking is pharmacy-grouped and deterministic, with multi-pharmacy ADAPTED work ranked once at its earliest configured pharmacy group. There is no order-type priority.
 - P2P service-centre isolation through sticky line ownership remains follow-on work. A future line lease must not change service centre until the line is fully quiescent and its current outbound tote is closed.
 - The operational scheduler emits at most one exact physical release command. The simulation-thread controller applies it through `OsrProcessingReleaseCommandHandler` and never mutates legacy logical release status.
+- Operational first-route targets are bounded non-rendering FIFO queues of exact release requests.
+- Live candidate-specific station admission and selected queue capacity are captured into immutable
+  operational snapshots on the simulation thread; the worker never reads mutable station or queue
+  state.
+- The same configured queue target revalidates capacity during command application before OSR
+  departure and lifecycle activation are committed.
+- `DspOperationalReleaseRuntimeFactory` composes fresh physical/operational snapshots, a supplied
+  synchronous or threaded evaluation source, the exact route-target registry, and downstream-first
+  command handling without owning external simulation state.
 - Machine wait queues now separate scheduler release admission from machine processing admission in the integrated debug P2P path:
   - release admission means there is station input waiting space
   - machine processing admission remains local to the downstream machine
@@ -162,9 +171,10 @@ The agreed next programme is split into short-lived branches from `master`:
 8. physical OSR processing release;
 9. dependency-ready operational release and pharmacy-grouped ranking;
 10. production operational route-target integration;
-11. sticky P2P service-centre leases;
-12. deadline-aware elastic line allocation;
-13. full-day analysis, metrics, and inspection.
+11. P2P route-entry queue consumption and physical-tote hydration;
+12. sticky P2P service-centre leases;
+13. deadline-aware elastic line allocation;
+14. full-day analysis, metrics, and inspection.
 
 Each branch must have its own decision-complete, step-based plan before implementation. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
@@ -179,8 +189,9 @@ Current programme position:
 - rate-limited service-centre supply: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`;
 - physical OSR processing release: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-processing-release-plan.md`;
 - dependency-ready operational release and pharmacy-grouped ranking: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`;
-- production operational route-target integration: current planned feature, with detailed plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`;
-- sticky P2P service-centre leases: follow-on after route-target integration;
+- production operational route-target integration: complete and verified, awaiting merge, with detailed plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`;
+- P2P route-entry queue consumption and hydration: next planning target; no detailed plan yet;
+- sticky P2P service-centre leases: follow-on after the P2P queue-consumer slice;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -228,8 +239,9 @@ Planned Phase 1 order:
 - rate-limited service-centre supply: complete, verified, and merged
 - physical OSR processing release: complete, verified, and merged
 - dependency-ready operational release: complete, verified, and merged
-- operational route-target integration: detailed plan ready; current feature branch
-- sticky P2P service-centre leases: follow-on after route-target integration
+- operational route-target integration: complete and verified; awaiting merge
+- P2P route-entry queue consumption and physical-tote hydration: next planning target
+- sticky P2P service-centre leases: follow-on after queue consumption/hydration
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

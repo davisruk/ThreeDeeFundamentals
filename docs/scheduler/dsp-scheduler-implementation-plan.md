@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, and dependency-ready operational release are complete, verified, and merged. Operational route-target integration is the current planned feature on `feature/dsp-operational-route-target-integration`.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, and dependency-ready operational release are complete, verified, and merged. Operational route-target integration is complete and verified on `feature/dsp-operational-route-target-integration`, awaiting merge. A narrow P2P route-entry queue-consumer/hydration feature must precede sticky P2P leases.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -669,7 +669,7 @@ Follow-on planning target:
 
 ### `feature/dsp-operational-route-target-integration`
 
-Status: detailed plan ready; implementation not started.
+Status: implementation complete and verified; awaiting merge.
 
 Detailed implementation doc:
 
@@ -694,10 +694,20 @@ Fixed implementation shape:
 - Third Party, Adapting, and P2P targets are covered; EMPTY, MANUAL, renderable hydration, sticky
   leases, and line affinity remain out of scope.
 
+Verified implementation contracts:
+
+- Bounded route-entry queues retain exact physical manifest identity and release time.
+- Candidate-specific immutable admissions bind scheduler selection to the same live target queue
+  used by downstream-first command application.
+- Fresh operational snapshots observe queue mutation without worker access to mutable state.
+- Production runtime composition supports supplied synchronous or threaded evaluation and closes
+  its controller/evaluation source idempotently.
+- Focused, full-suite, visual, and reset verification are green.
+
 Follow-on planning target:
 
-- `feature/dsp-p2p-sticky-service-centre-leases`, subject to the route-target branch's final
-  queue-consumer/hydration reassessment.
+- `feature/dsp-p2p-route-entry-queue-consumer` must define real P2P dequeue, hydration, and input
+  handoff before `feature/dsp-p2p-sticky-service-centre-leases`.
 
 ## Current Assumptions
 
