@@ -13,7 +13,7 @@ public final class OperationalRouteEntryAdmissionPolicy {
     public OperationalRouteEntryAdmissionPolicy() {
         this(
                 new OperationalRouteEntrySelector(),
-                new SnapshotOperationalStationAdmissionResolver());
+                new CandidateOperationalStationAdmissionResolver());
     }
 
     public OperationalRouteEntryAdmissionPolicy(

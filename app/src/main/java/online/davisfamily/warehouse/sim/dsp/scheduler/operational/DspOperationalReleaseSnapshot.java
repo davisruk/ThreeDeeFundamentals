@@ -26,7 +26,12 @@ public record DspOperationalReleaseSnapshot(
             List<ServiceCentrePharmacyGroup> pharmacyGroups,
             Map<StationType, StationAdmissionSnapshot> stationAdmissions,
             Set<PreparedLineKey> preparedLineKeys) {
-        this(candidates, pharmacyGroups, stationAdmissions, preparedLineKeys, List.of());
+        this(
+                candidates,
+                pharmacyGroups,
+                stationAdmissions,
+                preparedLineKeys,
+                deriveCompatibilityRouteAdmissions(candidates, stationAdmissions));
     }
 
     public DspOperationalReleaseSnapshot {
@@ -223,6 +228,29 @@ public record DspOperationalReleaseSnapshot(
             copy.add(routeAdmission);
         }
         return List.copyOf(copy);
+    }
+
+    private static List<OperationalCandidateRouteAdmission> deriveCompatibilityRouteAdmissions(
+            List<DspOperationalReleaseCandidate> candidates,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions) {
+        if (candidates == null || stationAdmissions == null) {
+            return List.of();
+        }
+        OperationalRouteEntrySelector selector = new OperationalRouteEntrySelector();
+        List<OperationalCandidateRouteAdmission> admissions = new ArrayList<>();
+        for (DspOperationalReleaseCandidate candidate : candidates) {
+            if (candidate == null) {
+                continue;
+            }
+            selector.firstStation(candidate.logicalOrderState().routeRequirements())
+                    .map(stationAdmissions::get)
+                    .filter(admission -> !admission.canAccept()
+                            || admission.selectedTargetId().isPresent())
+                    .map(admission -> new OperationalCandidateRouteAdmission(
+                            candidate.physicalCandidate().physicalToteId(), admission))
+                    .ifPresent(admissions::add);
+        }
+        return List.copyOf(admissions);
     }
 
     private static void validateCandidateGroups(

@@ -25,6 +25,38 @@ public final class DspOperationalReleaseSnapshotFactory {
             OsrProcessingReleaseSnapshot physicalSnapshot,
             InboundToteManifestCatalog manifestCatalog,
             WarehouseSchedulerSnapshot logicalSnapshot) {
+        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
+                physicalSnapshot, manifestCatalog, logicalSnapshot);
+        return createSnapshot(
+                joinedCandidates,
+                manifestCatalog,
+                logicalSnapshot,
+                deriveCompatibilityAdmissions(joinedCandidates, logicalSnapshot));
+    }
+
+    public DspOperationalReleaseSnapshot create(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            OperationalCandidateRouteAdmissionFactory routeAdmissionFactory) {
+        if (routeAdmissionFactory == null) {
+            throw new IllegalArgumentException("routeAdmissionFactory must not be null");
+        }
+        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
+                physicalSnapshot, manifestCatalog, logicalSnapshot);
+        List<OperationalCandidateRouteAdmission> routeAdmissions =
+                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
+        return createSnapshot(
+                joinedCandidates,
+                manifestCatalog,
+                logicalSnapshot,
+                routeAdmissions);
+    }
+
+    private static List<DspOperationalReleaseCandidate> joinCandidates(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot) {
         if (physicalSnapshot == null) {
             throw new IllegalArgumentException("physicalSnapshot must not be null");
         }
@@ -38,8 +70,6 @@ public final class DspOperationalReleaseSnapshotFactory {
         Map<OrderSheetKey, DspSchedulerOrderState> logicalStatesBySheet =
                 indexLogicalStates(logicalSnapshot.orderStates());
         validateServiceCentrePriorities(logicalSnapshot.orderStates());
-        List<ServiceCentrePharmacyGroup> pharmacyGroups = buildPharmacyGroups(manifestCatalog);
-
         List<DspOperationalReleaseCandidate> joinedCandidates = new ArrayList<>();
         for (OsrProcessingReleaseCandidate physicalCandidate : physicalSnapshot.candidates()) {
             InboundToteManifest manifest = manifestCatalog
@@ -63,11 +93,37 @@ public final class DspOperationalReleaseSnapshotFactory {
                     distinctPharmacyIds(manifest.items())));
         }
 
+        return List.copyOf(joinedCandidates);
+    }
+
+    private static DspOperationalReleaseSnapshot createSnapshot(
+            List<DspOperationalReleaseCandidate> joinedCandidates,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            List<OperationalCandidateRouteAdmission> routeAdmissions) {
         return new DspOperationalReleaseSnapshot(
                 joinedCandidates,
-                pharmacyGroups,
+                buildPharmacyGroups(manifestCatalog),
                 logicalSnapshot.stationAdmissions(),
-                logicalSnapshot.preparedLineKeys());
+                logicalSnapshot.preparedLineKeys(),
+                routeAdmissions);
+    }
+
+    private static List<OperationalCandidateRouteAdmission> deriveCompatibilityAdmissions(
+            List<DspOperationalReleaseCandidate> candidates,
+            WarehouseSchedulerSnapshot logicalSnapshot) {
+        OperationalRouteEntrySelector routeEntrySelector = new OperationalRouteEntrySelector();
+        List<OperationalCandidateRouteAdmission> admissions = new ArrayList<>();
+        for (DspOperationalReleaseCandidate candidate : candidates) {
+            routeEntrySelector.firstStation(candidate.logicalOrderState().routeRequirements())
+                    .map(logicalSnapshot.stationAdmissions()::get)
+                    .filter(admission -> !admission.canAccept()
+                            || admission.selectedTargetId().isPresent())
+                    .map(admission -> new OperationalCandidateRouteAdmission(
+                            candidate.physicalCandidate().physicalToteId(), admission))
+                    .ifPresent(admissions::add);
+        }
+        return List.copyOf(admissions);
     }
 
     private static Map<OrderSheetKey, DspSchedulerOrderState> indexLogicalStates(

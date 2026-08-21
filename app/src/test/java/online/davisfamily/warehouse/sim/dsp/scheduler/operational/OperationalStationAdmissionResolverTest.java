@@ -52,7 +52,7 @@ class OperationalStationAdmissionResolverTest {
         StationAdmissionSnapshot blockedP2p = admission(
                 StationType.P2P, false, false, Optional.of("p2p-1"), "P2P closed");
 
-        OperationalRouteEntryEvaluation evaluation = new OperationalRouteEntryAdmissionPolicy()
+        OperationalRouteEntryEvaluation evaluation = compatibilityPolicy()
                 .evaluate(candidate, snapshot(candidate, Map.of(
                         StationType.THIRD_PARTY, thirdParty,
                         StationType.P2P, blockedP2p)));
@@ -67,7 +67,7 @@ class OperationalStationAdmissionResolverTest {
     void shouldBlockMissingClosedOrFullEntryAdmission() {
         DspOperationalReleaseCandidate candidate = candidate(
                 "tote-1", route(false, false, false, true, false));
-        OperationalRouteEntryAdmissionPolicy policy = new OperationalRouteEntryAdmissionPolicy();
+        OperationalRouteEntryAdmissionPolicy policy = compatibilityPolicy();
 
         OperationalRouteEntryEvaluation missing = policy.evaluate(
                 candidate, snapshot(candidate, Map.of()));
@@ -106,7 +106,7 @@ class OperationalStationAdmissionResolverTest {
         StationAdmissionSnapshot admissionWithoutTarget = admission(
                 StationType.P2P, true, false, Optional.empty(), "");
 
-        OperationalRouteEntryEvaluation evaluation = new OperationalRouteEntryAdmissionPolicy()
+        OperationalRouteEntryEvaluation evaluation = compatibilityPolicy()
                 .evaluate(
                         candidate,
                         snapshot(candidate, Map.of(StationType.P2P, admissionWithoutTarget)));
@@ -148,6 +148,37 @@ class OperationalStationAdmissionResolverTest {
                 IllegalArgumentException.class,
                 () -> new OperationalRouteEntryAdmissionPolicy(
                         new OperationalRouteEntrySelector(), null));
+    }
+
+    @Test
+    void shouldUseCandidateAdmissionResolverByDefault() {
+        DspOperationalReleaseCandidate candidate = candidate(
+                "tote-7", route(false, false, false, true, false));
+        StationAdmissionSnapshot candidateAdmission = admission(
+                StationType.P2P, true, false, Optional.of("candidate-target"), "");
+        DspOperationalReleaseSnapshot snapshot = new DspOperationalReleaseSnapshot(
+                List.of(candidate),
+                List.of(new ServiceCentrePharmacyGroup("sc-1", "pharmacy-1", 0, 1)),
+                Map.of(StationType.P2P, admission(
+                        StationType.P2P,
+                        true,
+                        false,
+                        Optional.of("legacy-target"),
+                        "")),
+                Set.of(),
+                List.of(new OperationalCandidateRouteAdmission(
+                        new PhysicalToteId("tote-7"), candidateAdmission)));
+
+        OperationalRouteEntryEvaluation evaluation = new OperationalRouteEntryAdmissionPolicy()
+                .evaluate(candidate, snapshot);
+
+        assertEquals("candidate-target", evaluation.routeEntry().orElseThrow().targetId());
+    }
+
+    private static OperationalRouteEntryAdmissionPolicy compatibilityPolicy() {
+        return new OperationalRouteEntryAdmissionPolicy(
+                new OperationalRouteEntrySelector(),
+                new SnapshotOperationalStationAdmissionResolver());
     }
 
     private static DspOperationalReleaseSnapshot snapshot(

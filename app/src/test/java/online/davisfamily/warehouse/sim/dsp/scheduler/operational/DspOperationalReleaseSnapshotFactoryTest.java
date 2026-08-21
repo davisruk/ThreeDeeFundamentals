@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,13 +21,20 @@ import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
+import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetDefinition;
+import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 
 class DspOperationalReleaseSnapshotFactoryTest {
@@ -284,6 +292,94 @@ class DspOperationalReleaseSnapshotFactoryTest {
                 snapshot.candidates().get(0).physicalCandidate().physicalToteId());
     }
 
+    @Test
+    void shouldDeriveCandidateAdmissionFromCompatibilityStationMap() {
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-1", "product-1", "pharmacy-1")), 1);
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", manifest.items(), 999,
+                DspOrderStatus.WAITING);
+        StationAdmissionSnapshot admission = openAdmission(StationType.P2P, "p2p-legacy");
+        WarehouseSchedulerSnapshot logicalSnapshot = new WarehouseSchedulerSnapshot(
+                List.of(logicalState),
+                Map.of(StationType.P2P, admission),
+                Set.of(),
+                Optional.empty());
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(physicalCandidate(manifest))),
+                new InboundToteManifestCatalog(List.of(manifest)),
+                logicalSnapshot);
+
+        assertSame(admission, snapshot.routeAdmissions().get(0).stationAdmission());
+        assertEquals(
+                "p2p-legacy",
+                snapshot.findRouteAdmission(new PhysicalToteId("tote-1"), StationType.P2P)
+                        .orElseThrow()
+                        .stationAdmission()
+                        .selectedTargetId()
+                        .orElseThrow());
+    }
+
+    @Test
+    void shouldCaptureCandidateSpecificLiveAdmissionsUsingOneLogicalSnapshot() {
+        InboundToteManifest firstManifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-1", "product-1", "pharmacy-1")), 1);
+        InboundToteManifest secondManifest = manifest(
+                "tote-2", "order-2", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-2", "product-2", "pharmacy-2")), 2);
+        DspSchedulerOrderState firstState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", firstManifest.items(), 999,
+                DspOrderStatus.WAITING);
+        DspSchedulerOrderState secondState = logicalState(
+                "order-2", OrderType.FULL_PACK, "sc-1", secondManifest.items(), 999,
+                DspOrderStatus.WAITING);
+        WarehouseSchedulerSnapshot logicalSnapshot = logicalSnapshot(
+                List.of(firstState, secondState));
+        OperationalRouteEntryQueue firstQueue = new OperationalRouteEntryQueue(
+                new OperationalRouteTargetDefinition(StationType.P2P, "p2p-1", 1));
+        OperationalRouteEntryQueue secondQueue = new OperationalRouteEntryQueue(
+                new OperationalRouteTargetDefinition(StationType.P2P, "p2p-2", 1));
+        AtomicInteger resolutionCount = new AtomicInteger();
+        OperationalCandidateRouteAdmissionFactory admissionFactory =
+                new OperationalCandidateRouteAdmissionFactory(
+                        new OperationalRouteEntrySelector(),
+                        (stationType, candidate, observedSnapshot) -> {
+                            assertSame(logicalSnapshot, observedSnapshot);
+                            resolutionCount.incrementAndGet();
+                            String targetId = candidate.order().orderId().equals("order-1")
+                                    ? "p2p-1"
+                                    : "p2p-2";
+                            return openAdmission(stationType, targetId);
+                        },
+                        new OperationalRouteTargetRegistry(List.of(firstQueue, secondQueue)));
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(
+                        physicalCandidate(firstManifest),
+                        physicalCandidate(secondManifest))),
+                new InboundToteManifestCatalog(List.of(firstManifest, secondManifest)),
+                logicalSnapshot,
+                admissionFactory);
+
+        assertEquals(2, resolutionCount.get());
+        assertEquals(
+                List.of("p2p-1", "p2p-2"),
+                snapshot.routeAdmissions().stream()
+                        .map(routeAdmission -> routeAdmission.stationAdmission()
+                                .selectedTargetId().orElseThrow())
+                        .toList());
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        new OsrProcessingReleaseSnapshot(List.of()),
+                        new InboundToteManifestCatalog(List.of()),
+                        logicalSnapshot(List.of()),
+                        null));
+    }
+
     private static WarehouseSchedulerSnapshot logicalSnapshot(
             List<DspSchedulerOrderState> logicalStates) {
         return new WarehouseSchedulerSnapshot(
@@ -391,5 +487,17 @@ class DspOperationalReleaseSnapshotFactoryTest {
                 referenceOrderId,
                 1,
                 1);
+    }
+
+    private static StationAdmissionSnapshot openAdmission(
+            StationType stationType,
+            String targetId) {
+        return new StationAdmissionSnapshot(
+                stationType,
+                new StationCapacity(1, 1),
+                new StationSnapshot(stationType, 0, 0),
+                true,
+                "",
+                Optional.of(targetId));
     }
 }

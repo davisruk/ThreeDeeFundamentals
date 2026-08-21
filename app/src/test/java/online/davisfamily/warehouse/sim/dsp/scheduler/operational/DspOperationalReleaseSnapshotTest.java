@@ -171,32 +171,86 @@ class DspOperationalReleaseSnapshotTest {
         sourceAdmissions.put(StationType.P2P, openAdmission(StationType.P2P));
         Set<PreparedLineKey> sourcePreparedLines = new LinkedHashSet<>(
                 Set.of(new PreparedLineKey("order-1", "line-1")));
+        OperationalCandidateRouteAdmission routeAdmission =
+                new OperationalCandidateRouteAdmission(
+                        new PhysicalToteId("tote-1"),
+                        openAdmission(StationType.P2P, "p2p-1"));
+        List<OperationalCandidateRouteAdmission> sourceRouteAdmissions =
+                new ArrayList<>(List.of(routeAdmission));
 
         DspOperationalReleaseSnapshot snapshot = new DspOperationalReleaseSnapshot(
                 sourceCandidates,
                 sourceGroups,
                 sourceAdmissions,
-                sourcePreparedLines);
+                sourcePreparedLines,
+                sourceRouteAdmissions);
         sourcePharmacies.clear();
         sourceCandidates.clear();
         sourceGroups.clear();
         sourceAdmissions.clear();
         sourcePreparedLines.clear();
+        sourceRouteAdmissions.clear();
 
         assertEquals(List.of("pharmacy-1"), candidate.pharmacyIds());
         assertEquals(List.of(candidate), snapshot.candidates());
         assertEquals(1, snapshot.pharmacyGroups().size());
         assertEquals(Set.of(new PreparedLineKey("order-1", "line-1")), snapshot.preparedLineKeys());
         assertEquals(Set.of(StationType.P2P), snapshot.stationAdmissions().keySet());
+        assertEquals(List.of(routeAdmission), snapshot.routeAdmissions());
+        assertEquals(
+                routeAdmission,
+                snapshot.findRouteAdmission(new PhysicalToteId("tote-1"), StationType.P2P)
+                        .orElseThrow());
         assertThrows(UnsupportedOperationException.class, () -> candidate.pharmacyIds().clear());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.candidates().clear());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.pharmacyGroups().clear());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.stationAdmissions().clear());
         assertThrows(UnsupportedOperationException.class, () -> snapshot.preparedLineKeys().clear());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.routeAdmissions().clear());
         assertThrows(
                 IllegalArgumentException.class,
                 () -> snapshot.groupIndexFor(candidate(
                         "other-tote", 2, logicalState, List.of("pharmacy-1"))));
+    }
+
+    @Test
+    void shouldRejectRouteAdmissionOutsideCandidateRoute() {
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", "pharmacy-1");
+        DspOperationalReleaseCandidate candidate = candidate(
+                "tote-1", 1, logicalState, List.of("pharmacy-1"));
+        List<ServiceCentrePharmacyGroup> groups = List.of(
+                group("sc-1", "pharmacy-1", 0, 1));
+        OperationalCandidateRouteAdmission wrongStation =
+                new OperationalCandidateRouteAdmission(
+                        new PhysicalToteId("tote-1"),
+                        openAdmission(StationType.THIRD_PARTY, "third-party-1"));
+        OperationalCandidateRouteAdmission unknownCandidate =
+                new OperationalCandidateRouteAdmission(
+                        new PhysicalToteId("missing"),
+                        openAdmission(StationType.P2P, "p2p-1"));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new DspOperationalReleaseSnapshot(
+                        List.of(candidate), groups, Map.of(), Set.of(),
+                        List.of(wrongStation)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new DspOperationalReleaseSnapshot(
+                        List.of(candidate), groups, Map.of(), Set.of(),
+                        List.of(unknownCandidate)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new DspOperationalReleaseSnapshot(
+                        List.of(candidate), groups, Map.of(), Set.of(),
+                        List.of(
+                                new OperationalCandidateRouteAdmission(
+                                        new PhysicalToteId("tote-1"),
+                                        openAdmission(StationType.P2P, "p2p-1")),
+                                new OperationalCandidateRouteAdmission(
+                                        new PhysicalToteId("tote-1"),
+                                        openAdmission(StationType.P2P, "p2p-2")))));
     }
 
     private static DspOperationalReleaseSnapshot snapshot(
@@ -273,11 +327,18 @@ class DspOperationalReleaseSnapshotTest {
     }
 
     private static StationAdmissionSnapshot openAdmission(StationType stationType) {
+        return openAdmission(stationType, null);
+    }
+
+    private static StationAdmissionSnapshot openAdmission(
+            StationType stationType,
+            String targetId) {
         return new StationAdmissionSnapshot(
                 stationType,
                 new StationCapacity(1, 1),
                 new StationSnapshot(stationType, 0, 0),
                 true,
-                "");
+                "",
+                Optional.ofNullable(targetId));
     }
 }

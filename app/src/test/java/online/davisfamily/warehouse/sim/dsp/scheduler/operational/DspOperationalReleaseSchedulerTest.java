@@ -307,8 +307,21 @@ class DspOperationalReleaseSchedulerTest {
                 .map(serviceCentreId -> new ServiceCentrePharmacyGroup(
                         serviceCentreId, "pharmacy-1", 0, 1))
                 .toList();
+        OperationalRouteEntrySelector routeEntrySelector = new OperationalRouteEntrySelector();
+        List<OperationalCandidateRouteAdmission> routeAdmissions = candidates.stream()
+                .map(candidate -> routeEntrySelector.firstStation(
+                        candidate.logicalOrderState().routeRequirements())
+                        .map(stationAdmissions::get)
+                        .map(admission -> new OperationalCandidateRouteAdmission(
+                                candidate.physicalCandidate().physicalToteId(), admission)))
+                .flatMap(Optional::stream)
+                .toList();
         return new DspOperationalReleaseSnapshot(
-                candidates, groups, stationAdmissions, preparedLineKeys);
+                candidates,
+                groups,
+                stationAdmissions,
+                preparedLineKeys,
+                routeAdmissions);
     }
 
     private static DspOperationalReleaseCandidate candidate(
