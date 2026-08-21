@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, and route-target foundations are complete, verified, and merged. The current feature is generic OSR outbound route launch on `feature/dsp-osr-outbound-route-launch`, with a detailed plan at `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`. It preserves station targets as destination intent while hydration occurs at the OSR outbound boundary. Physical warehouse transport routing and station-arrival queues follow before P2P-local consumption or sticky leases.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, and route-target foundations are complete, verified, and merged. Generic OSR outbound route launch is implemented on `feature/dsp-osr-outbound-route-launch`, with focused and full automated suites green; it preserves station targets as destination intent while detached hydration occurs at the OSR outbound boundary. Legacy visual/reset smoke checks remain before merge. Physical warehouse transport routing and station-arrival queues are next, with a decision-complete plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`. P2P-local consumption and sticky leases remain later work.
 
 Read:
 
@@ -91,8 +91,10 @@ Read:
 2. `docs/scheduler/dsp-operational-scheduling-requirements.md`
 3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-5. `docs/machines/exceptions-station-requirements.md`
-6. `docs/machines/phase-1-stations-roadmap.md`
+5. `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+6. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+7. `docs/machines/exceptions-station-requirements.md`
+8. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
@@ -190,8 +192,8 @@ Current programme position:
 - physical OSR processing release: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-processing-release-plan.md`;
 - dependency-ready operational release and pharmacy-grouped ranking: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`;
 - production operational route-target integration: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`;
-- OSR outbound route launch and hydration: current feature, with detailed plan at `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`;
-- warehouse transport routing and station-arrival boundaries: next planning target;
+- OSR outbound route launch and hydration: implementation complete with automated verification green; legacy visual/reset smoke checks remain before merge;
+- warehouse transport routing and station-arrival boundaries: next feature, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
 - P2P-local queue consumption and sticky service-centre leases: follow physical transport arrival;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
@@ -241,8 +243,8 @@ Planned Phase 1 order:
 - physical OSR processing release: complete, verified, and merged
 - dependency-ready operational release: complete, verified, and merged
 - operational route-target integration: complete, verified, and merged
-- OSR outbound route launch and hydration: current feature
-- warehouse transport routing and station-arrival boundaries: follow-on
+- OSR outbound route launch and hydration: implementation complete; automated suites green
+- warehouse transport routing and station-arrival boundaries: next planned feature
 - P2P-local queue consumption and sticky service-centre leases: deferred until physical arrival exists
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines

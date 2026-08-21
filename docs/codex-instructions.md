@@ -8,17 +8,18 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The current OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-4. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
-5. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
-6. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
-7. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
-8. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-9. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-10. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-11. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-12. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-13. `docs/machines/phase-1-stations-roadmap.md`
+3. The next warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+4. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+5. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
+6. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+7. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+8. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+9. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+10. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+11. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+12. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+13. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+14. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -88,7 +89,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through `feature/dsp-operational-route-target-integration` are complete, verified, and merged. `feature/dsp-osr-outbound-route-launch` is the current feature and has a decision-complete plan at `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`. It must not place OSR-released work directly into a station-local or P2P queue. Warehouse transport routing and station-arrival boundaries follow it; P2P-local consumption and sticky leases come later. Exception Station behavior remains separate later work.
+The operational scheduler foundations through `feature/dsp-operational-route-target-integration` are complete, verified, and merged. `feature/dsp-osr-outbound-route-launch` is implemented with focused and full automated suites green; legacy visual/reset smoke checks remain before merge. Its contracts are recorded in `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`: OSR release feeds one shared launch queue, detached hydration feeds one generic transport queue, and neither boundary places work directly into a station-local or P2P queue. Warehouse transport routing and station-arrival boundaries are next and have a decision-complete plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`. P2P-local consumption and sticky leases come later. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -176,7 +177,15 @@ Completed scheduler work:
 - `feature/renderable-visibility-lifecycle`
 - `feature/machine-wait-queues`
 - `feature/dsp-scheduler-thread`
+- `feature/dsp-operational-simulation-clock`
+- `feature/dsp-rate-limited-service-centre-supply`
+- `feature/dsp-osr-processing-release`
 - `feature/dsp-dependency-ready-operational-release`
+- `feature/dsp-operational-route-target-integration`
+
+Current completed branch awaiting final visual/reset verification and merge:
+
+- `feature/dsp-osr-outbound-route-launch`
 
 Current scheduler decisions:
 
@@ -232,8 +241,8 @@ Known Phase 1 machine/station work:
 - physical OSR processing release: complete, verified, and merged
 - dependency-ready operational release: complete, verified, and merged
 - operational route-target integration: complete, verified, and merged
-- OSR outbound route launch and physical-tote hydration: detailed plan ready; current feature
-- warehouse transport routing and station-arrival boundaries: follow-on after route launch
+- OSR outbound route launch and physical-tote hydration: implementation complete; automated suites green, visual/reset smoke pending
+- warehouse transport routing and station-arrival boundaries: next feature; decision-complete plan ready
 - P2P-local queue consumption and sticky service-centre leases: deferred until physical arrival exists
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
