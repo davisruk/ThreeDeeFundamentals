@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, and OSR outbound route launch are complete, verified, and merged. Physical warehouse transport routing and station-arrival boundaries are complete and verified on `feature/dsp-warehouse-transport-routing` and await merge. The next planning target is `feature/dsp-p2p-arrival-consumer`; sticky service-centre leases follow as a separate branch.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, and physical warehouse transport routing are complete, verified, and merged. The active branch is `feature/dsp-p2p-arrival-consumer`, with its decision-complete plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`; sticky service-centre leases follow as a separate branch.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -743,16 +743,16 @@ Implemented contracts:
   unchanged for deterministic retry.
 - No destination station queue, tipper, machine controller, or scene publication is touched.
 
-Follow-on planning target:
+Completed physical-routing feature:
 
 - `feature/dsp-warehouse-transport-routing`, with detailed plan at
-  `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local arrival consumption follows
-  physical station-arrival boundaries, then sticky leases follow as a separate branch.
+  `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local arrival consumption is now
+  planned separately, followed by sticky leases.
 
 ### `feature/dsp-warehouse-transport-routing`
 
-Status: implementation complete and verified; focused regression and full test suites, focused
-visual transport behavior, and deterministic reset reconstruction are green. Awaiting merge.
+Status: implementation complete, verified, and merged; focused regression and full test suites,
+focused visual transport behavior, and deterministic reset reconstruction are green.
 
 Detailed implementation doc:
 
@@ -788,6 +788,21 @@ Follow-on planning target:
 - `feature/dsp-p2p-sticky-line-leases` second, supplying authoritative service-centre admission and
   line selection through that boundary.
 - Adapting and Third Party consumers can later use the same station-arrival contract.
+
+### `feature/dsp-p2p-arrival-consumer`
+
+Status: planned on the active branch.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
+
+Purpose:
+
+- Consume exact P2P station-arrival FIFO heads behind an immutable local admission callback.
+- Adapt the same routed tote, renderable, and load plan into the existing `TipperInputQueue`.
+- Preserve normal connected route movement into `ToteTrackTipperFlowController`.
+- Compose independent per-target consumers without implementing line selection or sticky leases.
 
 ## Current Assumptions
 

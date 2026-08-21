@@ -2,9 +2,7 @@
 
 Branch: `feature/dsp-warehouse-transport-routing`
 
-Status: implementation complete and verified. Focused regression and full test suites are green;
-the warehouse transport visual scene and deterministic reset reconstruction are green. Awaiting
-merge to `master`.
+Status: implementation complete, verified, and merged.
 
 ## Purpose
 

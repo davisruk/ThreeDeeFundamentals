@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, and OSR outbound launch foundations are complete, verified, and merged. Physical warehouse transport routing and bounded station-arrival queues are complete and verified on `feature/dsp-warehouse-transport-routing` and await merge. The next planning target is a P2P-local arrival consumer behind an explicit admission callback; sticky service-centre line leases follow in a separate branch.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, and physical warehouse transport foundations are complete, verified, and merged. The active branch is `feature/dsp-p2p-arrival-consumer`: it consumes exact P2P station-arrival payloads into the existing tipper input boundary behind an explicit immutable admission callback. Sticky service-centre line leases follow in a separate branch.
 
 Read:
 
@@ -92,9 +92,10 @@ Read:
 3. `docs/scheduler/dsp_osr_scheduler_requirements.md`
 4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 5. `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
-6. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-7. `docs/machines/exceptions-station-requirements.md`
-8. `docs/machines/phase-1-stations-roadmap.md`
+6. `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
+7. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+8. `docs/machines/exceptions-station-requirements.md`
+9. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
@@ -201,8 +202,8 @@ Current programme position:
 - dependency-ready operational release and pharmacy-grouped ranking: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`;
 - production operational route-target integration: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`;
 - OSR outbound route launch and hydration: complete, verified, and merged;
-- warehouse transport routing and station-arrival boundaries: complete and verified; awaiting merge, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
-- P2P-local arrival consumption: next planning target;
+- warehouse transport routing and station-arrival boundaries: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
+- P2P-local arrival consumption: planned on the active branch, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
 - sticky service-centre leases: separate branch after the arrival-consumer boundary exists;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
@@ -253,8 +254,8 @@ Planned Phase 1 order:
 - dependency-ready operational release: complete, verified, and merged
 - operational route-target integration: complete, verified, and merged
 - OSR outbound route launch and hydration: complete, verified, and merged
-- warehouse transport routing and station-arrival boundaries: complete and verified; awaiting merge
-- P2P-local arrival consumption: next planning target
+- warehouse transport routing and station-arrival boundaries: complete, verified, and merged
+- P2P-local arrival consumption: active planned branch
 - sticky service-centre leases: separate follow-on after P2P arrival consumption
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines

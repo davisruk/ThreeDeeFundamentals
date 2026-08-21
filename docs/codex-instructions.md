@@ -7,19 +7,20 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
-4. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-5. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
-6. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
-7. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
-8. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
-9. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-10. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-11. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-12. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-13. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-14. `docs/machines/phase-1-stations-roadmap.md`
+2. The active P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
+3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+4. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+5. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+6. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
+7. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+8. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+9. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+10. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+11. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+12. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+13. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+14. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+15. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -89,7 +90,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through OSR outbound route launch are complete, verified, and merged. Physical warehouse transport routing and bounded station-arrival queues are complete and verified on `feature/dsp-warehouse-transport-routing` and await merge. Their contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`: all destinations share one launch/publication path, exact active destination metadata drives transfer decisions, and terminal sensors alone hand exact routed payloads to station-local queues. The next plan should cover P2P-local arrival consumption behind an explicit admission callback. Sticky service-centre line leases follow in a separate branch. Exception Station behavior remains separate later work.
+The operational scheduler foundations through physical warehouse transport are complete, verified, and merged. Their contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`: all destinations share one launch/publication path, exact active destination metadata drives transfer decisions, and terminal sensors alone hand exact routed payloads to station-local queues. The active `feature/dsp-p2p-arrival-consumer` branch is governed by `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`. It must preserve exact routed payload identity while handing locally admitted P2P arrivals to the existing tipper input queue. Sticky service-centre line leases follow in a separate branch. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -184,9 +185,9 @@ Completed scheduler work:
 - `feature/dsp-operational-route-target-integration`
 - `feature/dsp-osr-outbound-route-launch`
 
-Current completed and verified branch awaiting merge:
+Current active planned branch:
 
-- `feature/dsp-warehouse-transport-routing`
+- `feature/dsp-p2p-arrival-consumer`
 
 Current scheduler decisions:
 
@@ -245,8 +246,8 @@ Known Phase 1 machine/station work:
 - dependency-ready operational release: complete, verified, and merged
 - operational route-target integration: complete, verified, and merged
 - OSR outbound route launch and physical-tote hydration: complete, verified, and merged
-- warehouse transport routing and station-arrival boundaries: complete and verified; awaiting merge
-- P2P-local arrival consumption: next planning target
+- warehouse transport routing and station-arrival boundaries: complete, verified, and merged
+- P2P-local arrival consumption: active planned branch
 - sticky service-centre leases: separate follow-on after P2P arrival consumption
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
