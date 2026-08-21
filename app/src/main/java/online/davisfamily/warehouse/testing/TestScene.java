@@ -62,6 +62,8 @@ public class TestScene extends BaseScene{
 		return switch (sceneKind) {
 			case ADAPTING -> new AdaptingDebugRig(tr, sim, objects, inspectionRegistry);
 			case THIRD_PARTY -> new ThirdPartyDebugRig(tr, sim, objects, inspectionRegistry);
+			case DSP_WAREHOUSE_TRANSPORT -> new DspWarehouseTransportDebugRig(
+					tr, sim, objects, inspectionRegistry);
 			case TOTE_TO_BAG -> new ToteToBagDebugRig(tr, sim, objects, inspectionRegistry);
 			case TIPPER_TRACK -> new ToteTrackTipperDebugRig(tr, sim, objects, inspectionRegistry);
 			case TIPPER_TO_RECEIVER -> new TipperToReceiverDebugRig(tr, sim, objects, inspectionRegistry);

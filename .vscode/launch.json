@@ -74,7 +74,15 @@
             "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
             "projectName": "app",
             "args": "--scene=third-party"
-        },                        
+        },
+        {
+            "type": "java",
+            "name": "Scene: DSP Warehouse Transport",
+            "request": "launch",
+            "mainClass": "online.davisfamily.threedee.SoftwareRenderer",
+            "projectName": "app",
+            "args": "--scene=dsp-warehouse-transport"
+        },                                
         {
             "type": "java",
             "name": "Scene: Default",
