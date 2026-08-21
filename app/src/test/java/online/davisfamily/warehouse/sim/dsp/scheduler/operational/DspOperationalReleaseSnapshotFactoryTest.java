@@ -1,0 +1,395 @@
+package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+import org.junit.jupiter.api.Test;
+
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
+import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+
+class DspOperationalReleaseSnapshotFactoryTest {
+
+    private final DspOperationalReleaseSnapshotFactory factory =
+            new DspOperationalReleaseSnapshotFactory();
+
+    @Test
+    void shouldJoinPhysicalManifestToExactLogicalSheet() {
+        DspOrderItem item = item("line-1", "product-1", "pharmacy-1");
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1", List.of(item), 4);
+        OsrProcessingReleaseCandidate physicalCandidate = physicalCandidate(manifest);
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", List.of(item), 999,
+                DspOrderStatus.WAITING);
+        PreparedLineKey preparedLineKey = new PreparedLineKey("order-1", "line-1");
+        WarehouseSchedulerSnapshot logicalSnapshot = new WarehouseSchedulerSnapshot(
+                List.of(logicalState), Map.of(), Set.of(preparedLineKey), Optional.empty());
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(physicalCandidate)),
+                new InboundToteManifestCatalog(List.of(manifest)),
+                logicalSnapshot);
+
+        DspOperationalReleaseCandidate joined = snapshot.candidates().get(0);
+        assertSame(physicalCandidate, joined.physicalCandidate());
+        assertSame(logicalState, joined.logicalOrderState());
+        assertEquals(List.of("pharmacy-1"), joined.pharmacyIds());
+        assertEquals(Set.of(preparedLineKey), snapshot.preparedLineKeys());
+        assertEquals(0, snapshot.groupIndexFor(joined));
+    }
+
+    @Test
+    void shouldKeepSeveralPhysicalManifestsForOneLogicalSheet() {
+        DspOrderItem firstItem = item("line-1", "product-1", "pharmacy-1");
+        DspOrderItem secondItem = item("line-2", "product-2", "pharmacy-1");
+        InboundToteManifest firstManifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1", List.of(firstItem), 1);
+        InboundToteManifest secondManifest = manifest(
+                "tote-2", "order-1", OrderType.FULL_PACK, "sc-1", List.of(secondItem), 2);
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1",
+                OrderType.FULL_PACK,
+                "sc-1",
+                List.of(firstItem, secondItem),
+                999,
+                DspOrderStatus.WAITING);
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(
+                        physicalCandidate(firstManifest),
+                        physicalCandidate(secondManifest))),
+                new InboundToteManifestCatalog(List.of(firstManifest, secondManifest)),
+                logicalSnapshot(List.of(logicalState)));
+
+        assertEquals(
+                List.of(new PhysicalToteId("tote-1"), new PhysicalToteId("tote-2")),
+                snapshot.candidates().stream()
+                        .map(candidate -> candidate.physicalCandidate().physicalToteId())
+                        .toList());
+        assertSame(logicalState, snapshot.candidates().get(0).logicalOrderState());
+        assertSame(logicalState, snapshot.candidates().get(1).logicalOrderState());
+    }
+
+    @Test
+    void shouldDeriveStablePharmacyGroupsFromCompleteCatalog() {
+        InboundToteManifest laterStored = manifest(
+                "tote-b", "order-b", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-b", "product-b", "pharmacy-b")), 20);
+        InboundToteManifest sameSequenceLaterInCatalog = manifest(
+                "tote-c", "order-c", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-c", "product-c", "pharmacy-c")), 20);
+        InboundToteManifest earlierDeparted = manifest(
+                "tote-a", "order-a", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-a", "product-a", "pharmacy-a")), 10);
+        DspSchedulerOrderState storedLogicalState = logicalState(
+                "order-b",
+                OrderType.FULL_PACK,
+                "sc-1",
+                laterStored.items(),
+                999,
+                DspOrderStatus.WAITING);
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(physicalCandidate(laterStored))),
+                new InboundToteManifestCatalog(List.of(
+                        laterStored,
+                        sameSequenceLaterInCatalog,
+                        earlierDeparted)),
+                logicalSnapshot(List.of(storedLogicalState)));
+
+        assertEquals(List.of(
+                new ServiceCentrePharmacyGroup("sc-1", "pharmacy-a", 0, 10),
+                new ServiceCentrePharmacyGroup("sc-1", "pharmacy-b", 1, 20),
+                new ServiceCentrePharmacyGroup("sc-1", "pharmacy-c", 2, 20)),
+                snapshot.pharmacyGroups());
+        assertEquals(1, snapshot.groupIndexFor(snapshot.candidates().get(0)));
+    }
+
+    @Test
+    void shouldRetainAllPharmaciesForAdaptedManifest() {
+        DspOrderItem first = adaptedItem("line-1", "product-1", "pharmacy-2", "associated-1");
+        DspOrderItem second = adaptedItem("line-2", "product-2", "pharmacy-1", "associated-2");
+        DspOrderItem repeated = adaptedItem("line-3", "product-3", "pharmacy-2", "associated-3");
+        InboundToteManifest manifest = manifest(
+                "tote-1",
+                "adapted-1",
+                OrderType.ADAPTED,
+                "sc-1",
+                List.of(first, second, repeated),
+                1);
+        DspSchedulerOrderState logicalState = logicalState(
+                "adapted-1",
+                OrderType.ADAPTED,
+                "sc-1",
+                manifest.items(),
+                999,
+                DspOrderStatus.BLOCKED);
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(physicalCandidate(manifest))),
+                new InboundToteManifestCatalog(List.of(manifest)),
+                logicalSnapshot(List.of(logicalState)));
+
+        assertEquals(
+                List.of("pharmacy-2", "pharmacy-1"),
+                snapshot.candidates().get(0).pharmacyIds());
+        assertEquals(1, snapshot.candidates().size());
+    }
+
+    @Test
+    void shouldRejectMissingOrDuplicateLogicalSheetState() {
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-1", "product-1", "pharmacy-1")), 1);
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1",
+                OrderType.FULL_PACK,
+                "sc-1",
+                manifest.items(),
+                999,
+                DspOrderStatus.WAITING);
+        OsrProcessingReleaseSnapshot physicalSnapshot = new OsrProcessingReleaseSnapshot(
+                List.of(physicalCandidate(manifest)));
+        InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(List.of(manifest));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(physicalSnapshot, catalog, logicalSnapshot(List.of())));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        physicalSnapshot,
+                        catalog,
+                        logicalSnapshot(List.of(logicalState, logicalState))));
+    }
+
+    @Test
+    void shouldRejectManifestLogicalIdentityOrLineMismatch() {
+        DspOrderItem logicalItem = item("line-1", "product-1", "pharmacy-1");
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1",
+                OrderType.FULL_PACK,
+                "sc-1",
+                List.of(logicalItem),
+                999,
+                DspOrderStatus.WAITING);
+        OsrProcessingReleaseCandidate physicalCandidate = physicalCandidate(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1", 1);
+        InboundToteManifest wrongSheetManifest = manifest(
+                "tote-1", "different-order", OrderType.FULL_PACK, "sc-1",
+                List.of(logicalItem), 1);
+        InboundToteManifest contradictoryLineManifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-1", "different-product", "pharmacy-1")), 1);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        new OsrProcessingReleaseSnapshot(List.of(physicalCandidate)),
+                        new InboundToteManifestCatalog(List.of(wrongSheetManifest)),
+                        logicalSnapshot(List.of(logicalState))));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        new OsrProcessingReleaseSnapshot(List.of(physicalCandidate)),
+                        new InboundToteManifestCatalog(List.of(contradictoryLineManifest)),
+                        logicalSnapshot(List.of(logicalState))));
+    }
+
+    @Test
+    void shouldRejectReleasedOrCompletedLogicalStateForStoredCandidate() {
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-1", "product-1", "pharmacy-1")), 1);
+        OsrProcessingReleaseSnapshot physicalSnapshot = new OsrProcessingReleaseSnapshot(
+                List.of(physicalCandidate(manifest)));
+        InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(List.of(manifest));
+
+        for (DspOrderStatus status : List.of(DspOrderStatus.RELEASED, DspOrderStatus.COMPLETED)) {
+            DspSchedulerOrderState logicalState = logicalState(
+                    "order-1", OrderType.FULL_PACK, "sc-1", manifest.items(), 999, status);
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> factory.create(
+                            physicalSnapshot,
+                            catalog,
+                            logicalSnapshot(List.of(logicalState))));
+        }
+    }
+
+    @Test
+    void shouldRejectInconsistentServiceCentrePriority() {
+        DspSchedulerOrderState first = logicalState(
+                "order-1",
+                OrderType.FULL_PACK,
+                "sc-1",
+                List.of(item("line-1", "product-1", "pharmacy-1")),
+                999,
+                DspOrderStatus.WAITING);
+        DspSchedulerOrderState second = logicalState(
+                "order-2",
+                OrderType.FULL_PACK,
+                "sc-1",
+                List.of(item("line-2", "product-2", "pharmacy-2")),
+                998,
+                DspOrderStatus.WAITING);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        new OsrProcessingReleaseSnapshot(List.of()),
+                        new InboundToteManifestCatalog(List.of()),
+                        logicalSnapshot(List.of(first, second))));
+    }
+
+    @Test
+    void shouldIgnoreLegacyActiveServiceCentreWindow() {
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1",
+                List.of(item("line-1", "product-1", "pharmacy-1")), 1);
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", manifest.items(), 999,
+                DspOrderStatus.WAITING);
+        WarehouseSchedulerSnapshot logicalSnapshot = new WarehouseSchedulerSnapshot(
+                List.of(logicalState), Map.of(), Set.of(), Optional.of("different-sc"));
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(physicalCandidate(manifest))),
+                new InboundToteManifestCatalog(List.of(manifest)),
+                logicalSnapshot);
+
+        assertEquals(new PhysicalToteId("tote-1"),
+                snapshot.candidates().get(0).physicalCandidate().physicalToteId());
+    }
+
+    private static WarehouseSchedulerSnapshot logicalSnapshot(
+            List<DspSchedulerOrderState> logicalStates) {
+        return new WarehouseSchedulerSnapshot(
+                logicalStates, Map.of(), Set.of(), Optional.empty());
+    }
+
+    private static DspSchedulerOrderState logicalState(
+            String orderId,
+            OrderType orderType,
+            String serviceCentreId,
+            List<DspOrderItem> items,
+            int priority,
+            DspOrderStatus status) {
+        NotionalToteOrder order = new NotionalToteOrder(
+                orderId,
+                "notional-" + orderId,
+                serviceCentreId,
+                1,
+                orderType,
+                items,
+                priority,
+                1);
+        RouteRequirements route = new RouteRequirements(
+                false,
+                orderType == OrderType.ADAPTED,
+                false,
+                orderType != OrderType.ADAPTED,
+                false,
+                StartLocation.OSR);
+        return new DspSchedulerOrderState(order, route, status);
+    }
+
+    private static InboundToteManifest manifest(
+            String physicalToteId,
+            String orderId,
+            OrderType orderType,
+            String serviceCentreId,
+            List<DspOrderItem> items,
+            long sourceSequenceNumber) {
+        return new InboundToteManifest(
+                new PhysicalToteId(physicalToteId),
+                new OrderSheetKey(orderId, 1),
+                orderType,
+                serviceCentreId,
+                items,
+                sourceSequenceNumber);
+    }
+
+    private static OsrProcessingReleaseCandidate physicalCandidate(
+            InboundToteManifest manifest) {
+        return physicalCandidate(
+                manifest.physicalToteId().value(),
+                manifest.orderSheetKey().orderId(),
+                manifest.orderType(),
+                manifest.serviceCentreId(),
+                manifest.sourceSequenceNumber());
+    }
+
+    private static OsrProcessingReleaseCandidate physicalCandidate(
+            String physicalToteId,
+            String orderId,
+            OrderType orderType,
+            String serviceCentreId,
+            long sourceSequenceNumber) {
+        return new OsrProcessingReleaseCandidate(
+                new PhysicalToteId(physicalToteId),
+                new OrderSheetKey(orderId, 1),
+                orderType,
+                serviceCentreId,
+                sourceSequenceNumber,
+                OsrProcessingReleaseAvailability.AVAILABLE,
+                Optional.empty());
+    }
+
+    private static DspOrderItem item(
+            String lineReference,
+            String productId,
+            String pharmacyId) {
+        return new DspOrderItem(
+                lineReference,
+                productId,
+                1,
+                pharmacyId,
+                "patient-" + lineReference,
+                "prescription-" + lineReference,
+                DspOrderLineType.FULL_PACK,
+                lineReference,
+                1,
+                1);
+    }
+
+    private static DspOrderItem adaptedItem(
+            String lineReference,
+            String productId,
+            String pharmacyId,
+            String referenceOrderId) {
+        return new DspOrderItem(
+                lineReference,
+                productId,
+                1,
+                pharmacyId,
+                "patient-" + lineReference,
+                "prescription-" + lineReference,
+                DspOrderLineType.ADAPTED,
+                referenceOrderId,
+                1,
+                1);
+    }
+}

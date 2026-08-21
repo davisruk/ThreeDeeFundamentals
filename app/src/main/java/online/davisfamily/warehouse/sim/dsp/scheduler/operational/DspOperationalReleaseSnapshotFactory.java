@@ -1,0 +1,220 @@
+package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+
+public final class DspOperationalReleaseSnapshotFactory {
+
+    public DspOperationalReleaseSnapshot create(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot) {
+        if (physicalSnapshot == null) {
+            throw new IllegalArgumentException("physicalSnapshot must not be null");
+        }
+        if (manifestCatalog == null) {
+            throw new IllegalArgumentException("manifestCatalog must not be null");
+        }
+        if (logicalSnapshot == null) {
+            throw new IllegalArgumentException("logicalSnapshot must not be null");
+        }
+
+        Map<OrderSheetKey, DspSchedulerOrderState> logicalStatesBySheet =
+                indexLogicalStates(logicalSnapshot.orderStates());
+        validateServiceCentrePriorities(logicalSnapshot.orderStates());
+        List<ServiceCentrePharmacyGroup> pharmacyGroups = buildPharmacyGroups(manifestCatalog);
+
+        List<DspOperationalReleaseCandidate> joinedCandidates = new ArrayList<>();
+        for (OsrProcessingReleaseCandidate physicalCandidate : physicalSnapshot.candidates()) {
+            InboundToteManifest manifest = manifestCatalog
+                    .findByPhysicalToteId(physicalCandidate.physicalToteId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "No inbound manifest for physical tote "
+                                    + physicalCandidate.physicalToteId().value()));
+            DspSchedulerOrderState logicalState = logicalStatesBySheet.get(
+                    physicalCandidate.orderSheetKey());
+            if (logicalState == null) {
+                throw new IllegalArgumentException(
+                        "No logical order state for sheet " + physicalCandidate.orderSheetKey());
+            }
+
+            validateJoinedIdentity(physicalCandidate, manifest, logicalState);
+            validateLogicalStatus(logicalState, physicalCandidate.physicalToteId());
+            validateManifestLines(manifest, logicalState);
+            joinedCandidates.add(new DspOperationalReleaseCandidate(
+                    physicalCandidate,
+                    logicalState,
+                    distinctPharmacyIds(manifest.items())));
+        }
+
+        return new DspOperationalReleaseSnapshot(
+                joinedCandidates,
+                pharmacyGroups,
+                logicalSnapshot.stationAdmissions(),
+                logicalSnapshot.preparedLineKeys());
+    }
+
+    private static Map<OrderSheetKey, DspSchedulerOrderState> indexLogicalStates(
+            List<DspSchedulerOrderState> logicalStates) {
+        Map<OrderSheetKey, DspSchedulerOrderState> statesBySheet = new LinkedHashMap<>();
+        for (DspSchedulerOrderState logicalState : logicalStates) {
+            if (logicalState == null) {
+                throw new IllegalArgumentException("logical order states must not contain null");
+            }
+            OrderSheetKey orderSheetKey = logicalState.order().orderSheetKey();
+            if (statesBySheet.putIfAbsent(orderSheetKey, logicalState) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate logical order state for sheet " + orderSheetKey);
+            }
+        }
+        return statesBySheet;
+    }
+
+    private static void validateServiceCentrePriorities(
+            List<DspSchedulerOrderState> logicalStates) {
+        Map<String, Integer> priorityByServiceCentre = new LinkedHashMap<>();
+        for (DspSchedulerOrderState logicalState : logicalStates) {
+            String serviceCentreId = logicalState.order().serviceCentreId().trim();
+            int orderPriority = logicalState.order().orderPriority();
+            Integer existingPriority = priorityByServiceCentre.putIfAbsent(
+                    serviceCentreId, orderPriority);
+            if (existingPriority != null && existingPriority != orderPriority) {
+                throw new IllegalArgumentException(
+                        "Logical orders for service centre " + serviceCentreId
+                                + " must have one consistent order priority");
+            }
+        }
+    }
+
+    private static List<ServiceCentrePharmacyGroup> buildPharmacyGroups(
+            InboundToteManifestCatalog manifestCatalog) {
+        List<IndexedManifest> indexedManifests = new ArrayList<>();
+        List<InboundToteManifest> manifests = manifestCatalog.manifests();
+        for (int index = 0; index < manifests.size(); index++) {
+            indexedManifests.add(new IndexedManifest(index, manifests.get(index)));
+        }
+        indexedManifests.sort(Comparator
+                .comparingLong((IndexedManifest value) -> value.manifest().sourceSequenceNumber())
+                .thenComparingInt(IndexedManifest::catalogIndex)
+                .thenComparing(value -> value.manifest().physicalToteId().value()));
+
+        Map<String, Set<String>> pharmaciesByServiceCentre = new LinkedHashMap<>();
+        Map<String, Integer> nextGroupIndexByServiceCentre = new LinkedHashMap<>();
+        List<ServiceCentrePharmacyGroup> groups = new ArrayList<>();
+        for (IndexedManifest indexedManifest : indexedManifests) {
+            InboundToteManifest manifest = indexedManifest.manifest();
+            Set<String> encounteredPharmacies = pharmaciesByServiceCentre.computeIfAbsent(
+                    manifest.serviceCentreId(), ignored -> new LinkedHashSet<>());
+            for (DspOrderItem item : manifest.items()) {
+                if (encounteredPharmacies.add(item.pharmacyId())) {
+                    int groupIndex = nextGroupIndexByServiceCentre.getOrDefault(
+                            manifest.serviceCentreId(), 0);
+                    groups.add(new ServiceCentrePharmacyGroup(
+                            manifest.serviceCentreId(),
+                            item.pharmacyId(),
+                            groupIndex,
+                            manifest.sourceSequenceNumber()));
+                    nextGroupIndexByServiceCentre.put(
+                            manifest.serviceCentreId(), groupIndex + 1);
+                }
+            }
+        }
+        return List.copyOf(groups);
+    }
+
+    private static void validateJoinedIdentity(
+            OsrProcessingReleaseCandidate physicalCandidate,
+            InboundToteManifest manifest,
+            DspSchedulerOrderState logicalState) {
+        if (!physicalCandidate.physicalToteId().equals(manifest.physicalToteId())) {
+            throw new IllegalArgumentException("Physical candidate and manifest tote ID must match");
+        }
+        if (!physicalCandidate.orderSheetKey().equals(manifest.orderSheetKey())) {
+            throw new IllegalArgumentException("Physical candidate and manifest sheet must match");
+        }
+        if (physicalCandidate.orderType() != manifest.orderType()) {
+            throw new IllegalArgumentException("Physical candidate and manifest order type must match");
+        }
+        if (!physicalCandidate.serviceCentreId().equals(manifest.serviceCentreId())) {
+            throw new IllegalArgumentException(
+                    "Physical candidate and manifest service centre must match");
+        }
+
+        if (!manifest.orderSheetKey().equals(logicalState.order().orderSheetKey())) {
+            throw new IllegalArgumentException("Manifest and logical order sheet must match");
+        }
+        if (manifest.orderType() != logicalState.order().orderType()) {
+            throw new IllegalArgumentException("Manifest and logical order type must match");
+        }
+        if (!manifest.serviceCentreId().equals(logicalState.order().serviceCentreId().trim())) {
+            throw new IllegalArgumentException("Manifest and logical service centre must match");
+        }
+    }
+
+    private static void validateLogicalStatus(
+            DspSchedulerOrderState logicalState,
+            PhysicalToteId physicalToteId) {
+        if (logicalState.status() != DspOrderStatus.WAITING
+                && logicalState.status() != DspOrderStatus.BLOCKED) {
+            throw new IllegalArgumentException(
+                    "Stored physical tote " + physicalToteId.value()
+                            + " cannot join logical status " + logicalState.status());
+        }
+    }
+
+    private static void validateManifestLines(
+            InboundToteManifest manifest,
+            DspSchedulerOrderState logicalState) {
+        Map<String, DspOrderItem> logicalItemsByLineReference = new LinkedHashMap<>();
+        for (DspOrderItem logicalItem : logicalState.order().items()) {
+            if (logicalItemsByLineReference.putIfAbsent(
+                    logicalItem.lineReference(), logicalItem) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate logical line reference " + logicalItem.lineReference()
+                                + " for sheet " + logicalState.order().orderSheetKey());
+            }
+        }
+        for (DspOrderItem manifestItem : manifest.items()) {
+            DspOrderItem logicalItem = logicalItemsByLineReference.get(
+                    manifestItem.lineReference());
+            if (logicalItem == null) {
+                throw new IllegalArgumentException(
+                        "Manifest line " + manifestItem.lineReference()
+                                + " is absent from logical sheet "
+                                + logicalState.order().orderSheetKey());
+            }
+            if (!manifestItem.equals(logicalItem)) {
+                throw new IllegalArgumentException(
+                        "Manifest line " + manifestItem.lineReference()
+                                + " contradicts logical sheet "
+                                + logicalState.order().orderSheetKey());
+            }
+        }
+    }
+
+    private static List<String> distinctPharmacyIds(List<DspOrderItem> items) {
+        Set<String> pharmacyIds = new LinkedHashSet<>();
+        for (DspOrderItem item : items) {
+            pharmacyIds.add(item.pharmacyId());
+        }
+        return List.copyOf(pharmacyIds);
+    }
+
+    private record IndexedManifest(int catalogIndex, InboundToteManifest manifest) {}
+}
