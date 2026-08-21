@@ -18,13 +18,23 @@ public record DspOperationalReleaseSnapshot(
         List<DspOperationalReleaseCandidate> candidates,
         List<ServiceCentrePharmacyGroup> pharmacyGroups,
         Map<StationType, StationAdmissionSnapshot> stationAdmissions,
-        Set<PreparedLineKey> preparedLineKeys) {
+        Set<PreparedLineKey> preparedLineKeys,
+        List<OperationalCandidateRouteAdmission> routeAdmissions) {
+
+    public DspOperationalReleaseSnapshot(
+            List<DspOperationalReleaseCandidate> candidates,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys) {
+        this(candidates, pharmacyGroups, stationAdmissions, preparedLineKeys, List.of());
+    }
 
     public DspOperationalReleaseSnapshot {
         candidates = copyCandidates(candidates);
         pharmacyGroups = copyAndValidateGroups(pharmacyGroups);
         stationAdmissions = copyStationAdmissions(stationAdmissions);
         preparedLineKeys = copyPreparedLineKeys(preparedLineKeys);
+        routeAdmissions = copyRouteAdmissions(routeAdmissions, candidates);
         validateCandidateGroups(candidates, pharmacyGroups);
     }
 
@@ -44,6 +54,21 @@ public record DspOperationalReleaseSnapshot(
         return pharmacyGroups.stream()
                 .filter(group -> group.serviceCentreId().equals(normalizedServiceCentreId))
                 .toList();
+    }
+
+    public Optional<OperationalCandidateRouteAdmission> findRouteAdmission(
+            PhysicalToteId physicalToteId,
+            StationType stationType) {
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
+        }
+        if (stationType == null) {
+            throw new IllegalArgumentException("stationType must not be null");
+        }
+        return routeAdmissions.stream()
+                .filter(admission -> admission.physicalToteId().equals(physicalToteId)
+                        && admission.stationAdmission().stationType() == stationType)
+                .findFirst();
     }
 
     public int groupIndexFor(DspOperationalReleaseCandidate candidate) {
@@ -153,6 +178,51 @@ public record DspOperationalReleaseSnapshot(
             copy.add(preparedLineKey);
         }
         return Collections.unmodifiableSet(copy);
+    }
+
+    private static List<OperationalCandidateRouteAdmission> copyRouteAdmissions(
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            List<DspOperationalReleaseCandidate> candidates) {
+        if (routeAdmissions == null) {
+            throw new IllegalArgumentException("routeAdmissions must not be null");
+        }
+        Map<PhysicalToteId, DspOperationalReleaseCandidate> candidatesByPhysicalToteId =
+                new LinkedHashMap<>();
+        for (DspOperationalReleaseCandidate candidate : candidates) {
+            candidatesByPhysicalToteId.put(
+                    candidate.physicalCandidate().physicalToteId(), candidate);
+        }
+
+        List<OperationalCandidateRouteAdmission> copy = new ArrayList<>();
+        Set<PhysicalToteId> admittedPhysicalToteIds = new LinkedHashSet<>();
+        OperationalRouteEntrySelector routeEntrySelector = new OperationalRouteEntrySelector();
+        for (OperationalCandidateRouteAdmission routeAdmission : routeAdmissions) {
+            if (routeAdmission == null) {
+                throw new IllegalArgumentException("routeAdmissions must not contain null");
+            }
+            PhysicalToteId physicalToteId = routeAdmission.physicalToteId();
+            if (!admittedPhysicalToteIds.add(physicalToteId)) {
+                throw new IllegalArgumentException(
+                        "routeAdmissions must have distinct physical tote IDs");
+            }
+            DspOperationalReleaseCandidate candidate = candidatesByPhysicalToteId.get(
+                    physicalToteId);
+            if (candidate == null) {
+                throw new IllegalArgumentException(
+                        "Route admission physical tote is not a snapshot candidate: "
+                                + physicalToteId.value());
+            }
+            StationType expectedStationType = routeEntrySelector.firstStation(
+                    candidate.logicalOrderState().routeRequirements())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Candidate with route admission has no route-entry station"));
+            if (routeAdmission.stationAdmission().stationType() != expectedStationType) {
+                throw new IllegalArgumentException(
+                        "Route admission station must match candidate first route-entry station");
+            }
+            copy.add(routeAdmission);
+        }
+        return List.copyOf(copy);
     }
 
     private static void validateCandidateGroups(
