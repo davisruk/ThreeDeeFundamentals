@@ -8,7 +8,7 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The current physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+3. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
 4. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
 5. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
 6. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
@@ -85,7 +85,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, and `feature/dsp-rate-limited-service-centre-supply` are complete, verified, and merged. `feature/dsp-osr-processing-release` is the current feature and has a decision-complete plan at `docs/scheduler/dsp-osr-processing-release-plan.md`. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, and `feature/dsp-rate-limited-service-centre-supply` are complete, verified, and merged. `feature/dsp-osr-processing-release` is complete and verified, pending merge to `master`. Its detailed plan is `docs/scheduler/dsp-osr-processing-release-plan.md`. The next planning target is `feature/dsp-dependency-ready-operational-release`. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -127,14 +127,18 @@ Completed rate-limited supply behavior:
 - `DspSupplySnapshot` is the immutable handoff for later scheduler, inspection, and metrics work.
 - Physical OSR processing release must preserve separate downstream acceptance, `recordDeparture(...)`, lifecycle activation, and scheduler-command transitions.
 
-Current physical OSR processing-release constraints:
+Completed physical OSR processing-release behavior:
 
 - Work per currently stored `PhysicalToteId`; never infer physical release from logical `DspOrderStatus` alone.
 - Preserve every physical manifest when several manifests share one `OrderSheetKey`.
 - Keep the legacy `ReleaseOrderCommand` and debug scheduler unchanged while introducing the typed physical command.
 - Revalidate worker-produced physical commands against live simulation-thread inventory, lifecycle, target, identity, and clock state.
 - Obtain downstream acceptance before committing inventory departure and lifecycle activation.
-- Do not implement pharmacy-grouped ranking, physical command emission, sticky P2P leases, or EMPTY/AV02 allocation in this branch.
+- `OsrProcessingReleaseSnapshotFactory` publishes distinct ordered physical candidates from immutable inventory and lifecycle snapshots.
+- `ReleasePhysicalToteFromOsrCommand` remains separate from the legacy order-centric debug command.
+- `OsrProcessingReleaseCommandHandler` revalidates live state, accepts downstream first, then commits `recordDeparture(...)` followed by lifecycle `activate(...)` using one simulation time.
+- Rejected, deferred, stale, or failed target applications leave inventory and lifecycle unchanged.
+- Pharmacy-grouped ranking, scheduler emission of the physical command, sticky P2P leases, and EMPTY/AV02 allocation remain follow-on work.
 
 Completed operational-clock behavior:
 
@@ -211,7 +215,8 @@ Known Phase 1 machine/station work:
 - OSR physical inventory and preload: complete, verified, and merged
 - operational simulation clock: complete, verified, and merged
 - rate-limited service-centre supply: complete, verified, and merged
-- physical OSR processing release: detailed plan ready; current feature branch
+- physical OSR processing release: complete and verified; pending merge to `master`
+- dependency-ready operational release: next feature to plan after merge
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

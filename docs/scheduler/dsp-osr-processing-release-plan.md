@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-osr-processing-release`
 
-Status: plan ready; implementation not started.
+Status: implementation complete and verified; pending merge to `master`.
 
 ## Purpose
 
@@ -453,11 +453,11 @@ Visual smoke tests:
 
 Before branch closure:
 
-- [ ] update this plan status to implementation complete and verified;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] record final type names and transaction ordering for the dependency-ready operational-release plan;
-- [ ] identify `feature/dsp-dependency-ready-operational-release` as the likely next branch, subject to reassessment against the completed physical boundary.
+- [x] update this plan status to implementation complete and verified;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] record final type names and transaction ordering for the dependency-ready operational-release plan;
+- [x] identify `feature/dsp-dependency-ready-operational-release` as the likely next branch, subject to reassessment against the completed physical boundary.
 
 ## Preserved Contracts For Follow-On Work
 

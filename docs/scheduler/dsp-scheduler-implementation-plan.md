@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, and rate-limited service-centre supply are complete, verified, and merged. Physical OSR processing release is the current planned feature on `feature/dsp-osr-processing-release`.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, and rate-limited service-centre supply are complete, verified, and merged. Physical OSR processing release is complete and verified on `feature/dsp-osr-processing-release`, pending merge. Dependency-ready operational release is the next planning target.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -593,7 +593,7 @@ Follow-on planning target:
 
 ### `feature/dsp-osr-processing-release`
 
-Status: detailed plan ready; implementation not started.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -614,9 +614,19 @@ Explicit non-goals:
 - no changes to `WarehouseSchedulerSnapshot`, `DspReleaseScheduler`, or existing visual debug release behavior;
 - no EMPTY/AV02 allocation, sticky P2P leases, deadline-aware line allocation, renderables, or full-day execution.
 
+Implemented contracts to preserve:
+
+- `OsrProcessingReleaseSnapshotFactory` derives ordered physical candidates solely from current OSR inventory and lifecycle snapshots.
+- `OsrProcessingReleaseCandidate` retains `PhysicalToteId`, `OrderSheetKey`, order type, service centre, source sequence, and any active same-sheet blocker without collapsing repeated manifests.
+- `ReleasePhysicalToteFromOsrCommand` remains distinct from the legacy order-centric `ReleaseOrderCommand`.
+- `OsrProcessingReleaseCommandHandler` revalidates live inventory, lifecycle, command identity, target identity, and one authoritative operational-clock snapshot on the simulation thread.
+- Successful release invokes `OsrProcessingReleaseTarget.accept(...)` first, then commits `OsrPhysicalInventory.recordDeparture(...)`, then `InboundToteLifecycleController.activate(...)` at the same elapsed simulation time.
+- Deferral, rejection, stale commands, target exceptions, and validation failures do not mutate local inventory or lifecycle state.
+- A released slot is visible to `DspServiceCentreSupplyCoordinator`, allowing a due capacity-blocked physical manifest to resume without reordering.
+
 Follow-on planning target:
 
-- dependency-ready operational release with pharmacy-grouped ranking and physical command emission.
+- `feature/dsp-dependency-ready-operational-release`, composing physical candidate snapshots into scheduler evaluation, adding pharmacy-grouped deterministic ranking, and emitting the typed physical command.
 
 ## Current Assumptions
 

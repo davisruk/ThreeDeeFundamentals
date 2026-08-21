@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, and rate-limited service-centre supply are complete, verified, and merged. Physical OSR processing release is the current planned feature on `feature/dsp-osr-processing-release`.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, and rate-limited service-centre supply are complete, verified, and merged. Physical OSR processing release is complete and verified on `feature/dsp-osr-processing-release`, pending merge. Dependency-ready operational release is the next planning target.
 
 Read:
 
@@ -108,8 +108,10 @@ Current scheduler decisions:
 - `DspServiceCentreSupplyCoordinator` authorizes at the inclusive low-water boundary and admits due physical manifests through `OsrPhysicalInventory.store(...)` using absolute operational-clock elapsed time.
 - A genuinely capacity-blocked due manifest retains its position and resumes without a burst. A future manifest is not marked blocked merely because an earlier admission filled the OSR.
 - `DspSupplySnapshot` is the immutable supply boundary for later scheduler, inspection, and metrics consumers.
-- The current physical-release plan introduces immutable per-manifest OSR candidates and a typed physical command alongside the legacy order-centric debug command; it does not migrate scheduler ranking yet.
-- Physical release must obtain downstream acceptance before committing `recordDeparture(...)` and lifecycle activation on the simulation thread.
+- Physical processing release now exposes immutable per-manifest OSR candidates and a typed physical command alongside the unchanged legacy order-centric debug command; scheduler ranking is not migrated yet.
+- `OsrProcessingReleaseCommandHandler` obtains downstream acceptance before committing `recordDeparture(...)` followed by lifecycle activation at the same authoritative simulation time.
+- Same-sheet manifests remain distinct; an active physical assignment blocks later manifests without hiding them.
+- Rejected, deferred, stale, or failed target applications leave OSR inventory and lifecycle state unchanged, while accepted departure frees capacity for rate-limited supply.
 - Upstream supply for an authorized service centre is ADAPTED first, followed by FULL_PACK and ASSOCIATED. EMPTY remains logical until AV02 supplies a physical tote.
 - The OSR may contain more than one authorized service centre. ADAPTED and FULL_PACK may process concurrently, and an ASSOCIATED/EMPTY order becomes eligible when its own preparation dependencies are terminal.
 - P2P service-centre isolation is enforced through sticky line ownership rather than a single global service-centre release window. A line cannot change service centre until it is fully quiescent and its current outbound tote is closed.
@@ -172,7 +174,8 @@ Current programme position:
 - OSR physical inventory and preload: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-physical-inventory-plan.md`;
 - operational simulation clock: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-operational-simulation-clock-plan.md`;
 - rate-limited service-centre supply: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`;
-- physical OSR processing release: current planned feature, with detailed plan at `docs/scheduler/dsp-osr-processing-release-plan.md`;
+- physical OSR processing release: complete and verified, pending merge, with detailed plan at `docs/scheduler/dsp-osr-processing-release-plan.md`;
+- dependency-ready operational release and pharmacy-grouped ranking: next planning target;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -218,7 +221,8 @@ Planned Phase 1 order:
 - OSR physical inventory and preload: complete, verified, and merged
 - operational simulation clock: complete, verified, and merged
 - rate-limited service-centre supply: complete, verified, and merged
-- physical OSR processing release: detailed plan ready; current feature branch
+- physical OSR processing release: complete and verified; pending merge to `master`
+- dependency-ready operational release: next feature to plan after merge
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 
