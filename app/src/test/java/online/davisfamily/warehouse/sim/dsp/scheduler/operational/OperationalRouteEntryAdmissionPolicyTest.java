@@ -49,7 +49,7 @@ class OperationalRouteEntryAdmissionPolicyTest {
                                 OperationalRouteAdmissionTestSupport.closedAdmission(
                                         StationType.P2P,
                                         null,
-                                        "Operational route target p2p-1 has no waiting capacity"))));
+                                        "Operational route admission target p2p-1 has no waiting capacity"))));
 
         OperationalRouteEntryEvaluation evaluation = new OperationalRouteEntryAdmissionPolicy()
                 .evaluate(candidate, snapshot);
@@ -59,7 +59,7 @@ class OperationalRouteEntryAdmissionPolicyTest {
                 OperationalReleaseBlockType.STATION_ADMISSION,
                 evaluation.blocks().get(0).type());
         assertEquals(
-                "Operational route target p2p-1 has no waiting capacity",
+                "Operational route admission target p2p-1 has no waiting capacity",
                 evaluation.blocks().get(0).reason());
     }
 }

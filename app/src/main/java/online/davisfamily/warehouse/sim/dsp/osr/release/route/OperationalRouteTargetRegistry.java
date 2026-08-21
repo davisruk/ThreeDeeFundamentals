@@ -12,8 +12,11 @@ import java.util.Set;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTarget;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTargetRegistry;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionCatalog;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
 
-public final class OperationalRouteTargetRegistry {
+public final class OperationalRouteTargetRegistry
+        implements OperationalRouteTargetAdmissionCatalog {
     private final List<OperationalRouteEntryQueue> queues;
     private final Map<String, OperationalRouteEntryQueue> queuesByTargetId;
     private final List<OsrProcessingReleaseTarget> releaseTargets;
@@ -82,8 +85,21 @@ public final class OperationalRouteTargetRegistry {
         return releaseTargets;
     }
 
+    @Override
     public OsrProcessingReleaseTargetRegistry processingReleaseTargetRegistry() {
         return processingReleaseTargetRegistry;
+    }
+
+    @Override
+    public List<OperationalRouteTargetAdmissionSnapshot> snapshotAdmissions() {
+        return queues.stream()
+                .map(OperationalRouteEntryQueue::snapshot)
+                .map(snapshot -> new OperationalRouteTargetAdmissionSnapshot(
+                        snapshot.stationType(),
+                        snapshot.targetId(),
+                        snapshot.capacity(),
+                        snapshot.occupancy()))
+                .toList();
     }
 
     public List<OperationalRouteEntryQueueSnapshot> snapshots() {

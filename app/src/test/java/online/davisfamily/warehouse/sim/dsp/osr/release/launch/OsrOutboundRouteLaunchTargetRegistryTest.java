@@ -86,9 +86,30 @@ class OsrOutboundRouteLaunchTargetRegistryTest {
                         destination(StationType.ADAPTING, "adapting-1")));
 
         assertEquals(0, registry.launchQueueSnapshot().occupancy());
+        List<OperationalRouteTargetAdmissionSnapshot> openAdmissions =
+                registry.snapshotAdmissions();
+        assertEquals(List.of("p2p-1", "adapting-1"), openAdmissions.stream()
+                .map(OperationalRouteTargetAdmissionSnapshot::targetId)
+                .toList());
+        assertTrue(openAdmissions.stream().allMatch(
+                OperationalRouteTargetAdmissionSnapshot::canAccept));
         assertTrue(registry.processingReleaseTargetRegistry()
                 .find("p2p-1").orElseThrow().accept(request("tote-1", 1)).applied());
         assertEquals(1, registry.launchQueueSnapshot().occupancy());
+
+        List<OperationalRouteTargetAdmissionSnapshot> fullAdmissions =
+                registry.snapshotAdmissions();
+        assertEquals(List.of(1, 1), fullAdmissions.stream()
+                .map(OperationalRouteTargetAdmissionSnapshot::capacity)
+                .toList());
+        assertEquals(List.of(1, 1), fullAdmissions.stream()
+                .map(OperationalRouteTargetAdmissionSnapshot::occupancy)
+                .toList());
+        assertTrue(fullAdmissions.stream().noneMatch(
+                OperationalRouteTargetAdmissionSnapshot::canAccept));
+        assertThrows(UnsupportedOperationException.class, () -> fullAdmissions.clear());
+        assertTrue(openAdmissions.stream().allMatch(
+                OperationalRouteTargetAdmissionSnapshot::canAccept));
 
         SchedulerCommandApplicationResult deferred = registry.processingReleaseTargetRegistry()
                 .find("adapting-1").orElseThrow().accept(request("tote-2", 2));

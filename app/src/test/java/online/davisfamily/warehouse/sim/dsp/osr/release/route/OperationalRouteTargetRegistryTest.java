@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTarget;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
 
 class OperationalRouteTargetRegistryTest {
 
@@ -76,6 +77,8 @@ class OperationalRouteTargetRegistryTest {
                 List.of(first, second));
 
         List<OperationalRouteEntryQueueSnapshot> snapshots = registry.snapshots();
+        List<OperationalRouteTargetAdmissionSnapshot> admissions =
+                registry.snapshotAdmissions();
 
         assertEquals(
                 List.of("third-party-ingress", "p2p-ingress"),
@@ -85,7 +88,19 @@ class OperationalRouteTargetRegistryTest {
         assertEquals(List.of(1, 2), snapshots.stream()
                 .map(OperationalRouteEntryQueueSnapshot::capacity)
                 .toList());
+        assertEquals(
+                List.of("third-party-ingress", "p2p-ingress"),
+                admissions.stream()
+                        .map(OperationalRouteTargetAdmissionSnapshot::targetId)
+                        .toList());
+        assertEquals(List.of(1, 2), admissions.stream()
+                .map(OperationalRouteTargetAdmissionSnapshot::capacity)
+                .toList());
+        assertEquals(List.of(0, 0), admissions.stream()
+                .map(OperationalRouteTargetAdmissionSnapshot::occupancy)
+                .toList());
         assertThrows(UnsupportedOperationException.class, () -> snapshots.clear());
+        assertThrows(UnsupportedOperationException.class, () -> admissions.clear());
         assertThrows(UnsupportedOperationException.class, () -> registry.queues().clear());
         assertThrows(UnsupportedOperationException.class, () -> registry.releaseTargets().clear());
         assertThrows(

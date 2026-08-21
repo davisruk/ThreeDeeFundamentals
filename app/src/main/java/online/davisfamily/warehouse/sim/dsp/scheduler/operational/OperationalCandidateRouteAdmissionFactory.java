@@ -1,13 +1,14 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
-import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
-import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueueSnapshot;
-import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionCatalog;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
@@ -15,24 +16,24 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot
 public final class OperationalCandidateRouteAdmissionFactory {
     private final OperationalRouteEntrySelector routeEntrySelector;
     private final StationAdmissionResolver stationAdmissionResolver;
-    private final OperationalRouteTargetRegistry routeTargetRegistry;
+    private final OperationalRouteTargetAdmissionCatalog routeTargetAdmissionCatalog;
 
     public OperationalCandidateRouteAdmissionFactory(
             OperationalRouteEntrySelector routeEntrySelector,
             StationAdmissionResolver stationAdmissionResolver,
-            OperationalRouteTargetRegistry routeTargetRegistry) {
+            OperationalRouteTargetAdmissionCatalog routeTargetAdmissionCatalog) {
         if (routeEntrySelector == null) {
             throw new IllegalArgumentException("routeEntrySelector must not be null");
         }
         if (stationAdmissionResolver == null) {
             throw new IllegalArgumentException("stationAdmissionResolver must not be null");
         }
-        if (routeTargetRegistry == null) {
-            throw new IllegalArgumentException("routeTargetRegistry must not be null");
+        if (routeTargetAdmissionCatalog == null) {
+            throw new IllegalArgumentException("routeTargetAdmissionCatalog must not be null");
         }
         this.routeEntrySelector = routeEntrySelector;
         this.stationAdmissionResolver = stationAdmissionResolver;
-        this.routeTargetRegistry = routeTargetRegistry;
+        this.routeTargetAdmissionCatalog = routeTargetAdmissionCatalog;
     }
 
     public List<OperationalCandidateRouteAdmission> create(
@@ -45,6 +46,8 @@ public final class OperationalCandidateRouteAdmissionFactory {
             throw new IllegalArgumentException("logicalSnapshot must not be null");
         }
 
+        Map<String, OperationalRouteTargetAdmissionSnapshot> targetAdmissionsById =
+                snapshotAdmissionsByTargetId();
         List<OperationalCandidateRouteAdmission> admissions = new ArrayList<>();
         for (DspOperationalReleaseCandidate candidate : candidates) {
             if (candidate == null) {
@@ -71,7 +74,8 @@ public final class OperationalCandidateRouteAdmissionFactory {
 
             StationAdmissionSnapshot effectiveAdmission = effectiveAdmission(
                     stationAdmission,
-                    stationType);
+                    stationType,
+                    targetAdmissionsById);
             admissions.add(new OperationalCandidateRouteAdmission(
                     candidate.physicalCandidate().physicalToteId(),
                     effectiveAdmission));
@@ -81,7 +85,8 @@ public final class OperationalCandidateRouteAdmissionFactory {
 
     private StationAdmissionSnapshot effectiveAdmission(
             StationAdmissionSnapshot stationAdmission,
-            StationType stationType) {
+            StationType stationType,
+            Map<String, OperationalRouteTargetAdmissionSnapshot> targetAdmissionsById) {
         if (!stationAdmission.canAccept()) {
             String blockedReason = stationAdmission.blockedReason().isBlank()
                     ? "Route-entry station " + stationType + " cannot accept the candidate"
@@ -97,27 +102,51 @@ public final class OperationalCandidateRouteAdmissionFactory {
         }
 
         String targetId = selectedTargetId.orElseThrow();
-        Optional<OperationalRouteEntryQueue> selectedQueue = routeTargetRegistry.find(targetId);
-        if (selectedQueue.isEmpty()) {
+        OperationalRouteTargetAdmissionSnapshot targetAdmission =
+                targetAdmissionsById.get(targetId);
+        if (targetAdmission == null) {
             return closed(
                     stationAdmission,
-                    "Unknown operational route target " + targetId
+                    "Unknown operational route admission target " + targetId
                             + " for station " + stationType);
         }
 
-        OperationalRouteEntryQueueSnapshot queueSnapshot = selectedQueue.orElseThrow().snapshot();
-        if (queueSnapshot.stationType() != stationType) {
+        if (targetAdmission.stationType() != stationType) {
             return closed(
                     stationAdmission,
-                    "Operational route target " + targetId + " belongs to station "
-                            + queueSnapshot.stationType() + " instead of " + stationType);
+                    "Operational route admission target " + targetId + " belongs to station "
+                            + targetAdmission.stationType() + " instead of " + stationType);
         }
-        if (!queueSnapshot.canAccept()) {
+        if (!targetAdmission.canAccept()) {
             return closed(
                     stationAdmission,
-                    "Operational route target " + targetId + " has no waiting capacity");
+                    "Operational route admission target " + targetId
+                            + " has no waiting capacity");
         }
         return stationAdmission;
+    }
+
+    private Map<String, OperationalRouteTargetAdmissionSnapshot> snapshotAdmissionsByTargetId() {
+        List<OperationalRouteTargetAdmissionSnapshot> targetAdmissions =
+                routeTargetAdmissionCatalog.snapshotAdmissions();
+        if (targetAdmissions == null) {
+            throw new IllegalStateException("snapshotAdmissions returned null");
+        }
+
+        Map<String, OperationalRouteTargetAdmissionSnapshot> admissionsByTargetId =
+                new LinkedHashMap<>();
+        for (OperationalRouteTargetAdmissionSnapshot targetAdmission : targetAdmissions) {
+            if (targetAdmission == null) {
+                throw new IllegalStateException("snapshotAdmissions must not contain null");
+            }
+            if (admissionsByTargetId.putIfAbsent(
+                    targetAdmission.targetId(), targetAdmission) != null) {
+                throw new IllegalStateException(
+                        "Duplicate operational route admission target ID: "
+                                + targetAdmission.targetId());
+            }
+        }
+        return Map.copyOf(admissionsByTargetId);
     }
 
     private static StationAdmissionSnapshot closed(

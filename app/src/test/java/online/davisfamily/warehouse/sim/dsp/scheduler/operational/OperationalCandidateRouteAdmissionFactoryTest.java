@@ -11,6 +11,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTargetRegistry;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionCatalog;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -106,7 +109,7 @@ class OperationalCandidateRouteAdmissionFactoryTest {
         assertTrue(admissions.get(0).stationAdmission().blockedReason()
                 .contains("no waiting capacity"));
         assertTrue(admissions.get(1).stationAdmission().blockedReason()
-                .contains("Unknown operational route target"));
+                .contains("Unknown operational route admission target"));
         assertTrue(admissions.get(2).stationAdmission().blockedReason()
                 .contains("belongs to station THIRD_PARTY"));
         assertTrue(admissions.get(3).stationAdmission().blockedReason()
@@ -135,6 +138,58 @@ class OperationalCandidateRouteAdmissionFactoryTest {
 
         assertTrue(admissions.isEmpty());
         assertEquals(1, resolverCalls.get());
+    }
+
+    @Test
+    void shouldCaptureImmutableTargetAdmissionsOnceForAllCandidates() {
+        List<DspOperationalReleaseCandidate> candidates = List.of(
+                candidate("one"),
+                candidate("two"));
+        AtomicInteger snapshotCalls = new AtomicInteger();
+        OperationalRouteTargetAdmissionCatalog catalog =
+                new OperationalRouteTargetAdmissionCatalog() {
+                    @Override
+                    public List<OperationalRouteTargetAdmissionSnapshot> snapshotAdmissions() {
+                        snapshotCalls.incrementAndGet();
+                        return List.of(new OperationalRouteTargetAdmissionSnapshot(
+                                StationType.P2P, "p2p-1", 2, 0));
+                    }
+
+                    @Override
+                    public OsrProcessingReleaseTargetRegistry processingReleaseTargetRegistry() {
+                        return new OsrProcessingReleaseTargetRegistry(List.of());
+                    }
+                };
+        StationAdmissionResolver resolver = (stationType, order, snapshot) ->
+                OperationalRouteAdmissionTestSupport.openAdmission(stationType, "p2p-1");
+        OperationalCandidateRouteAdmissionFactory factory = factory(resolver, catalog);
+
+        List<OperationalCandidateRouteAdmission> admissions = factory.create(
+                candidates,
+                OperationalRouteAdmissionTestSupport.logicalSnapshot(candidates));
+
+        assertEquals(2, admissions.size());
+        assertEquals(1, snapshotCalls.get());
+        assertTrue(admissions.stream().allMatch(admission ->
+                admission.stationAdmission().selectedTargetId().orElseThrow()
+                        .equals("p2p-1")));
+    }
+
+    @Test
+    void shouldRejectDuplicateAdmissionIdsFromCatalogSnapshot() {
+        OperationalRouteTargetAdmissionSnapshot admission =
+                new OperationalRouteTargetAdmissionSnapshot(
+                        StationType.P2P, "p2p-1", 1, 0);
+        OperationalRouteTargetAdmissionCatalog catalog = catalog(List.of(admission, admission));
+        DspOperationalReleaseCandidate candidate = candidate("one");
+
+        assertThrows(IllegalStateException.class, () -> factory(
+                (stationType, order, snapshot) ->
+                        OperationalRouteAdmissionTestSupport.openAdmission(
+                                stationType, "p2p-1"),
+                catalog).create(
+                        List.of(candidate),
+                        OperationalRouteAdmissionTestSupport.logicalSnapshot(List.of(candidate))));
     }
 
     @Test
@@ -177,8 +232,23 @@ class OperationalCandidateRouteAdmissionFactoryTest {
 
     private static OperationalCandidateRouteAdmissionFactory factory(
             StationAdmissionResolver resolver,
-            OperationalRouteTargetRegistry targets) {
+            OperationalRouteTargetAdmissionCatalog targets) {
         return new OperationalCandidateRouteAdmissionFactory(
                 new OperationalRouteEntrySelector(), resolver, targets);
+    }
+
+    private static OperationalRouteTargetAdmissionCatalog catalog(
+            List<OperationalRouteTargetAdmissionSnapshot> admissions) {
+        return new OperationalRouteTargetAdmissionCatalog() {
+            @Override
+            public List<OperationalRouteTargetAdmissionSnapshot> snapshotAdmissions() {
+                return admissions;
+            }
+
+            @Override
+            public OsrProcessingReleaseTargetRegistry processingReleaseTargetRegistry() {
+                return new OsrProcessingReleaseTargetRegistry(List.of());
+            }
+        };
     }
 }

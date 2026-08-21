@@ -160,7 +160,7 @@ class DspOperationalRouteTargetIntegrationScenarioTest {
                     .lastCommandApplicationResult().isPresent());
             assertTrue(misconfigured.runtime.controller().snapshot().lastEvaluation()
                     .orElseThrow().blockedCandidates().get(0).blocks().get(0).reason()
-                    .contains("Unknown operational route target"));
+                    .contains("Unknown operational route admission target"));
         }
     }
 

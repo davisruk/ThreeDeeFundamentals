@@ -9,7 +9,8 @@ import java.util.Optional;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTarget;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTargetRegistry;
 
-public final class OsrOutboundRouteLaunchTargetRegistry {
+public final class OsrOutboundRouteLaunchTargetRegistry
+        implements OperationalRouteTargetAdmissionCatalog {
     private final OsrOutboundRouteLaunchQueue launchQueue;
     private final List<OperationalRouteDestination> destinations;
     private final Map<String, OperationalRouteDestination> destinationsByTargetId;
@@ -65,8 +66,21 @@ public final class OsrOutboundRouteLaunchTargetRegistry {
         return targets;
     }
 
+    @Override
     public OsrProcessingReleaseTargetRegistry processingReleaseTargetRegistry() {
         return processingReleaseTargetRegistry;
+    }
+
+    @Override
+    public List<OperationalRouteTargetAdmissionSnapshot> snapshotAdmissions() {
+        OsrOutboundRouteLaunchQueueSnapshot queueSnapshot = launchQueue.snapshot();
+        return destinations.stream()
+                .map(destination -> new OperationalRouteTargetAdmissionSnapshot(
+                        destination.stationType(),
+                        destination.targetId(),
+                        queueSnapshot.capacity(),
+                        queueSnapshot.occupancy()))
+                .toList();
     }
 
     public OsrOutboundRouteLaunchQueueSnapshot launchQueueSnapshot() {
