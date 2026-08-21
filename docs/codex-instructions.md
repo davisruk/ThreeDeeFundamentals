@@ -8,16 +8,17 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
-4. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
-5. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
-6. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
-7. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-8. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-9. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-10. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-11. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-12. `docs/machines/phase-1-stations-roadmap.md`
+3. The current OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+4. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
+5. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+6. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+7. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+8. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+9. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+10. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+11. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+12. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+13. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -87,7 +88,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, `feature/dsp-rate-limited-service-centre-supply`, `feature/dsp-osr-processing-release`, and `feature/dsp-dependency-ready-operational-release` are complete, verified, and merged. `feature/dsp-operational-route-target-integration` is complete and verified, awaiting merge. Its contracts are recorded in `docs/scheduler/dsp-operational-route-target-integration-plan.md`. The next planning target is a narrow P2P route-entry queue-consumer/hydration feature; sticky P2P leases follow it. Exception Station behavior remains separate later work.
+The operational scheduler foundations through `feature/dsp-operational-route-target-integration` are complete, verified, and merged. `feature/dsp-osr-outbound-route-launch` is the current feature and has a decision-complete plan at `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`. It must not place OSR-released work directly into a station-local or P2P queue. Warehouse transport routing and station-arrival boundaries follow it; P2P-local consumption and sticky leases come later. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -230,9 +231,10 @@ Known Phase 1 machine/station work:
 - rate-limited service-centre supply: complete, verified, and merged
 - physical OSR processing release: complete, verified, and merged
 - dependency-ready operational release: complete, verified, and merged
-- operational route-target integration: complete and verified; awaiting merge
-- P2P route-entry queue consumption and physical-tote hydration: next planning target
-- sticky P2P service-centre leases: follow-on after queue consumption/hydration
+- operational route-target integration: complete, verified, and merged
+- OSR outbound route launch and physical-tote hydration: detailed plan ready; current feature
+- warehouse transport routing and station-arrival boundaries: follow-on after route launch
+- P2P-local queue consumption and sticky service-centre leases: deferred until physical arrival exists
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

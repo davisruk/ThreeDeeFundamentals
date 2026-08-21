@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, and dependency-ready operational release are complete, verified, and merged. Operational route-target integration is complete and verified on `feature/dsp-operational-route-target-integration`, awaiting merge. A narrow P2P route-entry queue-consumer/hydration feature must precede sticky P2P leases.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, and operational route-target integration are complete, verified, and merged. OSR outbound route launch is the current planned feature on `feature/dsp-osr-outbound-route-launch`; it separates destination intent from physical station arrival before warehouse transport routing is implemented.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -664,12 +664,15 @@ Implemented contracts to preserve:
 
 Follow-on planning target:
 
-- `feature/dsp-operational-route-target-integration`, because no production `OsrProcessingReleaseTarget` currently consumes operational release requests.
-- `feature/dsp-p2p-sticky-service-centre-leases` follows after route-target integration.
+- `feature/dsp-osr-outbound-route-launch`, because an OSR release must first enter a common
+  outbound launch boundary while retaining its selected station as destination intent.
+- `feature/dsp-warehouse-transport-routing` follows route launch and delivers physical totes to
+  station-local arrival queues.
+- P2P-local consumption and sticky service-centre leases follow physical station arrival.
 
 ### `feature/dsp-operational-route-target-integration`
 
-Status: implementation complete and verified; awaiting merge.
+Status: implementation complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -706,13 +709,37 @@ Verified implementation contracts:
 
 Follow-on planning target:
 
-- `feature/dsp-p2p-route-entry-queue-consumer` must define real P2P dequeue, hydration, and input
-  handoff before `feature/dsp-p2p-sticky-service-centre-leases`.
+- `feature/dsp-osr-outbound-route-launch` replaces the earlier direct P2P queue-consumer proposal.
+  It must establish common OSR outbound launch and hydration without bypassing warehouse transport.
+- `feature/dsp-warehouse-transport-routing` then maps destination intent to physical paths and
+  station-local arrival queues before P2P-local consumption or sticky leases are added.
+
+### `feature/dsp-osr-outbound-route-launch`
+
+Status: detailed plan ready; implementation not started.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+
+Purpose:
+
+- Feed all destination-specific operational targets into one globally ordered OSR outbound launch
+  queue.
+- Preserve target IDs as route destination intent without placing totes into station-local queues.
+- Hydrate detached physical totes at the OSR outbound boundary into a bounded generic transport
+  queue.
+- Establish the correct boundary for later warehouse routing and station-arrival work.
+
+Follow-on planning target:
+
+- `feature/dsp-warehouse-transport-routing` after this route-launch branch is complete; P2P local
+  queue consumption and sticky leases follow physical station-arrival boundaries.
 
 ## Current Assumptions
 
 - `master` is the integration base for scheduler branches.
-- The OSR may contain physical totes from several authorized service centres. Service-centre isolation through sticky ownership on each P2P line is the planned follow-on after operational route-target integration.
+- The OSR may contain physical totes from several authorized service centres. Service-centre isolation through sticky ownership on each P2P line is deferred until warehouse transport can deliver totes to P2P-local arrival queues.
 - Once sticky ownership exists, a P2P line must not accept another service centre until it is fully quiescent and its current outbound tote is closed.
 - Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
 - Adapted preparation orders may contain lines for multiple pharmacies.

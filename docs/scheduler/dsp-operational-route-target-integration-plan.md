@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-operational-route-target-integration`
 
-Status: implementation complete and verified; awaiting merge.
+Status: implementation complete, verified, and merged.
 
 ## Purpose
 
@@ -457,7 +457,7 @@ Required scenarios:
 1. A Third Party candidate leaves OSR and appears exactly once in the configured Third Party queue.
 2. Two ADAPTED candidates selected for different benches enter their exact bench queues; target IDs
    are not swapped or inferred from station type.
-3. A P2P candidate enters the configured P2P ingress queue.
+3. A P2P candidate enters the configured compatibility route-target queue.
 4. A full selected queue blocks evaluation without invoking the handler or changing inventory and
    lifecycle state.
 5. Capacity consumed after worker evaluation but before command application causes live target
@@ -549,14 +549,17 @@ Final verified contracts:
 
 ## Follow-On Branch
 
-Reassessment result: create a narrow queue-consumer/hydration branch before sticky leases:
+Post-merge architectural reassessment found that a direct P2P queue-consumer would incorrectly
+couple the OSR to a station that is physically near the end of the warehouse route. The replacement
+feature is:
 
 ```text
-feature/dsp-p2p-route-entry-queue-consumer
+feature/dsp-osr-outbound-route-launch
 ```
 
-The P2P ingress queue currently retains non-rendering release requests and is not consumed by a real
-P2P line. The next slice must define deterministic dequeue, physical-tote hydration, and handoff to
-the existing P2P input waiting boundary. It must not implement sticky lease selection. After that
-slice is complete, create `feature/dsp-p2p-sticky-service-centre-leases` without changing queue,
-handler, inventory, or lifecycle commit semantics.
+Its detailed plan is `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`. It introduces one
+shared OSR outbound launch boundary, preserves the selected target as destination intent, and
+hydrates a detached tote before warehouse transport routing. A later
+`feature/dsp-warehouse-transport-routing` branch will deliver totes to station-local arrival
+queues. P2P-local consumption and sticky service-centre leases must follow that physical arrival
+boundary.
