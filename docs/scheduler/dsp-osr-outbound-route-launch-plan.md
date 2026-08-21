@@ -2,7 +2,8 @@
 
 Branch: `feature/dsp-osr-outbound-route-launch`
 
-Status: plan ready; implementation not started.
+Status: implementation complete and verified; focused/full automated suites and legacy
+visual/reset smoke checks are green.
 
 ## Purpose
 
@@ -559,13 +560,36 @@ Architecture verification:
 
 Before branch closure:
 
-- [ ] mark this plan implementation complete and verified;
-- [ ] record final destination, shared-launch, hydration, and transport-boundary contracts;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] confirm focused/full tests and legacy visual/reset smoke checks are green;
-- [ ] create a decision-complete plan for physical warehouse transport routing and station-arrival
+- [x] mark this plan implementation complete and record automated verification;
+- [x] record final destination, shared-launch, hydration, and transport-boundary contracts;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] confirm focused and full automated test suites are green;
+- [x] confirm legacy P2P, Adapting, Third Party, and `ALT+R` visual/reset smoke checks are green;
+- [x] create a decision-complete plan for physical warehouse transport routing and station-arrival
   boundaries before any P2P queue-consumer or sticky-lease work.
+
+## Implemented Outcome
+
+- `OperationalRouteDestination` and `OsrOutboundRouteLaunchRequest` preserve the exact selected
+  station/target and release request without carrying route geometry or station-local state.
+- All production destination targets feed one bounded `OsrOutboundRouteLaunchQueue`; one captured
+  shared capacity snapshot gates every target during an operational evaluation.
+- Operational command application remains downstream-first: shared launch acceptance precedes OSR
+  departure and lifecycle activation at one authoritative simulation time.
+- `LoadPlanOsrOutboundToteHydrator` resolves the exact existing load plan and creates a detached
+  `RoutedPhysicalTote`; it does not plan bags, publish renderables, or invoke destination machinery.
+- `OsrOutboundRouteLaunchController` hydrates at most one FIFO head per update into one bounded
+  `OsrOutboundTransportQueue`. Transport backpressure prevents allocation; expected hydration
+  failures retain the exact launch head for deterministic retry.
+- Physical ID is exact across manifest, release request, load plan, tote, renderable, and route
+  follower. Destination and release-time provenance remain attached to the same physical payload.
+- P2P, Adapting, and Third Party are destination metadata only at this boundary. No station-local
+  queue, tipper, machine controller, or scene publication occurs during release or hydration.
+- Legacy target-specific route-entry queues remain available only through the explicit compatibility
+  runtime path.
+- Focused launch/transport/release/scheduler/lifecycle/OSR tests, the complete Gradle suite, and
+  legacy P2P, Adapting, Third Party, and `ALT+R` visual/reset smoke checks are green.
 
 ## Preserved Contracts For Physical Transport Routing
 

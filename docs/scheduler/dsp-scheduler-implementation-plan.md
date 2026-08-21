@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, and operational route-target integration are complete, verified, and merged. OSR outbound route launch is the current planned feature on `feature/dsp-osr-outbound-route-launch`; it separates destination intent from physical station arrival before warehouse transport routing is implemented.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, and operational route-target integration are complete, verified, and merged. OSR outbound route launch is complete and verified on `feature/dsp-osr-outbound-route-launch`, with focused/full automated suites and legacy visual/reset checks green; it is awaiting merge. Physical warehouse transport routing is the next feature and has a decision-complete plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -716,7 +716,8 @@ Follow-on planning target:
 
 ### `feature/dsp-osr-outbound-route-launch`
 
-Status: detailed plan ready; implementation not started.
+Status: implementation complete and verified; focused/full automated suites and legacy visual/reset
+smoke checks are green. Awaiting merge.
 
 Detailed implementation doc:
 
@@ -731,10 +732,47 @@ Purpose:
   queue.
 - Establish the correct boundary for later warehouse routing and station-arrival work.
 
+Implemented contracts:
+
+- One shared bounded launch FIFO preserves exact release order across Third Party, Adapting, and
+  P2P destinations.
+- Shared launch acceptance remains upstream of OSR departure and lifecycle activation.
+- Detached hydration resolves an existing exact load plan and preserves physical identity across
+  request, plan, tote, renderable, and route follower.
+- A bounded generic transport FIFO accepts at most one hydrated head per simulation update.
+- Full transport prevents hydration allocation; expected hydration failure leaves both queues
+  unchanged for deterministic retry.
+- No destination station queue, tipper, machine controller, or scene publication is touched.
+
 Follow-on planning target:
 
-- `feature/dsp-warehouse-transport-routing` after this route-launch branch is complete; P2P local
-  queue consumption and sticky leases follow physical station-arrival boundaries.
+- `feature/dsp-warehouse-transport-routing`, with detailed plan at
+  `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local queue consumption and sticky
+  leases follow physical station-arrival boundaries.
+
+### `feature/dsp-warehouse-transport-routing`
+
+Status: decision-complete plan ready; implementation starts from updated `master` after the route
+launch branch is merged.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+
+Purpose:
+
+- Publish detached outbound totes onto a common OSR outbound route through one simulation-owned
+  ingress boundary.
+- Map exact destination target IDs to route topology and destination-aware transfer decisions.
+- Track physical totes in flight without exposing mutable route state to the scheduler worker.
+- Stop and hand off arrived totes into bounded station-local arrival queues.
+- Preserve physical travel between OSR and P2P; no destination may be populated directly by OSR
+  release or hydration.
+
+Follow-on planning target:
+
+- P2P-local arrival consumption and sticky service-centre leases only after physical arrival is
+  proven. Adapting and Third Party consumers can then use the same station-arrival contract.
 
 ## Current Assumptions
 
