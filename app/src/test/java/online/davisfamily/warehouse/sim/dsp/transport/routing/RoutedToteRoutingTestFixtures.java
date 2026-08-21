@@ -59,6 +59,17 @@ final class RoutedToteRoutingTestFixtures {
                         false));
     }
 
+    static RenderableObject renderable(String id) {
+        return RenderableObject.create(
+                id,
+                null,
+                anchorMesh(),
+                new Mat4.ObjectTransformation(
+                        0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
+                triangleIndex -> 0,
+                false);
+    }
+
     private static InboundToteManifest manifest(String physicalToteId) {
         return new InboundToteManifest(
                 new PhysicalToteId(physicalToteId),
@@ -73,14 +84,7 @@ final class RoutedToteRoutingTestFixtures {
     }
 
     private static Tote tote(String physicalToteId) {
-        RenderableObject renderable = RenderableObject.create(
-                physicalToteId,
-                null,
-                anchorMesh(),
-                new Mat4.ObjectTransformation(
-                        0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
-                triangleIndex -> 0,
-                false);
+        RenderableObject renderable = renderable(physicalToteId);
         RouteSegment routeSegment = routeSegment("route-" + physicalToteId, 1f);
         return new Tote(
                 physicalToteId,
