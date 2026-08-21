@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, and physical OSR processing release are complete, verified, and merged. Dependency-ready operational release is complete and verified on `feature/dsp-dependency-ready-operational-release`, pending merge. The next planning target is operational route-target integration.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, and dependency-ready operational release are complete, verified, and merged. Operational route-target integration is the current planned feature on `feature/dsp-operational-route-target-integration`.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -630,7 +630,7 @@ Follow-on planning target:
 
 ### `feature/dsp-dependency-ready-operational-release`
 
-Status: implementation complete and verified; pending merge to `master`.
+Status: implementation complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -669,7 +669,11 @@ Follow-on planning target:
 
 ### `feature/dsp-operational-route-target-integration`
 
-Status: next feature; detailed plan not yet created.
+Status: detailed plan ready; implementation not started.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-operational-route-target-integration-plan.md`
 
 Purpose:
 
@@ -678,11 +682,28 @@ Purpose:
 - Preserve downstream-first acceptance and simulation-thread mutation.
 - Keep sticky service-centre ownership and active-line pharmacy affinity out of this integration slice.
 
+Fixed implementation shape:
+
+- Route-entry targets are bounded, simulation-owned, non-rendering FIFO queues of exact
+  `OsrProcessingReleaseRequest` values.
+- Candidate-specific live station admission is resolved on the simulation thread and captured in
+  the immutable operational snapshot with the selected queue target ID.
+- Target queue capacity is checked in the snapshot and revalidated during handler application.
+- A production runtime composition wires fresh snapshots, scheduler evaluation, target registry,
+  downstream-first command handling, and the operational controller.
+- Third Party, Adapting, and P2P targets are covered; EMPTY, MANUAL, renderable hydration, sticky
+  leases, and line affinity remain out of scope.
+
+Follow-on planning target:
+
+- `feature/dsp-p2p-sticky-service-centre-leases`, subject to the route-target branch's final
+  queue-consumer/hydration reassessment.
+
 ## Current Assumptions
 
 - `master` is the integration base for scheduler branches.
-- The OSR may contain physical totes from several authorized service centres; service-centre isolation is enforced through sticky ownership on each P2P line.
-- A P2P line cannot accept another service centre until it is fully quiescent and its current outbound tote is closed.
+- The OSR may contain physical totes from several authorized service centres. Service-centre isolation through sticky ownership on each P2P line is the planned follow-on after operational route-target integration.
+- Once sticky ownership exists, a P2P line must not accept another service centre until it is fully quiescent and its current outbound tote is closed.
 - Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
 - Adapted preparation orders may contain lines for multiple pharmacies.
 - Logical order sheets use `orderId + sheetNumber`; physical inbound totes use 12N `transportContainer` and are represented separately.

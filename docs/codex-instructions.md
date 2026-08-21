@@ -8,15 +8,16 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
-4. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
-5. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
-6. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-7. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-8. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-9. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-10. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-11. `docs/machines/phase-1-stations-roadmap.md`
+3. The current route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
+4. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+5. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+6. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+7. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+8. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+9. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+10. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+11. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+12. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -86,7 +87,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, `feature/dsp-rate-limited-service-centre-supply`, and `feature/dsp-osr-processing-release` are complete, verified, and merged. `feature/dsp-dependency-ready-operational-release` is complete and verified pending merge, with its decision-complete plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`. The next feature is production operational route-target integration. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, `feature/dsp-rate-limited-service-centre-supply`, `feature/dsp-osr-processing-release`, and `feature/dsp-dependency-ready-operational-release` are complete, verified, and merged. `feature/dsp-operational-route-target-integration` is the current feature and has a decision-complete plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -174,7 +175,7 @@ Completed scheduler work:
 - `feature/renderable-visibility-lifecycle`
 - `feature/machine-wait-queues`
 - `feature/dsp-scheduler-thread`
-- `feature/dsp-dependency-ready-operational-release` (complete and verified; pending merge)
+- `feature/dsp-dependency-ready-operational-release`
 
 Current scheduler decisions:
 
@@ -228,8 +229,8 @@ Known Phase 1 machine/station work:
 - operational simulation clock: complete, verified, and merged
 - rate-limited service-centre supply: complete, verified, and merged
 - physical OSR processing release: complete, verified, and merged
-- dependency-ready operational release: complete and verified; pending merge
-- operational route-target integration: next feature to plan and implement
+- dependency-ready operational release: complete, verified, and merged
+- operational route-target integration: detailed plan ready; current feature branch
 - sticky P2P service-centre leases: follow-on after route-target integration
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
