@@ -2,8 +2,9 @@
 
 Branch: `feature/dsp-warehouse-transport-routing`
 
-Status: decision-complete plan ready. Start from updated `master` after
-`feature/dsp-osr-outbound-route-launch` is verified and merged.
+Status: implementation complete and verified. Focused regression and full test suites are green;
+the warehouse transport visual scene and deterministic reset reconstruction are green. Awaiting
+merge to `master`.
 
 ## Purpose
 
@@ -45,6 +46,28 @@ This branch does not consume P2P arrivals into `TipperInputQueue`, assign sticky
 choose among five P2P lines, process Adapting or Third Party visits, implement post-station
 continuation, model tote collision/spacing, construct the full production warehouse, implement
 Exception routing, calibrate conveyor timing, or process a full day's dataset.
+
+## Implemented Outcome
+
+- Exact destination target IDs resolve to simulation-owned topology through
+  `WarehouseRouteCatalog`.
+- `RouteBoundDetachedOutboundToteFactory` creates closed, detached physical totes on one common
+  route entry without publishing them.
+- `WarehouseTransportIngressController` is the only boundary that publishes a hydrated tote and
+  registers it in flight; source removal happens only after both operations succeed.
+- `WarehouseTransportInFlightRegistry` retains one exact `RoutedPhysicalTote` per active physical
+  ID and exposes immutable route, motion, destination, and pending-arrival state.
+- `WarehouseTransferRoutingTable` and `DestinationAwareTransferTargetDecisionStrategy` select
+  explicit branch/continue outcomes from active destination metadata.
+- `WarehouseTransportArrivalController` holds terminal detections and transfers exact payload
+  ownership into bounded station-local queues only when capacity is available.
+- `DspWarehouseTransportRuntimeFactory` composes launch, hydration, publication, transfer strategy,
+  terminal arrival, and station queue boundaries without exposing live topology to scheduler
+  workers.
+- `--scene=dsp-warehouse-transport` proves one common entry, mixed Third Party/Adapting/P2P
+  routing, transfer animation, terminal backpressure, queue-capacity recovery, inspection, and
+  reset reconstruction. Queue-owned totes use a rig-only display slot so a blocked terminal tote
+  remains visually distinct.
 
 ## Required Reading
 
@@ -585,13 +608,13 @@ Architecture verification:
 
 Before branch closure:
 
-- [ ] mark this plan implementation complete and verified;
-- [ ] record final topology, publication, in-flight, transfer-decision, and arrival contracts;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] confirm focused/full tests and visual/reset checks are green;
-- [ ] create the next detailed plan only after reassessing whether P2P-local arrival consumption
-  and sticky service-centre leases should be one branch or two.
+- [x] mark this plan implementation complete and verified;
+- [x] record final topology, publication, in-flight, transfer-decision, and arrival contracts;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] confirm focused/full tests and visual/reset checks are green;
+- [x] reassess whether P2P-local arrival consumption and sticky service-centre leases should be one
+  branch or two before creating the next detailed plan.
 
 Proposed commit message: `Complete warehouse transport routing feature`
 
@@ -609,12 +632,15 @@ Proposed commit message: `Complete warehouse transport routing feature`
 
 ## Follow-On Decision
 
-After this branch is green and merged, reassess and plan either:
+The reassessment is complete. Use two branches in this order:
 
 ```text
 feature/dsp-p2p-arrival-consumer
 feature/dsp-p2p-sticky-line-leases
 ```
 
-as separate branches, or one combined branch only if the arrival-consumer API cannot be tested
-meaningfully without lease selection. Do not start either before physical arrival boundaries exist.
+The arrival consumer can be tested meaningfully behind an explicit local admission callback: it
+must preserve exact routed payload identity, defer without dequeuing when local admission is closed,
+and adapt an accepted P2P arrival into the existing `TipperInputQueue` boundary. The later lease
+branch supplies authoritative service-centre admission and line selection without changing station
+arrival queue ownership or transport routing.

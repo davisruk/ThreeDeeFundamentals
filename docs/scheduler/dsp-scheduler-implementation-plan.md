@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, and operational route-target integration are complete, verified, and merged. OSR outbound route launch is complete and verified on `feature/dsp-osr-outbound-route-launch`, with focused/full automated suites and legacy visual/reset checks green; it is awaiting merge. Physical warehouse transport routing is the next feature and has a decision-complete plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, and OSR outbound route launch are complete, verified, and merged. Physical warehouse transport routing and station-arrival boundaries are complete and verified on `feature/dsp-warehouse-transport-routing` and await merge. The next planning target is `feature/dsp-p2p-arrival-consumer`; sticky service-centre leases follow as a separate branch.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -716,8 +716,7 @@ Follow-on planning target:
 
 ### `feature/dsp-osr-outbound-route-launch`
 
-Status: implementation complete and verified; focused/full automated suites and legacy visual/reset
-smoke checks are green. Awaiting merge.
+Status: complete, verified, and merged.
 
 Detailed implementation doc:
 
@@ -747,13 +746,13 @@ Implemented contracts:
 Follow-on planning target:
 
 - `feature/dsp-warehouse-transport-routing`, with detailed plan at
-  `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local queue consumption and sticky
-  leases follow physical station-arrival boundaries.
+  `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local arrival consumption follows
+  physical station-arrival boundaries, then sticky leases follow as a separate branch.
 
 ### `feature/dsp-warehouse-transport-routing`
 
-Status: decision-complete plan ready; implementation starts from updated `master` after the route
-launch branch is merged.
+Status: implementation complete and verified; focused regression and full test suites, focused
+visual transport behavior, and deterministic reset reconstruction are green. Awaiting merge.
 
 Detailed implementation doc:
 
@@ -769,10 +768,26 @@ Purpose:
 - Preserve physical travel between OSR and P2P; no destination may be populated directly by OSR
   release or hydration.
 
+Implemented contracts:
+
+- One common route-entry segment owns publication of all detached routed totes.
+- Destination-aware transfer decisions use exact active target metadata and existing standalone
+  transfer-machine mechanics.
+- One in-flight registry owns exact routed payloads until terminal arrival succeeds.
+- Terminal sensors are the only writers to bounded Third Party, Adapting, and P2P station-arrival
+  queues; full queues retain held pending totes for deterministic retry.
+- Immutable route, ingress, in-flight, arrival, and station queue snapshots support inspection and
+  tests without exposing live topology to scheduler workers.
+- The focused `dsp-warehouse-transport` scene proves mixed routing and visually separates a
+  queue-owned P2P tote from a capacity-blocked terminal tote.
+
 Follow-on planning target:
 
-- P2P-local arrival consumption and sticky service-centre leases only after physical arrival is
-  proven. Adapting and Third Party consumers can then use the same station-arrival contract.
+- `feature/dsp-p2p-arrival-consumer` first, using an explicit local admission callback so a closed
+  P2P boundary defers without dequeuing the station arrival payload.
+- `feature/dsp-p2p-sticky-line-leases` second, supplying authoritative service-centre admission and
+  line selection through that boundary.
+- Adapting and Third Party consumers can later use the same station-arrival contract.
 
 ## Current Assumptions
 

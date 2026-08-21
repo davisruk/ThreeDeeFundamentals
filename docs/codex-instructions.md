@@ -8,7 +8,7 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The next warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+3. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
 4. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
 5. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
 6. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
@@ -89,7 +89,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through `feature/dsp-operational-route-target-integration` are complete, verified, and merged. `feature/dsp-osr-outbound-route-launch` is complete and verified and awaits merge. Its contracts are recorded in `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`: OSR release feeds one shared launch queue, detached hydration feeds one generic transport queue, and neither boundary places work directly into a station-local or P2P queue. Warehouse transport routing and station-arrival boundaries are next and have a decision-complete plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`. P2P-local consumption and sticky leases come later. Exception Station behavior remains separate later work.
+The operational scheduler foundations through OSR outbound route launch are complete, verified, and merged. Physical warehouse transport routing and bounded station-arrival queues are complete and verified on `feature/dsp-warehouse-transport-routing` and await merge. Their contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`: all destinations share one launch/publication path, exact active destination metadata drives transfer decisions, and terminal sensors alone hand exact routed payloads to station-local queues. The next plan should cover P2P-local arrival consumption behind an explicit admission callback. Sticky service-centre line leases follow in a separate branch. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -182,10 +182,11 @@ Completed scheduler work:
 - `feature/dsp-osr-processing-release`
 - `feature/dsp-dependency-ready-operational-release`
 - `feature/dsp-operational-route-target-integration`
+- `feature/dsp-osr-outbound-route-launch`
 
 Current completed and verified branch awaiting merge:
 
-- `feature/dsp-osr-outbound-route-launch`
+- `feature/dsp-warehouse-transport-routing`
 
 Current scheduler decisions:
 
@@ -211,6 +212,8 @@ Current scheduler decisions:
 - Direct picks update fulfilment tote plans. ADAPTED Third Party preparation participates in the existing Adapting store/collect lifecycle and is covered by an integration test through ASSOCIATED collection.
 - The `third-party` debug scene and inspection cover stopping, pass-through, downstream routing, and `ALT+R` reset. Focused tests, the complete suite, and visual verification are green.
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
+- Warehouse transport ingress is the sole publication boundary after detached hydration. Transfer decisions use exact active destination metadata, and terminal sensors are the sole writers to bounded station-local routed-tote queues.
+- Full station-arrival queues retain held pending totes in flight for deterministic retry. Do not bypass this boundary when adding P2P, Adapting, or Third Party consumers.
 - Machine wait queues are now the scheduler release boundary for the integrated debug P2P path:
   - scheduler release admission answers whether a tote can enter station waiting space
   - machine processing admission remains local to the machine/controller
@@ -241,9 +244,10 @@ Known Phase 1 machine/station work:
 - physical OSR processing release: complete, verified, and merged
 - dependency-ready operational release: complete, verified, and merged
 - operational route-target integration: complete, verified, and merged
-- OSR outbound route launch and physical-tote hydration: complete and verified; awaiting merge
-- warehouse transport routing and station-arrival boundaries: next feature; decision-complete plan ready
-- P2P-local queue consumption and sticky service-centre leases: deferred until physical arrival exists
+- OSR outbound route launch and physical-tote hydration: complete, verified, and merged
+- warehouse transport routing and station-arrival boundaries: complete and verified; awaiting merge
+- P2P-local arrival consumption: next planning target
+- sticky service-centre leases: separate follow-on after P2P arrival consumption
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

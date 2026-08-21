@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, and route-target foundations are complete, verified, and merged. Generic OSR outbound route launch is complete and verified on `feature/dsp-osr-outbound-route-launch`, with focused/full automated suites and legacy visual/reset checks green; it preserves station targets as destination intent while detached hydration occurs at the OSR outbound boundary. The branch is awaiting merge. Physical warehouse transport routing and station-arrival queues are next, with a decision-complete plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`. P2P-local consumption and sticky leases remain later work.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, and OSR outbound launch foundations are complete, verified, and merged. Physical warehouse transport routing and bounded station-arrival queues are complete and verified on `feature/dsp-warehouse-transport-routing` and await merge. The next planning target is a P2P-local arrival consumer behind an explicit admission callback; sticky service-centre line leases follow in a separate branch.
 
 Read:
 
@@ -129,6 +129,12 @@ Current scheduler decisions:
 - `DspOperationalReleaseRuntimeFactory` composes fresh physical/operational snapshots, a supplied
   synchronous or threaded evaluation source, the exact route-target registry, and downstream-first
   command handling without owning external simulation state.
+- Warehouse transport ingress is the only publication boundary for detached routed totes. Exact
+  active destination metadata drives transfer decisions, and terminal sensors alone hand exact
+  payloads into bounded station-local arrival queues.
+- A full station-arrival queue retains the tote as held, pending in-flight work and retries without
+  republishing or changing destination. The transport debug scene presents queue-owned and pending
+  P2P totes in distinct visual positions without changing their logical route/queue state.
 - Machine wait queues now separate scheduler release admission from machine processing admission in the integrated debug P2P path:
   - release admission means there is station input waiting space
   - machine processing admission remains local to the downstream machine
@@ -173,10 +179,12 @@ The agreed next programme is split into short-lived branches from `master`:
 8. physical OSR processing release;
 9. dependency-ready operational release and pharmacy-grouped ranking;
 10. production operational route-target integration;
-11. P2P route-entry queue consumption and physical-tote hydration;
-12. sticky P2P service-centre leases;
-13. deadline-aware elastic line allocation;
-14. full-day analysis, metrics, and inspection.
+11. OSR outbound route launch and physical-tote hydration;
+12. physical warehouse transport and station-arrival queues;
+13. P2P-local arrival consumption;
+14. sticky P2P service-centre leases;
+15. deadline-aware elastic line allocation;
+16. full-day analysis, metrics, and inspection.
 
 Each branch must have its own decision-complete, step-based plan before implementation. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
@@ -192,9 +200,10 @@ Current programme position:
 - physical OSR processing release: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-osr-processing-release-plan.md`;
 - dependency-ready operational release and pharmacy-grouped ranking: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`;
 - production operational route-target integration: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`;
-- OSR outbound route launch and hydration: complete and verified; awaiting merge;
-- warehouse transport routing and station-arrival boundaries: next feature, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
-- P2P-local queue consumption and sticky service-centre leases: follow physical transport arrival;
+- OSR outbound route launch and hydration: complete, verified, and merged;
+- warehouse transport routing and station-arrival boundaries: complete and verified; awaiting merge, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
+- P2P-local arrival consumption: next planning target;
+- sticky service-centre leases: separate branch after the arrival-consumer boundary exists;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -243,9 +252,10 @@ Planned Phase 1 order:
 - physical OSR processing release: complete, verified, and merged
 - dependency-ready operational release: complete, verified, and merged
 - operational route-target integration: complete, verified, and merged
-- OSR outbound route launch and hydration: complete and verified; awaiting merge
-- warehouse transport routing and station-arrival boundaries: next planned feature
-- P2P-local queue consumption and sticky service-centre leases: deferred until physical arrival exists
+- OSR outbound route launch and hydration: complete, verified, and merged
+- warehouse transport routing and station-arrival boundaries: complete and verified; awaiting merge
+- P2P-local arrival consumption: next planning target
+- sticky service-centre leases: separate follow-on after P2P arrival consumption
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 
