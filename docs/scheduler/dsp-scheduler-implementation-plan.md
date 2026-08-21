@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, and physical OSR processing release are complete, verified, and merged. Dependency-ready operational release is the current planned feature on `feature/dsp-dependency-ready-operational-release`.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, and physical OSR processing release are complete, verified, and merged. Dependency-ready operational release is complete and verified on `feature/dsp-dependency-ready-operational-release`, pending merge. The next planning target is operational route-target integration.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -630,7 +630,7 @@ Follow-on planning target:
 
 ### `feature/dsp-dependency-ready-operational-release`
 
-Status: detailed plan ready; implementation not started.
+Status: implementation complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -652,9 +652,31 @@ Explicit non-goals:
 - no deadline-aware elastic line allocation;
 - no production visual target migration, renderables, calibrated timing, or full-day run.
 
+Implemented contracts to preserve:
+
+- Physical candidates join exact manifest and logical-sheet identity without collapsing repeated manifests.
+- ADAPTED and FULL_PACK are independently eligible; ASSOCIATED checks only its own ADAPTED prepared-line keys.
+- First-route-entry admission and explicit selected target gate release; downstream stations do not gate OSR entry.
+- Ranking chooses the highest-priority service-centre cohort containing eligible work, then stable pharmacy group and deterministic physical source order, with no order-type priority.
+- The pure scheduler emits one typed physical command plus observable typed blocks.
+- Operational synchronous/threaded sources preserve immutable worker evaluation; the simulation-thread controller applies through `OsrProcessingReleaseCommandHandler` without legacy logical release mutation.
+- Fresh snapshots drive retry after deferral, and stale commands are rejected by live handler revalidation without duplicate downstream mutation.
+
 Follow-on planning target:
 
-- sticky P2P service-centre leases, subject to reassessment of route-target integration readiness.
+- `feature/dsp-operational-route-target-integration`, because no production `OsrProcessingReleaseTarget` currently consumes operational release requests.
+- `feature/dsp-p2p-sticky-service-centre-leases` follows after route-target integration.
+
+### `feature/dsp-operational-route-target-integration`
+
+Status: next feature; detailed plan not yet created.
+
+Purpose:
+
+- Connect operational first-route target IDs to real station waiting/admission boundaries.
+- Add production `OsrProcessingReleaseTarget` adapters and runtime assembly for the operational controller.
+- Preserve downstream-first acceptance and simulation-thread mutation.
+- Keep sticky service-centre ownership and active-line pharmacy affinity out of this integration slice.
 
 ## Current Assumptions
 

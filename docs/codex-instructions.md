@@ -8,7 +8,7 @@ Read these documents before starting:
 
 1. `docs/codex-context.md`
 2. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-3. The current operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+3. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
 4. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
 5. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
 6. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
@@ -86,7 +86,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, `feature/dsp-rate-limited-service-centre-supply`, and `feature/dsp-osr-processing-release` are complete, verified, and merged. `feature/dsp-dependency-ready-operational-release` is the current feature and has a decision-complete plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`. Exception Station behavior remains separate later work.
+`feature/dsp-bag-planning-provenance`, `feature/dsp-outbound-tote-allocation`, `feature/dsp-osr-physical-inventory`, `feature/dsp-operational-simulation-clock`, `feature/dsp-rate-limited-service-centre-supply`, and `feature/dsp-osr-processing-release` are complete, verified, and merged. `feature/dsp-dependency-ready-operational-release` is complete and verified pending merge, with its decision-complete plan at `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`. The next feature is production operational route-target integration. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -116,7 +116,7 @@ Completed OSR physical-inventory behavior:
 - EMPTY startup authorization is separate from physical occupancy and consumes no slot.
 - `OsrPhysicalInventory` is simulation-thread-owned; readers use immutable `OsrInventorySnapshot` values.
 - Inventory admission/departure, lifecycle registration/activation, and scheduler order status remain separate.
-- Future physical release must commit `recordDeparture(...)` only after downstream acceptance succeeds.
+- Physical release commits `recordDeparture(...)` only after downstream acceptance succeeds.
 - Rate-limited supply operates per physical manifest and uses inventory admission APIs rather than replacing inventory state.
 
 Completed rate-limited supply behavior:
@@ -139,7 +139,18 @@ Completed physical OSR processing-release behavior:
 - `ReleasePhysicalToteFromOsrCommand` remains separate from the legacy order-centric debug command.
 - `OsrProcessingReleaseCommandHandler` revalidates live state, accepts downstream first, then commits `recordDeparture(...)` followed by lifecycle `activate(...)` using one simulation time.
 - Rejected, deferred, stale, or failed target applications leave inventory and lifecycle unchanged.
-- Pharmacy-grouped ranking, scheduler emission of the physical command, sticky P2P leases, and EMPTY/AV02 allocation remain follow-on work.
+- Production route-target integration, sticky P2P leases, and EMPTY/AV02 allocation remain follow-on work.
+
+Completed dependency-ready operational release behavior:
+
+- Build candidates by exact physical manifest and logical sheet identity; never collapse repeated manifests.
+- ADAPTED and FULL_PACK are independently eligible. ASSOCIATED requires only its own prepared ADAPTED line keys and no active same-sheet physical assignment.
+- Gate OSR departure on the first route-entry station and an explicit selected target; later stations retain their own local admission gates.
+- Rank the highest-priority service-centre cohort containing eligible work, then stable pharmacy group and deterministic physical source order. Do not add order-type priority.
+- Rank multi-pharmacy ADAPTED work once at its earliest configured pharmacy group.
+- Emit at most one typed physical command per pure evaluation and retain typed block reasons for inspection.
+- Apply commands on the simulation thread through `OsrProcessingReleaseCommandHandler`; never call legacy logical `markReleased(...)`.
+- Rebuild fresh snapshots after deferral or rejection. Live handler revalidation rejects stale commands without duplicate downstream mutation.
 
 Completed operational-clock behavior:
 
@@ -163,6 +174,7 @@ Completed scheduler work:
 - `feature/renderable-visibility-lifecycle`
 - `feature/machine-wait-queues`
 - `feature/dsp-scheduler-thread`
+- `feature/dsp-dependency-ready-operational-release` (complete and verified; pending merge)
 
 Current scheduler decisions:
 
@@ -174,9 +186,8 @@ Current scheduler decisions:
 - Keep `OrderType` and `ToteType` distinct:
   - `OrderType` controls start location, dependencies, routing intent, and lifecycle
   - `ToteType` controls physical carrier role/capability
-- Process service centres as whole release windows:
-  - do not mix totes from different service centres, except naturally at the last/first boundary
-  - if the active service centre is blocked, hold the window rather than skipping ahead
+- The legacy debug scheduler retains its global service-centre-window behavior for compatibility.
+- Operational physical release chooses the highest-priority service-centre cohort that contains eligible work. If a higher-priority centre is wholly blocked, eligible work from a lower-priority centre may proceed.
 - P2P admission is candidate-specific because tote processing depends on the candidate tote load plan.
 - Scheduler evaluation now runs through an evaluation source boundary:
   - `SynchronousSchedulerEvaluationSource` remains available as the fallback path
@@ -217,7 +228,9 @@ Known Phase 1 machine/station work:
 - operational simulation clock: complete, verified, and merged
 - rate-limited service-centre supply: complete, verified, and merged
 - physical OSR processing release: complete, verified, and merged
-- dependency-ready operational release: detailed plan ready; current feature branch
+- dependency-ready operational release: complete and verified; pending merge
+- operational route-target integration: next feature to plan and implement
+- sticky P2P service-centre leases: follow-on after route-target integration
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

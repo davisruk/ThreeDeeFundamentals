@@ -2,7 +2,8 @@
 
 Branch: `feature/dsp-dependency-ready-operational-release`
 
-Status: plan ready; implementation not started.
+Status: implementation complete and verified. Focused coverage, the complete Gradle suite,
+and Step 10 visual/reset smoke checks are green.
 
 ## Purpose
 
@@ -636,11 +637,44 @@ Visual smoke tests:
 
 Before branch closure:
 
-- [ ] update this plan status to implementation complete and verified;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] record final operational snapshot, ranking, command, and controller contracts;
-- [ ] reassess whether the next branch is `feature/dsp-p2p-sticky-service-centre-leases` or an intervening route-target integration slice.
+- [x] update this plan status to implementation complete and verified;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] record final operational snapshot, ranking, command, and controller contracts;
+- [x] reassess whether the next branch is `feature/dsp-p2p-sticky-service-centre-leases` or an intervening route-target integration slice.
+
+## Verified Outcome
+
+- `DspOperationalReleaseSnapshotFactory` joins each stored `PhysicalToteId` to its exact
+  manifest and logical `OrderSheetKey`, while retaining repeated physical manifests.
+- Stable pharmacy groups are derived from the complete inbound manifest catalog. A
+  multi-pharmacy ADAPTED candidate is ranked once at its earliest configured group.
+- ADAPTED and FULL_PACK are independently eligible. ASSOCIATED is blocked only by its
+  own missing ADAPTED prepared-line keys and any active same-sheet physical assignment.
+- Eligibility checks only the first route-entry station and requires an explicit selected
+  target. Downstream stations continue to gate their own later handoffs.
+- Ranking first chooses the highest-priority service-centre cohort containing eligible
+  work, then pharmacy group and deterministic physical source order. It has no order-type
+  priority; a wholly blocked higher-priority centre does not block eligible lower-priority work.
+- `DspOperationalReleaseScheduler` is pure and emits at most one exact
+  `ReleasePhysicalToteFromOsrCommand` plus typed observable blocks.
+- Operational synchronous and named platform-thread evaluation sources preserve the
+  immutable worker boundary and one evaluation in flight.
+- `DspOperationalReleaseController` applies commands only on the simulation thread through
+  `OsrProcessingReleaseCommandHandler`; it never calls legacy logical `markReleased(...)`.
+- Applied, deferred, rejected, and stale decisions preserve the established downstream-first
+  inventory/lifecycle commit rules and are reevaluated from fresh snapshots.
+- Reconstruction restores startup inventory, lifecycle, evaluation, and application state.
+
+The route-target reassessment found no production `OsrProcessingReleaseTarget`
+implementation; all current implementations are test fixtures. The next branch should be:
+
+```text
+feature/dsp-operational-route-target-integration
+```
+
+That slice should connect operational route-entry target IDs and requests to real station
+waiting/admission boundaries before sticky P2P service-centre leases are introduced.
 
 ## Preserved Contracts For Follow-On Work
 
@@ -674,10 +708,15 @@ Before branch closure:
 
 ## Follow-On Branch
 
-After this branch is green and merged, reassess whether the next feature should be:
+After this branch is merged, implement:
 
 ```text
-feature/dsp-p2p-sticky-service-centre-leases
+feature/dsp-operational-route-target-integration
 ```
 
-That feature must publish authoritative per-line lease, quiescence, and open-output-tote state; prevent cross-service-centre admission; add active-line pharmacy affinity to ranking/allocation; and preserve selected P2P identity across downstream routing. If no production route-entry targets can yet consume `OsrProcessingReleaseRequest`, create a small route-target integration branch before lease work rather than hiding adapters inside the lease policy.
+No production route-entry target currently consumes `OsrProcessingReleaseRequest`, so the
+integration slice is required. After it is green and merged, create
+`feature/dsp-p2p-sticky-service-centre-leases`. Lease work must publish authoritative
+per-line lease, quiescence, and open-output-tote state; prevent cross-service-centre
+admission; add active-line pharmacy affinity to ranking/allocation; and preserve selected
+P2P identity across downstream routing.
