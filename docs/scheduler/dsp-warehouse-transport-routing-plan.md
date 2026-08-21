@@ -231,7 +231,8 @@ route connections and configured transfer-target edges. Never infer reachability
 coordinates or labels.
 
 Tests use a small shared-entry topology with Third Party, Adapting, and P2P terminals and cover all
-validation, lookup, reachability, ordering, and snapshot immutability.
+identity/configuration validation, lookup, ordering, disconnected-transfer terminals, and snapshot
+immutability. Complete reachability remains Step 6 work.
 
 Ask the user to run:
 

@@ -50,6 +50,15 @@ final class RoutedToteRoutingTestFixtures {
                 tote.getRenderable());
     }
 
+    static RouteSegment routeSegment(String label, float length) {
+        return new RouteSegment(
+                label,
+                new LinearSegment3(
+                        new Vec3(0f, 0f, 0f),
+                        new Vec3(length, 0f, 0f),
+                        false));
+    }
+
     private static InboundToteManifest manifest(String physicalToteId) {
         return new InboundToteManifest(
                 new PhysicalToteId(physicalToteId),
@@ -72,12 +81,7 @@ final class RoutedToteRoutingTestFixtures {
                         0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
                 triangleIndex -> 0,
                 false);
-        RouteSegment routeSegment = new RouteSegment(
-                "route-" + physicalToteId,
-                new LinearSegment3(
-                        new Vec3(0f, 0f, 0f),
-                        new Vec3(1f, 0f, 0f),
-                        false));
+        RouteSegment routeSegment = routeSegment("route-" + physicalToteId, 1f);
         return new Tote(
                 physicalToteId,
                 new RouteFollower(physicalToteId, routeSegment, 0f, 1d),
