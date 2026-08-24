@@ -5,10 +5,13 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 
 public record P2pLineAllocationRequest(
         PhysicalToteId physicalToteId,
@@ -16,7 +19,8 @@ public record P2pLineAllocationRequest(
         List<String> pharmacyIds,
         boolean p2pFirstRouteStation,
         P2pLineLeaseCatalogSnapshot lineCatalog,
-        Map<OperationalRouteDestination, Boolean> routeAdmissionByDestination) {
+        Map<OperationalRouteDestination, Boolean> routeAdmissionByDestination,
+        Optional<P2pElasticAllocationSnapshot> elasticAllocation) {
 
     public P2pLineAllocationRequest {
         if (physicalToteId == null) {
@@ -32,6 +36,35 @@ public record P2pLineAllocationRequest(
         }
         routeAdmissionByDestination = copyAdmissions(
                 routeAdmissionByDestination, lineCatalog);
+        if (elasticAllocation == null) {
+            throw new IllegalArgumentException("elasticAllocation must not be null");
+        }
+        elasticAllocation.ifPresent(allocation -> {
+            List<P2pLineId> catalogLineIds = lineCatalog.lines().stream()
+                    .map(line -> line.definition().lineId())
+                    .toList();
+            if (!allocation.configuredLineIds().equals(catalogLineIds)) {
+                throw new IllegalArgumentException(
+                        "elastic allocation lines must match the request line catalog");
+            }
+        });
+    }
+
+    public P2pLineAllocationRequest(
+            PhysicalToteId physicalToteId,
+            String serviceCentreId,
+            List<String> pharmacyIds,
+            boolean p2pFirstRouteStation,
+            P2pLineLeaseCatalogSnapshot lineCatalog,
+            Map<OperationalRouteDestination, Boolean> routeAdmissionByDestination) {
+        this(
+                physicalToteId,
+                serviceCentreId,
+                pharmacyIds,
+                p2pFirstRouteStation,
+                lineCatalog,
+                routeAdmissionByDestination,
+                Optional.empty());
     }
 
     public boolean routeAdmissible(OperationalRouteDestination destination) {

@@ -39,12 +39,26 @@ public record P2pElasticAllocationSnapshot(
                     "serviceCentres must not be null or contain null");
         }
         Set<String> serviceCentreIds = new LinkedHashSet<>();
+        Set<P2pLineId> classifiedLineIds = new LinkedHashSet<>();
         for (P2pServiceCentreLineDemandSnapshot serviceCentre : serviceCentres) {
             if (!serviceCentreIds.add(serviceCentre.serviceCentreId())) {
                 throw new IllegalArgumentException("serviceCentre IDs must be distinct");
             }
             if (!serviceCentre.deadline().evaluatedAt().equals(evaluatedAt)) {
                 throw new IllegalArgumentException("all deadlines must match evaluatedAt");
+            }
+            List<P2pLineId> ownedLineIds = java.util.stream.Stream.concat(
+                    serviceCentre.feedingOwnedLineIds().stream(),
+                    serviceCentre.drainingSurplusLineIds().stream()).toList();
+            if (!configuredLineIds.containsAll(ownedLineIds)) {
+                throw new IllegalArgumentException(
+                        "classified owner lines must be configured allocation lines");
+            }
+            for (P2pLineId lineId : ownedLineIds) {
+                if (!classifiedLineIds.add(lineId)) {
+                    throw new IllegalArgumentException(
+                            "a configured line must not be classified for multiple owners");
+                }
             }
         }
         serviceCentres = List.copyOf(serviceCentres);
