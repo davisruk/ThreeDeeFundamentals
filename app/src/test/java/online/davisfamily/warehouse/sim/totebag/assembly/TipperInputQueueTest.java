@@ -52,6 +52,25 @@ class TipperInputQueueTest {
     }
 
     @Test
+    void shouldReportWhetherToteIsQueued() {
+        TipperInputQueue queue = new TipperInputQueue("tipper-input", 1);
+
+        assertFalse(queue.contains("tote-a"));
+        queue.enqueue(payload("tote-a"));
+        assertTrue(queue.contains("tote-a"));
+        queue.dequeuePayload();
+        assertFalse(queue.contains("tote-a"));
+    }
+
+    @Test
+    void shouldRejectInvalidContainsIdentity() {
+        TipperInputQueue queue = new TipperInputQueue("tipper-input", 1);
+
+        assertThrows(IllegalArgumentException.class, () -> queue.contains(null));
+        assertThrows(IllegalArgumentException.class, () -> queue.contains(" "));
+    }
+
+    @Test
     void shouldExposeSnapshot() {
         TipperInputQueue queue = new TipperInputQueue("tipper-input", 2);
         queue.enqueue(payload("tote-a"));
@@ -84,9 +103,29 @@ class TipperInputQueueTest {
     @Test
     void shouldRejectEnqueueWhenFull() {
         TipperInputQueue queue = new TipperInputQueue("tipper-input", 1);
-        queue.enqueue(payload("tote-a"));
+        TipperTotePayload existing = payload("tote-a");
+        TipperTotePayload rejected = payload("tote-b");
+        queue.enqueue(existing);
 
-        assertThrows(IllegalStateException.class, () -> queue.enqueue(payload("tote-b")));
+        assertThrows(IllegalStateException.class, () -> queue.enqueue(rejected));
+
+        assertEquals(ToteMotionState.MOVING, rejected.getTote().getInteractionMode());
+        assertSame(existing, queue.peekPayload());
+        assertEquals(java.util.List.of("tote-a"), queue.snapshot().toteIds());
+    }
+
+    @Test
+    void shouldRejectDuplicateBeforeChangingCandidateMotionOrExistingPayload() {
+        TipperInputQueue queue = new TipperInputQueue("tipper-input", 2);
+        TipperTotePayload existing = payload("tote-a");
+        TipperTotePayload duplicate = payload("tote-a");
+        queue.enqueue(existing);
+
+        assertThrows(IllegalArgumentException.class, () -> queue.enqueue(duplicate));
+
+        assertEquals(ToteMotionState.MOVING, duplicate.getTote().getInteractionMode());
+        assertSame(existing, queue.peekPayload());
+        assertEquals(java.util.List.of("tote-a"), queue.snapshot().toteIds());
     }
 
     private static TipperTotePayload payload(String toteId) {

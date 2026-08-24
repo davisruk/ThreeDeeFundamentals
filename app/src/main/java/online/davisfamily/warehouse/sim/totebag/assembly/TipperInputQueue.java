@@ -19,11 +19,26 @@ public class TipperInputQueue {
         return queue.canAccept();
     }
 
+    public boolean contains(String toteId) {
+        if (toteId == null || toteId.isBlank()) {
+            throw new IllegalArgumentException("toteId must not be null or blank");
+        }
+        return payloadsByToteId.containsKey(toteId);
+    }
+
     public void enqueue(TipperTotePayload payload) {
         if (payload == null) {
             throw new IllegalArgumentException("payload must not be null");
         }
         String toteId = payload.getTote().getId();
+        if (contains(toteId)) {
+            throw new IllegalArgumentException(
+                    "Tote is already queued at tipper input: " + toteId);
+        }
+        if (!queue.canAccept()) {
+            throw new IllegalStateException("Tipper input queue is full");
+        }
+
         payload.getTote().setInteractionMode(ToteMotionState.HELD);
         queue.enqueue(toteId);
         payloadsByToteId.put(toteId, payload);
