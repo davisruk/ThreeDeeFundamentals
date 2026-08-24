@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, and physical warehouse transport foundations are complete, verified, and merged. The active branch is `feature/dsp-p2p-arrival-consumer`: it consumes exact P2P station-arrival payloads into the existing tipper input boundary behind an explicit immutable admission callback. Sticky service-centre line leases follow in a separate branch.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, and physical warehouse transport foundations are complete, verified, and merged. P2P-local arrival consumption is complete and verified on the active `feature/dsp-p2p-arrival-consumer` branch, pending merge. It preserves exact station-arrival payload identity through immutable local admission and the existing tipper-input boundary. Sticky service-centre line leases follow in a separate branch after this merge.
 
 Read:
 
@@ -136,6 +136,14 @@ Current scheduler decisions:
 - A full station-arrival queue retains the tote as held, pending in-flight work and retries without
   republishing or changing destination. The transport debug scene presents queue-owned and pending
   P2P totes in distinct visual positions without changing their logical route/queue state.
+- P2P station-arrival consumers now transfer exact routed tote, renderable, and load-plan ownership
+  into bounded `TipperInputQueue` instances only after local immutable admission and capacity both
+  permit. Blocked retries do not mutate route-follower state or source FIFO ownership.
+- `TipperInputQueueController` remains the sole queue-to-tipper processing boundary. Production
+  contained-pack layout uses supplied tote interior geometry, and existing visual synchronization
+  creates pack renderables lazily.
+- The warehouse transport scene exposes P2P station-arrival and tipper-input occupancies separately;
+  its delayed placeholder drains only tipper input and never bypasses station-arrival ownership.
 - Machine wait queues now separate scheduler release admission from machine processing admission in the integrated debug P2P path:
   - release admission means there is station input waiting space
   - machine processing admission remains local to the downstream machine
@@ -203,8 +211,8 @@ Current programme position:
 - production operational route-target integration: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`;
 - OSR outbound route launch and hydration: complete, verified, and merged;
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
-- P2P-local arrival consumption: planned on the active branch, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
-- sticky service-centre leases: separate branch after the arrival-consumer boundary exists;
+- P2P-local arrival consumption: complete and verified on the active branch, pending merge, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
+- sticky service-centre leases: next separate branch after the arrival-consumer branch is merged;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -255,8 +263,8 @@ Planned Phase 1 order:
 - operational route-target integration: complete, verified, and merged
 - OSR outbound route launch and hydration: complete, verified, and merged
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
-- P2P-local arrival consumption: active planned branch
-- sticky service-centre leases: separate follow-on after P2P arrival consumption
+- P2P-local arrival consumption: complete and verified on the active branch, pending merge
+- sticky service-centre leases: next separate branch after P2P arrival consumption is merged
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

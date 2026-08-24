@@ -7,7 +7,7 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The active P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
+2. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
 3. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 4. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
 5. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
@@ -90,7 +90,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through physical warehouse transport are complete, verified, and merged. Their contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`: all destinations share one launch/publication path, exact active destination metadata drives transfer decisions, and terminal sensors alone hand exact routed payloads to station-local queues. The active `feature/dsp-p2p-arrival-consumer` branch is governed by `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`. It must preserve exact routed payload identity while handing locally admitted P2P arrivals to the existing tipper input queue. Sticky service-centre line leases follow in a separate branch. Exception Station behavior remains separate later work.
+The operational scheduler foundations through physical warehouse transport are complete, verified, and merged. Their contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`: all destinations share one launch/publication path, exact active destination metadata drives transfer decisions, and terminal sensors alone hand exact routed payloads to station-local queues. P2P-local arrival consumption is complete and verified on the active branch, pending merge, under `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`. Exact routed payloads pass through immutable local admission into bounded tipper-input ownership without bypassing warehouse transport or the existing queue-to-tipper controller. Sticky service-centre line leases follow in a separate branch after merge. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -185,9 +185,9 @@ Completed scheduler work:
 - `feature/dsp-operational-route-target-integration`
 - `feature/dsp-osr-outbound-route-launch`
 
-Current active planned branch:
+Current active branch:
 
-- `feature/dsp-p2p-arrival-consumer`
+- `feature/dsp-p2p-arrival-consumer`: implementation complete and verified; pending merge
 
 Current scheduler decisions:
 
@@ -215,6 +215,13 @@ Current scheduler decisions:
 - Renderable visibility/lifecycle support is complete. Hidden renderables are skipped in update/draw/pick, and pack visuals use visibility instead of off-screen translation in current debug paths.
 - Warehouse transport ingress is the sole publication boundary after detached hydration. Transfer decisions use exact active destination metadata, and terminal sensors are the sole writers to bounded station-local routed-tote queues.
 - Full station-arrival queues retain held pending totes in flight for deterministic retry. Do not bypass this boundary when adding P2P, Adapting, or Third Party consumers.
+- P2P arrival consumers process one exact station FIFO head per update. Local admission or full
+  tipper input retains source ownership and route-follower state; acceptance preserves exact tote,
+  renderable, and load-plan identity before verified source dequeue.
+- Do not call `ToteTrackTipperFlowController.acceptNextTote(...)` from a station-arrival consumer.
+  `TipperInputQueueController` remains the sole queue-to-tipper boundary.
+- Use supplied tote interior geometry through `ContainedPackP2pTipperPayloadFactory`; do not create
+  pack renderables in an arrival-controller update.
 - Machine wait queues are now the scheduler release boundary for the integrated debug P2P path:
   - scheduler release admission answers whether a tote can enter station waiting space
   - machine processing admission remains local to the machine/controller
@@ -247,8 +254,8 @@ Known Phase 1 machine/station work:
 - operational route-target integration: complete, verified, and merged
 - OSR outbound route launch and physical-tote hydration: complete, verified, and merged
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
-- P2P-local arrival consumption: active planned branch
-- sticky service-centre leases: separate follow-on after P2P arrival consumption
+- P2P-local arrival consumption: complete and verified on the active branch, pending merge
+- sticky service-centre leases: next separate branch after P2P arrival consumption is merged
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

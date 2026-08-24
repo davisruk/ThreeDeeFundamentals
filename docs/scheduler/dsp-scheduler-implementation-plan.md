@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, and physical warehouse transport routing are complete, verified, and merged. The active branch is `feature/dsp-p2p-arrival-consumer`, with its decision-complete plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`; sticky service-centre leases follow as a separate branch.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, and physical warehouse transport routing are complete, verified, and merged. P2P-local arrival consumption is complete and verified on `feature/dsp-p2p-arrival-consumer`, pending merge; sticky service-centre leases follow as a separate branch after that merge.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -746,8 +746,8 @@ Implemented contracts:
 Completed physical-routing feature:
 
 - `feature/dsp-warehouse-transport-routing`, with detailed plan at
-  `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local arrival consumption is now
-  planned separately, followed by sticky leases.
+  `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local arrival consumption was
+  implemented separately and is complete and verified pending merge, followed by sticky leases.
 
 ### `feature/dsp-warehouse-transport-routing`
 
@@ -781,17 +781,17 @@ Implemented contracts:
 - The focused `dsp-warehouse-transport` scene proves mixed routing and visually separates a
   queue-owned P2P tote from a capacity-blocked terminal tote.
 
-Follow-on planning target:
+Follow-on sequence:
 
-- `feature/dsp-p2p-arrival-consumer` first, using an explicit local admission callback so a closed
-  P2P boundary defers without dequeuing the station arrival payload.
+- `feature/dsp-p2p-arrival-consumer` is complete and verified pending merge. Its explicit local
+  admission callback lets a closed P2P boundary defer without dequeuing the station arrival payload.
 - `feature/dsp-p2p-sticky-line-leases` second, supplying authoritative service-centre admission and
   line selection through that boundary.
 - Adapting and Third Party consumers can later use the same station-arrival contract.
 
 ### `feature/dsp-p2p-arrival-consumer`
 
-Status: planned on the active branch.
+Status: implementation complete and verified on the active branch; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -803,6 +803,20 @@ Purpose:
 - Adapt the same routed tote, renderable, and load plan into the existing `TipperInputQueue`.
 - Preserve normal connected route movement into `ToteTrackTipperFlowController`.
 - Compose independent per-target consumers without implementing line selection or sticky leases.
+
+Implemented contracts:
+
+- Local immutable admission and bounded tipper-input capacity are revalidated after physical
+  station arrival without consuming directly from OSR or warehouse transport ingress.
+- Source ownership changes only after exact target acceptance, preserving tote, renderable, load
+  plan, route segment, distance, and direction through blocked retries.
+- Existing `TipperInputQueueController` and connected route following remain the only path into
+  tipper processing.
+- Production contained-pack layout uses supplied tote geometry; visual-source registration remains
+  lazy and separate from controller updates.
+- Independent P2P consumer bindings expose immutable ordered snapshots and do not select lines or
+  own service-centre leases.
+- Focused/full tests and transport/tote-to-bag visual/reset checks are green.
 
 ## Current Assumptions
 

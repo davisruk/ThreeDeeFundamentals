@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-p2p-arrival-consumer`
 
-Status: planned; implementation not started.
+Status: implementation complete and verified; pending merge to `master`.
 
 ## Purpose
 
@@ -419,15 +419,41 @@ Architecture verification:
 
 Before branch closure:
 
-- [ ] mark this plan implementation complete and verified;
-- [ ] record final admission, payload, route-continuity, ownership, and snapshot contracts;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] confirm focused/full tests and visual/reset checks are green;
+- [x] mark this plan implementation complete and verified;
+- [x] record final admission, payload, route-continuity, ownership, and snapshot contracts;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] confirm focused/full tests and visual/reset checks are green;
 - [ ] create the decision-complete plan for `feature/dsp-p2p-sticky-line-leases` only after this
-  branch is merged.
+  branch is merged; intentionally deferred until that prerequisite is satisfied.
 
 Proposed commit message: `Complete P2P arrival consumer feature`
+
+## Final Implemented Contract
+
+- One consumer owns one exact P2P destination and processes no more than its station-arrival FIFO
+  head per simulation update.
+- Immutable local admission is evaluated before target capacity. Deferred admission and full tipper
+  input leave source ownership and route-follower state unchanged for deterministic retry.
+- Acceptance preserves the exact `RoutedPhysicalTote`, `PhysicalToteId`, `Tote`, renderable, and
+  `ToteLoadPlan`; successful downstream acceptance precedes verified source dequeue.
+- `TipperInputQueueController` remains the sole boundary that releases accepted totes into
+  `ToteTrackTipperFlowController`; the arrival consumer never calls the tipper flow directly.
+- `P2pArrivalRouteBinding` validates deterministic object-identity connectivity without coordinate
+  inference or route mutation.
+- `ContainedPackP2pTipperPayloadFactory` derives contained-pack positions from supplied tote
+  interior geometry and the exact load plan. Pack renderables remain lazily created by existing
+  visual synchronization.
+- `TipperToSorterP2pArrivalAcceptedListener` provides the explicit visual-source registration
+  adapter for full P2P composition without placing rendering behavior in the core consumer.
+- Ordered immutable consumer and target snapshots expose destination, queue occupancy/capacity,
+  accepted IDs/counts, and stable blocked reasons without leaking mutable simulation objects.
+- Independent P2P bindings cannot block one another. Line selection and sticky service-centre
+  ownership remain deliberately outside this feature.
+- The `dsp-warehouse-transport` scene now drains only the bounded tipper-input placeholder, never
+  the station-arrival queue, and displays both ownership layers independently.
+- Focused tests, the complete Gradle suite, `dsp-warehouse-transport`, `tote-to-bag`, and `ALT+R`
+  reconstruction checks were green on 2026-08-24.
 
 ## Expected Final Contract
 
