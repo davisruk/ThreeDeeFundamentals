@@ -18,16 +18,32 @@ public final class P2pLeaseReleaseController implements SimulationController {
     private final List<P2pLineActivityProbe> activityProbes;
     private final P2pLineLeaseRegistry leaseRegistry;
     private final OutboundToteAllocator outboundToteAllocator;
+    private final P2pLeaseRetentionPolicy retentionPolicy;
 
     public P2pLeaseReleaseController(
             Supplier<P2pServiceCentreWorkSnapshot> workSnapshotSupplier,
             List<P2pLineActivityProbe> activityProbes,
             P2pLineLeaseRegistry leaseRegistry,
             OutboundToteAllocator outboundToteAllocator) {
+        this(
+                workSnapshotSupplier,
+                activityProbes,
+                leaseRegistry,
+                outboundToteAllocator,
+                new CompletionOnlyP2pLeaseRetentionPolicy());
+    }
+
+    public P2pLeaseReleaseController(
+            Supplier<P2pServiceCentreWorkSnapshot> workSnapshotSupplier,
+            List<P2pLineActivityProbe> activityProbes,
+            P2pLineLeaseRegistry leaseRegistry,
+            OutboundToteAllocator outboundToteAllocator,
+            P2pLeaseRetentionPolicy retentionPolicy) {
         if (workSnapshotSupplier == null
                 || activityProbes == null
                 || leaseRegistry == null
-                || outboundToteAllocator == null) {
+                || outboundToteAllocator == null
+                || retentionPolicy == null) {
             throw new IllegalArgumentException("P2P lease release controller inputs must not be null");
         }
         if (activityProbes.size() != leaseRegistry.definitions().size()
@@ -39,6 +55,7 @@ public final class P2pLeaseReleaseController implements SimulationController {
         this.activityProbes = List.copyOf(activityProbes);
         this.leaseRegistry = leaseRegistry;
         this.outboundToteAllocator = outboundToteAllocator;
+        this.retentionPolicy = retentionPolicy;
     }
 
     @Override
@@ -66,26 +83,40 @@ public final class P2pLeaseReleaseController implements SimulationController {
 
         P2pLineLeaseCatalogSnapshot leases = leaseRegistry.snapshot(activities);
         Duration time = simulationTime(context.getSimulationTimeSeconds());
-        for (P2pLineLeaseSnapshot line : leases.lines()) {
-            if (!line.leased()) {
-                continue;
-            }
-            String owner = line.serviceCentreId().orElseThrow();
-            if (work.hasRemainingWork(owner) || !line.activity().processingDrained()) {
-                continue;
-            }
-            if (line.activity().openOutboundTote().isPresent()) {
-                var closedTote = outboundToteAllocator.closeForApplicableWorkCompletion(
-                        line.definition().lineId(), time)
-                        .orElseThrow(() -> new IllegalStateException(
-                                "P2P activity reported an open outbound tote that could not be closed"));
-                leaseRegistry.recordOutboundToteClosure(
-                        line.definition().lineId(), closedTote);
-                return;
-            }
-            leaseRegistry.releaseLease(line.definition().lineId(), owner, line.activity());
+        var decision = retentionPolicy.firstTransition(leases, work);
+        if (decision.isEmpty()) {
             return;
         }
+        P2pLeaseRetentionDecision transition = decision.orElseThrow();
+        P2pLineLeaseSnapshot line = leases.findLine(transition.lineId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "lease retention policy selected an unknown P2P line"));
+        if (!line.serviceCentreId().filter(transition.serviceCentreId()::equals).isPresent()) {
+            throw new IllegalStateException(
+                    "lease retention policy selected a line with a different owner");
+        }
+        switch (transition.action()) {
+            case CLOSE_FOR_APPLICABLE_WORK_COMPLETION -> closeOutboundTote(
+                    line, time, true);
+            case CLOSE_FOR_SERVICE_CENTRE_CHANGE -> closeOutboundTote(
+                    line, time, false);
+            case RELEASE_LEASE -> leaseRegistry.releaseLease(
+                    transition.lineId(), transition.serviceCentreId(), line.activity());
+        }
+    }
+
+    private void closeOutboundTote(
+            P2pLineLeaseSnapshot line,
+            Duration time,
+            boolean applicableWorkComplete) {
+        var closedTote = (applicableWorkComplete
+                ? outboundToteAllocator.closeForApplicableWorkCompletion(
+                        line.definition().lineId(), time)
+                : outboundToteAllocator.closeForServiceCentreChange(
+                        line.definition().lineId(), time))
+                .orElseThrow(() -> new IllegalStateException(
+                        "P2P activity reported an open outbound tote that could not be closed"));
+        leaseRegistry.recordOutboundToteClosure(line.definition().lineId(), closedTote);
     }
 
     private static Duration simulationTime(double seconds) {
