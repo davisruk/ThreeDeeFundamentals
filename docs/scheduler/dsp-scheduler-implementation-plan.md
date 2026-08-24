@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, and physical warehouse transport routing are complete, verified, and merged. P2P-local arrival consumption is complete and verified on `feature/dsp-p2p-arrival-consumer`, pending merge; sticky service-centre leases follow as a separate branch after that merge.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, and P2P-local arrival consumption are complete, verified, and merged. Sticky P2P service-centre leases are the active planned branch; deadline-aware elastic line allocation follows separately.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -747,7 +747,7 @@ Completed physical-routing feature:
 
 - `feature/dsp-warehouse-transport-routing`, with detailed plan at
   `docs/scheduler/dsp-warehouse-transport-routing-plan.md`; P2P-local arrival consumption was
-  implemented separately and is complete and verified pending merge, followed by sticky leases.
+  implemented separately and is complete, verified, and merged, followed by sticky leases.
 
 ### `feature/dsp-warehouse-transport-routing`
 
@@ -783,7 +783,7 @@ Implemented contracts:
 
 Follow-on sequence:
 
-- `feature/dsp-p2p-arrival-consumer` is complete and verified pending merge. Its explicit local
+- `feature/dsp-p2p-arrival-consumer` is complete, verified, and merged. Its explicit local
   admission callback lets a closed P2P boundary defer without dequeuing the station arrival payload.
 - `feature/dsp-p2p-sticky-line-leases` second, supplying authoritative service-centre admission and
   line selection through that boundary.
@@ -791,7 +791,7 @@ Follow-on sequence:
 
 ### `feature/dsp-p2p-arrival-consumer`
 
-Status: implementation complete and verified on the active branch; pending merge to `master`.
+Status: implementation complete, verified, and merged to `master`.
 
 Detailed implementation doc:
 
@@ -818,10 +818,37 @@ Implemented contracts:
   own service-centre leases.
 - Focused/full tests and transport/tote-to-bag visual/reset checks are green.
 
+### `feature/dsp-p2p-sticky-line-leases`
+
+Status: planned on the active feature branch; implementation has not started.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
+
+Purpose:
+
+- Pin every physical tote requiring P2P to one exact line independently of its first route-entry
+  station.
+- Enforce optional sticky service-centre ownership at scheduling, command application, and physical
+  P2P arrival boundaries.
+- Prefer active-pharmacy affinity while retaining deterministic service-centre and source ranking.
+- Publish complete immutable P2P activity snapshots and release leases only after owner work,
+  processing, expected groups, bag output, and outbound tote state have drained.
+- Preserve the existing OSR-to-route-to-transport-to-station-to-tipper ownership chain.
+
+Deferred follow-on:
+
+- `feature/dsp-deadline-aware-elastic-line-allocation` will decide how many fully available lines a
+  service centre should receive based on workload and deadlines. It must reuse the sticky lease and
+  quiescence contracts rather than weakening them.
+
 ## Current Assumptions
 
 - `master` is the integration base for scheduler branches.
-- The OSR may contain physical totes from several authorized service centres. Service-centre isolation through sticky ownership on each P2P line is deferred until warehouse transport can deliver totes to P2P-local arrival queues.
+- The OSR may contain physical totes from several authorized service centres. The active sticky-line
+  lease slice must isolate those centres after warehouse transport delivers totes to P2P-local
+  arrival queues.
 - Once sticky ownership exists, a P2P line must not accept another service centre until it is fully quiescent and its current outbound tote is closed.
 - Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
 - Adapted preparation orders may contain lines for multiple pharmacies.

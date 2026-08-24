@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, and physical warehouse transport foundations are complete, verified, and merged. P2P-local arrival consumption is complete and verified on the active `feature/dsp-p2p-arrival-consumer` branch, pending merge. It preserves exact station-arrival payload identity through immutable local admission and the existing tipper-input boundary. Sticky service-centre line leases follow in a separate branch after this merge.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, and P2P-local arrival-consumer foundations are complete, verified, and merged. Arrival consumption preserves exact station payload identity through immutable local admission and the existing tipper-input boundary. Sticky P2P service-centre line leases are now planned on `feature/dsp-p2p-sticky-line-leases`; deadline-aware elastic line allocation follows separately.
 
 Read:
 
@@ -93,7 +93,8 @@ Read:
 4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 5. `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
 6. `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
-7. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+7. `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
+8. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
 8. `docs/machines/exceptions-station-requirements.md`
 9. `docs/machines/phase-1-stations-roadmap.md`
 
@@ -119,7 +120,7 @@ Current scheduler decisions:
 - The OSR may contain more than one authorized service centre. ADAPTED and FULL_PACK may process concurrently, and an ASSOCIATED/EMPTY order becomes eligible when its own preparation dependencies are terminal.
 - Operational release ranks only fully eligible work from the highest-priority service-centre cohort that has any eligible candidate; a wholly blocked higher-priority centre does not block eligible lower-priority work.
 - Candidate ranking is pharmacy-grouped and deterministic, with multi-pharmacy ADAPTED work ranked once at its earliest configured pharmacy group. There is no order-type priority.
-- P2P service-centre isolation through sticky line ownership remains follow-on work. A future line lease must not change service centre until the line is fully quiescent and its current outbound tote is closed.
+- P2P-local arrival consumption is complete, verified, and merged. Sticky line ownership is the active planned feature on `feature/dsp-p2p-sticky-line-leases`; a line must not change service centre until owner work is complete, the full processing path is quiescent, and its current outbound tote is closed.
 - The operational scheduler emits at most one exact physical release command. The simulation-thread controller applies it through `OsrProcessingReleaseCommandHandler` and never mutates legacy logical release status.
 - Operational first-route targets are bounded non-rendering FIFO queues of exact release requests.
 - Live candidate-specific station admission and selected queue capacity are captured into immutable
@@ -191,7 +192,7 @@ The agreed next programme is split into short-lived branches from `master`:
 11. OSR outbound route launch and physical-tote hydration;
 12. physical warehouse transport and station-arrival queues;
 13. P2P-local arrival consumption;
-14. sticky P2P service-centre leases;
+14. sticky P2P service-centre leases (active planned branch);
 15. deadline-aware elastic line allocation;
 16. full-day analysis, metrics, and inspection.
 
@@ -211,8 +212,9 @@ Current programme position:
 - production operational route-target integration: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-operational-route-target-integration-plan.md`;
 - OSR outbound route launch and hydration: complete, verified, and merged;
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
-- P2P-local arrival consumption: complete and verified on the active branch, pending merge, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
-- sticky service-centre leases: next separate branch after the arrival-consumer branch is merged;
+- P2P-local arrival consumption: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
+- sticky service-centre leases: active planned branch, with decision-complete plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
+- deadline-aware elastic line allocation: next separate branch after sticky leases are merged;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -263,8 +265,9 @@ Planned Phase 1 order:
 - operational route-target integration: complete, verified, and merged
 - OSR outbound route launch and hydration: complete, verified, and merged
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
-- P2P-local arrival consumption: complete and verified on the active branch, pending merge
-- sticky service-centre leases: next separate branch after P2P arrival consumption is merged
+- P2P-local arrival consumption: complete, verified, and merged
+- sticky service-centre leases: active planned branch
+- deadline-aware elastic line allocation: follows sticky leases as a separate branch
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 
