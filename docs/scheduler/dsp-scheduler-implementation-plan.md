@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, and P2P-local arrival consumption are complete, verified, and merged. Sticky P2P service-centre leases are the active planned branch; deadline-aware elastic line allocation follows separately.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, and P2P-local arrival consumption are complete, verified, and merged. Sticky P2P service-centre leases are complete and verified on their feature branch and await merge; deadline-aware elastic line allocation follows separately after that merge.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -820,7 +820,7 @@ Implemented contracts:
 
 ### `feature/dsp-p2p-sticky-line-leases`
 
-Status: planned on the active feature branch; implementation has not started.
+Status: implementation complete and verified on the feature branch; awaiting merge to `master`.
 
 Detailed implementation doc:
 
@@ -843,13 +843,24 @@ Deferred follow-on:
   service centre should receive based on workload and deadlines. It must reuse the sticky lease and
   quiescence contracts rather than weakening them.
 
+Verified contracts:
+
+- P2P-required physical totes are pinned once to an exact line before OSR departure, separately
+  from their first route-entry destination.
+- Lease selection is deterministic and prefers compatible owner/pharmacy affinity without allowing
+  a different service centre onto an owned line.
+- Command application commits leases and assignments; station arrival only revalidates them.
+- Complete line activity, remaining owner work, open outbound output, and expected groups all block
+  release. Output closure and lease release occur on separate simulation updates.
+- Focused/full tests and warehouse transport/tote-to-bag visual/reset checks are green.
+
 ## Current Assumptions
 
 - `master` is the integration base for scheduler branches.
-- The OSR may contain physical totes from several authorized service centres. The active sticky-line
-  lease slice must isolate those centres after warehouse transport delivers totes to P2P-local
-  arrival queues.
-- Once sticky ownership exists, a P2P line must not accept another service centre until it is fully quiescent and its current outbound tote is closed.
+- The OSR may contain physical totes from several authorized service centres. Sticky leases isolate
+  those centres after warehouse transport delivers totes to P2P-local arrival queues.
+- A P2P line must not accept another service centre until owner work is exhausted, the line is fully
+  quiescent, and its current outbound tote is closed.
 - Final dispatch orders/totes must be pharmacy-pure, but `pharmacyId` is line-level in 12N data.
 - Adapted preparation orders may contain lines for multiple pharmacies.
 - Logical order sheets use `orderId + sheetNumber`; physical inbound totes use 12N `transportContainer` and are represented separately.

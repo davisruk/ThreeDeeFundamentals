@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-p2p-sticky-line-leases`
 
-Status: planned; implementation has not started.
+Status: implementation complete and verified; awaiting merge to `master`.
 
 ## Purpose
 
@@ -44,6 +44,32 @@ one service centre deserves, reclaim surplus lines from a nonterminal service ce
 work, add full production geometry for five P2P lines, implement Adapting/Third Party consumers,
 implement Exception handling, calibrate station timings, or run a complete production day. Those
 remain later slices.
+
+## Verified Implementation Result
+
+- Five ordered P2P line definitions are composed without requiring five rendered assemblies.
+- Every P2P-required physical tote is assigned once to an exact line and destination independently
+  of its first route-entry target. Exact retries are idempotent and conflicting reassignment fails.
+- Operational selection prefers compatible owner/pharmacy affinity deterministically, while direct
+  P2P admission observes exact target capacity and earlier-station routes remain independently
+  backpressured at their eventual P2P arrival boundary.
+- Successful simulation-thread command application is the only lease-acquisition and assignment
+  commit boundary. Deferred, rejected, and stale releases mutate neither lease nor OSR ownership.
+- Warehouse transport carries the pinned assignment unchanged. Sticky local arrival admission
+  revalidates exact tote, line, destination, service centre, and current lease ownership without
+  mutating the lease.
+- Complete detached activity snapshots cover arrival, tipper input, active tote/discharge, pack
+  path, expected groups, bagging, receiver, and outbound tote state. Temporary machine idleness is
+  not treated as line quiescence.
+- Owner work remains authoritative until all known P2P manifests are consumed. Once processing is
+  drained, any open outbound tote closes on one update and the lease releases only on a later fully
+  quiescent update.
+- Runtime inspection exposes ordered ownership, active pharmacy, blockers, assignments, closure,
+  and transition details. The warehouse transport scene uses deterministic non-rendered line/output
+  placeholders; its final accepted tote intentionally remains in tipper input because that scene has
+  no downstream P2P assembly.
+- Focused tests, the full Gradle suite, warehouse transport and tote-to-bag visual checks, and
+  `ALT+R` reconstruction are green.
 
 ## Required Reading
 
@@ -560,11 +586,11 @@ Architecture verification:
 
 Before branch closure:
 
-- [ ] mark this plan implementation complete and verified;
-- [ ] record the final assignment, affinity, commit, arrival, quiescence, close, and release contracts;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] confirm focused/full tests and visual/reset checks are green;
+- [x] mark this plan implementation complete and verified;
+- [x] record the final assignment, affinity, commit, arrival, quiescence, close, and release contracts;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] confirm focused/full tests and visual/reset checks are green;
 - [ ] create the decision-complete plan for `feature/dsp-deadline-aware-elastic-line-allocation`
   only after this branch is merged.
 

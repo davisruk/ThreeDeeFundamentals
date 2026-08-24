@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, and P2P-local arrival-consumer foundations are complete, verified, and merged. Arrival consumption preserves exact station payload identity through immutable local admission and the existing tipper-input boundary. Sticky P2P service-centre line leases are now planned on `feature/dsp-p2p-sticky-line-leases`; deadline-aware elastic line allocation follows separately.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, and P2P-local arrival-consumer foundations are complete, verified, and merged. Arrival consumption preserves exact station payload identity through immutable local admission and the existing tipper-input boundary. Sticky P2P service-centre line leases are complete and verified on `feature/dsp-p2p-sticky-line-leases` and await merge; deadline-aware elastic line allocation follows separately after that merge.
 
 Read:
 
@@ -95,8 +95,8 @@ Read:
 6. `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
 7. `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
 8. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-8. `docs/machines/exceptions-station-requirements.md`
-9. `docs/machines/phase-1-stations-roadmap.md`
+9. `docs/machines/exceptions-station-requirements.md`
+10. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
@@ -120,7 +120,13 @@ Current scheduler decisions:
 - The OSR may contain more than one authorized service centre. ADAPTED and FULL_PACK may process concurrently, and an ASSOCIATED/EMPTY order becomes eligible when its own preparation dependencies are terminal.
 - Operational release ranks only fully eligible work from the highest-priority service-centre cohort that has any eligible candidate; a wholly blocked higher-priority centre does not block eligible lower-priority work.
 - Candidate ranking is pharmacy-grouped and deterministic, with multi-pharmacy ADAPTED work ranked once at its earliest configured pharmacy group. There is no order-type priority.
-- P2P-local arrival consumption is complete, verified, and merged. Sticky line ownership is the active planned feature on `feature/dsp-p2p-sticky-line-leases`; a line must not change service centre until owner work is complete, the full processing path is quiescent, and its current outbound tote is closed.
+- P2P-local arrival consumption is complete, verified, and merged. Sticky line ownership is complete
+  and verified on its feature branch: every P2P-required tote is pinned once to one exact line, and
+  that line cannot change service centre until owner work is complete, the full processing path is
+  quiescent, and its current outbound tote is closed.
+- Sticky line selection prefers compatible owner and active-pharmacy affinity deterministically.
+  Lease/assignment mutation occurs only during simulation-thread command application; physical P2P
+  arrival revalidates exact committed ownership without selecting or mutating a line.
 - The operational scheduler emits at most one exact physical release command. The simulation-thread controller applies it through `OsrProcessingReleaseCommandHandler` and never mutates legacy logical release status.
 - Operational first-route targets are bounded non-rendering FIFO queues of exact release requests.
 - Live candidate-specific station admission and selected queue capacity are captured into immutable
@@ -192,7 +198,7 @@ The agreed next programme is split into short-lived branches from `master`:
 11. OSR outbound route launch and physical-tote hydration;
 12. physical warehouse transport and station-arrival queues;
 13. P2P-local arrival consumption;
-14. sticky P2P service-centre leases (active planned branch);
+14. sticky P2P service-centre leases (complete and verified; awaiting merge);
 15. deadline-aware elastic line allocation;
 16. full-day analysis, metrics, and inspection.
 
@@ -213,8 +219,8 @@ Current programme position:
 - OSR outbound route launch and hydration: complete, verified, and merged;
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
 - P2P-local arrival consumption: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
-- sticky service-centre leases: active planned branch, with decision-complete plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
-- deadline-aware elastic line allocation: next separate branch after sticky leases are merged;
+- sticky service-centre leases: complete and verified on the feature branch, awaiting merge, with detailed plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
+- deadline-aware elastic line allocation: next separate branch after sticky leases are merged; its plan must reuse assignment pinning, full quiescence, and close-before-release contracts;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -266,8 +272,8 @@ Planned Phase 1 order:
 - OSR outbound route launch and hydration: complete, verified, and merged
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
 - P2P-local arrival consumption: complete, verified, and merged
-- sticky service-centre leases: active planned branch
-- deadline-aware elastic line allocation: follows sticky leases as a separate branch
+- sticky service-centre leases: complete and verified on the feature branch; awaiting merge
+- deadline-aware elastic line allocation: follows the sticky-lease merge as a separate branch
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

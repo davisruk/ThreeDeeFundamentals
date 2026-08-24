@@ -7,7 +7,7 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The active sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
+2. The completed sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
 3. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
 4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
 5. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
@@ -91,7 +91,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through P2P-local arrival consumption are complete, verified, and merged. Their transport contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md` and `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`: all destinations share one launch/publication path, terminal sensors alone hand exact routed payloads to station-local queues, and P2P arrivals pass through immutable local admission into bounded tipper-input ownership. Sticky service-centre line leases are the active planned feature under `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`. That work must keep eventual P2P assignment separate from the first route-entry destination, preserve the scheduler snapshot/command boundary, and enforce close-before-release quiescence. Deadline-aware elastic line allocation and Exception Station behavior remain separate later work.
+The operational scheduler foundations through P2P-local arrival consumption are complete, verified, and merged. Their transport contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md` and `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`: all destinations share one launch/publication path, terminal sensors alone hand exact routed payloads to station-local queues, and P2P arrivals pass through immutable local admission into bounded tipper-input ownership. Sticky service-centre line leases are complete and verified on their feature branch under `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md` and await merge. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. Deadline-aware elastic line allocation and Exception Station behavior remain separate later work.
 
 Completed bag-planning behavior:
 
@@ -144,7 +144,7 @@ Completed physical OSR processing-release behavior:
 - `ReleasePhysicalToteFromOsrCommand` remains separate from the legacy order-centric debug command.
 - `OsrProcessingReleaseCommandHandler` revalidates live state, accepts downstream first, then commits `recordDeparture(...)` followed by lifecycle `activate(...)` using one simulation time.
 - Rejected, deferred, stale, or failed target applications leave inventory and lifecycle unchanged.
-- Production route-target integration, sticky P2P leases, and EMPTY/AV02 allocation remain follow-on work.
+- Production route-target integration and sticky P2P leases are complete. EMPTY/AV02 allocation remains follow-on work.
 
 Completed dependency-ready operational release behavior:
 
@@ -188,7 +188,7 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-p2p-sticky-line-leases`: decision-complete plan created; implementation has not started
+- `feature/dsp-p2p-sticky-line-leases`: implementation complete and verified; awaiting merge to `master`
 
 Current scheduler decisions:
 
@@ -256,8 +256,8 @@ Known Phase 1 machine/station work:
 - OSR outbound route launch and physical-tote hydration: complete, verified, and merged
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
 - P2P-local arrival consumption: complete, verified, and merged
-- sticky service-centre leases: active planned branch
-- deadline-aware elastic line allocation: next separate branch after sticky leases are merged
+- sticky service-centre leases: complete and verified on the feature branch; awaiting merge
+- deadline-aware elastic line allocation: next separate branch after sticky leases are merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

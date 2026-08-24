@@ -15,6 +15,7 @@ import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.matrices.Vec4;
 import online.davisfamily.threedee.matrices.Vertex;
+import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.rendering.selection.SelectionManager;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities;
 import online.davisfamily.threedee.rendering.utilities.lines.BresenhamLineUtilities.ClippedLine;
@@ -194,6 +195,9 @@ public class DebugUtils {
 	        int x = 10;
 	        int y = 20;
 	        int line = 18;
+	        if (drawInspectionOverlay(g, image, tdelta, x, y, line)) {
+	            return;
+	        }
 	        int panelWidth = 420;
 	        
 	        g.setColor(new Color(0, 0, 0, 170));
@@ -267,6 +271,80 @@ public class DebugUtils {
 	    } finally {
 	        g.dispose();
 	    }
+	}
+
+	private boolean drawInspectionOverlay(
+	        Graphics2D g,
+	        BufferedImage image,
+	        double tdelta,
+	        int x,
+	        int y,
+	        int lineHeight) {
+	    RenderableObject selected = selectionManager.getSelected();
+	    List<String> inspectionLines = inspectionRegistry.describe(selected);
+	    if (inspectionLines.isEmpty()) {
+	        return false;
+	    }
+
+	    List<String> displayLines = new java.util.ArrayList<>();
+	    displayLines.add(String.format("Pos:   (%.3f, %.3f, %.3f)",
+	            camera.position.x, camera.position.y, camera.position.z));
+	    displayLines.add(String.format("FPS: %.3f", 1.0 / tdelta));
+	    displayLines.add("Selected object: " + selected.id);
+	    displayLines.add("Inspection:");
+	    displayLines.addAll(inspectionLines);
+	    int availableTextWidth = Math.max(1, image.getWidth() - x - 10);
+	    List<String> wrappedLines = displayLines.stream()
+	            .flatMap(value -> wrapLine(g, value, availableTextWidth).stream())
+	            .toList();
+
+	    int contentWidth = wrappedLines.stream()
+	            .mapToInt(value -> g.getFontMetrics().stringWidth(value))
+	            .max()
+	            .orElse(400);
+	    int panelWidth = Math.min(Math.max(0, image.getWidth() - 10), contentWidth + 20);
+	    int panelHeight = Math.min(
+	            Math.max(0, image.getHeight() - 10),
+	            wrappedLines.size() * lineHeight + 10);
+	    g.setColor(new Color(0, 0, 0, 170));
+	    g.fillRoundRect(5, 5, panelWidth, panelHeight, 10, 10);
+	    g.setColor(Color.WHITE);
+
+	    for (String displayLine : wrappedLines) {
+	        if (y > image.getHeight() - 10) {
+	            break;
+	        }
+	        g.drawString(displayLine, x, y);
+	        y += lineHeight;
+	    }
+	    return true;
+	}
+
+	private List<String> wrapLine(Graphics2D g, String value, int maximumWidth) {
+	    if (g.getFontMetrics().stringWidth(value) <= maximumWidth) {
+	        return List.of(value);
+	    }
+
+	    List<String> lines = new java.util.ArrayList<>();
+	    StringBuilder currentLine = new StringBuilder();
+	    for (String word : value.split(" ")) {
+	        String candidate = currentLine.isEmpty()
+	                ? word
+	                : currentLine + " " + word;
+	        if (!currentLine.isEmpty()
+	                && g.getFontMetrics().stringWidth(candidate) > maximumWidth) {
+	            lines.add(currentLine.toString());
+	            currentLine.setLength(0);
+	        }
+	        if (!currentLine.isEmpty()) {
+	            currentLine.append(' ');
+	        }
+	        currentLine.append(word);
+	    }
+	    if (!currentLine.isEmpty()) {
+	        lines.add(currentLine.toString());
+	    }
+	    return List.copyOf(lines);
 	}
 	
 	// untested - may cause exceptions when axis goes through the camera

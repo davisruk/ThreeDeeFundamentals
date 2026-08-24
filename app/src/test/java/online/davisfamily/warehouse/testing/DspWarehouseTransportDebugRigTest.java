@@ -64,6 +64,7 @@ class DspWarehouseTransportDebugRigTest {
         assertTrue(transportInspection.stream().anyMatch(line ->
                 line.startsWith("P2P lease warehouse-p2p-line-1:")
                         && line.contains("owner=104")
+                        && line.contains("pharmacy=pharmacy-104-1")
                         && line.contains("transport-p2p-1")
                         && line.contains("blockers=[")
                         && line.contains("closure=none")

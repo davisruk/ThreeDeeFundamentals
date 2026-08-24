@@ -59,6 +59,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseRegistry;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pArrivalAdmissionPolicy;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntime;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntimeFactory;
@@ -89,6 +90,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     private static final double RELEASE_INTERVAL_SECONDS = 3d;
     private static final double P2P_HOLD_SECONDS = 12d;
     private static final double ROUTE_SPEED = 1d;
+    private static final String DEBUG_ACTIVE_PHARMACY_ID = "pharmacy-104-1";
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
     private final OsrOutboundRouteLaunchQueue launchQueue =
@@ -218,9 +220,18 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
         }
         p2pLineDefinitions = List.copyOf(lineDefinitions);
         p2pLeaseRegistry = new P2pLineLeaseRegistry(p2pLineDefinitions);
+        P2pLineDefinition debugLine = p2pLineDefinitions.getFirst();
+        OutboundToteSnapshot debugOpenOutboundTote = new OutboundToteSnapshot(
+                new PhysicalToteId("warehouse-outbound-104-1"),
+                debugLine.lineId(),
+                Optional.of("104"),
+                Optional.of(DEBUG_ACTIVE_PHARMACY_ID),
+                10,
+                List.of(),
+                Optional.empty());
         Map<P2pLineId, P2pLineActivityProbe> activityProbes = new LinkedHashMap<>();
         activityProbes.put(
-                p2pLineDefinitions.getFirst().lineId(),
+                debugLine.lineId(),
                 () -> new P2pLineActivitySnapshot(
                         new P2pInputActivitySnapshot(
                                 p2pQueue.snapshot().occupancy(),
@@ -229,7 +240,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                                 0),
                         P2pPackPathActivitySnapshot.idle(),
                         P2pBaggingActivitySnapshot.idle(),
-                        Optional.empty()));
+                        Optional.of(debugOpenOutboundTote)));
         p2pLineDefinitions.stream().skip(1).forEach(definition ->
                 activityProbes.put(
                         definition.lineId(), P2pLineActivitySnapshot::idle));
@@ -245,7 +256,6 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                         adaptingTarget, TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION)),
                 entry(secondMachine, p2pDestination, TransferRoutingDecision.continueOnCurrentRoute()));
 
-        P2pLineDefinition debugLine = p2pLineDefinitions.getFirst();
         P2pPhysicalToteAssignment firstP2pAssignment = assignment(
                 "transport-p2p-1", debugLine);
         P2pPhysicalToteAssignment secondP2pAssignment = assignment(
