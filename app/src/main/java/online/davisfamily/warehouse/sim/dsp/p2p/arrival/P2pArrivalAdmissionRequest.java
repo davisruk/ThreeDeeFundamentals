@@ -68,7 +68,6 @@ public record P2pArrivalAdmissionRequest(
         }
 
         serviceCentreId = serviceCentreId.trim();
-        String normalizedServiceCentreId = serviceCentreId;
         Set<String> distinctPharmacyIds = new LinkedHashSet<>();
         for (String pharmacyId : pharmacyIds) {
             if (pharmacyId == null || pharmacyId.isBlank()) {
@@ -77,13 +76,6 @@ public record P2pArrivalAdmissionRequest(
             distinctPharmacyIds.add(pharmacyId.trim());
         }
         pharmacyIds = List.copyOf(new ArrayList<>(distinctPharmacyIds));
-        p2pAssignment.ifPresent(assignment -> {
-            if (!assignment.physicalToteId().equals(physicalToteId)
-                    || !assignment.serviceCentreId().equals(normalizedServiceCentreId)) {
-                throw new IllegalArgumentException(
-                        "P2P assignment must match the arrival physical identity and service centre");
-            }
-        });
     }
 
     public static P2pArrivalAdmissionRequest from(

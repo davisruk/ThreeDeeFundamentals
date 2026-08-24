@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.p2p.arrival;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -21,6 +22,7 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
 import online.davisfamily.warehouse.sim.tote.Tote;
@@ -65,16 +67,26 @@ final class P2pArrivalRuntimeTestFixtures {
             String physicalToteId,
             OperationalRouteDestination destination,
             RouteSegment terminal) {
+        return routedTote(physicalToteId, "104", destination, terminal, Optional.empty());
+    }
+
+    static RoutedPhysicalTote routedTote(
+            String physicalToteId,
+            String serviceCentreId,
+            OperationalRouteDestination destination,
+            RouteSegment terminal,
+            Optional<P2pPhysicalToteAssignment> p2pAssignment) {
         PhysicalToteId toteId = new PhysicalToteId(physicalToteId);
         InboundToteManifest manifest = new InboundToteManifest(
                 toteId,
                 new OrderSheetKey("order-" + physicalToteId, 1),
                 OrderType.FULL_PACK,
-                "104",
+                serviceCentreId,
                 List.of(new DspOrderItem("line-" + physicalToteId, "product-1", 1)),
                 0L);
         OsrOutboundRouteLaunchRequest request = new OsrOutboundRouteLaunchRequest(
-                new OsrProcessingReleaseRequest(manifest, Duration.ZERO),
+                new OsrProcessingReleaseRequest(
+                        manifest, Duration.ZERO, p2pAssignment),
                 destination);
         RenderableObject renderable = renderable(physicalToteId);
         Tote tote = new Tote(

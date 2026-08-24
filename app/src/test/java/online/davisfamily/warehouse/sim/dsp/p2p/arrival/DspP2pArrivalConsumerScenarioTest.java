@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -18,8 +19,15 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseRegistry;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pArrivalAdmissionPolicy;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
 import online.davisfamily.warehouse.sim.tote.Tote;
@@ -207,6 +215,78 @@ class DspP2pArrivalConsumerScenarioTest {
         assertEquals(1L, open.controller().snapshot().successfulAcceptanceCount());
     }
 
+    @Test
+    void shouldHoldMismatchedLeaseHeadWhileIndependentLineAdvancesThenRetry() {
+        P2pLineDefinition firstDefinition = new P2pLineDefinition(
+                new P2pLineId("line-1"), p2pDestination("p2p-1"));
+        P2pLineDefinition secondDefinition = new P2pLineDefinition(
+                new P2pLineId("line-2"), p2pDestination("p2p-2"));
+        P2pLineLeaseRegistry registry = new P2pLineLeaseRegistry(
+                List.of(firstDefinition, secondDefinition));
+        P2pPhysicalToteAssignment firstAssignment = assignment(
+                "arrival-1", "104", firstDefinition);
+        P2pPhysicalToteAssignment secondAssignment = assignment(
+                "arrival-2", "108", secondDefinition);
+        registry.acquireLease(
+                firstDefinition.lineId(), "104", P2pLineActivitySnapshot.idle());
+        registry.commitAssignment(firstAssignment);
+        registry.releaseLease(
+                firstDefinition.lineId(), "104", P2pLineActivitySnapshot.idle());
+        registry.acquireLease(
+                firstDefinition.lineId(), "108", P2pLineActivitySnapshot.idle());
+        registry.acquireLease(
+                secondDefinition.lineId(), "108", P2pLineActivitySnapshot.idle());
+        registry.commitAssignment(secondAssignment);
+        Map<P2pLineId, P2pLineActivitySnapshot> idleActivities = Map.of(
+                firstDefinition.lineId(), P2pLineActivitySnapshot.idle(),
+                secondDefinition.lineId(), P2pLineActivitySnapshot.idle());
+
+        LineFixture first = line(
+                "p2p-1",
+                new StickyP2pArrivalAdmissionPolicy(
+                        firstDefinition, () -> registry.snapshot(idleActivities)));
+        LineFixture second = line(
+                "p2p-2",
+                new StickyP2pArrivalAdmissionPolicy(
+                        secondDefinition, () -> registry.snapshot(idleActivities)));
+        RoutedPhysicalTote blocked = P2pArrivalRuntimeTestFixtures.routedTote(
+                "arrival-1",
+                "104",
+                first.destination(),
+                first.terminal(),
+                Optional.of(firstAssignment));
+        RoutedPhysicalTote permitted = P2pArrivalRuntimeTestFixtures.routedTote(
+                "arrival-2",
+                "108",
+                second.destination(),
+                second.terminal(),
+                Optional.of(secondAssignment));
+        first.source().enqueue(blocked);
+        second.source().enqueue(permitted);
+
+        SimulationWorld world = new SimulationWorld();
+        world.addController(first.controller());
+        world.addController(second.controller());
+        world.update(UPDATE_SECONDS);
+
+        assertTrue(first.source().contains(blocked.physicalToteId()));
+        assertFalse(first.input().contains(blocked.physicalToteId().value()));
+        assertEquals(StickyP2pArrivalAdmissionPolicy.LEASE_OWNER_MISMATCH,
+                first.controller().snapshot().policyReason());
+        assertFalse(second.source().contains(permitted.physicalToteId()));
+        assertTrue(second.input().contains(permitted.physicalToteId().value()));
+
+        registry.releaseLease(
+                firstDefinition.lineId(), "108", P2pLineActivitySnapshot.idle());
+        registry.acquireLease(
+                firstDefinition.lineId(), "104", P2pLineActivitySnapshot.idle());
+        world.update(UPDATE_SECONDS);
+
+        assertFalse(first.source().contains(blocked.physicalToteId()));
+        assertTrue(first.input().contains(blocked.physicalToteId().value()));
+        assertEquals(1L, first.controller().snapshot().successfulAcceptanceCount());
+    }
+
     private static void assertHeldAtSource(
             StationRoutedToteArrivalQueue source,
             TipperInputQueue input,
@@ -244,6 +324,17 @@ class DspP2pArrivalConsumerScenarioTest {
 
     private static OperationalRouteDestination p2pDestination(String targetId) {
         return new OperationalRouteDestination(StationType.P2P, targetId);
+    }
+
+    private static P2pPhysicalToteAssignment assignment(
+            String physicalToteId,
+            String serviceCentreId,
+            P2pLineDefinition line) {
+        return new P2pPhysicalToteAssignment(
+                new PhysicalToteId(physicalToteId),
+                serviceCentreId,
+                line.lineId(),
+                line.destination());
     }
 
     private static RouteSegment segment(String label, float startX, float endX) {
