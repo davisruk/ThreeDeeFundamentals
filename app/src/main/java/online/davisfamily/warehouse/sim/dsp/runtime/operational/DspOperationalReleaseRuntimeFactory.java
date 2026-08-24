@@ -16,6 +16,9 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteT
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.DspP2pStickyLeaseRuntime;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntime;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshot;
@@ -25,6 +28,78 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalRou
 import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockSnapshot;
 
 public final class DspOperationalReleaseRuntimeFactory {
+
+    public DspOperationalReleaseRuntime createElastic(
+            OperationalReleaseEvaluationSource evaluationSource,
+            OsrPhysicalInventory inventory,
+            InboundToteLifecycleController lifecycleController,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<WarehouseSchedulerSnapshot> logicalSnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            StationAdmissionResolver stationAdmissionResolver,
+            OperationalRouteTargetAdmissionCatalog routeTargetAdmissionCatalog,
+            DspP2pElasticAllocationRuntime elasticRuntime) {
+        requireNonNull(elasticRuntime, "elasticRuntime");
+        requireNonNull(evaluationSource, "evaluationSource");
+        requireNonNull(inventory, "inventory");
+        requireNonNull(lifecycleController, "lifecycleController");
+        requireNonNull(manifestCatalog, "manifestCatalog");
+        requireNonNull(logicalSnapshotSupplier, "logicalSnapshotSupplier");
+        requireNonNull(clockSnapshotSupplier, "clockSnapshotSupplier");
+        requireNonNull(stationAdmissionResolver, "stationAdmissionResolver");
+        requireNonNull(routeTargetAdmissionCatalog, "routeTargetAdmissionCatalog");
+        if (!evaluationSource.p2pAllocationProfileId()
+                .filter(P2pElasticAllocationSnapshot
+                        .DEADLINE_AWARE_ELASTIC_STICKY_LEASES::equals)
+                .isPresent()) {
+            throw new IllegalArgumentException(
+                    "Elastic runtime requires an elastic P2P evaluation source");
+        }
+        validateP2pTargets(routeTargetAdmissionCatalog, elasticRuntime.lineDefinitions());
+
+        OsrProcessingReleaseSnapshotFactory physicalSnapshotFactory =
+                new OsrProcessingReleaseSnapshotFactory();
+        DspOperationalReleaseSnapshotFactory operationalSnapshotFactory =
+                new DspOperationalReleaseSnapshotFactory();
+        OperationalCandidateRouteAdmissionFactory routeAdmissionFactory =
+                new OperationalCandidateRouteAdmissionFactory(
+                        new OperationalRouteEntrySelector(),
+                        stationAdmissionResolver,
+                        routeTargetAdmissionCatalog);
+
+        Supplier<DspOperationalReleaseSnapshot> operationalSnapshotSupplier = () -> {
+            WarehouseSchedulerSnapshot logicalSnapshot = logicalSnapshotSupplier.get();
+            if (logicalSnapshot == null) {
+                throw new IllegalStateException("logicalSnapshotSupplier returned null");
+            }
+            OsrProcessingReleaseSnapshot physicalSnapshot = physicalSnapshotFactory.create(
+                    inventory.snapshot(), lifecycleController.snapshot());
+            var elasticSnapshot = elasticRuntime.operationalSnapshot();
+            return operationalSnapshotFactory.create(
+                    physicalSnapshot,
+                    manifestCatalog,
+                    logicalSnapshot,
+                    routeAdmissionFactory,
+                    elasticSnapshot.leases(),
+                    routeTargetAdmissionCatalog.snapshotAdmissions().stream()
+                            .filter(admission -> admission.stationType() == StationType.P2P)
+                            .toList(),
+                    elasticSnapshot.allocation());
+        };
+
+        OsrProcessingReleaseCommandHandler commandHandler =
+                new OsrProcessingReleaseCommandHandler(
+                        inventory,
+                        lifecycleController,
+                        clockSnapshotSupplier,
+                        routeTargetAdmissionCatalog.processingReleaseTargetRegistry(),
+                        elasticRuntime.releaseAssignmentCommitter());
+        DspOperationalReleaseController controller = new DspOperationalReleaseController(
+                evaluationSource,
+                operationalSnapshotSupplier,
+                commandHandler);
+        return new DspOperationalReleaseRuntime(controller, routeTargetAdmissionCatalog);
+    }
 
     public DspOperationalReleaseRuntime createSticky(
             OperationalReleaseEvaluationSource evaluationSource,
@@ -45,7 +120,7 @@ public final class DspOperationalReleaseRuntimeFactory {
         requireNonNull(clockSnapshotSupplier, "clockSnapshotSupplier");
         requireNonNull(stationAdmissionResolver, "stationAdmissionResolver");
         requireNonNull(routeTargetAdmissionCatalog, "routeTargetAdmissionCatalog");
-        validateStickyP2pTargets(routeTargetAdmissionCatalog, stickyLeaseRuntime);
+        validateP2pTargets(routeTargetAdmissionCatalog, stickyLeaseRuntime.lineDefinitions());
 
         OsrProcessingReleaseSnapshotFactory physicalSnapshotFactory =
                 new OsrProcessingReleaseSnapshotFactory();
@@ -171,11 +246,10 @@ public final class DspOperationalReleaseRuntimeFactory {
         }
     }
 
-    private static void validateStickyP2pTargets(
+    private static void validateP2pTargets(
             OperationalRouteTargetAdmissionCatalog admissionCatalog,
-            DspP2pStickyLeaseRuntime stickyLeaseRuntime) {
-        List<OperationalRouteDestination> configuredDestinations = stickyLeaseRuntime
-                .lineDefinitions().stream()
+            List<P2pLineDefinition> lineDefinitions) {
+        List<OperationalRouteDestination> configuredDestinations = lineDefinitions.stream()
                 .map(definition -> definition.destination())
                 .toList();
         Set<OperationalRouteDestination> admittedDestinations = new LinkedHashSet<>();
@@ -186,12 +260,12 @@ public final class DspOperationalReleaseRuntimeFactory {
                 .forEach(destination -> {
                     if (!admittedDestinations.add(destination)) {
                         throw new IllegalArgumentException(
-                                "Duplicate sticky P2P route target admission: " + destination);
+                            "Duplicate P2P route target admission: " + destination);
                     }
                 });
         if (!admittedDestinations.equals(new LinkedHashSet<>(configuredDestinations))) {
             throw new IllegalArgumentException(
-                    "Sticky P2P route admissions must match every configured line destination");
+                    "P2P route admissions must match every configured line destination");
         }
     }
 }

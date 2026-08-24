@@ -30,6 +30,28 @@ public final class DspP2pStickyLeaseRuntimeFactory {
             Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
             OutboundToteAllocator outboundToteAllocator,
             List<P2pStickyArrivalBinding> arrivalBindings) {
+        return create(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                outboundToteAllocator,
+                arrivalBindings,
+                new CompletionOnlyP2pLeaseRetentionPolicy());
+    }
+
+    public DspP2pStickyLeaseRuntime create(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            List<P2pStickyArrivalBinding> arrivalBindings,
+            P2pLeaseRetentionPolicy retentionPolicy) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
         requireNonNull(activityProbes, "activityProbes");
@@ -38,6 +60,7 @@ public final class DspP2pStickyLeaseRuntimeFactory {
         requireNonNull(lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
         requireNonNull(outboundToteAllocator, "outboundToteAllocator");
         requireNonNull(arrivalBindings, "arrivalBindings");
+        requireNonNull(retentionPolicy, "retentionPolicy");
 
         if (lineDefinitions.stream().anyMatch(definition -> definition == null)) {
             throw new IllegalArgumentException("lineDefinitions must not contain null");
@@ -99,7 +122,8 @@ public final class DspP2pStickyLeaseRuntimeFactory {
                 },
                 definitions.stream().map(definition -> probes.get(definition.lineId())).toList(),
                 registry,
-                outboundToteAllocator);
+                outboundToteAllocator,
+                retentionPolicy);
         simulationWorld.addController(releaseController);
 
         return new DspP2pStickyLeaseRuntime(

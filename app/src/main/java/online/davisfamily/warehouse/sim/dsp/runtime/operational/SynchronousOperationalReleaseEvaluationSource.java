@@ -57,4 +57,9 @@ public final class SynchronousOperationalReleaseEvaluationSource
     public String modeLabel() {
         return "sync";
     }
+
+    @Override
+    public Optional<String> p2pAllocationProfileId() {
+        return Optional.of(scheduler.p2pAllocationProfileId());
+    }
 }

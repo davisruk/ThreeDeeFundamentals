@@ -38,6 +38,9 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteL
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetDefinition;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticStickyP2pLineAllocationPolicy;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntime;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.ElasticRuntimeTestFixture;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
@@ -96,6 +99,57 @@ class DspOperationalReleaseRuntimeFactoryTest {
 
         assertEquals("threaded", runtime.controller().snapshot().evaluationMode());
         runtime.close();
+    }
+
+    @Test
+    void shouldRequireElasticEvaluationProfileAndCarryElasticRuntimeSnapshot() {
+        Fixture fixture = new Fixture();
+        ElasticRuntimeTestFixture elasticFixture = new ElasticRuntimeTestFixture();
+        DspP2pElasticAllocationRuntime elasticRuntime = elasticFixture.createRuntime();
+        DspOperationalReleaseRuntimeFactory factory = new DspOperationalReleaseRuntimeFactory();
+        OperationalRouteTargetRegistry targetRegistry = elasticFixture.targetRegistry();
+
+        SynchronousOperationalReleaseEvaluationSource stickySource =
+                new SynchronousOperationalReleaseEvaluationSource(
+                        new DspOperationalReleaseScheduler());
+        assertThrows(IllegalArgumentException.class, () -> factory.createElastic(
+                stickySource,
+                fixture.inventory,
+                fixture.lifecycleController,
+                fixture.catalog,
+                fixture.runtimeState::snapshot,
+                fixture.clock::initialSnapshot,
+                fixture::admission,
+                targetRegistry,
+                elasticRuntime));
+
+        DspOperationalReleaseScheduler elasticScheduler = new DspOperationalReleaseScheduler(
+                new online.davisfamily.warehouse.sim.dsp.scheduler.operational
+                        .OperationalDependencyReadinessPolicy(),
+                new online.davisfamily.warehouse.sim.dsp.scheduler.operational
+                        .OperationalRouteEntryAdmissionPolicy(),
+                new online.davisfamily.warehouse.sim.dsp.scheduler.operational
+                        .PharmacyGroupedSourceSequenceRankingPolicy(),
+                new DeadlineAwareElasticStickyP2pLineAllocationPolicy());
+        SynchronousOperationalReleaseEvaluationSource elasticSource =
+                new SynchronousOperationalReleaseEvaluationSource(elasticScheduler);
+        try (DspOperationalReleaseRuntime runtime = factory.createElastic(
+                elasticSource,
+                fixture.inventory,
+                fixture.lifecycleController,
+                fixture.catalog,
+                fixture.runtimeState::snapshot,
+                fixture.clock::initialSnapshot,
+                fixture::admission,
+                targetRegistry,
+                elasticRuntime)) {
+            assertEquals(
+                    "DEADLINE_AWARE_ELASTIC_STICKY_LEASES",
+                    elasticSource.p2pAllocationProfileId().orElseThrow());
+            assertEquals(5, runtime.routeTargetAdmissionSnapshots().size());
+        } finally {
+            elasticRuntime.close();
+        }
     }
 
     @Test

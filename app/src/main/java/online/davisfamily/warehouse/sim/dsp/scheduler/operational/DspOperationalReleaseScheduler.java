@@ -171,6 +171,10 @@ public final class DspOperationalReleaseScheduler {
                 Optional.of(decision), blockedCandidates);
     }
 
+    public String p2pAllocationProfileId() {
+        return p2pLineAllocationPolicy.profileId();
+    }
+
     private static OperationalBlockedCandidate blockedCandidate(
             DspOperationalReleaseCandidate candidate,
             List<OperationalReleaseBlock> blocks) {

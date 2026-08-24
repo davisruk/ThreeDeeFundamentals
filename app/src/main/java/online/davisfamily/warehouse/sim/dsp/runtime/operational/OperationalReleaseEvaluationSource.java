@@ -21,4 +21,8 @@ public interface OperationalReleaseEvaluationSource extends AutoCloseable {
     default boolean evaluationInFlight() {
         return false;
     }
+
+    default Optional<String> p2pAllocationProfileId() {
+        return Optional.empty();
+    }
 }

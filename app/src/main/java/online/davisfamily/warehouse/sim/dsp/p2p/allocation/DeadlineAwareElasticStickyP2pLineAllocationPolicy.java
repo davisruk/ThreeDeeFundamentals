@@ -18,6 +18,11 @@ public final class DeadlineAwareElasticStickyP2pLineAllocationPolicy
     private static final int QUIESCENT_UNLEASED_TIER = 2;
 
     @Override
+    public String profileId() {
+        return P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES;
+    }
+
+    @Override
     public P2pLineAllocationDecision allocate(P2pLineAllocationRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");

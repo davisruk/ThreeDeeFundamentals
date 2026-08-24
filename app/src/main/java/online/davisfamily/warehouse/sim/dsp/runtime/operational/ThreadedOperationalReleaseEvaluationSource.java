@@ -92,6 +92,11 @@ public final class ThreadedOperationalReleaseEvaluationSource
         return evaluationInFlight;
     }
 
+    @Override
+    public Optional<String> p2pAllocationProfileId() {
+        return Optional.of(scheduler.p2pAllocationProfileId());
+    }
+
     private void evaluateOnWorker(
             long sequence,
             DspOperationalReleaseSnapshot snapshot) {

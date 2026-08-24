@@ -150,7 +150,8 @@ class ElasticP2pLeaseRetentionPolicyTest {
         P2pLineLeaseCatalogSnapshot leases = catalog(leased(
                 definition("line-1"), P2pLineActivitySnapshot.idle(), List.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new ElasticP2pLeaseRetentionPolicy(null));
+                () -> new ElasticP2pLeaseRetentionPolicy(
+                        (java.util.function.Supplier<P2pElasticAllocationSnapshot>) null));
         ElasticP2pLeaseRetentionPolicy nullAllocation =
                 new ElasticP2pLeaseRetentionPolicy(() -> null);
         assertThrows(IllegalStateException.class, () -> nullAllocation.firstTransition(

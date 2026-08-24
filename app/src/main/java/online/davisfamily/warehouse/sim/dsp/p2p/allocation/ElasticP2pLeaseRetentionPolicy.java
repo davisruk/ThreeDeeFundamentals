@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
@@ -17,14 +18,24 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapsh
 
 public final class ElasticP2pLeaseRetentionPolicy implements P2pLeaseRetentionPolicy {
 
-    private final Supplier<P2pElasticAllocationSnapshot> allocationSupplier;
+    private final Function<P2pLineLeaseCatalogSnapshot, P2pElasticAllocationSnapshot>
+            allocationFactory;
 
     public ElasticP2pLeaseRetentionPolicy(
             Supplier<P2pElasticAllocationSnapshot> allocationSupplier) {
         if (allocationSupplier == null) {
             throw new IllegalArgumentException("allocationSupplier must not be null");
         }
-        this.allocationSupplier = allocationSupplier;
+        this.allocationFactory = ignored -> allocationSupplier.get();
+    }
+
+    public ElasticP2pLeaseRetentionPolicy(
+            Function<P2pLineLeaseCatalogSnapshot, P2pElasticAllocationSnapshot>
+                    allocationFactory) {
+        if (allocationFactory == null) {
+            throw new IllegalArgumentException("allocationFactory must not be null");
+        }
+        this.allocationFactory = allocationFactory;
     }
 
     @Override
@@ -34,9 +45,9 @@ public final class ElasticP2pLeaseRetentionPolicy implements P2pLeaseRetentionPo
         if (leases == null || work == null) {
             throw new IllegalArgumentException("lease retention inputs must not be null");
         }
-        P2pElasticAllocationSnapshot allocation = allocationSupplier.get();
+        P2pElasticAllocationSnapshot allocation = allocationFactory.apply(leases);
         if (allocation == null) {
-            throw new IllegalStateException("allocationSupplier returned null");
+            throw new IllegalStateException("allocationFactory returned null");
         }
         List<P2pLineId> lineIds = leases.lines().stream()
                 .map(line -> line.definition().lineId())
