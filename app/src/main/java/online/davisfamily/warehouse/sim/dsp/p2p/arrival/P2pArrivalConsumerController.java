@@ -78,9 +78,7 @@ public final class P2pArrivalConsumerController implements SimulationController 
         RoutedPhysicalTote head = optionalHead.orElseThrow();
         requireTerminalRoutePosition(head);
 
-        P2pArrivalAdmissionRequest request = P2pArrivalAdmissionRequest.from(
-                head.launchRequest().releaseRequest().manifest(),
-                head.destination());
+        P2pArrivalAdmissionRequest request = P2pArrivalAdmissionRequest.from(head);
         P2pArrivalAdmissionDecision decision = admissionPolicy.evaluate(request);
         if (decision == null) {
             throw new IllegalStateException("P2P arrival admission policy returned null");

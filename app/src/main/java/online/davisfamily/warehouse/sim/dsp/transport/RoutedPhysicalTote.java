@@ -1,10 +1,13 @@
 package online.davisfamily.warehouse.sim.dsp.transport;
 
+import java.util.Optional;
+
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -57,6 +60,10 @@ public record RoutedPhysicalTote(
 
     public OperationalRouteDestination destination() {
         return launchRequest.destination();
+    }
+
+    public Optional<P2pPhysicalToteAssignment> p2pAssignment() {
+        return launchRequest.p2pAssignment();
     }
 
     private static void requireMatchingPhysicalId(

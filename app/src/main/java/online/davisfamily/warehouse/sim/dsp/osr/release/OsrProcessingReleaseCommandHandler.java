@@ -15,6 +15,8 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrPhysicalInventory;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pReleaseAssignmentCommit;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pReleaseAssignmentCommitter;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandHandler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.SchedulerCommand;
@@ -25,12 +27,27 @@ public final class OsrProcessingReleaseCommandHandler implements SchedulerComman
     private final InboundToteLifecycleController lifecycleController;
     private final Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier;
     private final OsrProcessingReleaseTargetRegistry targetRegistry;
+    private final P2pReleaseAssignmentCommitter p2pAssignmentCommitter;
 
     public OsrProcessingReleaseCommandHandler(
             OsrPhysicalInventory inventory,
             InboundToteLifecycleController lifecycleController,
             Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
             OsrProcessingReleaseTargetRegistry targetRegistry) {
+        this(
+                inventory,
+                lifecycleController,
+                clockSnapshotSupplier,
+                targetRegistry,
+                P2pReleaseAssignmentCommitter.NO_OP);
+    }
+
+    public OsrProcessingReleaseCommandHandler(
+            OsrPhysicalInventory inventory,
+            InboundToteLifecycleController lifecycleController,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            OsrProcessingReleaseTargetRegistry targetRegistry,
+            P2pReleaseAssignmentCommitter p2pAssignmentCommitter) {
         if (inventory == null) {
             throw new IllegalArgumentException("inventory must not be null");
         }
@@ -43,10 +60,14 @@ public final class OsrProcessingReleaseCommandHandler implements SchedulerComman
         if (targetRegistry == null) {
             throw new IllegalArgumentException("targetRegistry must not be null");
         }
+        if (p2pAssignmentCommitter == null) {
+            throw new IllegalArgumentException("p2pAssignmentCommitter must not be null");
+        }
         this.inventory = inventory;
         this.lifecycleController = lifecycleController;
         this.clockSnapshotSupplier = clockSnapshotSupplier;
         this.targetRegistry = targetRegistry;
+        this.p2pAssignmentCommitter = p2pAssignmentCommitter;
     }
 
     @Override
@@ -130,8 +151,22 @@ public final class OsrProcessingReleaseCommandHandler implements SchedulerComman
                             + releaseCommand.releaseTargetId());
         }
 
+        P2pReleaseAssignmentCommit pendingP2pCommit;
+        try {
+            pendingP2pCommit = p2pAssignmentCommitter.prepare(releaseCommand, manifest);
+            if (pendingP2pCommit == null) {
+                throw new IllegalStateException("P2P release assignment committer returned null");
+            }
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            return SchedulerCommandApplicationResult.rejectedResult(
+                    "P2P release assignment validation failed: " + exception.getMessage());
+        }
+
         OsrProcessingReleaseRequest request =
-                new OsrProcessingReleaseRequest(manifest, releaseTime);
+                new OsrProcessingReleaseRequest(
+                        manifest,
+                        releaseTime,
+                        releaseCommand.proposedP2pAssignment());
         SchedulerCommandApplicationResult targetResult =
                 target.orElseThrow().accept(request);
         if (targetResult == null) {
@@ -141,6 +176,7 @@ public final class OsrProcessingReleaseCommandHandler implements SchedulerComman
             return targetResult;
         }
 
+        pendingP2pCommit.commit();
         InboundToteManifest departedManifest =
                 inventory.recordDeparture(releaseCommand.physicalToteId());
         if (!departedManifest.equals(manifest)) {

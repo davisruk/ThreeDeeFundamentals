@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -25,8 +26,13 @@ import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrPhysicalInventory;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pReleaseAssignmentCommitter;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
 import online.davisfamily.warehouse.sim.dsp.scheduler.ReleaseOrderCommand;
 import online.davisfamily.warehouse.sim.dsp.time.DspOperatingPhase;
@@ -34,6 +40,107 @@ import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockSnapshot;
 import online.davisfamily.warehouse.sim.dsp.time.OperationalDayTime;
 
 class OsrProcessingReleaseCommandHandlerTest {
+
+    @Test
+    void shouldCarryAndCommitPinnedAssignmentAfterTargetAcceptance() {
+        InboundToteManifest manifest = manifest(
+                "tote-1", sheet("order-1"), OrderType.FULL_PACK, "104", 1);
+        P2pPhysicalToteAssignment assignment = new P2pPhysicalToteAssignment(
+                manifest.physicalToteId(),
+                manifest.serviceCentreId(),
+                new P2pLineId("line-1"),
+                new OperationalRouteDestination(StationType.P2P, "target-1"));
+        RecordingTarget target = new RecordingTarget("target-1");
+        OsrPhysicalInventory inventory = inventory(List.of(manifest));
+        InboundToteLifecycleController lifecycle = lifecycle(List.of(manifest));
+        AtomicInteger phase = new AtomicInteger();
+        P2pReleaseAssignmentCommitter committer = (command, liveManifest) -> {
+            assertSame(manifest, liveManifest);
+            assertEquals(Optional.of(assignment), command.proposedP2pAssignment());
+            assertEquals(0, phase.get());
+            return () -> {
+                assertEquals(1, phase.get());
+                assertEquals(1, inventory.snapshot().occupancy());
+                assertTrue(lifecycle.snapshot().assignments().isEmpty());
+                phase.set(2);
+            };
+        };
+        target.observer = request -> {
+            assertEquals(Optional.of(assignment), request.p2pAssignment());
+            assertEquals(0, phase.getAndIncrement());
+        };
+        OsrProcessingReleaseCommandHandler handler = new OsrProcessingReleaseCommandHandler(
+                inventory,
+                lifecycle,
+                clockAt(7),
+                new OsrProcessingReleaseTargetRegistry(List.of(target)),
+                committer);
+        ReleasePhysicalToteFromOsrCommand command = new ReleasePhysicalToteFromOsrCommand(
+                manifest.physicalToteId(),
+                manifest.orderSheetKey(),
+                manifest.serviceCentreId(),
+                "target-1",
+                Optional.of(assignment));
+
+        SchedulerCommandApplicationResult result = handler.apply(command);
+
+        assertTrue(result.applied());
+        assertEquals(2, phase.get());
+        assertEquals(0, inventory.snapshot().occupancy());
+        assertEquals(1, lifecycle.snapshot().assignments().size());
+    }
+
+    @Test
+    void shouldNotCommitPreparedAssignmentWhenTargetDefersOrRejects() {
+        for (SchedulerCommandApplicationResult targetResult : List.of(
+                SchedulerCommandApplicationResult.deferredResult("full"),
+                SchedulerCommandApplicationResult.rejectedResult("invalid"))) {
+            InboundToteManifest manifest = manifest(
+                    "tote-1", sheet("order-1"), OrderType.FULL_PACK, "104", 1);
+            RecordingTarget target = new RecordingTarget("target-1");
+            target.result = targetResult;
+            OsrPhysicalInventory inventory = inventory(List.of(manifest));
+            InboundToteLifecycleController lifecycle = lifecycle(List.of(manifest));
+            AtomicInteger commits = new AtomicInteger();
+            OsrProcessingReleaseCommandHandler handler = new OsrProcessingReleaseCommandHandler(
+                    inventory,
+                    lifecycle,
+                    clockAt(7),
+                    new OsrProcessingReleaseTargetRegistry(List.of(target)),
+                    (command, liveManifest) -> commits::incrementAndGet);
+
+            SchedulerCommandApplicationResult result = handler.apply(command(manifest));
+
+            assertSame(targetResult, result);
+            assertEquals(0, commits.get());
+            assertUncommitted(inventory, lifecycle, manifest);
+        }
+    }
+
+    @Test
+    void shouldRejectAssignmentPrevalidationFailureBeforeInvokingTarget() {
+        InboundToteManifest manifest = manifest(
+                "tote-1", sheet("order-1"), OrderType.FULL_PACK, "104", 1);
+        RecordingTarget target = new RecordingTarget("target-1");
+        OsrPhysicalInventory inventory = inventory(List.of(manifest));
+        InboundToteLifecycleController lifecycle = lifecycle(List.of(manifest));
+        OsrProcessingReleaseCommandHandler handler = new OsrProcessingReleaseCommandHandler(
+                inventory,
+                lifecycle,
+                clockAt(7),
+                new OsrProcessingReleaseTargetRegistry(List.of(target)),
+                (command, liveManifest) -> {
+                    throw new IllegalStateException("assignment is stale");
+                });
+
+        SchedulerCommandApplicationResult result = handler.apply(command(manifest));
+
+        assertFalse(result.applied());
+        assertFalse(result.deferred());
+        assertTrue(result.reason().contains("assignment is stale"));
+        assertEquals(0, target.callCount);
+        assertUncommitted(inventory, lifecycle, manifest);
+    }
 
     @Test
     void shouldAcceptDownstreamBeforeCommittingDepartureAndActivation() {
@@ -303,6 +410,13 @@ class OsrProcessingReleaseCommandHandlerTest {
                 new OsrProcessingReleaseCommandHandler(inventory, lifecycle, null, registry));
         assertThrows(IllegalArgumentException.class, () ->
                 new OsrProcessingReleaseCommandHandler(inventory, lifecycle, clockAt(1), null));
+        assertThrows(IllegalArgumentException.class, () ->
+                new OsrProcessingReleaseCommandHandler(
+                        inventory,
+                        lifecycle,
+                        clockAt(1),
+                        registry,
+                        null));
 
         OsrProcessingReleaseCommandHandler nullClockHandler =
                 new OsrProcessingReleaseCommandHandler(inventory, lifecycle, () -> null, registry);
