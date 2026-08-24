@@ -28,6 +28,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
     private final TippingMachine tippingMachine;
     private final TipperDownstreamFlow downstreamFlow;
     private final double dischargeDurationSeconds;
+    private final TipperToteCompletedListener toteCompletedListener;
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
     private final List<TippingDischargeTransfer> activeDischarges = new ArrayList<>();
     private float visualTipProgress;
@@ -54,7 +55,8 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 tipperTippedAngleRadians,
                 tippingMachine,
                 new SorterTipperDownstreamFlow(sortingMachine, null),
-                dischargeDurationSeconds);
+                dischargeDurationSeconds,
+                TipperToteCompletedListener.NO_OP);
     }
 
     public void setToteAdmissionPredicate(Predicate<ToteLoadPlan> toteAdmissionPredicate) {
@@ -81,7 +83,8 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 tipperTippedAngleRadians,
                 tippingMachine,
                 new SorterTipperDownstreamFlow(sortingMachine, null),
-                dischargeDurationSeconds);
+                dischargeDurationSeconds,
+                TipperToteCompletedListener.NO_OP);
     }
 
     public ToteTrackTipperFlowController(
@@ -102,7 +105,8 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 tipperTippedAngleRadians,
                 tippingMachine,
                 new SorterTipperDownstreamFlow(sortingMachine, sorterOutfeedTarget),
-                dischargeDurationSeconds);
+                dischargeDurationSeconds,
+                TipperToteCompletedListener.NO_OP);
     }
 
     public ToteTrackTipperFlowController(
@@ -114,11 +118,34 @@ public class ToteTrackTipperFlowController implements SimulationController {
             TippingMachine tippingMachine,
             TipperDownstreamFlow downstreamFlow,
             double dischargeDurationSeconds) {
+        this(
+                tote,
+                toteLoadPlanProvider,
+                tipperSegment,
+                tipperStopDistance,
+                tipperTippedAngleRadians,
+                tippingMachine,
+                downstreamFlow,
+                dischargeDurationSeconds,
+                TipperToteCompletedListener.NO_OP);
+    }
+
+    public ToteTrackTipperFlowController(
+            Tote tote,
+            ToteLoadPlanProvider toteLoadPlanProvider,
+            RouteSegment tipperSegment,
+            float tipperStopDistance,
+            float tipperTippedAngleRadians,
+            TippingMachine tippingMachine,
+            TipperDownstreamFlow downstreamFlow,
+            double dischargeDurationSeconds,
+            TipperToteCompletedListener toteCompletedListener) {
         if (tote == null
                 || toteLoadPlanProvider == null
                 || tipperSegment == null
                 || tippingMachine == null
-                || downstreamFlow == null) {
+                || downstreamFlow == null
+                || toteCompletedListener == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null");
         }
         if (tipperStopDistance < 0f) {
@@ -138,6 +165,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         this.tippingMachine = tippingMachine;
         this.downstreamFlow = downstreamFlow;
         this.dischargeDurationSeconds = dischargeDurationSeconds;
+        this.toteCompletedListener = toteCompletedListener;
     }
 
     @Override
@@ -148,7 +176,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         updateVisualTipProgress(dtSeconds);
         syncToteVisualTilt();
         downstreamFlow.update(dtSeconds);
-        releaseToteIfReady();
+        releaseToteIfReady(context);
     }
 
     public List<Pack> getObservedPacks() {
@@ -235,7 +263,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         }
     }
 
-    private void releaseToteIfReady() {
+    private void releaseToteIfReady(SimulationContext context) {
         if (activeTote == null || !toteCaptured || toteReleased) {
             return;
         }
@@ -245,6 +273,7 @@ public class ToteTrackTipperFlowController implements SimulationController {
         if (!machinesClear) {
             return;
         }
+        toteCompletedListener.onToteCompleted(activeTote, context);
         activeTote.clearVisualTiltAngleZ();
         activeTote.clearVisualOffset();
         activeTote.setInteractionMode(ToteMotionState.MOVING);

@@ -136,6 +136,10 @@ public final class InboundToteLifecycleController {
         return ledger.snapshot();
     }
 
+    public InboundToteManifest manifestFor(PhysicalToteId toteId) {
+        return requireManifest(toteId);
+    }
+
     private InboundToteManifest requireManifest(PhysicalToteId toteId) {
         if (toteId == null) {
             throw new IllegalArgumentException("toteId must not be null");

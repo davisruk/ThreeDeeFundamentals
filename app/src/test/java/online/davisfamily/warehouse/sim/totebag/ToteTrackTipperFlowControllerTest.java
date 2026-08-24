@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +21,7 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
+import online.davisfamily.warehouse.sim.totebag.control.SorterTipperDownstreamFlow;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
@@ -28,6 +30,40 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 
 class ToteTrackTipperFlowControllerTest {
+
+    @Test
+    void shouldNotifyCompletionExactlyOnceWhenReleased() {
+        RouteSegment infeedSegment = new RouteSegment(
+                "infeed", new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(2f, 0f, 0f), false));
+        RouteSegment tipperSegment = new RouteSegment(
+                "tipper", new LinearSegment3(new Vec3(2f, 0f, 0f), new Vec3(3.25f, 0f, 0f), false));
+        infeedSegment.connectTo(tipperSegment);
+        Tote tote = createTote("tote-a", infeedSegment);
+        ToteLoadPlan plan = new ToteLoadPlan(
+                "tote-a",
+                List.of(new PackPlan("pack-a", "bag-a", new PackDimensions(0.2f, 0.1f, 0.08f))));
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.1d, 0.1d, 0.1d);
+        SortingMachine sortingMachine = new SortingMachine("sorter", 0.1d);
+        AtomicInteger completions = new AtomicInteger();
+        ToteTrackTipperFlowController controller = new ToteTrackTipperFlowController(
+                tote, ignored -> plan, tipperSegment, 0.625f, -1.02f,
+                tippingMachine, new SorterTipperDownstreamFlow(sortingMachine, null), 0.1d,
+                (completedTote, context) -> {
+                    assertEquals("tote-a", completedTote.getId());
+                    completions.incrementAndGet();
+                });
+        SimulationWorld sim = new SimulationWorld();
+        sim.addTrackableObject(tote);
+        sim.addSimObject(tippingMachine);
+        sim.addSimObject(sortingMachine);
+        sim.addController(controller);
+
+        for (int index = 0; index < 200; index++) {
+            sim.update(0.05d);
+        }
+
+        assertEquals(1, completions.get());
+    }
 
     @Test
     void shouldAcceptNextToteAfterReleasingPreviousOne() {

@@ -357,7 +357,7 @@ Scope:
 Ask the user to run:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLeaseReleaseControllerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.InboundLifecycleP2pToteCompletedListenerTest --tests online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowControllerTest --tests online.davisfamily.warehouse.sim.dsp.outbound.*
+  .\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLeaseReleaseControllerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.InboundLifecycleP2pToteCompletedListenerTest --tests online.davisfamily.warehouse.sim.totebag.ToteTrackTipperFlowControllerTest --tests online.davisfamily.warehouse.sim.dsp.outbound.*
 ```
 
 Proposed commit message: `Track completion and release drained P2P leases`
