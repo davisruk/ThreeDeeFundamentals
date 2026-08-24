@@ -4,24 +4,45 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.ReleasePhysicalToteFromOsrCommand;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationDecision;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationPolicy;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationRequest;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pLineAllocationPolicy;
 
 public final class DspOperationalReleaseScheduler {
     private final OperationalDependencyReadinessPolicy dependencyReadinessPolicy;
     private final OperationalRouteEntryAdmissionPolicy routeEntryAdmissionPolicy;
     private final OperationalCandidateRankingPolicy candidateRankingPolicy;
+    private final P2pLineAllocationPolicy p2pLineAllocationPolicy;
+    private final OperationalRouteEntrySelector routeEntrySelector;
 
     public DspOperationalReleaseScheduler() {
         this(
                 new OperationalDependencyReadinessPolicy(),
                 new OperationalRouteEntryAdmissionPolicy(),
-                new PharmacyGroupedSourceSequenceRankingPolicy());
+                new PharmacyGroupedSourceSequenceRankingPolicy(),
+                new StickyP2pLineAllocationPolicy());
     }
 
     public DspOperationalReleaseScheduler(
             OperationalDependencyReadinessPolicy dependencyReadinessPolicy,
             OperationalRouteEntryAdmissionPolicy routeEntryAdmissionPolicy,
             OperationalCandidateRankingPolicy candidateRankingPolicy) {
+        this(
+                dependencyReadinessPolicy,
+                routeEntryAdmissionPolicy,
+                candidateRankingPolicy,
+                new StickyP2pLineAllocationPolicy());
+    }
+
+    public DspOperationalReleaseScheduler(
+            OperationalDependencyReadinessPolicy dependencyReadinessPolicy,
+            OperationalRouteEntryAdmissionPolicy routeEntryAdmissionPolicy,
+            OperationalCandidateRankingPolicy candidateRankingPolicy,
+            P2pLineAllocationPolicy p2pLineAllocationPolicy) {
         if (dependencyReadinessPolicy == null) {
             throw new IllegalArgumentException("dependencyReadinessPolicy must not be null");
         }
@@ -31,9 +52,14 @@ public final class DspOperationalReleaseScheduler {
         if (candidateRankingPolicy == null) {
             throw new IllegalArgumentException("candidateRankingPolicy must not be null");
         }
+        if (p2pLineAllocationPolicy == null) {
+            throw new IllegalArgumentException("p2pLineAllocationPolicy must not be null");
+        }
         this.dependencyReadinessPolicy = dependencyReadinessPolicy;
         this.routeEntryAdmissionPolicy = routeEntryAdmissionPolicy;
         this.candidateRankingPolicy = candidateRankingPolicy;
+        this.p2pLineAllocationPolicy = p2pLineAllocationPolicy;
+        this.routeEntrySelector = new OperationalRouteEntrySelector();
     }
 
     public DspOperationalReleaseEvaluation evaluate(
@@ -52,17 +78,73 @@ public final class DspOperationalReleaseScheduler {
                 continue;
             }
 
-            OperationalRouteEntryEvaluation routeEntryEvaluation =
-                    routeEntryAdmissionPolicy.evaluate(candidate, snapshot);
-            if (!routeEntryEvaluation.blocks().isEmpty()) {
-                blockedCandidates.add(blockedCandidate(
-                        candidate, routeEntryEvaluation.blocks()));
-                continue;
+            boolean stickyP2pCandidate = snapshot.stickyP2pAllocationEnabled()
+                    && candidate.logicalOrderState().routeRequirements().requiresP2p();
+            boolean directP2p = stickyP2pCandidate
+                    && routeEntrySelector.firstStation(
+                            candidate.logicalOrderState().routeRequirements())
+                            .filter(stationType -> stationType == StationType.P2P)
+                            .isPresent();
+
+            OperationalRouteEntry routeEntry = null;
+            if (!directP2p) {
+                OperationalRouteEntryEvaluation routeEntryEvaluation =
+                        routeEntryAdmissionPolicy.evaluate(candidate, snapshot);
+                if (!routeEntryEvaluation.blocks().isEmpty()) {
+                    blockedCandidates.add(blockedCandidate(
+                            candidate, routeEntryEvaluation.blocks()));
+                    continue;
+                }
+                routeEntry = routeEntryEvaluation.routeEntry()
+                        .orElseThrow(() -> new IllegalStateException(
+                                "Eligible route-entry evaluation must contain a route entry"));
             }
-            OperationalRouteEntry routeEntry = routeEntryEvaluation.routeEntry()
-                    .orElseThrow(() -> new IllegalStateException(
-                            "Eligible route-entry evaluation must contain a route entry"));
-            eligibleCandidates.add(new OperationalReleaseSelection(candidate, routeEntry));
+
+            Optional<P2pPhysicalToteAssignment> assignment = Optional.empty();
+            boolean activePharmacyAffinity = false;
+            if (stickyP2pCandidate) {
+                P2pLineAllocationDecision allocation = p2pLineAllocationPolicy.allocate(
+                        new P2pLineAllocationRequest(
+                                candidate.physicalCandidate().physicalToteId(),
+                                candidate.physicalCandidate().serviceCentreId(),
+                                candidate.pharmacyIds(),
+                                directP2p,
+                                snapshot.p2pLineLeases(),
+                                snapshot.p2pRouteAdmissions()));
+                if (allocation == null) {
+                    throw new IllegalStateException("P2P line allocation policy returned null");
+                }
+                if (!allocation.allocated()) {
+                    blockedCandidates.add(blockedCandidate(
+                            candidate,
+                            List.of(new OperationalReleaseBlock(
+                                    OperationalReleaseBlockType.P2P_LINE_ALLOCATION,
+                                    allocation.blockReason().orElseThrow().name()))));
+                    continue;
+                }
+                assignment = allocation.assignment();
+                P2pPhysicalToteAssignment proposedAssignment = assignment.orElseThrow();
+                var assignedLine = snapshot.p2pLineLeases()
+                        .findLine(proposedAssignment.lineId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                "P2P allocation selected a line absent from the operational snapshot"));
+                if (!assignedLine.definition().destination().equals(
+                        proposedAssignment.destination())) {
+                    throw new IllegalStateException(
+                            "P2P allocation destination does not match its snapshot line");
+                }
+                activePharmacyAffinity = allocation.activePharmacyAffinity();
+                if (directP2p) {
+                    routeEntry = new OperationalRouteEntry(
+                            StationType.P2P,
+                            proposedAssignment.destination().targetId());
+                }
+            }
+            eligibleCandidates.add(new OperationalReleaseSelection(
+                    candidate,
+                    routeEntry,
+                    assignment,
+                    activePharmacyAffinity));
         }
 
         List<OperationalReleaseSelection> rankedCandidates = candidateRankingPolicy.rank(
@@ -78,7 +160,8 @@ public final class DspOperationalReleaseScheduler {
                 selectedCandidate.physicalCandidate().physicalToteId(),
                 selectedCandidate.physicalCandidate().orderSheetKey(),
                 selectedCandidate.physicalCandidate().serviceCentreId(),
-                selected.routeEntry().targetId());
+                selected.routeEntry().targetId(),
+                selected.proposedP2pAssignment());
         DspOperationalReleaseDecision decision = new DspOperationalReleaseDecision(
                 selectedCandidate,
                 selected.routeEntry(),

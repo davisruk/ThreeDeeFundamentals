@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -25,6 +26,13 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetDefinition;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
@@ -41,6 +49,43 @@ class DspOperationalReleaseSnapshotFactoryTest {
 
     private final DspOperationalReleaseSnapshotFactory factory =
             new DspOperationalReleaseSnapshotFactory();
+
+    @Test
+    void shouldBuildDetachedStickyLineAndTargetAdmissionSnapshot() {
+        OperationalRouteDestination destination = new OperationalRouteDestination(
+                StationType.P2P, "p2p-line-1");
+        P2pLineLeaseCatalogSnapshot leases = new P2pLineLeaseCatalogSnapshot(List.of(
+                new P2pLineLeaseSnapshot(
+                        new P2pLineDefinition(new P2pLineId("line-1"), destination),
+                        Optional.empty(),
+                        P2pLineActivitySnapshot.idle(),
+                        List.of())));
+        List<OperationalRouteTargetAdmissionSnapshot> targetAdmissions = new ArrayList<>(List.of(
+                new OperationalRouteTargetAdmissionSnapshot(
+                        StationType.P2P, destination.targetId(), 1, 0)));
+        OperationalRouteEntryQueue queue = new OperationalRouteEntryQueue(
+                new OperationalRouteTargetDefinition(
+                        StationType.P2P, destination.targetId(), 1));
+        OperationalCandidateRouteAdmissionFactory admissionFactory =
+                new OperationalCandidateRouteAdmissionFactory(
+                        new OperationalRouteEntrySelector(),
+                        (stationType, candidate, snapshot) -> null,
+                        new OperationalRouteTargetRegistry(List.of(queue)));
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of()),
+                new InboundToteManifestCatalog(List.of()),
+                logicalSnapshot(List.of()),
+                admissionFactory,
+                leases,
+                targetAdmissions);
+        targetAdmissions.clear();
+
+        assertSame(leases, snapshot.p2pLineLeases());
+        assertEquals(Map.of(destination, true), snapshot.p2pRouteAdmissions());
+        assertThrows(UnsupportedOperationException.class,
+                () -> snapshot.p2pRouteAdmissions().clear());
+    }
 
     @Test
     void shouldJoinPhysicalManifestToExactLogicalSheet() {

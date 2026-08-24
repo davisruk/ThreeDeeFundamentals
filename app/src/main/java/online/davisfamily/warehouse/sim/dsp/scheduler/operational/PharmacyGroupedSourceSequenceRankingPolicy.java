@@ -77,7 +77,9 @@ public final class PharmacyGroupedSourceSequenceRankingPolicy
     private static Comparator<OperationalReleaseSelection> rankingComparator(
             DspOperationalReleaseSnapshot snapshot) {
         return Comparator
-                .comparingInt((OperationalReleaseSelection selection) ->
+                .comparing((OperationalReleaseSelection selection) ->
+                        !selection.activePharmacyAffinity())
+                .thenComparingInt((OperationalReleaseSelection selection) ->
                         snapshot.groupIndexFor(selection.candidate()))
                 .thenComparingLong(selection ->
                         selection.candidate().physicalCandidate().sourceSequenceNumber())

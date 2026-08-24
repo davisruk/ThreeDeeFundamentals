@@ -5,5 +5,6 @@ public enum OperationalReleaseBlockType {
     ADAPTED_DEPENDENCY,
     ROUTE_ENTRY,
     STATION_ADMISSION,
-    TARGET_SELECTION
+    TARGET_SELECTION,
+    P2P_LINE_ALLOCATION
 }

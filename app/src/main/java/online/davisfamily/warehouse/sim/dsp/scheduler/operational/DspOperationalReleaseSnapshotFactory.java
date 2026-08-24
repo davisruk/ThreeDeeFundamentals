@@ -13,8 +13,12 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
@@ -51,6 +55,32 @@ public final class DspOperationalReleaseSnapshotFactory {
                 manifestCatalog,
                 logicalSnapshot,
                 routeAdmissions);
+    }
+
+    public DspOperationalReleaseSnapshot create(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            OperationalCandidateRouteAdmissionFactory routeAdmissionFactory,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions) {
+        if (routeAdmissionFactory == null) {
+            throw new IllegalArgumentException("routeAdmissionFactory must not be null");
+        }
+        if (p2pLineLeases == null || p2pTargetAdmissions == null) {
+            throw new IllegalArgumentException("P2P operational snapshot inputs must not be null");
+        }
+        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
+                physicalSnapshot, manifestCatalog, logicalSnapshot);
+        List<OperationalCandidateRouteAdmission> routeAdmissions =
+                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
+        return createSnapshot(
+                joinedCandidates,
+                manifestCatalog,
+                logicalSnapshot,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pTargetAdmissions);
     }
 
     private static List<DspOperationalReleaseCandidate> joinCandidates(
@@ -107,6 +137,37 @@ public final class DspOperationalReleaseSnapshotFactory {
                 logicalSnapshot.stationAdmissions(),
                 logicalSnapshot.preparedLineKeys(),
                 routeAdmissions);
+    }
+
+    private static DspOperationalReleaseSnapshot createSnapshot(
+            List<DspOperationalReleaseCandidate> joinedCandidates,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions) {
+        Map<OperationalRouteDestination, Boolean> targetAdmissions = new LinkedHashMap<>();
+        for (OperationalRouteTargetAdmissionSnapshot admission : p2pTargetAdmissions) {
+            if (admission == null) {
+                throw new IllegalArgumentException("p2pTargetAdmissions must not contain null");
+            }
+            if (admission.stationType() != StationType.P2P) {
+                throw new IllegalArgumentException("p2pTargetAdmissions must identify P2P targets");
+            }
+            OperationalRouteDestination destination = new OperationalRouteDestination(
+                    admission.stationType(), admission.targetId());
+            if (targetAdmissions.putIfAbsent(destination, admission.canAccept()) != null) {
+                throw new IllegalArgumentException("Duplicate P2P target admission: " + destination);
+            }
+        }
+        return new DspOperationalReleaseSnapshot(
+                joinedCandidates,
+                buildPharmacyGroups(manifestCatalog),
+                logicalSnapshot.stationAdmissions(),
+                logicalSnapshot.preparedLineKeys(),
+                routeAdmissions,
+                p2pLineLeases,
+                targetAdmissions);
     }
 
     private static List<OperationalCandidateRouteAdmission> deriveCompatibilityAdmissions(

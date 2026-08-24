@@ -1,14 +1,31 @@
 package online.davisfamily.warehouse.sim.dsp.osr.release;
 
+import java.util.Optional;
+
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.scheduler.SchedulerCommand;
 
 public record ReleasePhysicalToteFromOsrCommand(
         PhysicalToteId physicalToteId,
         OrderSheetKey orderSheetKey,
         String serviceCentreId,
-        String releaseTargetId) implements SchedulerCommand {
+        String releaseTargetId,
+        Optional<P2pPhysicalToteAssignment> proposedP2pAssignment) implements SchedulerCommand {
+
+    public ReleasePhysicalToteFromOsrCommand(
+            PhysicalToteId physicalToteId,
+            OrderSheetKey orderSheetKey,
+            String serviceCentreId,
+            String releaseTargetId) {
+        this(
+                physicalToteId,
+                orderSheetKey,
+                serviceCentreId,
+                releaseTargetId,
+                Optional.empty());
+    }
 
     public ReleasePhysicalToteFromOsrCommand {
         if (physicalToteId == null) {
@@ -17,8 +34,19 @@ public record ReleasePhysicalToteFromOsrCommand(
         if (orderSheetKey == null) {
             throw new IllegalArgumentException("orderSheetKey must not be null");
         }
-        serviceCentreId = requireValue(serviceCentreId, "serviceCentreId");
+        String normalizedServiceCentreId = requireValue(serviceCentreId, "serviceCentreId");
+        serviceCentreId = normalizedServiceCentreId;
         releaseTargetId = requireValue(releaseTargetId, "releaseTargetId");
+        if (proposedP2pAssignment == null) {
+            throw new IllegalArgumentException("proposedP2pAssignment must not be null");
+        }
+        proposedP2pAssignment.ifPresent(assignment -> {
+            if (!assignment.physicalToteId().equals(physicalToteId)
+                    || !assignment.serviceCentreId().equals(normalizedServiceCentreId)) {
+                throw new IllegalArgumentException(
+                        "proposed P2P assignment must match command physical identity and service centre");
+            }
+        });
     }
 
     private static String requireValue(String value, String fieldName) {

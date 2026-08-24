@@ -20,6 +20,9 @@ import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
@@ -89,6 +92,35 @@ class PharmacyGroupedSourceSequenceRankingPolicyTest {
         assertEquals(
                 List.of(firstGroupLateSource, laterGroupEarlySource),
                 policy.rank(List.of(laterGroupEarlySource, firstGroupLateSource), snapshot));
+    }
+
+    @Test
+    void shouldRankActiveLinePharmacyAffinityBeforeStaticPharmacyGroup() {
+        OperationalReleaseSelection firstGroup = selection(candidate(
+                "first-tote", "first-order", 1, OrderType.FULL_PACK,
+                "sc-1", 999, 1, List.of("pharmacy-1")));
+        DspOperationalReleaseCandidate affinityCandidate = candidate(
+                "affinity-tote", "affinity-order", 1, OrderType.FULL_PACK,
+                "sc-1", 999, 2, List.of("pharmacy-2"));
+        OperationalRouteDestination destination = new OperationalRouteDestination(
+                StationType.P2P, "target-affinity");
+        OperationalReleaseSelection affinity = new OperationalReleaseSelection(
+                affinityCandidate,
+                new OperationalRouteEntry(StationType.P2P, destination.targetId()),
+                Optional.of(new P2pPhysicalToteAssignment(
+                        affinityCandidate.physicalCandidate().physicalToteId(),
+                        "sc-1",
+                        new P2pLineId("line-1"),
+                        destination)),
+                true);
+        DspOperationalReleaseSnapshot snapshot = snapshot(
+                List.of(firstGroup, affinity),
+                List.of(
+                        group("sc-1", "pharmacy-1", 0, 1),
+                        group("sc-1", "pharmacy-2", 1, 2)));
+
+        assertEquals(List.of(affinity, firstGroup),
+                policy.rank(List.of(firstGroup, affinity), snapshot));
     }
 
     @Test

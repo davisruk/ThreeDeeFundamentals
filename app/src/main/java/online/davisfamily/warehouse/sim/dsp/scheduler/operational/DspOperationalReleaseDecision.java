@@ -1,5 +1,6 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.ReleasePhysicalToteFromOsrCommand;
 
 public record DspOperationalReleaseDecision(
@@ -24,6 +25,18 @@ public record DspOperationalReleaseDecision(
                 || !command.releaseTargetId().equals(routeEntry.targetId())) {
             throw new IllegalArgumentException(
                     "command identity and target must match the operational decision");
+        }
+        if (!candidate.logicalOrderState().routeRequirements().requiresP2p()
+                && command.proposedP2pAssignment().isPresent()) {
+            throw new IllegalArgumentException(
+                    "non-P2P operational decisions must not carry a P2P assignment");
+        }
+        if (routeEntry.stationType() == StationType.P2P
+                && command.proposedP2pAssignment().isPresent()
+                && !command.proposedP2pAssignment().orElseThrow().destination().targetId()
+                        .equals(routeEntry.targetId())) {
+            throw new IllegalArgumentException(
+                    "direct P2P command target must match its proposed assignment");
         }
     }
 }

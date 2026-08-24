@@ -11,6 +11,8 @@ import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 
@@ -19,7 +21,9 @@ public record DspOperationalReleaseSnapshot(
         List<ServiceCentrePharmacyGroup> pharmacyGroups,
         Map<StationType, StationAdmissionSnapshot> stationAdmissions,
         Set<PreparedLineKey> preparedLineKeys,
-        List<OperationalCandidateRouteAdmission> routeAdmissions) {
+        List<OperationalCandidateRouteAdmission> routeAdmissions,
+        P2pLineLeaseCatalogSnapshot p2pLineLeases,
+        Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions) {
 
     public DspOperationalReleaseSnapshot(
             List<DspOperationalReleaseCandidate> candidates,
@@ -31,7 +35,25 @@ public record DspOperationalReleaseSnapshot(
                 pharmacyGroups,
                 stationAdmissions,
                 preparedLineKeys,
-                deriveCompatibilityRouteAdmissions(candidates, stationAdmissions));
+                deriveCompatibilityRouteAdmissions(candidates, stationAdmissions),
+                new P2pLineLeaseCatalogSnapshot(List.of()),
+                Map.of());
+    }
+
+    public DspOperationalReleaseSnapshot(
+            List<DspOperationalReleaseCandidate> candidates,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions) {
+        this(
+                candidates,
+                pharmacyGroups,
+                stationAdmissions,
+                preparedLineKeys,
+                routeAdmissions,
+                new P2pLineLeaseCatalogSnapshot(List.of()),
+                Map.of());
     }
 
     public DspOperationalReleaseSnapshot {
@@ -40,6 +62,11 @@ public record DspOperationalReleaseSnapshot(
         stationAdmissions = copyStationAdmissions(stationAdmissions);
         preparedLineKeys = copyPreparedLineKeys(preparedLineKeys);
         routeAdmissions = copyRouteAdmissions(routeAdmissions, candidates);
+        if (p2pLineLeases == null) {
+            throw new IllegalArgumentException("p2pLineLeases must not be null");
+        }
+        p2pRouteAdmissions = copyP2pRouteAdmissions(
+                p2pRouteAdmissions, p2pLineLeases);
         validateCandidateGroups(candidates, pharmacyGroups);
     }
 
@@ -90,6 +117,10 @@ public record DspOperationalReleaseSnapshot(
                 .mapToInt(pharmacyId -> findGroup(serviceCentreId, pharmacyId).groupIndex())
                 .min()
                 .orElseThrow();
+    }
+
+    public boolean stickyP2pAllocationEnabled() {
+        return !p2pLineLeases.lines().isEmpty();
     }
 
     private static List<DspOperationalReleaseCandidate> copyCandidates(
@@ -183,6 +214,34 @@ public record DspOperationalReleaseSnapshot(
             copy.add(preparedLineKey);
         }
         return Collections.unmodifiableSet(copy);
+    }
+
+    private static Map<OperationalRouteDestination, Boolean> copyP2pRouteAdmissions(
+            Map<OperationalRouteDestination, Boolean> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot lineLeases) {
+        if (routeAdmissions == null) {
+            throw new IllegalArgumentException("p2pRouteAdmissions must not be null");
+        }
+        Map<OperationalRouteDestination, Boolean> copy = new LinkedHashMap<>();
+        routeAdmissions.forEach((destination, admissionOpen) -> {
+            if (destination == null || admissionOpen == null) {
+                throw new IllegalArgumentException(
+                        "p2pRouteAdmissions must not contain null keys or values");
+            }
+            if (destination.stationType() != StationType.P2P) {
+                throw new IllegalArgumentException(
+                        "p2pRouteAdmissions must contain only P2P destinations");
+            }
+            copy.put(destination, admissionOpen);
+        });
+        Set<OperationalRouteDestination> configuredDestinations = lineLeases.lines().stream()
+                .map(line -> line.definition().destination())
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (!copy.keySet().equals(configuredDestinations)) {
+            throw new IllegalArgumentException(
+                    "p2pRouteAdmissions must contain exactly every configured P2P destination");
+        }
+        return Collections.unmodifiableMap(copy);
     }
 
     private static List<OperationalCandidateRouteAdmission> copyRouteAdmissions(
