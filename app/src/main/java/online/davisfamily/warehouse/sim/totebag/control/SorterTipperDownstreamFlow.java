@@ -66,4 +66,8 @@ public class SorterTipperDownstreamFlow implements TipperDownstreamFlow {
     public List<Pack> getCompletedOutputPacks() {
         return List.copyOf(completedOutputPacks);
     }
+
+    public int getPendingSorterOutfeedCount() {
+        return pendingSorterOutfeed.size();
+    }
 }

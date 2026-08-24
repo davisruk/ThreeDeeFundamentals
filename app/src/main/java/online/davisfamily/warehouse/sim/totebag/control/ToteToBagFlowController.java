@@ -11,6 +11,7 @@ import online.davisfamily.warehouse.sim.totebag.control.*;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -41,6 +42,7 @@ public class ToteToBagFlowController implements SimulationController {
     private final List<PdcTransfer> activePdcTransfers = new ArrayList<>();
     private final List<PrlToPcrTransfer> activePrlToPcrTransfers = new ArrayList<>();
     private final Queue<ReleasedPackGroup> releasedGroups = new ArrayDeque<>();
+    private final Set<String> outstandingExpectedCorrelationIds = new LinkedHashSet<>();
     private final PdcTransferDurationProvider pdcTransferDurationProvider;
     private final PdcDiversionDistanceProvider pdcDiversionDistanceProvider;
     private final PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider;
@@ -379,7 +381,7 @@ public class ToteToBagFlowController implements SimulationController {
     }
 
     public Map<String, PrlConveyor> getPrlsById() {
-        return prlsById;
+        return Collections.unmodifiableMap(new LinkedHashMap<>(prlsById));
     }
 
     public Queue<ReleasedPackGroup> getReleasedGroups() {
@@ -404,6 +406,10 @@ public class ToteToBagFlowController implements SimulationController {
 
     public List<PrlToPcrTransfer> getActivePrlToPcrTransfers() {
         return List.copyOf(activePrlToPcrTransfers);
+    }
+
+    public int getOutstandingExpectedBagGroupCount() {
+        return outstandingExpectedCorrelationIds.size();
     }
 
     public boolean canAdmit(ToteLoadPlan candidateToteLoadPlan) {
@@ -445,6 +451,7 @@ public class ToteToBagFlowController implements SimulationController {
         List<PrlAssignmentPlan> plans = assignmentPlanner.createPlans(batchPlan, prlsById.keySet().stream().toList());
         for (PrlAssignmentPlan plan : plans) {
             prlsById.get(plan.prlId()).assign(plan);
+            outstandingExpectedCorrelationIds.add(plan.correlationId());
         }
         initialized = true;
     }
@@ -639,6 +646,7 @@ public class ToteToBagFlowController implements SimulationController {
             pcrConveyor.pollPackAtOutfeed();
             if (!pcrConveyor.hasWorkInFlight()) {
                 downstreamPackGroupReceiver.completeIncomingTransfer(groupAtOutfeed);
+                outstandingExpectedCorrelationIds.remove(groupAtOutfeed.correlationId());
                 return;
             }
         }
@@ -665,6 +673,7 @@ public class ToteToBagFlowController implements SimulationController {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No idle PRL available for correlation " + correlationId));
         idlePrl.assign(new PrlAssignmentPlan(idlePrl.getId(), correlationId, expectedPackCount));
+        outstandingExpectedCorrelationIds.add(correlationId);
         return idlePrl;
     }
 

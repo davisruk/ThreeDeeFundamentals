@@ -99,6 +99,10 @@ public class SortingMachine implements StatefulSimObject<SortingMachineState> {
         return !outputQueue.isEmpty();
     }
 
+    public int getReleasedPackCount() {
+        return outputQueue.size();
+    }
+
     public Pack pollReleasedPack() {
         return outputQueue.poll();
     }

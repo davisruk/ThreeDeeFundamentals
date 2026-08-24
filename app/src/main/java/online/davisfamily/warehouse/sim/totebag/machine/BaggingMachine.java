@@ -258,6 +258,14 @@ public class BaggingMachine implements StatefulSimObject<BaggingMachineState>, P
         return activeDischarge;
     }
 
+    public int getPendingDischargeCount() {
+        return pendingDischarges.size();
+    }
+
+    public boolean hasActiveDischarge() {
+        return activeDischarge != null || dischargeWithoutReceiverActive;
+    }
+
     public List<String> getCompletedCorrelationIds() {
         return Collections.unmodifiableList(completedCorrelationIds);
     }

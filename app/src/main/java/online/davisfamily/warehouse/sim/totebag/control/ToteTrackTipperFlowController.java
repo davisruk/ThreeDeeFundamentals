@@ -163,6 +163,10 @@ public class ToteTrackTipperFlowController implements SimulationController {
         return activeTote != null && toteCaptured && !toteReleased;
     }
 
+    public boolean hasActiveTote() {
+        return activeTote != null;
+    }
+
     public boolean canAcceptNextTote() {
         return activeTote == null
                 && tippingMachine.isIdle()
