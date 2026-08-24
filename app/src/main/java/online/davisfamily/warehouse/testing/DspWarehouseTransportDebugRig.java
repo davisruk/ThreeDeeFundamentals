@@ -43,13 +43,23 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequ
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
-import online.davisfamily.warehouse.sim.dsp.p2p.arrival.AllowAllP2pArrivalAdmissionPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.ContainedPackP2pTipperPayloadFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalConsumerBinding;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalRouteBinding;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pTipperArrivalTarget;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pBaggingActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pInputActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivityProbe;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseRegistry;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pArrivalAdmissionPolicy;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntime;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
@@ -94,6 +104,9 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     private final DspWarehouseTransportRuntime runtime;
     private final TipperInputQueue p2pInputQueue;
     private final DspP2pArrivalConsumerRuntime p2pArrivalRuntime;
+    private final List<P2pLineDefinition> p2pLineDefinitions;
+    private final Map<P2pLineId, P2pLineActivityProbe> p2pActivityProbes;
+    private final P2pLineLeaseRegistry p2pLeaseRegistry;
     private boolean observedP2pBackpressure;
     private boolean observedSeparatedP2pBackpressure;
     private boolean p2pCapacityReturned;
@@ -193,6 +206,35 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
         StationRoutedToteArrivalQueue p2pQueue = queue(p2pDestination, 1);
         p2pInputQueue = new TipperInputQueue("warehouse-p2p-input", 1);
 
+        List<P2pLineDefinition> lineDefinitions = new ArrayList<>();
+        lineDefinitions.add(new P2pLineDefinition(
+                new P2pLineId("warehouse-p2p-line-1"), p2pDestination));
+        for (int lineNumber = 2; lineNumber <= 5; lineNumber++) {
+            lineDefinitions.add(new P2pLineDefinition(
+                    new P2pLineId("warehouse-p2p-line-" + lineNumber),
+                    destination(
+                            StationType.P2P,
+                            "warehouse-p2p-placeholder-" + lineNumber)));
+        }
+        p2pLineDefinitions = List.copyOf(lineDefinitions);
+        p2pLeaseRegistry = new P2pLineLeaseRegistry(p2pLineDefinitions);
+        Map<P2pLineId, P2pLineActivityProbe> activityProbes = new LinkedHashMap<>();
+        activityProbes.put(
+                p2pLineDefinitions.getFirst().lineId(),
+                () -> new P2pLineActivitySnapshot(
+                        new P2pInputActivitySnapshot(
+                                p2pQueue.snapshot().occupancy(),
+                                p2pInputQueue.snapshot().toteIds().size(),
+                                false,
+                                0),
+                        P2pPackPathActivitySnapshot.idle(),
+                        P2pBaggingActivitySnapshot.idle(),
+                        Optional.empty()));
+        p2pLineDefinitions.stream().skip(1).forEach(definition ->
+                activityProbes.put(
+                        definition.lineId(), P2pLineActivitySnapshot::idle));
+        p2pActivityProbes = Map.copyOf(activityProbes);
+
         List<WarehouseTransferRoutingTable.Entry> transferEntries = List.of(
                 entry(firstMachine, thirdPartyDestination, TransferRoutingDecision.continueOnCurrentRoute()),
                 entry(firstMachine, adaptingDestination, TransferRoutingDecision.transferTo(
@@ -203,11 +245,20 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                         adaptingTarget, TransferOrientationPolicy.PRESERVE_TOTE_ORIENTATION)),
                 entry(secondMachine, p2pDestination, TransferRoutingDecision.continueOnCurrentRoute()));
 
+        P2pLineDefinition debugLine = p2pLineDefinitions.getFirst();
+        P2pPhysicalToteAssignment firstP2pAssignment = assignment(
+                "transport-p2p-1", debugLine);
+        P2pPhysicalToteAssignment secondP2pAssignment = assignment(
+                "transport-p2p-2", debugLine);
+        p2pLeaseRegistry.acquireLease(
+                debugLine.lineId(), "104", P2pLineActivitySnapshot.idle());
+        p2pLeaseRegistry.commitAssignment(firstP2pAssignment);
+        p2pLeaseRegistry.commitAssignment(secondP2pAssignment);
         scheduledRequests = List.of(
-                request("transport-p2p-1", p2pDestination, 1),
+                request("transport-p2p-1", p2pDestination, 1, firstP2pAssignment),
                 request("transport-third-party", thirdPartyDestination, 2),
                 request("transport-adapting", adaptingDestination, 3),
-                request("transport-p2p-2", p2pDestination, 4));
+                request("transport-p2p-2", p2pDestination, 4, secondP2pAssignment));
         scheduledRequests.forEach(request -> loadPlans.put(
                 request.physicalToteId().value(),
                 new ToteLoadPlan(request.physicalToteId(), List.of())));
@@ -250,7 +301,8 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                 sim,
                 List.of(new P2pArrivalConsumerBinding(
                         p2pQueue,
-                        new AllowAllP2pArrivalAdmissionPolicy(),
+                        new StickyP2pArrivalAdmissionPolicy(
+                                debugLine, this::p2pLeaseSnapshot),
                         new P2pArrivalRouteBinding(p2p, p2p),
                         new ContainedPackP2pTipperPayloadFactory(
                                 toteGeometry.getInnerBottomWidth(),
@@ -375,7 +427,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
             StationRoutedToteArrivalQueueSnapshot p2pStation =
                     arrivalQueues.get(P2P_TARGET_ID).snapshot();
             var p2pInput = p2pInputQueue.snapshot();
-            return List.of(
+            List<String> description = new ArrayList<>(List.of(
                     "Type: DSP warehouse transport",
                     "Launch: " + launch.launchOccupancy() + " / " + launch.launchCapacity(),
                     "Transport: " + ingress.transportOccupancy() + " / " + ingress.transportCapacity(),
@@ -391,8 +443,36 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                             + " / " + p2pStation.capacity(),
                     "P2P tipper input: " + p2pInput.toteIds().size()
                             + " / " + p2pInput.capacity(),
-                    "Blocked: " + (arrival.blocked() ? arrival.blockedReason() : "none"));
+                    "Blocked: " + (arrival.blocked() ? arrival.blockedReason() : "none")));
+            p2pLeaseSnapshot().lines().forEach(line -> description.add(
+                    "P2P lease " + line.definition().lineId().value()
+                            + ": owner=" + line.serviceCentreId().orElse("none")
+                            + ", pharmacy=" + line.activePharmacyId().orElse("none")
+                            + ", quiescent=" + line.activity().quiescent()
+                            + ", blockers=[arrival="
+                                    + line.activity().input().stationArrivalCount()
+                                    + ", tipperInput="
+                                    + line.activity().input().tipperInputCount()
+                                    + ", processingDrained="
+                                    + line.activity().processingDrained() + "]"
+                            + ", assignments=" + line.physicalAssignments().stream()
+                                    .map(value -> value.physicalToteId().value()).toList()
+                            + ", closure=none"
+                            + ", transition=" + p2pLeaseRegistry
+                                    .lastTransitionFor(line.definition().lineId())
+                                    .map(value -> value.details()).orElse("none")));
+            return List.copyOf(description);
         });
+    }
+
+    private P2pLineLeaseCatalogSnapshot p2pLeaseSnapshot() {
+        Map<P2pLineId, P2pLineActivitySnapshot> activities = new LinkedHashMap<>();
+        for (P2pLineDefinition definition : p2pLineDefinitions) {
+            activities.put(
+                    definition.lineId(),
+                    p2pActivityProbes.get(definition.lineId()).snapshot());
+        }
+        return p2pLeaseRegistry.snapshot(activities);
     }
 
     private void addQueueMarker(
@@ -654,6 +734,39 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
         return new OsrOutboundRouteLaunchRequest(
                 new OsrProcessingReleaseRequest(manifest, Duration.ofSeconds(sequence)),
                 destination);
+    }
+
+    private static OsrOutboundRouteLaunchRequest request(
+            String physicalToteId,
+            OperationalRouteDestination destination,
+            long sequence,
+            P2pPhysicalToteAssignment assignment) {
+        InboundToteManifest manifest = new InboundToteManifest(
+                new PhysicalToteId(physicalToteId),
+                new OrderSheetKey("order-" + physicalToteId, 1),
+                OrderType.FULL_PACK,
+                "104",
+                List.of(new DspOrderItem(
+                        "line-" + physicalToteId,
+                        "product-" + physicalToteId,
+                        1)),
+                sequence);
+        return new OsrOutboundRouteLaunchRequest(
+                new OsrProcessingReleaseRequest(
+                        manifest,
+                        Duration.ofSeconds(sequence),
+                        Optional.of(assignment)),
+                destination);
+    }
+
+    private static P2pPhysicalToteAssignment assignment(
+            String physicalToteId,
+            P2pLineDefinition line) {
+        return new P2pPhysicalToteAssignment(
+                new PhysicalToteId(physicalToteId),
+                "104",
+                line.lineId(),
+                line.destination());
     }
 
     private static TrackSpec rollerTrackSpec(ToteGeometry toteGeometry, boolean guides) {

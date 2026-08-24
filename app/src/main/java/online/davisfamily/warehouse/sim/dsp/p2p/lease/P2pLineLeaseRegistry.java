@@ -11,12 +11,14 @@ import java.util.Set;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 
 public final class P2pLineLeaseRegistry {
     private final List<P2pLineDefinition> definitions;
     private final Map<P2pLineId, MutableLineLease> leasesByLineId = new LinkedHashMap<>();
     private final Map<PhysicalToteId, P2pPhysicalToteAssignment> assignmentsByPhysicalToteId =
             new LinkedHashMap<>();
+    private long transitionSequence;
 
     public P2pLineLeaseRegistry(List<P2pLineDefinition> definitions) {
         if (definitions == null) {
@@ -56,6 +58,10 @@ public final class P2pLineLeaseRegistry {
         return Optional.ofNullable(assignmentsByPhysicalToteId.get(physicalToteId));
     }
 
+    public Optional<P2pLineLeaseTransitionSnapshot> lastTransitionFor(P2pLineId lineId) {
+        return Optional.ofNullable(requireLine(lineId).lastTransition);
+    }
+
     public void acquireLease(
             P2pLineId lineId,
             String serviceCentreId,
@@ -76,7 +82,10 @@ public final class P2pLineLeaseRegistry {
             throw new IllegalStateException("An unleased P2P line must be quiescent before acquisition");
         }
 
-        line.serviceCentreId = normalizedServiceCentreId;
+        if (line.serviceCentreId == null) {
+            line.serviceCentreId = normalizedServiceCentreId;
+            recordTransition(line, "LEASE_ACQUIRED serviceCentre=" + normalizedServiceCentreId);
+        }
     }
 
     public void commitAssignment(P2pPhysicalToteAssignment assignment) {
@@ -108,6 +117,10 @@ public final class P2pLineLeaseRegistry {
         }
 
         assignmentsByPhysicalToteId.put(assignment.physicalToteId(), assignment);
+        recordTransition(
+                line,
+                "ASSIGNMENT_COMMITTED physicalTote="
+                        + assignment.physicalToteId().value());
     }
 
     public void releaseLease(
@@ -132,6 +145,32 @@ public final class P2pLineLeaseRegistry {
         }
 
         line.serviceCentreId = null;
+        recordTransition(line, "LEASE_RELEASED serviceCentre=" + normalizedExpectedOwner);
+    }
+
+    public void recordOutboundToteClosure(
+            P2pLineId lineId,
+            OutboundToteSnapshot closedTote) {
+        MutableLineLease line = requireLine(lineId);
+        if (closedTote == null) {
+            throw new IllegalArgumentException("closedTote must not be null");
+        }
+        if (closedTote.open() || !closedTote.p2pLineId().equals(lineId)) {
+            throw new IllegalArgumentException(
+                    "closedTote must be closed and match the P2P line");
+        }
+        if (line.serviceCentreId == null
+                || closedTote.serviceCentreId().isEmpty()
+                || !closedTote.serviceCentreId().orElseThrow().equals(line.serviceCentreId)) {
+            throw new IllegalStateException(
+                    "closedTote must belong to the current P2P line lease owner");
+        }
+        recordTransition(
+                line,
+                "OUTBOUND_TOTE_CLOSED physicalTote="
+                        + closedTote.physicalToteId().value()
+                        + " reason="
+                        + closedTote.closureReason().orElseThrow());
     }
 
     public P2pLineLeaseCatalogSnapshot snapshot(
@@ -205,9 +244,15 @@ public final class P2pLineLeaseRegistry {
         return value.trim();
     }
 
+    private void recordTransition(MutableLineLease line, String details) {
+        line.lastTransition = new P2pLineLeaseTransitionSnapshot(
+                ++transitionSequence, details);
+    }
+
     private static final class MutableLineLease {
         private final P2pLineDefinition definition;
         private String serviceCentreId;
+        private P2pLineLeaseTransitionSnapshot lastTransition;
 
         private MutableLineLease(P2pLineDefinition definition) {
             this.definition = definition;

@@ -75,10 +75,12 @@ public final class P2pLeaseReleaseController implements SimulationController {
                 continue;
             }
             if (line.activity().openOutboundTote().isPresent()) {
-                outboundToteAllocator.closeForApplicableWorkCompletion(
+                var closedTote = outboundToteAllocator.closeForApplicableWorkCompletion(
                         line.definition().lineId(), time)
                         .orElseThrow(() -> new IllegalStateException(
                                 "P2P activity reported an open outbound tote that could not be closed"));
+                leaseRegistry.recordOutboundToteClosure(
+                        line.definition().lineId(), closedTote);
                 return;
             }
             leaseRegistry.releaseLease(line.definition().lineId(), owner, line.activity());

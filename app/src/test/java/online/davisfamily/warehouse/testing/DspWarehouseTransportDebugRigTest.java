@@ -58,6 +58,16 @@ class DspWarehouseTransportDebugRigTest {
                 .anyMatch(line -> line.startsWith("P2P station arrival:")));
         assertTrue(transportInspection.stream()
                 .anyMatch(line -> line.startsWith("P2P tipper input:")));
+        assertEquals(5, transportInspection.stream()
+                .filter(line -> line.startsWith("P2P lease warehouse-p2p-line-"))
+                .count());
+        assertTrue(transportInspection.stream().anyMatch(line ->
+                line.startsWith("P2P lease warehouse-p2p-line-1:")
+                        && line.contains("owner=104")
+                        && line.contains("transport-p2p-1")
+                        && line.contains("blockers=[")
+                        && line.contains("closure=none")
+                        && line.contains("transition=ASSIGNMENT_COMMITTED")));
 
         for (String targetId : List.of(
                 DspWarehouseTransportDebugRig.THIRD_PARTY_TARGET_ID,
