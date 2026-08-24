@@ -91,6 +91,10 @@ public final class P2pTipperArrivalTarget implements ToteLoadPlanProvider {
                 acceptedCount);
     }
 
+    TipperInputQueue inputQueue() {
+        return inputQueue;
+    }
+
     private void validateAcceptance(
             RoutedPhysicalTote routedTote,
             TipperTotePayload payload) {
