@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
@@ -18,6 +19,7 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCand
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
@@ -83,6 +85,32 @@ public final class DspOperationalReleaseSnapshotFactory {
                 p2pTargetAdmissions);
     }
 
+    public DspOperationalReleaseSnapshot create(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            OperationalCandidateRouteAdmissionFactory routeAdmissionFactory,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions,
+            P2pElasticAllocationSnapshot elasticAllocation) {
+        if (routeAdmissionFactory == null || p2pLineLeases == null
+                || p2pTargetAdmissions == null || elasticAllocation == null) {
+            throw new IllegalArgumentException("elastic operational snapshot inputs must not be null");
+        }
+        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
+                physicalSnapshot, manifestCatalog, logicalSnapshot);
+        List<OperationalCandidateRouteAdmission> routeAdmissions =
+                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
+        return createSnapshot(
+                joinedCandidates,
+                manifestCatalog,
+                logicalSnapshot,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pTargetAdmissions,
+                Optional.of(elasticAllocation));
+    }
+
     private static List<DspOperationalReleaseCandidate> joinCandidates(
             OsrProcessingReleaseSnapshot physicalSnapshot,
             InboundToteManifestCatalog manifestCatalog,
@@ -146,6 +174,24 @@ public final class DspOperationalReleaseSnapshotFactory {
             List<OperationalCandidateRouteAdmission> routeAdmissions,
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
             List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions) {
+        return createSnapshot(
+                joinedCandidates,
+                manifestCatalog,
+                logicalSnapshot,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pTargetAdmissions,
+                Optional.empty());
+    }
+
+    private static DspOperationalReleaseSnapshot createSnapshot(
+            List<DspOperationalReleaseCandidate> joinedCandidates,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions,
+            Optional<P2pElasticAllocationSnapshot> elasticAllocation) {
         Map<OperationalRouteDestination, Boolean> targetAdmissions = new LinkedHashMap<>();
         for (OperationalRouteTargetAdmissionSnapshot admission : p2pTargetAdmissions) {
             if (admission == null) {
@@ -167,7 +213,8 @@ public final class DspOperationalReleaseSnapshotFactory {
                 logicalSnapshot.preparedLineKeys(),
                 routeAdmissions,
                 p2pLineLeases,
-                targetAdmissions);
+                targetAdmissions,
+                elasticAllocation);
     }
 
     private static List<OperationalCandidateRouteAdmission> deriveCompatibilityAdmissions(

@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,12 +29,18 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteD
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pBaggingActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticStickyP2pLineAllocationPolicy;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationCalibrationStatus;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreLineDemandSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreWorkloadSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pInputActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreDeadlineSnapshot;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
@@ -182,6 +190,117 @@ class DspOperationalReleaseSchedulerTest {
                 Map.of(otherOwner.definition().destination(), true)))
                 .releaseDecision().orElseThrow();
         assertTrue(nonP2p.command().proposedP2pAssignment().isEmpty());
+    }
+
+    @Test
+    void shouldApplyElasticBudgetOnlyWhenElasticPolicyIsExplicitlyInjected() {
+        DspOperationalReleaseCandidate candidate = candidate(
+                "tote-1",
+                logicalState(
+                        "order-1", 1, OrderType.FULL_PACK, "sc-1", 999,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                1,
+                OsrProcessingReleaseAvailability.AVAILABLE,
+                Optional.empty());
+        P2pLineLeaseSnapshot line = leasedLine(
+                "line-1", "sc-1", Optional.empty());
+        P2pLineLeaseCatalogSnapshot catalog = new P2pLineLeaseCatalogSnapshot(List.of(line));
+        P2pElasticAllocationSnapshot allocation = elasticAllocation(
+                catalog,
+                List.of(demand("sc-1", 999, 0, List.of(), List.of("line-1"))));
+        DspOperationalReleaseSnapshot snapshot = elasticSnapshot(
+                List.of(candidate),
+                Map.of(StationType.P2P, openAdmission(StationType.P2P, "target-line-1")),
+                Set.of(),
+                catalog,
+                Map.of(line.definition().destination(), true),
+                allocation);
+
+        assertTrue(scheduler.evaluate(snapshot).releaseDecision().isPresent());
+
+        DspOperationalReleaseScheduler elasticScheduler = elasticScheduler();
+        DspOperationalReleaseEvaluation blocked = elasticScheduler.evaluate(snapshot);
+        assertTrue(blocked.releaseDecision().isEmpty());
+        assertEquals("NO_ELASTIC_LINE_BUDGET",
+                blocked.blockedCandidates().getFirst().blocks().getFirst().reason());
+    }
+
+    @Test
+    void shouldReleaseLaterEligibleCentreWhenEarlierCandidateHasNoElasticBudget() {
+        DspOperationalReleaseCandidate earlier = candidate(
+                "tote-1",
+                logicalState(
+                        "order-1", 1, OrderType.FULL_PACK, "sc-1", 999,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                1,
+                OsrProcessingReleaseAvailability.AVAILABLE,
+                Optional.empty());
+        DspOperationalReleaseCandidate later = candidate(
+                "tote-2",
+                logicalState(
+                        "order-2", 1, OrderType.FULL_PACK, "sc-2", 998,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                2,
+                OsrProcessingReleaseAvailability.AVAILABLE,
+                Optional.empty());
+        P2pLineLeaseSnapshot line = leasedLine("line-1", "sc-2", Optional.empty());
+        P2pLineLeaseCatalogSnapshot catalog = new P2pLineLeaseCatalogSnapshot(List.of(line));
+        P2pElasticAllocationSnapshot allocation = elasticAllocation(
+                catalog,
+                List.of(
+                        demand("sc-1", 999, 0, List.of(), List.of()),
+                        demand("sc-2", 998, 1, List.of("line-1"), List.of())));
+        DspOperationalReleaseSnapshot snapshot = elasticSnapshot(
+                List.of(earlier, later),
+                Map.of(StationType.P2P, openAdmission(StationType.P2P, "target-line-1")),
+                Set.of(),
+                catalog,
+                Map.of(line.definition().destination(), true),
+                allocation);
+
+        DspOperationalReleaseEvaluation evaluation = elasticScheduler().evaluate(snapshot);
+
+        assertEquals(new PhysicalToteId("tote-2"),
+                evaluation.releaseDecision().orElseThrow().command().physicalToteId());
+        assertEquals(new PhysicalToteId("tote-1"),
+                evaluation.blockedCandidates().getFirst().physicalToteId());
+    }
+
+    @Test
+    void shouldLeaveNonP2pCandidateIndependentOfElasticBudget() {
+        DspOperationalReleaseCandidate adapted = candidate(
+                "adapted-tote",
+                logicalState(
+                        "adapted-order", 1, OrderType.ADAPTED, "sc-1", 999,
+                        DspOrderLineType.ADAPTED,
+                        new RouteRequirements(
+                                false, true, false, false, false, StartLocation.OSR)),
+                1,
+                OsrProcessingReleaseAvailability.AVAILABLE,
+                Optional.empty());
+        P2pLineLeaseSnapshot line = new P2pLineLeaseSnapshot(
+                new P2pLineDefinition(
+                        new P2pLineId("line-1"),
+                        new OperationalRouteDestination(StationType.P2P, "target-line-1")),
+                Optional.empty(),
+                P2pLineActivitySnapshot.idle(),
+                List.of());
+        P2pLineLeaseCatalogSnapshot catalog = new P2pLineLeaseCatalogSnapshot(List.of(line));
+        P2pElasticAllocationSnapshot allocation = elasticAllocation(catalog, List.of());
+        DspOperationalReleaseSnapshot snapshot = elasticSnapshot(
+                List.of(adapted),
+                Map.of(StationType.ADAPTING,
+                        openAdmission(StationType.ADAPTING, "adapting-1")),
+                Set.of(),
+                catalog,
+                Map.of(line.definition().destination(), false),
+                allocation);
+
+        DspOperationalReleaseDecision decision = elasticScheduler().evaluate(snapshot)
+                .releaseDecision().orElseThrow();
+
+        assertEquals(StationType.ADAPTING, decision.routeEntry().stationType());
+        assertTrue(decision.command().proposedP2pAssignment().isEmpty());
     }
 
     @Test
@@ -512,6 +631,97 @@ class DspOperationalReleaseSchedulerTest {
                 routeAdmissions,
                 lineLeases,
                 targetAdmissions);
+    }
+
+    private static DspOperationalReleaseSnapshot elasticSnapshot(
+            List<DspOperationalReleaseCandidate> candidates,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            P2pLineLeaseCatalogSnapshot lineLeases,
+            Map<OperationalRouteDestination, Boolean> targetAdmissions,
+            P2pElasticAllocationSnapshot allocation) {
+        DspOperationalReleaseSnapshot sticky = stickySnapshot(
+                candidates,
+                stationAdmissions,
+                preparedLineKeys,
+                lineLeases,
+                targetAdmissions);
+        return new DspOperationalReleaseSnapshot(
+                sticky.candidates(),
+                sticky.pharmacyGroups(),
+                sticky.stationAdmissions(),
+                sticky.preparedLineKeys(),
+                sticky.routeAdmissions(),
+                sticky.p2pLineLeases(),
+                sticky.p2pRouteAdmissions(),
+                Optional.of(allocation));
+    }
+
+    private static DspOperationalReleaseScheduler elasticScheduler() {
+        return new DspOperationalReleaseScheduler(
+                new OperationalDependencyReadinessPolicy(),
+                new OperationalRouteEntryAdmissionPolicy(),
+                new PharmacyGroupedSourceSequenceRankingPolicy(),
+                new DeadlineAwareElasticStickyP2pLineAllocationPolicy());
+    }
+
+    private static P2pElasticAllocationSnapshot elasticAllocation(
+            P2pLineLeaseCatalogSnapshot catalog,
+            List<P2pServiceCentreLineDemandSnapshot> demands) {
+        return new P2pElasticAllocationSnapshot(
+                P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                P2pElasticAllocationCalibrationStatus.UNCALIBRATED,
+                LocalDateTime.of(2026, 8, 24, 6, 0),
+                catalog.lines().stream().map(line -> line.definition().lineId()).toList(),
+                1,
+                demands,
+                List.of());
+    }
+
+    private static P2pServiceCentreLineDemandSnapshot demand(
+            String serviceCentreId,
+            int priority,
+            int desiredLines,
+            List<String> feedingLineIds,
+            List<String> drainingLineIds) {
+        LocalDateTime evaluatedAt = LocalDateTime.of(2026, 8, 24, 6, 0);
+        List<P2pLineId> feeding = feedingLineIds.stream().map(P2pLineId::new).toList();
+        List<P2pLineId> draining = drainingLineIds.stream().map(P2pLineId::new).toList();
+        P2pServiceCentreWorkloadSnapshot workload = new P2pServiceCentreWorkloadSnapshot(
+                serviceCentreId,
+                List.of(new PhysicalToteId("remaining-" + serviceCentreId)),
+                0,
+                List.of(),
+                List.of(),
+                Duration.ofHours(1));
+        ServiceCentreDeadlineSnapshot deadline = new ServiceCentreDeadlineSnapshot(
+                serviceCentreId,
+                "Centre " + serviceCentreId,
+                priority,
+                evaluatedAt,
+                evaluatedAt.plusHours(11),
+                evaluatedAt.plusHours(10),
+                evaluatedAt.plusHours(10),
+                evaluatedAt.plusHours(10),
+                Duration.ofHours(10),
+                false,
+                false);
+        return new P2pServiceCentreLineDemandSnapshot(
+                serviceCentreId,
+                priority,
+                Duration.ZERO,
+                deadline,
+                workload,
+                Duration.ofHours(1),
+                1,
+                1,
+                desiredLines,
+                feeding,
+                draining,
+                Math.max(0, desiredLines - feeding.size()),
+                Math.max(0, 1 - desiredLines),
+                true,
+                List.of());
     }
 
     private static P2pLineLeaseSnapshot leasedLine(

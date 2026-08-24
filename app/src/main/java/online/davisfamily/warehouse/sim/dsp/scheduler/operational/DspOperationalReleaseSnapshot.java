@@ -12,6 +12,8 @@ import java.util.Set;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -23,7 +25,8 @@ public record DspOperationalReleaseSnapshot(
         Set<PreparedLineKey> preparedLineKeys,
         List<OperationalCandidateRouteAdmission> routeAdmissions,
         P2pLineLeaseCatalogSnapshot p2pLineLeases,
-        Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions) {
+        Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
+        Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation) {
 
     public DspOperationalReleaseSnapshot(
             List<DspOperationalReleaseCandidate> candidates,
@@ -37,7 +40,8 @@ public record DspOperationalReleaseSnapshot(
                 preparedLineKeys,
                 deriveCompatibilityRouteAdmissions(candidates, stationAdmissions),
                 new P2pLineLeaseCatalogSnapshot(List.of()),
-                Map.of());
+                Map.of(),
+                Optional.empty());
     }
 
     public DspOperationalReleaseSnapshot(
@@ -53,7 +57,27 @@ public record DspOperationalReleaseSnapshot(
                 preparedLineKeys,
                 routeAdmissions,
                 new P2pLineLeaseCatalogSnapshot(List.of()),
-                Map.of());
+                Map.of(),
+                Optional.empty());
+    }
+
+    public DspOperationalReleaseSnapshot(
+            List<DspOperationalReleaseCandidate> candidates,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions) {
+        this(
+                candidates,
+                pharmacyGroups,
+                stationAdmissions,
+                preparedLineKeys,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pRouteAdmissions,
+                Optional.empty());
     }
 
     public DspOperationalReleaseSnapshot {
@@ -67,6 +91,10 @@ public record DspOperationalReleaseSnapshot(
         }
         p2pRouteAdmissions = copyP2pRouteAdmissions(
                 p2pRouteAdmissions, p2pLineLeases);
+        if (elasticP2pAllocation == null) {
+            throw new IllegalArgumentException("elasticP2pAllocation must not be null");
+        }
+        validateElasticAllocation(candidates, p2pLineLeases, elasticP2pAllocation);
         validateCandidateGroups(candidates, pharmacyGroups);
     }
 
@@ -121,6 +149,35 @@ public record DspOperationalReleaseSnapshot(
 
     public boolean stickyP2pAllocationEnabled() {
         return !p2pLineLeases.lines().isEmpty();
+    }
+
+    private static void validateElasticAllocation(
+            List<DspOperationalReleaseCandidate> candidates,
+            P2pLineLeaseCatalogSnapshot lineLeases,
+            Optional<P2pElasticAllocationSnapshot> elasticAllocation) {
+        elasticAllocation.ifPresent(allocation -> {
+            List<P2pLineId> lineIds = lineLeases.lines().stream()
+                    .map(line -> line.definition().lineId())
+                    .toList();
+            if (!allocation.configuredLineIds().equals(lineIds)) {
+                throw new IllegalArgumentException(
+                        "elastic allocation lines must match operational P2P leases");
+            }
+            for (DspOperationalReleaseCandidate candidate : candidates) {
+                if (!candidate.logicalOrderState().routeRequirements().requiresP2p()) {
+                    continue;
+                }
+                String serviceCentreId = candidate.physicalCandidate().serviceCentreId();
+                boolean hasDemand = allocation.find(serviceCentreId).isPresent();
+                boolean hasExclusion = allocation.issues().stream()
+                        .anyMatch(issue -> issue.serviceCentreId().equals(serviceCentreId));
+                if (!hasDemand && !hasExclusion) {
+                    throw new IllegalArgumentException(
+                            "P2P candidate has no elastic demand or exclusion for service centre "
+                                    + serviceCentreId);
+                }
+            }
+        });
     }
 
     private static List<DspOperationalReleaseCandidate> copyCandidates(

@@ -110,7 +110,8 @@ public final class DspOperationalReleaseScheduler {
                                 candidate.pharmacyIds(),
                                 directP2p,
                                 snapshot.p2pLineLeases(),
-                                snapshot.p2pRouteAdmissions()));
+                                snapshot.p2pRouteAdmissions(),
+                                snapshot.elasticP2pAllocation()));
                 if (allocation == null) {
                     throw new IllegalStateException("P2P line allocation policy returned null");
                 }

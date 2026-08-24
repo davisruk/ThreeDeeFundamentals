@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.Test;
 
@@ -30,6 +31,8 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteD
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationCalibrationStatus;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
@@ -85,6 +88,25 @@ class DspOperationalReleaseSnapshotFactoryTest {
         assertEquals(Map.of(destination, true), snapshot.p2pRouteAdmissions());
         assertThrows(UnsupportedOperationException.class,
                 () -> snapshot.p2pRouteAdmissions().clear());
+
+        P2pElasticAllocationSnapshot elasticAllocation = new P2pElasticAllocationSnapshot(
+                P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                P2pElasticAllocationCalibrationStatus.UNCALIBRATED,
+                LocalDateTime.of(2026, 8, 24, 6, 0),
+                List.of(new P2pLineId("line-1")),
+                1,
+                List.of(),
+                List.of());
+        DspOperationalReleaseSnapshot elasticSnapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of()),
+                new InboundToteManifestCatalog(List.of()),
+                logicalSnapshot(List.of()),
+                admissionFactory,
+                leases,
+                List.of(new OperationalRouteTargetAdmissionSnapshot(
+                        StationType.P2P, destination.targetId(), 1, 0)),
+                elasticAllocation);
+        assertSame(elasticAllocation, elasticSnapshot.elasticP2pAllocation().orElseThrow());
     }
 
     @Test
