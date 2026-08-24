@@ -43,6 +43,13 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequ
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.AllowAllP2pArrivalAdmissionPolicy;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.ContainedPackP2pTipperPayloadFactory;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntime;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalConsumerBinding;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalRouteBinding;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pTipperArrivalTarget;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntime;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
@@ -52,6 +59,8 @@ import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseRouteDefi
 import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransferRoutingTable;
 import online.davisfamily.warehouse.sim.events.TransferCompletedEvent;
 import online.davisfamily.warehouse.sim.sensor.MembershipSensor;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.transfer.TransferMotionConfig;
 import online.davisfamily.warehouse.sim.transfer.TransferOrientationPolicy;
@@ -83,6 +92,8 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     private final RenderableObject transportInspectionMarker;
     private final Map<String, RenderableObject> queueMarkers = new LinkedHashMap<>();
     private final DspWarehouseTransportRuntime runtime;
+    private final TipperInputQueue p2pInputQueue;
+    private final DspP2pArrivalConsumerRuntime p2pArrivalRuntime;
     private boolean observedP2pBackpressure;
     private boolean observedSeparatedP2pBackpressure;
     private boolean p2pCapacityReturned;
@@ -180,6 +191,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
         StationRoutedToteArrivalQueue thirdPartyQueue = queue(thirdPartyDestination, 2);
         StationRoutedToteArrivalQueue adaptingQueue = queue(adaptingDestination, 2);
         StationRoutedToteArrivalQueue p2pQueue = queue(p2pDestination, 1);
+        p2pInputQueue = new TipperInputQueue("warehouse-p2p-input", 1);
 
         List<WarehouseTransferRoutingTable.Entry> transferEntries = List.of(
                 entry(firstMachine, thirdPartyDestination, TransferRoutingDecision.continueOnCurrentRoute()),
@@ -229,7 +241,26 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
 
         sim.addController(new ScheduledLaunchController());
         sim.addController(new TerminalQueuePresentationController());
-        sim.addController(new P2pCapacityReturnController(p2pQueue));
+        float toteInteriorFloorLocalY = 0.04f
+                + (toteGeometry.getOuterHeight() - toteGeometry.getInnerHeight())
+                + 0.01f;
+        P2pTipperArrivalTarget p2pTarget = new P2pTipperArrivalTarget(
+                p2pDestination, p2pInputQueue);
+        p2pArrivalRuntime = new DspP2pArrivalConsumerRuntimeFactory().create(
+                sim,
+                List.of(new P2pArrivalConsumerBinding(
+                        p2pQueue,
+                        new AllowAllP2pArrivalAdmissionPolicy(),
+                        new P2pArrivalRouteBinding(p2p, p2p),
+                        new ContainedPackP2pTipperPayloadFactory(
+                                toteGeometry.getInnerBottomWidth(),
+                                toteGeometry.getInnerBottomDepth(),
+                                toteInteriorFloorLocalY,
+                                0.012f,
+                                0.012f,
+                                0.010f),
+                        p2pTarget)));
+        sim.addController(new P2pInputCapacityReturnController());
         sim.addController(new BackpressureObservationController());
     }
 
@@ -239,6 +270,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
 
     @Override
     public void close() {
+        p2pArrivalRuntime.close();
         runtime.close();
     }
 
@@ -272,6 +304,14 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
 
     List<String> consumedP2pToteIds() {
         return List.copyOf(consumedP2pToteIds);
+    }
+
+    int p2pInputOccupancy() {
+        return p2pInputQueue.snapshot().toteIds().size();
+    }
+
+    long acceptedP2pArrivalCount() {
+        return p2pArrivalRuntime.controllerSnapshots().get(0).successfulAcceptanceCount();
     }
 
     private StationRoutedToteArrivalQueue queue(
@@ -309,7 +349,20 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                         "Type: Routed physical tote",
                         "Physical tote: " + request.physicalToteId().value(),
                         "Destination: " + request.destination().targetId(),
-                        "Transport ownership: station arrival queue"));
+                        "Transport ownership: " + transportOwnership(request)));
+    }
+
+    private String transportOwnership(OsrOutboundRouteLaunchRequest request) {
+        String toteId = request.physicalToteId().value();
+        if (p2pInputQueue.contains(toteId)) {
+            return "P2P tipper input queue";
+        }
+        StationRoutedToteArrivalQueue arrivalQueue = arrivalQueues.get(
+                request.destination().targetId());
+        if (arrivalQueue != null && arrivalQueue.contains(request.physicalToteId())) {
+            return "station arrival queue";
+        }
+        return "downstream placeholder";
     }
 
     private void registerTransportInspection(RenderableObject marker) {
@@ -319,6 +372,9 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
             var ingress = runtime.ingressController().snapshot();
             var inFlight = runtime.inFlightSnapshot();
             var arrival = runtime.arrivalController().snapshot();
+            StationRoutedToteArrivalQueueSnapshot p2pStation =
+                    arrivalQueues.get(P2P_TARGET_ID).snapshot();
+            var p2pInput = p2pInputQueue.snapshot();
             return List.of(
                     "Type: DSP warehouse transport",
                     "Launch: " + launch.launchOccupancy() + " / " + launch.launchCapacity(),
@@ -331,6 +387,10 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                     "Pending arrivals: " + arrival.pendingArrivals().stream()
                             .map(pending -> pending.physicalToteId().value())
                             .toList(),
+                    "P2P station arrival: " + p2pStation.occupancy()
+                            + " / " + p2pStation.capacity(),
+                    "P2P tipper input: " + p2pInput.toteIds().size()
+                            + " / " + p2pInput.capacity(),
                     "Blocked: " + (arrival.blocked() ? arrival.blockedReason() : "none"));
         });
     }
@@ -351,13 +411,20 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
 
     private List<String> describeQueue(String targetId) {
         StationRoutedToteArrivalQueueSnapshot snapshot = arrivalQueues.get(targetId).snapshot();
-        return List.of(
+        List<String> description = new ArrayList<>(List.of(
                 "Type: Station routed-tote arrival queue",
                 "Destination: " + snapshot.destination().stationType(),
                 "Target: " + snapshot.destination().targetId(),
                 "Queue: " + snapshot.occupancy() + " / " + snapshot.capacity(),
                 "Totes: " + snapshot.entries().stream()
-                        .map(entry -> entry.physicalToteId().value()).toList());
+                        .map(entry -> entry.physicalToteId().value()).toList()));
+        if (P2P_TARGET_ID.equals(targetId)) {
+            var inputSnapshot = p2pInputQueue.snapshot();
+            description.add("Tipper input: " + inputSnapshot.toteIds().size()
+                    + " / " + inputSnapshot.capacity());
+            description.add("Tipper totes: " + inputSnapshot.toteIds());
+        }
+        return List.copyOf(description);
     }
 
     private final class ScheduledLaunchController implements SimulationController {
@@ -387,20 +454,19 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                     routedTote.tote().setVisualOffset(0f, 0f, 0.45f);
                 }
             }));
+            TipperTotePayload payload = p2pInputQueue.peekPayload();
+            if (payload != null) {
+                payload.getTote().setVisualOffset(0.90f, 0f, 0f);
+            }
         }
     }
 
-    private final class P2pCapacityReturnController implements SimulationController {
-        private final StationRoutedToteArrivalQueue p2pQueue;
+    private final class P2pInputCapacityReturnController implements SimulationController {
         private double occupiedSinceSeconds = Double.NaN;
-
-        private P2pCapacityReturnController(StationRoutedToteArrivalQueue p2pQueue) {
-            this.p2pQueue = p2pQueue;
-        }
 
         @Override
         public void update(SimulationContext context, double dtSeconds) {
-            if (p2pCapacityReturned || p2pQueue.peek().isEmpty()) {
+            if (p2pCapacityReturned || p2pInputQueue.peekPayload() == null) {
                 return;
             }
             if (Double.isNaN(occupiedSinceSeconds)) {
@@ -410,9 +476,9 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
             if (context.getSimulationTimeSeconds() - occupiedSinceSeconds < P2P_HOLD_SECONDS) {
                 return;
             }
-            var consumed = p2pQueue.dequeue().orElseThrow();
-            consumed.renderable().setVisible(false);
-            consumedP2pToteIds.add(consumed.physicalToteId().value());
+            var consumed = p2pInputQueue.dequeuePayload();
+            consumed.getToteRenderable().setVisible(false);
+            consumedP2pToteIds.add(consumed.getTote().getId());
             p2pCapacityReturned = true;
         }
     }
@@ -420,31 +486,22 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     private final class BackpressureObservationController implements SimulationController {
         @Override
         public void update(SimulationContext context, double dtSeconds) {
-            var arrival = runtime.arrivalController().snapshot();
-            if (!arrival.blockedReason().contains("no capacity")) {
+            var queued = arrivalQueues.get(P2P_TARGET_ID).peek().orElse(null);
+            var inputPayload = p2pInputQueue.peekPayload();
+            if (queued == null || inputPayload == null) {
                 return;
             }
             observedP2pBackpressure = true;
-            var queued = arrivalQueues.get(P2P_TARGET_ID).peek().orElse(null);
-            var pending = arrival.pendingArrivals().stream()
-                    .filter(candidate -> P2P_TARGET_ID.equals(
-                            candidate.destination().targetId()))
-                    .findFirst()
-                    .orElse(null);
-            if (queued == null || pending == null) {
-                return;
-            }
             RenderableObject queuedRenderable = toteRenderables.get(
                     queued.physicalToteId().value());
-            RenderableObject pendingRenderable = toteRenderables.get(
-                    pending.physicalToteId().value());
-            if (queuedRenderable == null || pendingRenderable == null) {
+            RenderableObject inputRenderable = inputPayload.getToteRenderable();
+            if (queuedRenderable == null) {
                 return;
             }
             float deltaX = queuedRenderable.transformation.xTranslation
-                    - pendingRenderable.transformation.xTranslation;
+                    - inputRenderable.transformation.xTranslation;
             float deltaZ = queuedRenderable.transformation.zTranslation
-                    - pendingRenderable.transformation.zTranslation;
+                    - inputRenderable.transformation.zTranslation;
             if (((deltaX * deltaX) + (deltaZ * deltaZ)) > 0.04f) {
                 observedSeparatedP2pBackpressure = true;
             }

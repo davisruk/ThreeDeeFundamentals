@@ -37,6 +37,8 @@ class DspWarehouseTransportDebugRigTest {
         assertTrue(rig.observedSeparatedP2pBackpressure());
         assertTrue(rig.p2pCapacityReturned());
         assertEquals(List.of("transport-p2p-1"), rig.consumedP2pToteIds());
+        assertEquals(2L, rig.acceptedP2pArrivalCount());
+        assertEquals(1, rig.p2pInputOccupancy());
         assertEquals(4, rig.runtime().arrivalController().snapshot().successfulArrivalCount());
         assertEquals(0, rig.runtime().inFlightSnapshot().occupancy());
         assertEquals(4, rig.expectedPhysicalToteIds().stream()
@@ -52,6 +54,10 @@ class DspWarehouseTransportDebugRigTest {
         assertTrue(transportInspection.stream().anyMatch(line -> line.startsWith("Transport:")));
         assertTrue(transportInspection.stream().anyMatch(line -> line.startsWith("In flight:")));
         assertTrue(transportInspection.stream().anyMatch(line -> line.startsWith("Pending arrivals:")));
+        assertTrue(transportInspection.stream()
+                .anyMatch(line -> line.startsWith("P2P station arrival:")));
+        assertTrue(transportInspection.stream()
+                .anyMatch(line -> line.startsWith("P2P tipper input:")));
 
         for (String targetId : List.of(
                 DspWarehouseTransportDebugRig.THIRD_PARTY_TARGET_ID,
@@ -60,6 +66,12 @@ class DspWarehouseTransportDebugRigTest {
             List<String> queueInspection = inspectionRegistry.describe(rig.queueMarker(targetId));
             assertTrue(queueInspection.stream().anyMatch(line -> line.startsWith("Target: " + targetId)));
             assertTrue(queueInspection.stream().anyMatch(line -> line.startsWith("Queue:")));
+            if (DspWarehouseTransportDebugRig.P2P_TARGET_ID.equals(targetId)) {
+                assertTrue(queueInspection.stream()
+                        .anyMatch(line -> line.startsWith("Tipper input:")));
+                assertTrue(queueInspection.stream()
+                        .anyMatch(line -> line.startsWith("Tipper totes:")));
+            }
         }
 
         rig.close();
