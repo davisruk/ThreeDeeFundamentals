@@ -1,0 +1,9 @@
+package online.davisfamily.warehouse.sim.dsp.p2p.allocation;
+
+public enum P2pElasticAllocationIssueType {
+    LATEST_ALLOWED_COMPLETION_PASSED,
+    DEMAND_EXCEEDS_LINE_CAPACITY,
+    INSUFFICIENT_SHARED_LINE_CAPACITY,
+    OUTSIDE_CONCURRENT_SERVICE_CENTRE_WINDOW,
+    LEASE_OWNER_OUTSIDE_ACTIVE_WINDOW
+}
