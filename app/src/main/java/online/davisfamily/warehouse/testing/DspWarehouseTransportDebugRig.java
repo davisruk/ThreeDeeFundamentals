@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.testing;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,6 +50,11 @@ import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRun
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalConsumerBinding;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalRouteBinding;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pTipperArrivalTarget;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationCalibrationStatus;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationInspection;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreLineDemandSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreWorkloadSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pBaggingActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pInputActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivityProbe;
@@ -59,6 +65,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseRegistry;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pArrivalAdmissionPolicy;
+import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreDeadlineSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntime;
@@ -471,8 +478,67 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                             + ", transition=" + p2pLeaseRegistry
                                     .lastTransitionFor(line.definition().lineId())
                                     .map(value -> value.details()).orElse("none")));
+            description.add(
+                    "Elastic fixture: non-rendered P2P activity/output placeholders; "
+                            + "uncalibrated, not a production-day execution");
+            description.addAll(new P2pElasticAllocationInspection().describe(
+                    elasticAllocationInspectionSnapshot()));
             return List.copyOf(description);
         });
+    }
+
+    private P2pElasticAllocationSnapshot elasticAllocationInspectionSnapshot() {
+        LocalDateTime evaluatedAt = LocalDateTime.of(2026, 8, 24, 6, 0);
+        P2pLineId feedingLineId = p2pLineDefinitions.getFirst().lineId();
+        List<PhysicalToteId> remainingToteIds = p2pLeaseSnapshot().lines().getFirst()
+                .physicalAssignments().stream()
+                .map(P2pPhysicalToteAssignment::physicalToteId)
+                .toList();
+        P2pServiceCentreWorkloadSnapshot workload =
+                new P2pServiceCentreWorkloadSnapshot(
+                        "104",
+                        remainingToteIds,
+                        0,
+                        List.of(),
+                        List.of(),
+                        Duration.ofHours(20));
+        ServiceCentreDeadlineSnapshot deadline = new ServiceCentreDeadlineSnapshot(
+                "104",
+                "Letchworth",
+                999,
+                evaluatedAt,
+                evaluatedAt.plusHours(11),
+                evaluatedAt.plusHours(10),
+                evaluatedAt.plusHours(10),
+                evaluatedAt.plusHours(10),
+                Duration.ofHours(10),
+                false,
+                false);
+        P2pServiceCentreLineDemandSnapshot demand =
+                new P2pServiceCentreLineDemandSnapshot(
+                        "104",
+                        999,
+                        Duration.ZERO,
+                        deadline,
+                        workload,
+                        Duration.ofHours(20),
+                        2,
+                        2,
+                        2,
+                        List.of(feedingLineId),
+                        List.of(),
+                        1,
+                        0,
+                        true,
+                        List.of());
+        return new P2pElasticAllocationSnapshot(
+                P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                P2pElasticAllocationCalibrationStatus.UNCALIBRATED,
+                evaluatedAt,
+                p2pLineDefinitions.stream().map(P2pLineDefinition::lineId).toList(),
+                2,
+                List.of(demand),
+                List.of());
     }
 
     private P2pLineLeaseCatalogSnapshot p2pLeaseSnapshot() {

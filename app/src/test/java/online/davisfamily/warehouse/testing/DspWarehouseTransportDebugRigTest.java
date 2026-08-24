@@ -69,6 +69,24 @@ class DspWarehouseTransportDebugRigTest {
                         && line.contains("blockers=[")
                         && line.contains("closure=none")
                         && line.contains("transition=ASSIGNMENT_COMMITTED")));
+        assertTrue(transportInspection.stream().anyMatch(line ->
+                line.startsWith("Elastic fixture:")
+                        && line.contains("non-rendered P2P activity/output placeholders")
+                        && line.contains("not a production-day execution")));
+        assertTrue(transportInspection.contains(
+                "Elastic profile: DEADLINE_AWARE_ELASTIC_STICKY_LEASES"));
+        assertTrue(transportInspection.contains("Elastic calibration: UNCALIBRATED"));
+        assertTrue(transportInspection.stream().anyMatch(line ->
+                line.startsWith("SC 104 deadline:") && line.contains("slack=PT10H")));
+        assertTrue(transportInspection.stream().anyMatch(line ->
+                line.startsWith("SC 104 lines:")
+                        && line.contains("required=2")
+                        && line.contains("desired=2")
+                        && line.contains("owned=1")
+                        && line.contains("additional=1")));
+        assertTrue(transportInspection.contains(
+                "SC 104 feeding: [warehouse-p2p-line-1]"));
+        assertTrue(transportInspection.contains("SC 104 draining: []"));
 
         for (String targetId : List.of(
                 DspWarehouseTransportDebugRig.THIRD_PARTY_TARGET_ID,
