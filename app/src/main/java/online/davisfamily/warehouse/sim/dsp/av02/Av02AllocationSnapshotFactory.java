@@ -48,14 +48,15 @@ public final class Av02AllocationSnapshotFactory {
         }
 
         validateLogicalOrderIdentities(schedulerSnapshot.orderStates());
-        Set<OrderSheetKey> waitingSheets = new LinkedHashSet<>();
-        inventorySnapshot.waitingTotes().forEach(tote -> waitingSheets.add(tote.orderSheetKey()));
+        Set<OrderSheetKey> allocatedSheets = new LinkedHashSet<>();
+        inventorySnapshot.waitingTotes().forEach(tote -> allocatedSheets.add(tote.orderSheetKey()));
+        inventorySnapshot.departedTotes().forEach(tote -> allocatedSheets.add(tote.orderSheetKey()));
 
         List<Av02AllocationCandidate> candidates = new ArrayList<>();
         for (DspSchedulerOrderState orderState : schedulerSnapshot.orderStates()) {
             NotionalToteOrder order = orderState.order();
             if (order.orderType() != OrderType.EMPTY || terminal(orderState.status())
-                    || waitingSheets.contains(order.orderSheetKey())) {
+                    || allocatedSheets.contains(order.orderSheetKey())) {
                 continue;
             }
 

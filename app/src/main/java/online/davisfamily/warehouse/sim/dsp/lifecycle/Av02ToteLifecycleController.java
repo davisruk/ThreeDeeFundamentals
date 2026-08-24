@@ -26,6 +26,22 @@ public final class Av02ToteLifecycleController {
     public PhysicalToteRecord allocateFor(
             NotionalToteOrder order,
             Duration allocationTime) {
+        validateAllocationRequest(order, allocationTime);
+        PhysicalToteId allocatedId = idAllocator.nextPhysicalToteId();
+        return allocateValidated(order, allocationTime, allocatedId);
+    }
+
+    public PhysicalToteRecord allocateFor(
+            NotionalToteOrder order,
+            Duration allocationTime,
+            PhysicalToteId allocatedId) {
+        validateAllocationRequest(order, allocationTime);
+        return allocateValidated(order, allocationTime, allocatedId);
+    }
+
+    private void validateAllocationRequest(
+            NotionalToteOrder order,
+            Duration allocationTime) {
         if (order == null) {
             throw new IllegalArgumentException("order must not be null");
         }
@@ -38,10 +54,14 @@ public final class Av02ToteLifecycleController {
                     "Logical sheet already has an active physical tote assignment: "
                             + order.orderSheetKey());
         }
+    }
 
-        PhysicalToteId allocatedId = idAllocator.nextPhysicalToteId();
+    private PhysicalToteRecord allocateValidated(
+            NotionalToteOrder order,
+            Duration allocationTime,
+            PhysicalToteId allocatedId) {
         if (allocatedId == null) {
-            throw new IllegalArgumentException("idAllocator returned null");
+            throw new IllegalArgumentException("allocatedId must not be null");
         }
         if (ledger.tote(allocatedId).isPresent()) {
             throw new IllegalArgumentException(
