@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, and sticky P2P lease foundations are complete, verified, and merged. Arrival consumption preserves exact station payload identity through immutable local admission and the existing tipper-input boundary. Deadline-aware elastic line allocation is implemented and verified on `feature/dsp-deadline-aware-elastic-line-allocation`, pending merge.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation is now planned on `feature/dsp-av02-operational-allocation` as the final physical-work prerequisite before full-day execution and metrics.
 
 Read:
 
@@ -95,9 +95,10 @@ Read:
 6. `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
 7. `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
 8. `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
-9. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-10. `docs/machines/exceptions-station-requirements.md`
-11. `docs/machines/phase-1-stations-roadmap.md`
+9. `docs/scheduler/dsp-av02-operational-allocation-plan.md`
+10. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+11. `docs/machines/exceptions-station-requirements.md`
+12. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
@@ -206,8 +207,9 @@ The agreed next programme is split into short-lived branches from `master`:
 12. physical warehouse transport and station-arrival queues;
 13. P2P-local arrival consumption;
 14. sticky P2P service-centre leases (complete, verified, and merged);
-15. deadline-aware elastic line allocation (implemented and verified; pending merge);
-16. full-day analysis, metrics, and inspection (likely next planning slice).
+15. deadline-aware elastic line allocation (complete, verified, and merged);
+16. AV02 operational allocation (active planned branch);
+17. full-day analysis, metrics, and inspection.
 
 Each branch must have its own decision-complete, step-based plan before implementation. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
@@ -227,8 +229,9 @@ Current programme position:
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
 - P2P-local arrival consumption: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
 - sticky service-centre leases: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
-- deadline-aware elastic line allocation: implementation complete and verified on the feature branch, pending merge, with detailed plan at `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`;
-- full-day execution and metrics: likely next planning slice; decide first whether EMPTY/AV02 or Exception Station physical outcomes are required by its scenario;
+- deadline-aware elastic line allocation: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`;
+- AV02 operational allocation: active planned branch, with decision-complete plan at `docs/scheduler/dsp-av02-operational-allocation-plan.md`;
+- full-day execution and metrics: expected after AV02 operational allocation;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -281,8 +284,9 @@ Planned Phase 1 order:
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
-- deadline-aware elastic line allocation: implementation complete and verified on the feature branch; pending merge
-- full-day execution and metrics: likely next planning slice, subject to EMPTY/AV02 and Exception Station prerequisite assessment
+- deadline-aware elastic line allocation: complete, verified, and merged
+- AV02 operational allocation: active planned branch
+- full-day execution and metrics: expected after AV02 operational allocation
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

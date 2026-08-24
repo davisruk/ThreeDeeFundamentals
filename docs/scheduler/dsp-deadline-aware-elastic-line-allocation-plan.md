@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-deadline-aware-elastic-line-allocation`
 
-Status: implementation complete and verified on the feature branch; pending merge to `master`.
+Status: implementation complete, verified, and merged to `master`.
 
 ## Purpose
 
@@ -536,10 +536,9 @@ Implementation record:
   assignment policy.
 - Focused tests, the full Gradle suite, `dsp-warehouse-transport`, `tote-to-bag`, and `ALT+R`
   reconstruction checks are green.
-- The likely next planning slice is full-day execution and metrics so the uncalibrated profile can
-  be exercised against loaded 12N volumes. EMPTY/AV02 and Exception Station Phase 1 remain explicit
-  fidelity gaps and must be selected first if the next full-day scenario requires their physical
-  outcomes rather than diagnostics.
+- AV02 operational allocation was selected as the next physical-work prerequisite before full-day
+  execution and metrics. Exception Station Phase 1 remains deferred under the current
+  all-lines-fulfilled assumption.
 
 Proposed commit message: `Complete deadline-aware elastic P2P allocation`
 

@@ -7,22 +7,23 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The completed elastic-allocation plan, `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
-3. The completed sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
-4. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
-5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-6. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
-7. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-8. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
-9. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
-10. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
-10. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
-11. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-12. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-13. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-14. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-15. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-16. `docs/machines/phase-1-stations-roadmap.md`
+2. The active AV02 plan, `docs/scheduler/dsp-av02-operational-allocation-plan.md`
+3. The completed elastic-allocation plan, `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
+4. The completed sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
+5. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
+6. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+7. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+8. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+9. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
+10. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+11. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+12. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+13. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+14. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+15. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+16. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+17. `docs/scheduler/dsp-operational-scheduling-requirements.md`
+18. `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -92,7 +93,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through sticky P2P service-centre line leases are complete, verified, and merged. Their transport and ownership contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`, and `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`: eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. Deadline-aware elastic line allocation is implemented and verified on its feature branch, pending merge. Its uncalibrated profile varies only future feeding/acquisition budgets; it never moves committed assignments or pre-empts active work. Full-day execution and metrics is the likely next planning slice. Exception Station and EMPTY/AV02 behavior remain separate fidelity gaps.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is the active planned feature. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Full-day execution and metrics follows AV02. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
 
 Completed bag-planning behavior:
 
@@ -189,7 +190,7 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-deadline-aware-elastic-line-allocation`: implementation complete and verified; pending merge to `master`
+- `feature/dsp-av02-operational-allocation`: decision-complete plan created; implementation has not started
 
 Current scheduler decisions:
 
@@ -258,8 +259,9 @@ Known Phase 1 machine/station work:
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
-- deadline-aware elastic line allocation: implementation complete and verified on the feature branch; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
-- full-day execution and metrics: likely next planning slice; reassess whether EMPTY/AV02 or Exception Station physical outcomes are prerequisites
+- deadline-aware elastic line allocation: complete, verified, and merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
+- AV02 operational allocation: active planned branch; allocate only logical EMPTY inbound fulfilment totes and keep P2P outbound tote supply independent
+- full-day execution and metrics: expected after AV02 operational allocation
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine
