@@ -7,7 +7,7 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The active elastic-allocation plan, `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
+2. The completed elastic-allocation plan, `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
 3. The completed sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
 4. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
 5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
@@ -92,7 +92,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through sticky P2P service-centre line leases are complete, verified, and merged. Their transport and ownership contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`, and `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`: eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. Deadline-aware elastic line allocation is the active planned feature. It may vary future line budgets but must never move committed assignments or pre-empt active work. Exception Station behavior remains separate later work.
+The operational scheduler foundations through sticky P2P service-centre line leases are complete, verified, and merged. Their transport and ownership contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`, and `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`: eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. Deadline-aware elastic line allocation is implemented and verified on its feature branch, pending merge. Its uncalibrated profile varies only future feeding/acquisition budgets; it never moves committed assignments or pre-empts active work. Full-day execution and metrics is the likely next planning slice. Exception Station and EMPTY/AV02 behavior remain separate fidelity gaps.
 
 Completed bag-planning behavior:
 
@@ -189,7 +189,7 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-deadline-aware-elastic-line-allocation`: decision-complete plan created; implementation has not started
+- `feature/dsp-deadline-aware-elastic-line-allocation`: implementation complete and verified; pending merge to `master`
 
 Current scheduler decisions:
 
@@ -258,7 +258,8 @@ Known Phase 1 machine/station work:
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
-- deadline-aware elastic line allocation: active planned branch; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
+- deadline-aware elastic line allocation: implementation complete and verified on the feature branch; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
+- full-day execution and metrics: likely next planning slice; reassess whether EMPTY/AV02 or Exception Station physical outcomes are prerequisites
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

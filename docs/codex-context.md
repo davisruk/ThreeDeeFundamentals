@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, and sticky P2P lease foundations are complete, verified, and merged. Arrival consumption preserves exact station payload identity through immutable local admission and the existing tipper-input boundary. Deadline-aware elastic line allocation is now planned on `feature/dsp-deadline-aware-elastic-line-allocation`.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, and sticky P2P lease foundations are complete, verified, and merged. Arrival consumption preserves exact station payload identity through immutable local admission and the existing tipper-input boundary. Deadline-aware elastic line allocation is implemented and verified on `feature/dsp-deadline-aware-elastic-line-allocation`, pending merge.
 
 Read:
 
@@ -128,6 +128,12 @@ Current scheduler decisions:
 - Sticky line selection prefers compatible owner and active-pharmacy affinity deterministically.
   Lease/assignment mutation occurs only during simulation-thread command application; physical P2P
   arrival revalidates exact committed ownership without selecting or mutating a line.
+- The experimental `DEADLINE_AWARE_ELASTIC_STICKY_LEASES` profile derives immutable uncalibrated
+  demand from configured timetable deadlines and remaining tote/pack/bag work. At most two
+  authorized service centres receive desired budgets across five lines.
+- Feeding lines accept new assignments; draining surplus lines do not. Pinned assignments and
+  active processing prevent release, output closure and lease release occur on separate simulation
+  updates, and committed assignments are never moved.
 - The operational scheduler emits at most one exact physical release command. The simulation-thread controller applies it through `OsrProcessingReleaseCommandHandler` and never mutates legacy logical release status.
 - Operational first-route targets are bounded non-rendering FIFO queues of exact release requests.
 - Live candidate-specific station admission and selected queue capacity are captured into immutable
@@ -200,8 +206,8 @@ The agreed next programme is split into short-lived branches from `master`:
 12. physical warehouse transport and station-arrival queues;
 13. P2P-local arrival consumption;
 14. sticky P2P service-centre leases (complete, verified, and merged);
-15. deadline-aware elastic line allocation (active planned branch);
-16. full-day analysis, metrics, and inspection.
+15. deadline-aware elastic line allocation (implemented and verified; pending merge);
+16. full-day analysis, metrics, and inspection (likely next planning slice).
 
 Each branch must have its own decision-complete, step-based plan before implementation. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
@@ -221,7 +227,8 @@ Current programme position:
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-warehouse-transport-routing-plan.md`;
 - P2P-local arrival consumption: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
 - sticky service-centre leases: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
-- deadline-aware elastic line allocation: active planned branch, with decision-complete plan at `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`;
+- deadline-aware elastic line allocation: implementation complete and verified on the feature branch, pending merge, with detailed plan at `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`;
+- full-day execution and metrics: likely next planning slice; decide first whether EMPTY/AV02 or Exception Station physical outcomes are required by its scenario;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -274,7 +281,8 @@ Planned Phase 1 order:
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
-- deadline-aware elastic line allocation: active planned branch
+- deadline-aware elastic line allocation: implementation complete and verified on the feature branch; pending merge
+- full-day execution and metrics: likely next planning slice, subject to EMPTY/AV02 and Exception Station prerequisite assessment
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

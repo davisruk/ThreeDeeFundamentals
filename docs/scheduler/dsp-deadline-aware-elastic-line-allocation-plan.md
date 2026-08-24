@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-deadline-aware-elastic-line-allocation`
 
-Status: planned; implementation has not started.
+Status: implementation complete and verified on the feature branch; pending merge to `master`.
 
 ## Purpose
 
@@ -513,13 +513,33 @@ Architecture verification:
 
 Before branch closure:
 
-- [ ] mark this plan implementation complete and verified;
-- [ ] record final timetable, workload, demand, feeding, draining, closure, and release contracts;
-- [ ] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
-- [ ] update `docs/codex-context.md` and `docs/codex-instructions.md`;
-- [ ] confirm focused/full tests and visual/reset checks are green;
-- [ ] reassess whether the next branch is full-day metrics/execution, EMPTY/AV02, or Exception
+- [x] mark this plan implementation complete and verified;
+- [x] record final timetable, workload, demand, feeding, draining, closure, and release contracts;
+- [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
+- [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
+- [x] confirm focused/full tests and visual/reset checks are green;
+- [x] reassess whether the next branch is full-day metrics/execution, EMPTY/AV02, or Exception
   Station Phase 1 based on the remaining operational critical path.
+
+Implementation record:
+
+- Timetable deadlines are configured independently of 12N `departureTime`, including explicit
+  next-day operation where required.
+- Remaining tote, pack, bag, and unsupported EMPTY data produce immutable, normalized,
+  uncalibrated workload snapshots.
+- Ordered demand reserves capacity for the oldest authorized centre, permits at most one later
+  centre in the baseline concurrency window, and exposes unmet or infeasible demand.
+- Feeding lines alone accept new assignments. Draining lines retain immutable pinned assignments
+  and ownership until work and complete physical activity drain.
+- An open outbound tote closes on one simulation update before its fully quiescent lease may
+  release on a later update. A released line may then be acquired through the normal elastic
+  assignment policy.
+- Focused tests, the full Gradle suite, `dsp-warehouse-transport`, `tote-to-bag`, and `ALT+R`
+  reconstruction checks are green.
+- The likely next planning slice is full-day execution and metrics so the uncalibrated profile can
+  be exercised against loaded 12N volumes. EMPTY/AV02 and Exception Station Phase 1 remain explicit
+  fidelity gaps and must be selected first if the next full-day scenario requires their physical
+  outcomes rather than diagnostics.
 
 Proposed commit message: `Complete deadline-aware elastic P2P allocation`
 

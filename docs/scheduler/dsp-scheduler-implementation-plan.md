@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, and sticky P2P service-centre leases are complete, verified, and merged. Deadline-aware elastic line allocation is the active planned branch.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, and sticky P2P service-centre leases are complete, verified, and merged. Deadline-aware elastic line allocation is implemented and verified on its feature branch, pending merge. Full-day execution and metrics is the likely next planning slice, subject to deciding whether EMPTY/AV02 or Exception Station outcomes are required first.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -855,7 +855,7 @@ Verified contracts:
 
 ### `feature/dsp-deadline-aware-elastic-line-allocation`
 
-Status: decision-complete plan created on the active feature branch; implementation has not started.
+Status: implementation complete and verified on the active feature branch; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -871,6 +871,22 @@ Purpose:
   has drained; never move committed assignments or pre-empt active work.
 - Expose profile identity, workload, slack, required/desired/owned lines, and infeasibility for
   inspection and later full-day analysis.
+
+Verified contracts:
+
+- Configured timetable deadlines do not use 12N `departureTime`.
+- Immutable normalized work determines required and desired counts for at most two active service
+  centres across five lines; infeasibility remains observable.
+- Exact feeding lines accept future assignments while draining surplus lines reject them.
+- Pinned assignments never move, active work is not pre-empted, and output closes before a later
+  quiescent lease release and reacquisition.
+- Focused/full tests and warehouse transport/tote-to-bag visual/reset checks are green.
+
+Likely next branch:
+
+- full-day execution and metrics using loaded 12N volumes and the explicitly uncalibrated profile;
+- select EMPTY/AV02 or Exception Station Phase 1 first only if that scenario requires their physical
+  outcomes rather than preserving them as explicit diagnostics.
 
 ## Current Assumptions
 
