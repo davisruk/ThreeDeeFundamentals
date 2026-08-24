@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-p2p-sticky-line-leases`
 
-Status: implementation complete and verified; awaiting merge to `master`.
+Status: implementation complete, verified, and merged to `master`.
 
 ## Purpose
 
@@ -591,7 +591,7 @@ Before branch closure:
 - [x] update `docs/scheduler/dsp-scheduler-implementation-plan.md`;
 - [x] update `docs/codex-context.md` and `docs/codex-instructions.md`;
 - [x] confirm focused/full tests and visual/reset checks are green;
-- [ ] create the decision-complete plan for `feature/dsp-deadline-aware-elastic-line-allocation`
+- [x] create the decision-complete plan for `feature/dsp-deadline-aware-elastic-line-allocation`
   only after this branch is merged.
 
 Proposed commit message: `Complete sticky P2P line lease feature`

@@ -7,14 +7,15 @@ This document is the entry-point handoff for follow-up Codex sessions. The curre
 Read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The completed sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
-3. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
-4. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-5. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
-6. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-7. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
-8. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
-9. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
+2. The active elastic-allocation plan, `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
+3. The completed sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
+4. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
+5. `docs/scheduler/dsp-scheduler-implementation-plan.md`
+6. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+7. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+8. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
+9. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+10. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
 10. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
 11. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
 12. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
@@ -91,7 +92,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through P2P-local arrival consumption are complete, verified, and merged. Their transport contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md` and `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`: all destinations share one launch/publication path, terminal sensors alone hand exact routed payloads to station-local queues, and P2P arrivals pass through immutable local admission into bounded tipper-input ownership. Sticky service-centre line leases are complete and verified on their feature branch under `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md` and await merge. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. Deadline-aware elastic line allocation and Exception Station behavior remain separate later work.
+The operational scheduler foundations through sticky P2P service-centre line leases are complete, verified, and merged. Their transport and ownership contracts are recorded in `docs/scheduler/dsp-warehouse-transport-routing-plan.md`, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`, and `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`: eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. Deadline-aware elastic line allocation is the active planned feature. It may vary future line budgets but must never move committed assignments or pre-empt active work. Exception Station behavior remains separate later work.
 
 Completed bag-planning behavior:
 
@@ -188,7 +189,7 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-p2p-sticky-line-leases`: implementation complete and verified; awaiting merge to `master`
+- `feature/dsp-deadline-aware-elastic-line-allocation`: decision-complete plan created; implementation has not started
 
 Current scheduler decisions:
 
@@ -256,8 +257,8 @@ Known Phase 1 machine/station work:
 - OSR outbound route launch and physical-tote hydration: complete, verified, and merged
 - warehouse transport routing and station-arrival boundaries: complete, verified, and merged
 - P2P-local arrival consumption: complete, verified, and merged
-- sticky service-centre leases: complete and verified on the feature branch; awaiting merge
-- deadline-aware elastic line allocation: next separate branch after sticky leases are merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
+- sticky service-centre leases: complete, verified, and merged
+- deadline-aware elastic line allocation: active planned branch; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

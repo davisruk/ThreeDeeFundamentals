@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, and P2P-local arrival consumption are complete, verified, and merged. Sticky P2P service-centre leases are complete and verified on their feature branch and await merge; deadline-aware elastic line allocation follows separately after that merge.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, and sticky P2P service-centre leases are complete, verified, and merged. Deadline-aware elastic line allocation is the active planned branch.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -820,7 +820,7 @@ Implemented contracts:
 
 ### `feature/dsp-p2p-sticky-line-leases`
 
-Status: implementation complete and verified on the feature branch; awaiting merge to `master`.
+Status: implementation complete, verified, and merged to `master`.
 
 Detailed implementation doc:
 
@@ -837,11 +837,10 @@ Purpose:
   processing, expected groups, bag output, and outbound tote state have drained.
 - Preserve the existing OSR-to-route-to-transport-to-station-to-tipper ownership chain.
 
-Deferred follow-on:
+Follow-on boundary:
 
-- `feature/dsp-deadline-aware-elastic-line-allocation` will decide how many fully available lines a
-  service centre should receive based on workload and deadlines. It must reuse the sticky lease and
-  quiescence contracts rather than weakening them.
+- Deadline-aware elastic allocation must reuse the sticky lease and quiescence contracts rather
+  than weakening them.
 
 Verified contracts:
 
@@ -853,6 +852,25 @@ Verified contracts:
 - Complete line activity, remaining owner work, open outbound output, and expected groups all block
   release. Output closure and lease release occur on separate simulation updates.
 - Focused/full tests and warehouse transport/tote-to-bag visual/reset checks are green.
+
+### `feature/dsp-deadline-aware-elastic-line-allocation`
+
+Status: decision-complete plan created on the active feature branch; implementation has not started.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
+
+Purpose:
+
+- Add structured trunker deadlines independently of 12N `departureTime`.
+- Estimate deterministic uncalibrated remaining work from physical totes, planned packs, and bags.
+- Convert deadline/work demand into an ordered desired-line budget for at most two active service
+  centres across the five P2P lines.
+- Stop feeding surplus lines and release them only after every pinned tote and physical/output state
+  has drained; never move committed assignments or pre-empt active work.
+- Expose profile identity, workload, slack, required/desired/owned lines, and infeasibility for
+  inspection and later full-day analysis.
 
 ## Current Assumptions
 
