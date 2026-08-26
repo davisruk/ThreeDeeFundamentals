@@ -3,7 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.transport.routing;
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 import online.davisfamily.warehouse.sim.dsp.transport.DetachedOutboundToteFactory;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.tote.Tote;
@@ -47,7 +47,7 @@ public final class RouteBoundDetachedOutboundToteFactory
 
     @Override
     public RoutedPhysicalTote create(
-            OsrOutboundRouteLaunchRequest request,
+            OperationalRouteLaunchRequest request,
             ToteLoadPlan loadPlan) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");

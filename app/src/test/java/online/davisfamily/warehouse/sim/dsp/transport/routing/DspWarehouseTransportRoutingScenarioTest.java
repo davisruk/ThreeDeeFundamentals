@@ -18,6 +18,8 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
@@ -107,8 +109,6 @@ class DspWarehouseTransportRoutingScenarioTest {
                 assertSame(source.launchRequest(), arrived.launchRequest());
                 assertSame(source.launchRequest().releaseRequest(),
                         arrived.launchRequest().releaseRequest());
-                assertSame(source.launchRequest().releaseRequest().manifest(),
-                        arrived.launchRequest().releaseRequest().manifest());
                 assertSame(source.loadPlan(), arrived.loadPlan());
                 assertEquals(source.destination(), arrived.destination());
             }
@@ -246,16 +246,28 @@ class DspWarehouseTransportRoutingScenarioTest {
     }
 
     private static DspSchedulerOrderState logicalState(RoutedPhysicalTote source) {
-        var manifest = source.launchRequest().releaseRequest().manifest();
+        var launchRequest = source.launchRequest();
+        String physicalToteId = launchRequest.physicalToteId().value();
+        DspOrderItem item = new DspOrderItem(
+                "line-" + physicalToteId,
+                "product-" + physicalToteId,
+                1,
+                launchRequest.pharmacyIds().getFirst(),
+                "patient-" + physicalToteId,
+                "prescription-" + physicalToteId,
+                DspOrderLineType.FULL_PACK,
+                launchRequest.orderSheetKey().orderId(),
+                1,
+                1);
         NotionalToteOrder order = new NotionalToteOrder(
-                manifest.orderSheetKey().orderId(),
-                "notional-" + manifest.physicalToteId().value(),
-                manifest.serviceCentreId(),
-                manifest.orderSheetKey().sheetNumber(),
-                manifest.orderType(),
-                manifest.items(),
+                launchRequest.orderSheetKey().orderId(),
+                "notional-" + physicalToteId,
+                launchRequest.serviceCentreId(),
+                launchRequest.orderSheetKey().sheetNumber(),
+                launchRequest.orderType(),
+                List.of(item),
                 999,
-                manifest.sourceSequenceNumber());
+                launchRequest.identity().sourceSequenceNumber());
         return new DspSchedulerOrderState(
                 order,
                 new RouteRequirements(false, false, false, true, false,

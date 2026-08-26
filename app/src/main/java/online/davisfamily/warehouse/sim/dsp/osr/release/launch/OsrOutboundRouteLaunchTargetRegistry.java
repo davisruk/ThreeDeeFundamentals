@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseTarget;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTarget;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTargetRegistry;
 
@@ -15,7 +17,10 @@ public final class OsrOutboundRouteLaunchTargetRegistry
     private final List<OperationalRouteDestination> destinations;
     private final Map<String, OperationalRouteDestination> destinationsByTargetId;
     private final List<OsrOutboundRouteLaunchTarget> targets;
+    private final List<Av02OutboundRouteLaunchTarget> av02Targets;
     private final OsrProcessingReleaseTargetRegistry processingReleaseTargetRegistry;
+    private final OperationalPhysicalToteReleaseTargetRegistry
+            operationalPhysicalToteReleaseTargetRegistry;
 
     public OsrOutboundRouteLaunchTargetRegistry(
             OsrOutboundRouteLaunchQueue launchQueue,
@@ -31,6 +36,7 @@ public final class OsrOutboundRouteLaunchTargetRegistry
         Map<String, OperationalRouteDestination> configuredDestinationsByTargetId =
                 new LinkedHashMap<>();
         List<OsrOutboundRouteLaunchTarget> configuredTargets = new ArrayList<>();
+        List<Av02OutboundRouteLaunchTarget> configuredAv02Targets = new ArrayList<>();
 
         for (OperationalRouteDestination destination : destinations) {
             if (destination == null) {
@@ -44,14 +50,19 @@ public final class OsrOutboundRouteLaunchTargetRegistry
             }
             configuredDestinations.add(destination);
             configuredTargets.add(new OsrOutboundRouteLaunchTarget(destination, launchQueue));
+            configuredAv02Targets.add(new Av02OutboundRouteLaunchTarget(destination, launchQueue));
         }
 
         this.launchQueue = launchQueue;
         this.destinations = List.copyOf(configuredDestinations);
         this.destinationsByTargetId = Map.copyOf(configuredDestinationsByTargetId);
         this.targets = List.copyOf(configuredTargets);
+        this.av02Targets = List.copyOf(configuredAv02Targets);
         this.processingReleaseTargetRegistry = new OsrProcessingReleaseTargetRegistry(
                 new ArrayList<OsrProcessingReleaseTarget>(configuredTargets));
+        this.operationalPhysicalToteReleaseTargetRegistry =
+                new OperationalPhysicalToteReleaseTargetRegistry(
+                        new ArrayList<OperationalPhysicalToteReleaseTarget>(configuredAv02Targets));
     }
 
     public List<OperationalRouteDestination> destinations() {
@@ -66,9 +77,18 @@ public final class OsrOutboundRouteLaunchTargetRegistry
         return targets;
     }
 
+    public List<Av02OutboundRouteLaunchTarget> av02Targets() {
+        return av02Targets;
+    }
+
     @Override
     public OsrProcessingReleaseTargetRegistry processingReleaseTargetRegistry() {
         return processingReleaseTargetRegistry;
+    }
+
+    public OperationalPhysicalToteReleaseTargetRegistry
+            operationalPhysicalToteReleaseTargetRegistry() {
+        return operationalPhysicalToteReleaseTargetRegistry;
     }
 
     @Override

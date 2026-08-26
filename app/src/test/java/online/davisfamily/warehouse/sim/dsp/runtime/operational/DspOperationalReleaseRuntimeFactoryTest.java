@@ -33,7 +33,8 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequ
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionCatalog;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetDefinition;
@@ -160,7 +161,7 @@ class DspOperationalReleaseRuntimeFactoryTest {
         OsrOutboundRouteLaunchTargetRegistry launchRegistry =
                 new OsrOutboundRouteLaunchTargetRegistry(launchQueue, List.of(
                         new OperationalRouteDestination(StationType.P2P, "p2p-1")));
-        OsrOutboundRouteLaunchRequest blocker = new OsrOutboundRouteLaunchRequest(
+        OperationalRouteLaunchRequest blocker = OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(fixture.blockerManifest, Duration.ZERO),
                 new OperationalRouteDestination(StationType.P2P, "p2p-1"));
         launchQueue.enqueue(blocker);
@@ -186,12 +187,18 @@ class DspOperationalReleaseRuntimeFactoryTest {
 
             assertFalse(fixture.inventory.snapshot().findStored(
                     fixture.manifest.physicalToteId()).isPresent());
-            OsrOutboundRouteLaunchRequest queued = launchQueue.peek().orElseThrow();
-            assertSame(fixture.manifest, queued.releaseRequest().manifest());
+            OperationalRouteLaunchRequest queued = launchQueue.peek().orElseThrow();
+            assertEquals(fixture.manifest.physicalToteId(), queued.physicalToteId());
+            assertEquals(fixture.manifest.orderSheetKey(), queued.orderSheetKey());
+            assertEquals(fixture.manifest.serviceCentreId(), queued.serviceCentreId());
+            assertEquals(
+                    fixture.manifest.items().stream()
+                            .map(item -> item.pharmacyId()).distinct().toList(),
+                    queued.pharmacyIds());
             assertEquals("p2p-1", queued.destination().targetId());
             assertEquals(StationType.P2P, queued.destination().stationType());
             assertEquals(
-                    queued.releaseRequest().releaseTime(),
+                    queued.releaseTime(),
                     fixture.lifecycleController.snapshot()
                             .activeAssignmentFor(fixture.manifest.orderSheetKey())
                             .orElseThrow()

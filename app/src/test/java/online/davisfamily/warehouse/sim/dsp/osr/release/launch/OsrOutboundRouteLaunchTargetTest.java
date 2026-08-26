@@ -38,8 +38,11 @@ class OsrOutboundRouteLaunchTargetTest {
         assertEquals("", result.reason());
         assertEquals("third-party-1", target.targetId());
         assertSame(destination, target.destination());
-        OsrOutboundRouteLaunchRequest queued = queue.peek().orElseThrow();
-        assertSame(request, queued.releaseRequest());
+        OperationalRouteLaunchRequest queued = queue.peek().orElseThrow();
+        assertEquals(request.manifest().physicalToteId(), queued.physicalToteId());
+        assertEquals(request.manifest().orderSheetKey(), queued.orderSheetKey());
+        assertEquals(List.of("UNKNOWN"), queued.pharmacyIds());
+        assertEquals(request.releaseTime(), queued.releaseTime());
         assertSame(destination, queued.destination());
     }
 
@@ -59,7 +62,7 @@ class OsrOutboundRouteLaunchTargetTest {
         assertFalse(result.applied());
         assertTrue(result.deferred());
         assertTrue(result.reason().contains("adapting-1"));
-        assertSame(first, queue.peek().orElseThrow().releaseRequest());
+        assertEquals(first.manifest().physicalToteId(), queue.peek().orElseThrow().physicalToteId());
         assertEquals(1, queue.snapshot().occupancy());
     }
 

@@ -42,7 +42,8 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.ReleasePhysicalToteFromOsrCommand;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.outbound.DeterministicOutboundToteIdSource;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocator;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteConfig;
@@ -296,7 +297,7 @@ class DspP2pStickyLineLeaseScenarioTest {
                 new Vec3(),
                 0f);
         return new RoutedPhysicalTote(
-                new OsrOutboundRouteLaunchRequest(
+                OperationalRouteLaunchRequestFactory.fromOsr(
                         new OsrProcessingReleaseRequest(manifest, Duration.ZERO, assignment),
                         destination),
                 new ToteLoadPlan(new PhysicalToteId(physicalToteId), List.of()),

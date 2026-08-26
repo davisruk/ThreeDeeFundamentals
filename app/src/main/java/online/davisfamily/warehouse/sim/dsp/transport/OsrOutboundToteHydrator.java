@@ -1,8 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.transport;
 
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 
 @FunctionalInterface
 public interface OsrOutboundToteHydrator {
-    RoutedPhysicalTote hydrate(OsrOutboundRouteLaunchRequest request);
+    RoutedPhysicalTote hydrate(OperationalRouteLaunchRequest request);
 }

@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -23,13 +23,13 @@ class LoadPlanOsrOutboundToteHydratorTest {
 
     @Test
     void shouldResolveAndBuildOnceWithExactRequestAndPlan() {
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "tote-1", StationType.P2P, "p2p-1");
         ToteLoadPlan loadPlan = new ToteLoadPlan("tote-1", List.of());
         AtomicInteger providerCalls = new AtomicInteger();
         AtomicInteger factoryCalls = new AtomicInteger();
         AtomicReference<String> requestedToteId = new AtomicReference<>();
-        AtomicReference<OsrOutboundRouteLaunchRequest> factoryRequest =
+        AtomicReference<OperationalRouteLaunchRequest> factoryRequest =
                 new AtomicReference<>();
         AtomicReference<ToteLoadPlan> factoryPlan = new AtomicReference<>();
         LoadPlanOsrOutboundToteHydrator hydrator = new LoadPlanOsrOutboundToteHydrator(
@@ -64,7 +64,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
                 StationType.THIRD_PARTY,
                 StationType.ADAPTING,
                 StationType.P2P)) {
-            OsrOutboundRouteLaunchRequest request = request(
+            OperationalRouteLaunchRequest request = request(
                     "tote-" + stationType.name().toLowerCase(Locale.ROOT),
                     stationType,
                     "target-" + stationType.name().toLowerCase(Locale.ROOT));
@@ -83,7 +83,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
 
     @Test
     void shouldBlockMissingOrMismatchedLoadPlanWithoutCallingFactory() {
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "tote-1", StationType.P2P, "p2p-1");
         AtomicInteger providerCalls = new AtomicInteger();
         AtomicInteger factoryCalls = new AtomicInteger();
@@ -123,7 +123,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
 
     @Test
     void shouldRejectNullAndMismatchedFactoryResults() {
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "tote-1", StationType.ADAPTING, "adapting-1");
         ToteLoadPlan loadPlan = new ToteLoadPlan("tote-1", List.of());
 
@@ -133,7 +133,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
                 OsrOutboundToteHydrationException.class,
                 () -> nullHydrator.hydrate(request));
 
-        OsrOutboundRouteLaunchRequest copiedRequest = request(
+        OperationalRouteLaunchRequest copiedRequest = request(
                 "tote-1", StationType.ADAPTING, "adapting-1");
         LoadPlanOsrOutboundToteHydrator copiedRequestHydrator = hydrator(
                 loadPlan,
@@ -154,7 +154,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
 
     @Test
     void shouldRejectOpenLidsAndWrapInvalidFactoryPayloadCause() {
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "tote-1", StationType.THIRD_PARTY, "third-party-1");
         ToteLoadPlan loadPlan = new ToteLoadPlan("tote-1", List.of());
         LoadPlanOsrOutboundToteHydrator openLidHydrator = hydrator(
@@ -188,7 +188,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
     void shouldPropagateUnexpectedRuntimeFailureAndValidateInputs() {
         RuntimeException unexpected = new IllegalStateException("unexpected");
         ToteLoadPlan loadPlan = new ToteLoadPlan("tote-1", List.of());
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "tote-1", StationType.P2P, "p2p-1");
         LoadPlanOsrOutboundToteHydrator hydrator = hydrator(
                 loadPlan,
@@ -219,7 +219,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
                 factory);
     }
 
-    private static OsrOutboundRouteLaunchRequest request(
+    private static OperationalRouteLaunchRequest request(
             String physicalToteId,
             StationType stationType,
             String targetId) {
@@ -228,7 +228,7 @@ class LoadPlanOsrOutboundToteHydratorTest {
     }
 
     private static RoutedPhysicalTote routedTote(
-            OsrOutboundRouteLaunchRequest request,
+            OperationalRouteLaunchRequest request,
             ToteLoadPlan loadPlan) {
         String physicalToteId = request.physicalToteId().value();
         Tote tote = RoutedPhysicalToteTestFixtures.tote(

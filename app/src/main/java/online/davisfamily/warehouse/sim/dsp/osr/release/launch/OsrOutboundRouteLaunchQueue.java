@@ -14,7 +14,7 @@ import online.davisfamily.warehouse.sim.machine.queue.MachineWaitQueue;
 public final class OsrOutboundRouteLaunchQueue {
     private final String queueId;
     private final MachineWaitQueue waitQueue;
-    private final Map<String, OsrOutboundRouteLaunchRequest> requestsByPhysicalToteId =
+    private final Map<String, OperationalRouteLaunchRequest> requestsByPhysicalToteId =
             new LinkedHashMap<>();
 
     public OsrOutboundRouteLaunchQueue(String queueId, int capacity) {
@@ -38,7 +38,7 @@ public final class OsrOutboundRouteLaunchQueue {
         return requestsByPhysicalToteId.containsKey(physicalToteId.value());
     }
 
-    public void enqueue(OsrOutboundRouteLaunchRequest request) {
+    public void enqueue(OperationalRouteLaunchRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
         }
@@ -60,7 +60,7 @@ public final class OsrOutboundRouteLaunchQueue {
         validateInvariants();
     }
 
-    public Optional<OsrOutboundRouteLaunchRequest> peek() {
+    public Optional<OperationalRouteLaunchRequest> peek() {
         validateInvariants();
         String physicalToteId = waitQueue.peek();
         if (physicalToteId == null) {
@@ -69,20 +69,20 @@ public final class OsrOutboundRouteLaunchQueue {
         return Optional.of(requestForQueuedPhysicalTote(physicalToteId));
     }
 
-    public Optional<OsrOutboundRouteLaunchRequest> dequeue() {
+    public Optional<OperationalRouteLaunchRequest> dequeue() {
         validateInvariants();
         String physicalToteId = waitQueue.peek();
         if (physicalToteId == null) {
             return Optional.empty();
         }
 
-        OsrOutboundRouteLaunchRequest request = requestForQueuedPhysicalTote(physicalToteId);
+        OperationalRouteLaunchRequest request = requestForQueuedPhysicalTote(physicalToteId);
         String dequeuedPhysicalToteId = waitQueue.dequeue();
         if (!physicalToteId.equals(dequeuedPhysicalToteId)) {
             throw new IllegalStateException(
                     "Outbound route-launch FIFO changed while dequeuing: " + queueId);
         }
-        OsrOutboundRouteLaunchRequest removed =
+        OperationalRouteLaunchRequest removed =
                 requestsByPhysicalToteId.remove(physicalToteId);
         if (removed != request) {
             throw new IllegalStateException(
@@ -97,7 +97,7 @@ public final class OsrOutboundRouteLaunchQueue {
         validateInvariants();
         List<OsrOutboundRouteLaunchQueueSnapshot.Entry> entries = new ArrayList<>();
         for (String physicalToteId : waitQueue.toteIds()) {
-            OsrOutboundRouteLaunchRequest request =
+            OperationalRouteLaunchRequest request =
                     requestForQueuedPhysicalTote(physicalToteId);
             entries.add(new OsrOutboundRouteLaunchQueueSnapshot.Entry(
                     request.physicalToteId(),
@@ -109,8 +109,8 @@ public final class OsrOutboundRouteLaunchQueue {
                 entries);
     }
 
-    private OsrOutboundRouteLaunchRequest requestForQueuedPhysicalTote(String physicalToteId) {
-        OsrOutboundRouteLaunchRequest request = requestsByPhysicalToteId.get(physicalToteId);
+    private OperationalRouteLaunchRequest requestForQueuedPhysicalTote(String physicalToteId) {
+        OperationalRouteLaunchRequest request = requestsByPhysicalToteId.get(physicalToteId);
         if (request == null) {
             throw new IllegalStateException(
                     "Queued physical tote has no outbound route-launch request: "

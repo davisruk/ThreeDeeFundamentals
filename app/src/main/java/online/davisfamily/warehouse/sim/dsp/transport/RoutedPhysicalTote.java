@@ -6,13 +6,13 @@ import online.davisfamily.threedee.behaviour.routing.RouteFollower;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 public record RoutedPhysicalTote(
-        OsrOutboundRouteLaunchRequest launchRequest,
+        OperationalRouteLaunchRequest launchRequest,
         ToteLoadPlan loadPlan,
         Tote tote,
         RenderableObject renderable) {

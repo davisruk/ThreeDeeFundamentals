@@ -72,9 +72,9 @@ class OsrOutboundRouteLaunchTargetRegistryTest {
         assertTrue(registry.processingReleaseTargetRegistry()
                 .find("adapting-1").orElseThrow().accept(third).applied());
 
-        assertSame(first, queue.dequeue().orElseThrow().releaseRequest());
-        assertSame(second, queue.dequeue().orElseThrow().releaseRequest());
-        assertSame(third, queue.dequeue().orElseThrow().releaseRequest());
+        assertEquals(first.manifest().physicalToteId(), queue.dequeue().orElseThrow().physicalToteId());
+        assertEquals(second.manifest().physicalToteId(), queue.dequeue().orElseThrow().physicalToteId());
+        assertEquals(third.manifest().physicalToteId(), queue.dequeue().orElseThrow().physicalToteId());
     }
 
     @Test
@@ -141,6 +141,7 @@ class OsrOutboundRouteLaunchTargetRegistryTest {
         assertThrows(IllegalArgumentException.class, () -> empty.findDestination(" "));
         assertThrows(UnsupportedOperationException.class, () -> empty.destinations().clear());
         assertThrows(UnsupportedOperationException.class, () -> empty.targets().clear());
+        assertThrows(UnsupportedOperationException.class, () -> empty.av02Targets().clear());
     }
 
     private static OperationalRouteDestination destination(

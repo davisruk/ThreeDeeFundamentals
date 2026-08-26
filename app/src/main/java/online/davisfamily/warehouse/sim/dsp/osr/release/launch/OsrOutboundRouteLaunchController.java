@@ -48,12 +48,12 @@ public final class OsrOutboundRouteLaunchController implements SimulationControl
             throw new IllegalArgumentException("dtSeconds must be finite and >= 0");
         }
 
-        Optional<OsrOutboundRouteLaunchRequest> optionalHead = launchQueue.peek();
+        Optional<OperationalRouteLaunchRequest> optionalHead = launchQueue.peek();
         if (optionalHead.isEmpty()) {
             clearBlock();
             return;
         }
-        OsrOutboundRouteLaunchRequest head = optionalHead.orElseThrow();
+        OperationalRouteLaunchRequest head = optionalHead.orElseThrow();
 
         if (!transportQueue.canAccept()) {
             recordBlock(head, "OSR outbound transport queue has no capacity");
@@ -78,7 +78,7 @@ public final class OsrOutboundRouteLaunchController implements SimulationControl
             return;
         }
 
-        Optional<OsrOutboundRouteLaunchRequest> currentHead = launchQueue.peek();
+        Optional<OperationalRouteLaunchRequest> currentHead = launchQueue.peek();
         if (currentHead.isEmpty() || currentHead.orElseThrow() != head) {
             recordBlock(head, "Outbound route-launch head changed during hydration");
             return;
@@ -107,7 +107,7 @@ public final class OsrOutboundRouteLaunchController implements SimulationControl
         }
 
         transportQueue.enqueue(routedTote);
-        OsrOutboundRouteLaunchRequest dequeued = launchQueue.dequeue().orElseThrow(() ->
+        OperationalRouteLaunchRequest dequeued = launchQueue.dequeue().orElseThrow(() ->
                 new IllegalStateException(
                         "Outbound route-launch head disappeared after transport acceptance"));
         if (dequeued != head) {
@@ -146,7 +146,7 @@ public final class OsrOutboundRouteLaunchController implements SimulationControl
                 successfulHydrationCount);
     }
 
-    private void recordBlock(OsrOutboundRouteLaunchRequest request, String reason) {
+    private void recordBlock(OperationalRouteLaunchRequest request, String reason) {
         blockedPhysicalToteId = Optional.of(request.physicalToteId());
         blockedReason = reason == null || reason.isBlank()
                 ? "Outbound route launch is blocked"

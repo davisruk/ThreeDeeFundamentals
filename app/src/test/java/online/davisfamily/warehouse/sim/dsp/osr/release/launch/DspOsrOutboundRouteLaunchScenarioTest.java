@@ -123,21 +123,27 @@ class DspOsrOutboundRouteLaunchScenarioTest {
             assertEquals(3, scenario.hydrationFactoryCalls.get());
             for (int index = 0; index < 3; index++) {
                 RoutedPhysicalTote routedTote = scenario.transportQueue.dequeue().orElseThrow();
-                OsrOutboundRouteLaunchRequest request = routedTote.launchRequest();
+                OperationalRouteLaunchRequest request = routedTote.launchRequest();
                 ToteLoadPlan expectedPlan = scenario.loadPlans.getLoadPlanFor(
                         request.physicalToteId());
+                var manifest = scenario.catalog.findByPhysicalToteId(
+                        request.physicalToteId()).orElseThrow();
                 assertSame(request, routedTote.launchRequest());
-                assertSame(request.releaseRequest().manifest(),
-                        scenario.catalog.findByPhysicalToteId(request.physicalToteId())
-                                .orElseThrow());
+                assertEquals(manifest.physicalToteId(), request.physicalToteId());
+                assertEquals(manifest.orderSheetKey(), request.orderSheetKey());
+                assertEquals(manifest.orderType(), request.orderType());
+                assertEquals(manifest.serviceCentreId(), request.serviceCentreId());
+                assertEquals(
+                        manifest.items().stream().map(item -> item.pharmacyId()).distinct().toList(),
+                        request.pharmacyIds());
                 assertSame(expectedPlan, routedTote.loadPlan());
                 assertSame(request.destination(), routedTote.destination());
-                assertEquals(Duration.ZERO, request.releaseRequest().releaseTime());
+                assertEquals(Duration.ZERO, request.releaseTime());
                 assertEquals(
-                        request.releaseRequest().releaseTime(),
+                        request.releaseTime(),
                         scenario.lifecycle.snapshot()
                                 .activeAssignmentFor(
-                                        request.releaseRequest().manifest().orderSheetKey())
+                                        request.orderSheetKey())
                                 .orElseThrow()
                                 .activatedAt());
             }
@@ -197,9 +203,9 @@ class DspOsrOutboundRouteLaunchScenarioTest {
         try (Scenario scenario = Scenario.standard(
                 List.of(first, second), 2, 1, false)) {
             scenario.releaseUpdates(2);
-            OsrOutboundRouteLaunchRequest firstRequest =
+            OperationalRouteLaunchRequest firstRequest =
                     scenario.launchQueue.peek().orElseThrow();
-            OsrOutboundRouteLaunchRequest blocker =
+            OperationalRouteLaunchRequest blocker =
                     requestForBlocker("transport-blocker");
             scenario.transportQueue.enqueue(scenario.detached(
                     blocker,
@@ -453,7 +459,7 @@ class DspOsrOutboundRouteLaunchScenarioTest {
                 0);
     }
 
-    private static OsrOutboundRouteLaunchRequest requestForBlocker(String physicalToteId) {
+    private static OperationalRouteLaunchRequest requestForBlocker(String physicalToteId) {
         NotionalToteOrder order = order(
                 physicalToteId,
                 OrderType.FULL_PACK,
@@ -461,7 +467,7 @@ class DspOsrOutboundRouteLaunchScenarioTest {
                 DspOrderLineType.FULL_PACK,
                 "regular-product",
                 99);
-        return new OsrOutboundRouteLaunchRequest(
+        return OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(manifest(order), Duration.ZERO),
                 destination(StationType.P2P, "p2p-ingress"));
     }
@@ -572,7 +578,7 @@ class DspOsrOutboundRouteLaunchScenarioTest {
         }
 
         private RoutedPhysicalTote detached(
-                OsrOutboundRouteLaunchRequest request,
+                OperationalRouteLaunchRequest request,
                 ToteLoadPlan loadPlan) {
             String physicalToteId = request.physicalToteId().value();
             RenderableObject renderable = RenderableObject.create(

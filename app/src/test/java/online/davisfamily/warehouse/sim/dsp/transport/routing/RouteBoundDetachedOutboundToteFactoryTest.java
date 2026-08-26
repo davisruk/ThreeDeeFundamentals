@@ -18,7 +18,7 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -34,7 +34,7 @@ class RouteBoundDetachedOutboundToteFactoryTest {
             RoutedPhysicalTote source = RoutedToteRoutingTestFixtures.routedTote(
                     "tote-" + definition.destination().targetId(),
                     definition.destination());
-            AtomicReference<OsrOutboundRouteLaunchRequest> receivedRequest =
+            AtomicReference<OperationalRouteLaunchRequest> receivedRequest =
                     new AtomicReference<>();
             AtomicReference<ToteLoadPlan> receivedPlan = new AtomicReference<>();
             RouteBoundDetachedOutboundToteFactory factory = factory(

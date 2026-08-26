@@ -19,7 +19,8 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -31,7 +32,7 @@ final class RoutedPhysicalToteTestFixtures {
             String physicalToteId,
             StationType stationType,
             String targetId) {
-        OsrOutboundRouteLaunchRequest launchRequest = launchRequest(
+        OperationalRouteLaunchRequest launchRequest = launchRequest(
                 physicalToteId, stationType, targetId);
         ToteLoadPlan loadPlan = new ToteLoadPlan(
                 new PhysicalToteId(physicalToteId), List.of());
@@ -43,7 +44,7 @@ final class RoutedPhysicalToteTestFixtures {
                 tote.getRenderable());
     }
 
-    static OsrOutboundRouteLaunchRequest launchRequest(
+    static OperationalRouteLaunchRequest launchRequest(
             String physicalToteId,
             StationType stationType,
             String targetId) {
@@ -57,7 +58,7 @@ final class RoutedPhysicalToteTestFixtures {
                         "product-" + physicalToteId,
                         1)),
                 0);
-        return new OsrOutboundRouteLaunchRequest(
+        return OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(manifest, Duration.ofSeconds(5)),
                 new OperationalRouteDestination(stationType, targetId));
     }

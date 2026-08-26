@@ -43,7 +43,8 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.ContainedPackP2pTipperPayloadFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactory;
@@ -103,7 +104,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     private final OsrOutboundRouteLaunchQueue launchQueue =
             new OsrOutboundRouteLaunchQueue("warehouse-debug-launch", 8);
     private final Map<String, ToteLoadPlan> loadPlans = new LinkedHashMap<>();
-    private final List<OsrOutboundRouteLaunchRequest> scheduledRequests;
+    private final List<OperationalRouteLaunchRequest> scheduledRequests;
     private final Map<String, StationRoutedToteArrivalQueue> arrivalQueues =
             new LinkedHashMap<>();
     private final Map<String, RenderableObject> toteRenderables = new LinkedHashMap<>();
@@ -391,7 +392,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     }
 
     private RenderableObject createInspectableTote(
-            OsrOutboundRouteLaunchRequest request,
+            OperationalRouteLaunchRequest request,
             TriangleRenderer tr,
             ToteGeometry toteGeometry,
             SelectionInspectionRegistry registry) {
@@ -403,7 +404,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
         return renderable;
     }
 
-    private List<String> describeTote(OsrOutboundRouteLaunchRequest request) {
+    private List<String> describeTote(OperationalRouteLaunchRequest request) {
         return runtime.inFlightSnapshot().entries().stream()
                 .filter(entry -> entry.physicalToteId().equals(request.physicalToteId()))
                 .findFirst()
@@ -421,7 +422,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                         "Transport ownership: " + transportOwnership(request)));
     }
 
-    private String transportOwnership(OsrOutboundRouteLaunchRequest request) {
+    private String transportOwnership(OperationalRouteLaunchRequest request) {
         String toteId = request.physicalToteId().value();
         if (p2pInputQueue.contains(toteId)) {
             return "P2P tipper input queue";
@@ -793,7 +794,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                         false));
     }
 
-    private static OsrOutboundRouteLaunchRequest request(
+    private static OperationalRouteLaunchRequest request(
             String physicalToteId,
             OperationalRouteDestination destination,
             long sequence) {
@@ -807,12 +808,12 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                         "product-" + physicalToteId,
                         1)),
                 sequence);
-        return new OsrOutboundRouteLaunchRequest(
+        return OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(manifest, Duration.ofSeconds(sequence)),
                 destination);
     }
 
-    private static OsrOutboundRouteLaunchRequest request(
+    private static OperationalRouteLaunchRequest request(
             String physicalToteId,
             OperationalRouteDestination destination,
             long sequence,
@@ -827,7 +828,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                         "product-" + physicalToteId,
                         1)),
                 sequence);
-        return new OsrOutboundRouteLaunchRequest(
+        return OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(
                         manifest,
                         Duration.ofSeconds(sequence),

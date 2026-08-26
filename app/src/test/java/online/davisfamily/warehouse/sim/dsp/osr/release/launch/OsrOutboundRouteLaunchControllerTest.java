@@ -41,10 +41,10 @@ class OsrOutboundRouteLaunchControllerTest {
     void shouldHydrateAtMostOneMixedDestinationRequestPerUpdateInGlobalFifoOrder() {
         OsrOutboundRouteLaunchQueue launchQueue = launchQueue(3);
         OsrOutboundTransportQueue transportQueue = transportQueue(3);
-        OsrOutboundRouteLaunchRequest first = request("tote-1", StationType.P2P, "p2p-1");
-        OsrOutboundRouteLaunchRequest second = request(
+        OperationalRouteLaunchRequest first = request("tote-1", StationType.P2P, "p2p-1");
+        OperationalRouteLaunchRequest second = request(
                 "tote-2", StationType.THIRD_PARTY, "third-party-1");
-        OsrOutboundRouteLaunchRequest third = request(
+        OperationalRouteLaunchRequest third = request(
                 "tote-3", StationType.ADAPTING, "adapting-1");
         launchQueue.enqueue(first);
         launchQueue.enqueue(second);
@@ -87,7 +87,7 @@ class OsrOutboundRouteLaunchControllerTest {
     void shouldApplyBackpressureBeforeHydrationAndRecoverWhenTransportCapacityReturns() {
         OsrOutboundRouteLaunchQueue launchQueue = launchQueue(1);
         OsrOutboundTransportQueue transportQueue = transportQueue(1);
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "waiting", StationType.P2P, "p2p-1");
         launchQueue.enqueue(request);
         transportQueue.enqueue(routed(request(
@@ -123,7 +123,7 @@ class OsrOutboundRouteLaunchControllerTest {
     void shouldRetainHeadAfterExpectedHydrationFailureAndRetryDeterministically() {
         OsrOutboundRouteLaunchQueue launchQueue = launchQueue(1);
         OsrOutboundTransportQueue transportQueue = transportQueue(1);
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "missing-plan", StationType.THIRD_PARTY, "third-party-1");
         launchQueue.enqueue(request);
         AtomicBoolean planAvailable = new AtomicBoolean();
@@ -156,11 +156,11 @@ class OsrOutboundRouteLaunchControllerTest {
 
     @Test
     void shouldRetainBothQueuesForNullOrMismatchedHydrationResult() {
-        OsrOutboundRouteLaunchRequest head = request(
+        OperationalRouteLaunchRequest head = request(
                 "head", StationType.P2P, "p2p-1");
         assertBlockedWithoutMutation(head, launchRequest -> null, "returned null");
 
-        OsrOutboundRouteLaunchRequest mismatched = request(
+        OperationalRouteLaunchRequest mismatched = request(
                 "head", StationType.ADAPTING, "adapting-1");
         assertBlockedWithoutMutation(
                 head,
@@ -172,7 +172,7 @@ class OsrOutboundRouteLaunchControllerTest {
     void shouldRejectDuplicateTransportIdentityWithoutHydration() {
         OsrOutboundRouteLaunchQueue launchQueue = launchQueue(1);
         OsrOutboundTransportQueue transportQueue = transportQueue(2);
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "duplicate", StationType.P2P, "p2p-1");
         launchQueue.enqueue(request);
         transportQueue.enqueue(routed(request));
@@ -197,7 +197,7 @@ class OsrOutboundRouteLaunchControllerTest {
     void shouldKeepSourceOwnedUntilHydrationAndTransportAcceptance() {
         OsrOutboundRouteLaunchQueue launchQueue = launchQueue(1);
         OsrOutboundTransportQueue transportQueue = transportQueue(1);
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "ordered", StationType.ADAPTING, "adapting-1");
         launchQueue.enqueue(request);
         OsrOutboundRouteLaunchController controller = new OsrOutboundRouteLaunchController(
@@ -232,7 +232,7 @@ class OsrOutboundRouteLaunchControllerTest {
         assertEquals(0, hydrationCount.get());
         assertFalse(idleController.snapshot().blocked());
 
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "unexpected", StationType.P2P, "p2p-1");
         launchQueue.enqueue(request);
         IllegalStateException failure = new IllegalStateException("unexpected failure");
@@ -267,7 +267,7 @@ class OsrOutboundRouteLaunchControllerTest {
     }
 
     private static void assertBlockedWithoutMutation(
-            OsrOutboundRouteLaunchRequest head,
+            OperationalRouteLaunchRequest head,
             online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundToteHydrator hydrator,
             String reasonFragment) {
         OsrOutboundRouteLaunchQueue launchQueue = launchQueue(1);
@@ -292,7 +292,7 @@ class OsrOutboundRouteLaunchControllerTest {
         return new OsrOutboundTransportQueue("transport", capacity);
     }
 
-    private static OsrOutboundRouteLaunchRequest request(
+    private static OperationalRouteLaunchRequest request(
             String physicalToteId,
             StationType stationType,
             String targetId) {
@@ -306,12 +306,12 @@ class OsrOutboundRouteLaunchControllerTest {
                         "product-" + physicalToteId,
                         1)),
                 0);
-        return new OsrOutboundRouteLaunchRequest(
+        return OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(manifest, Duration.ofSeconds(5)),
                 new OperationalRouteDestination(stationType, targetId));
     }
 
-    private static RoutedPhysicalTote routed(OsrOutboundRouteLaunchRequest launchRequest) {
+    private static RoutedPhysicalTote routed(OperationalRouteLaunchRequest launchRequest) {
         String physicalToteId = launchRequest.physicalToteId().value();
         RenderableObject renderable = RenderableObject.create(
                 physicalToteId,

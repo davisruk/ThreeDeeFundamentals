@@ -33,7 +33,8 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
 import online.davisfamily.warehouse.sim.tote.Tote;
@@ -342,7 +343,7 @@ class P2pArrivalConsumerControllerTest {
                         1,
                         1)),
                 0L);
-        OsrOutboundRouteLaunchRequest launchRequest = new OsrOutboundRouteLaunchRequest(
+        OperationalRouteLaunchRequest launchRequest = OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(manifest, Duration.ZERO),
                 destination);
         RenderableObject renderable = renderable(physicalToteId);

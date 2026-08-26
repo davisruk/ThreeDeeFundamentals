@@ -1,7 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.transport;
 
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 
@@ -23,7 +23,7 @@ public final class LoadPlanOsrOutboundToteHydrator implements OsrOutboundToteHyd
     }
 
     @Override
-    public RoutedPhysicalTote hydrate(OsrOutboundRouteLaunchRequest request) {
+    public RoutedPhysicalTote hydrate(OperationalRouteLaunchRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
         }

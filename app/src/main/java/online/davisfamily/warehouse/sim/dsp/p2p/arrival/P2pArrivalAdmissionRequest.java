@@ -100,18 +100,14 @@ public record P2pArrivalAdmissionRequest(
         if (routedTote == null) {
             throw new IllegalArgumentException("routedTote must not be null");
         }
-        InboundToteManifest manifest =
-                routedTote.launchRequest().releaseRequest().manifest();
-        List<String> pharmacyIds = manifest.items().stream()
-                .map(item -> item.pharmacyId())
-                .toList();
+        var launchRequest = routedTote.launchRequest();
         return new P2pArrivalAdmissionRequest(
-                manifest.physicalToteId(),
-                routedTote.destination(),
-                manifest.serviceCentreId(),
-                manifest.orderSheetKey(),
-                manifest.orderType(),
-                pharmacyIds,
-                routedTote.p2pAssignment());
+                launchRequest.physicalToteId(),
+                launchRequest.destination(),
+                launchRequest.serviceCentreId(),
+                launchRequest.orderSheetKey(),
+                launchRequest.orderType(),
+                launchRequest.pharmacyIds(),
+                launchRequest.p2pAssignment());
     }
 }

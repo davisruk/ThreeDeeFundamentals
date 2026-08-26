@@ -11,7 +11,7 @@ import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -19,7 +19,7 @@ class RoutedPhysicalToteTest {
 
     @Test
     void shouldRetainExactValidatedPayloadAndDeriveRouteIdentity() {
-        OsrOutboundRouteLaunchRequest launchRequest =
+        OperationalRouteLaunchRequest launchRequest =
                 RoutedPhysicalToteTestFixtures.launchRequest(
                         "tote-1", StationType.P2P, "p2p-1");
         ToteLoadPlan loadPlan = new ToteLoadPlan(
@@ -41,7 +41,7 @@ class RoutedPhysicalToteTest {
 
     @Test
     void shouldRejectNullPayloadComponents() {
-        OsrOutboundRouteLaunchRequest launchRequest =
+        OperationalRouteLaunchRequest launchRequest =
                 RoutedPhysicalToteTestFixtures.launchRequest(
                         "tote-1", StationType.P2P, "p2p-1");
         ToteLoadPlan loadPlan = new ToteLoadPlan("tote-1", List.of());
@@ -60,7 +60,7 @@ class RoutedPhysicalToteTest {
 
     @Test
     void shouldRejectEveryPhysicalIdentityMismatch() {
-        OsrOutboundRouteLaunchRequest launchRequest =
+        OperationalRouteLaunchRequest launchRequest =
                 RoutedPhysicalToteTestFixtures.launchRequest(
                         "tote-1", StationType.ADAPTING, "adapting-1");
         ToteLoadPlan matchingPlan = new ToteLoadPlan("tote-1", List.of());
@@ -97,7 +97,7 @@ class RoutedPhysicalToteTest {
 
     @Test
     void shouldRequireTheTotesExactRenderableAndRouteFollower() {
-        OsrOutboundRouteLaunchRequest launchRequest =
+        OperationalRouteLaunchRequest launchRequest =
                 RoutedPhysicalToteTestFixtures.launchRequest(
                         "tote-1", StationType.THIRD_PARTY, "third-party-1");
         ToteLoadPlan loadPlan = new ToteLoadPlan("tote-1", List.of());

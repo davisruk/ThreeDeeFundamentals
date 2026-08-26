@@ -21,7 +21,8 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
@@ -84,7 +85,7 @@ final class P2pArrivalRuntimeTestFixtures {
                 serviceCentreId,
                 List.of(new DspOrderItem("line-" + physicalToteId, "product-1", 1)),
                 0L);
-        OsrOutboundRouteLaunchRequest request = new OsrOutboundRouteLaunchRequest(
+        OperationalRouteLaunchRequest request = OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(
                         manifest, Duration.ZERO, p2pAssignment),
                 destination);

@@ -24,11 +24,11 @@ class OsrOutboundRouteLaunchQueueTest {
     @Test
     void shouldPreserveExactRequestsInGlobalFifoAcrossDestinations() {
         OsrOutboundRouteLaunchQueue queue = queue(3);
-        OsrOutboundRouteLaunchRequest first = request(
+        OperationalRouteLaunchRequest first = request(
                 "tote-1", 1, StationType.P2P, "p2p-1");
-        OsrOutboundRouteLaunchRequest second = request(
+        OperationalRouteLaunchRequest second = request(
                 "tote-2", 2, StationType.THIRD_PARTY, "third-party-1");
-        OsrOutboundRouteLaunchRequest third = request(
+        OperationalRouteLaunchRequest third = request(
                 "tote-3", 3, StationType.ADAPTING, "adapting-1");
 
         queue.enqueue(first);
@@ -46,7 +46,7 @@ class OsrOutboundRouteLaunchQueueTest {
     @Test
     void shouldExposeDestinationBearingImmutableSnapshot() {
         OsrOutboundRouteLaunchQueue queue = queue(2);
-        OsrOutboundRouteLaunchRequest first = request(
+        OperationalRouteLaunchRequest first = request(
                 "tote-1", 1, StationType.P2P, "p2p-1");
         queue.enqueue(first);
 
@@ -72,7 +72,7 @@ class OsrOutboundRouteLaunchQueueTest {
     @Test
     void shouldRejectDuplicateBeforeCheckingFullCapacity() {
         OsrOutboundRouteLaunchQueue queue = queue(1);
-        OsrOutboundRouteLaunchRequest first = request(
+        OperationalRouteLaunchRequest first = request(
                 "tote-1", 1, StationType.P2P, "p2p-1");
         queue.enqueue(first);
 
@@ -86,7 +86,7 @@ class OsrOutboundRouteLaunchQueueTest {
     @Test
     void shouldRecoverCapacityAndDuplicateIndexAfterDequeue() {
         OsrOutboundRouteLaunchQueue queue = queue(1);
-        OsrOutboundRouteLaunchRequest request = request(
+        OperationalRouteLaunchRequest request = request(
                 "tote-1", 1, StationType.P2P, "p2p-1");
         queue.enqueue(request);
 
@@ -122,7 +122,7 @@ class OsrOutboundRouteLaunchQueueTest {
         return new OsrOutboundRouteLaunchQueue("  osr-outbound  ", capacity);
     }
 
-    private static OsrOutboundRouteLaunchRequest request(
+    private static OperationalRouteLaunchRequest request(
             String physicalToteId,
             long sourceSequence,
             StationType stationType,
@@ -139,7 +139,7 @@ class OsrOutboundRouteLaunchQueueTest {
                                 1)),
                         sourceSequence),
                 Duration.ofSeconds(sourceSequence));
-        return new OsrOutboundRouteLaunchRequest(
+        return OperationalRouteLaunchRequestFactory.fromOsr(
                 releaseRequest,
                 new OperationalRouteDestination(stationType, targetId));
     }

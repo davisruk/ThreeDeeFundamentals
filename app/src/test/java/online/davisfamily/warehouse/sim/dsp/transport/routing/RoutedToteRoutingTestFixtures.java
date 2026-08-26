@@ -19,7 +19,8 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
-import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
@@ -37,7 +38,7 @@ final class RoutedToteRoutingTestFixtures {
     static RoutedPhysicalTote routedTote(
             String physicalToteId,
             OperationalRouteDestination destination) {
-        OsrOutboundRouteLaunchRequest launchRequest = new OsrOutboundRouteLaunchRequest(
+        OperationalRouteLaunchRequest launchRequest = OperationalRouteLaunchRequestFactory.fromOsr(
                 new OsrProcessingReleaseRequest(
                         manifest(physicalToteId),
                         Duration.ofSeconds(5)),

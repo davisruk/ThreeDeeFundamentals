@@ -1,15 +1,17 @@
 package online.davisfamily.warehouse.sim.dsp.osr.release.launch;
 
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
-import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
-import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseTarget;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseTarget;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
 
-public final class OsrOutboundRouteLaunchTarget implements OsrProcessingReleaseTarget {
+/** Adapts an AV02 release request onto the shared operational launch FIFO. */
+public final class Av02OutboundRouteLaunchTarget
+        implements OperationalPhysicalToteReleaseTarget {
     private final OperationalRouteDestination destination;
     private final OsrOutboundRouteLaunchQueue launchQueue;
 
-    public OsrOutboundRouteLaunchTarget(
+    public Av02OutboundRouteLaunchTarget(
             OperationalRouteDestination destination,
             OsrOutboundRouteLaunchQueue launchQueue) {
         if (destination == null) {
@@ -32,13 +34,14 @@ public final class OsrOutboundRouteLaunchTarget implements OsrProcessingReleaseT
     }
 
     @Override
-    public SchedulerCommandApplicationResult accept(OsrProcessingReleaseRequest request) {
+    public SchedulerCommandApplicationResult accept(
+            OperationalPhysicalToteReleaseRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
         }
 
         OperationalRouteLaunchRequest launchRequest =
-                OperationalRouteLaunchRequestFactory.fromOsr(request, destination);
+                OperationalRouteLaunchRequestFactory.fromOperational(request, destination);
         PhysicalToteId physicalToteId = launchRequest.physicalToteId();
         if (launchQueue.contains(physicalToteId)) {
             return SchedulerCommandApplicationResult.rejectedResult(
@@ -47,7 +50,7 @@ public final class OsrOutboundRouteLaunchTarget implements OsrProcessingReleaseT
         }
         if (!launchQueue.canAccept()) {
             return SchedulerCommandApplicationResult.deferredResult(
-                    "OSR outbound route-launch queue has no capacity for target " + targetId());
+                    "AV02 outbound route-launch queue has no capacity for target " + targetId());
         }
 
         launchQueue.enqueue(launchRequest);
