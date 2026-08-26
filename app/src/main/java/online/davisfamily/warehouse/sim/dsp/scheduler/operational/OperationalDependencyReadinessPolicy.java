@@ -27,7 +27,7 @@ public final class OperationalDependencyReadinessPolicy {
 
         NotionalToteOrder logicalOrder = candidate.logicalOrderState().order();
         OrderType orderType = logicalOrder.orderType();
-        if (orderType != OrderType.ASSOCIATED) {
+        if (orderType != OrderType.ASSOCIATED && orderType != OrderType.EMPTY) {
             return List.copyOf(blocks);
         }
 

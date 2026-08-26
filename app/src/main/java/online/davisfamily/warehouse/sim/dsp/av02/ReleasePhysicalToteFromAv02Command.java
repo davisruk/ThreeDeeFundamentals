@@ -1,13 +1,14 @@
-package online.davisfamily.warehouse.sim.dsp.osr.release;
+package online.davisfamily.warehouse.sim.dsp.av02;
 
 import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseCommand;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 
-public record ReleasePhysicalToteFromOsrCommand(
+public record ReleasePhysicalToteFromAv02Command(
         PhysicalToteId physicalToteId,
         OrderSheetKey orderSheetKey,
         String serviceCentreId,
@@ -15,7 +16,7 @@ public record ReleasePhysicalToteFromOsrCommand(
         Optional<P2pPhysicalToteAssignment> proposedP2pAssignment)
         implements OperationalPhysicalToteReleaseCommand {
 
-    public ReleasePhysicalToteFromOsrCommand(
+    public ReleasePhysicalToteFromAv02Command(
             PhysicalToteId physicalToteId,
             OrderSheetKey orderSheetKey,
             String serviceCentreId,
@@ -28,7 +29,7 @@ public record ReleasePhysicalToteFromOsrCommand(
                 Optional.empty());
     }
 
-    public ReleasePhysicalToteFromOsrCommand {
+    public ReleasePhysicalToteFromAv02Command {
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");
         }
@@ -52,7 +53,7 @@ public record ReleasePhysicalToteFromOsrCommand(
 
     @Override
     public OperationalPhysicalToteSource source() {
-        return OperationalPhysicalToteSource.OSR;
+        return OperationalPhysicalToteSource.AV02;
     }
 
     private static String requireValue(String value, String fieldName) {

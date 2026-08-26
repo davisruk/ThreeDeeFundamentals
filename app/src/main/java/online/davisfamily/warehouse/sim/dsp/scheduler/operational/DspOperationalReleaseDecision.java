@@ -1,12 +1,12 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
-import online.davisfamily.warehouse.sim.dsp.osr.release.ReleasePhysicalToteFromOsrCommand;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseCommand;
 
 public record DspOperationalReleaseDecision(
         DspOperationalReleaseCandidate candidate,
         OperationalRouteEntry routeEntry,
-        ReleasePhysicalToteFromOsrCommand command) {
+        OperationalPhysicalToteReleaseCommand command) {
 
     public DspOperationalReleaseDecision {
         if (candidate == null) {
@@ -22,6 +22,7 @@ public record DspOperationalReleaseDecision(
                 || !command.orderSheetKey().equals(candidate.physicalCandidate().orderSheetKey())
                 || !command.serviceCentreId().equals(
                         candidate.physicalCandidate().serviceCentreId())
+                || command.source() != candidate.physicalCandidate().source()
                 || !command.releaseTargetId().equals(routeEntry.targetId())) {
             throw new IllegalArgumentException(
                     "command identity and target must match the operational decision");

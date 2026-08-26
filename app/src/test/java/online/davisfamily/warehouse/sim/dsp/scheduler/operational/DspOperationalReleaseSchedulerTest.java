@@ -22,9 +22,9 @@ import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseCommand;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
-import online.davisfamily.warehouse.sim.dsp.osr.release.ReleasePhysicalToteFromOsrCommand;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
@@ -321,7 +321,7 @@ class DspOperationalReleaseSchedulerTest {
         DspOperationalReleaseDecision decision = scheduler.evaluate(snapshot)
                 .releaseDecision()
                 .orElseThrow();
-        ReleasePhysicalToteFromOsrCommand command = decision.command();
+        OperationalPhysicalToteReleaseCommand command = decision.command();
 
         assertSame(candidate, decision.candidate());
         assertEquals(new PhysicalToteId("tote-1"), command.physicalToteId());

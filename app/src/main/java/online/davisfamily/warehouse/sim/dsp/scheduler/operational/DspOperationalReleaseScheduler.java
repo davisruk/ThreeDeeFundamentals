@@ -4,7 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import online.davisfamily.warehouse.sim.dsp.av02.ReleasePhysicalToteFromAv02Command;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseCommand;
 import online.davisfamily.warehouse.sim.dsp.osr.release.ReleasePhysicalToteFromOsrCommand;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationDecision;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationPolicy;
@@ -157,11 +161,9 @@ public final class DspOperationalReleaseScheduler {
 
         OperationalReleaseSelection selected = rankedCandidates.get(0);
         DspOperationalReleaseCandidate selectedCandidate = selected.candidate();
-        ReleasePhysicalToteFromOsrCommand command = new ReleasePhysicalToteFromOsrCommand(
-                selectedCandidate.physicalCandidate().physicalToteId(),
-                selectedCandidate.physicalCandidate().orderSheetKey(),
-                selectedCandidate.physicalCandidate().serviceCentreId(),
-                selected.routeEntry().targetId(),
+        OperationalPhysicalToteReleaseCommand command = physicalReleaseCommand(
+                selectedCandidate,
+                selected.routeEntry(),
                 selected.proposedP2pAssignment());
         DspOperationalReleaseDecision decision = new DspOperationalReleaseDecision(
                 selectedCandidate,
@@ -173,6 +175,30 @@ public final class DspOperationalReleaseScheduler {
 
     public String p2pAllocationProfileId() {
         return p2pLineAllocationPolicy.profileId();
+    }
+
+    private static OperationalPhysicalToteReleaseCommand physicalReleaseCommand(
+            DspOperationalReleaseCandidate candidate,
+            OperationalRouteEntry routeEntry,
+            Optional<P2pPhysicalToteAssignment> proposedP2pAssignment) {
+        PhysicalToteId physicalToteId = candidate.physicalCandidate().physicalToteId();
+        OrderSheetKey orderSheetKey = candidate.physicalCandidate().orderSheetKey();
+        String serviceCentreId = candidate.physicalCandidate().serviceCentreId();
+        String releaseTargetId = routeEntry.targetId();
+        return switch (candidate.physicalCandidate().source()) {
+            case OSR -> new ReleasePhysicalToteFromOsrCommand(
+                    physicalToteId,
+                    orderSheetKey,
+                    serviceCentreId,
+                    releaseTargetId,
+                    proposedP2pAssignment);
+            case AV02 -> new ReleasePhysicalToteFromAv02Command(
+                    physicalToteId,
+                    orderSheetKey,
+                    serviceCentreId,
+                    releaseTargetId,
+                    proposedP2pAssignment);
+        };
     }
 
     private static OperationalBlockedCandidate blockedCandidate(
