@@ -5,6 +5,7 @@ import java.util.function.Function;
 
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.DspP2pStickyLeaseRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.DspP2pStickyLeaseRuntimeSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.OperationalP2pReleaseAssignmentCommitter;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pReleaseAssignmentCommitter;
@@ -32,6 +33,10 @@ public final class DspP2pElasticAllocationRuntime implements AutoCloseable {
 
     public P2pReleaseAssignmentCommitter releaseAssignmentCommitter() {
         return leaseRuntime.releaseAssignmentCommitter();
+    }
+
+    public OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter() {
+        return leaseRuntime.operationalReleaseAssignmentCommitter();
     }
 
     public P2pLineLeaseCatalogSnapshot leaseSnapshot() {

@@ -17,6 +17,7 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
     private final Map<P2pLineId, P2pLineActivityProbe> activityProbes;
     private final P2pLineLeaseRegistry leaseRegistry;
     private final P2pReleaseAssignmentCommitter releaseAssignmentCommitter;
+    private final OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter;
     private final OutboundToteAllocator outboundToteAllocator;
     private final DspP2pArrivalConsumerRuntime arrivalRuntime;
     private boolean closed;
@@ -28,10 +29,31 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
             P2pReleaseAssignmentCommitter releaseAssignmentCommitter,
             OutboundToteAllocator outboundToteAllocator,
             DspP2pArrivalConsumerRuntime arrivalRuntime) {
+        this(
+                definitions,
+                activityProbes,
+                leaseRegistry,
+                releaseAssignmentCommitter,
+                releaseAssignmentCommitter instanceof OperationalP2pReleaseAssignmentCommitter
+                        ? (OperationalP2pReleaseAssignmentCommitter) releaseAssignmentCommitter
+                        : OperationalP2pReleaseAssignmentCommitter.NO_OP,
+                outboundToteAllocator,
+                arrivalRuntime);
+    }
+
+    DspP2pStickyLeaseRuntime(
+            List<P2pLineDefinition> definitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            P2pLineLeaseRegistry leaseRegistry,
+            P2pReleaseAssignmentCommitter releaseAssignmentCommitter,
+            OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter,
+            OutboundToteAllocator outboundToteAllocator,
+            DspP2pArrivalConsumerRuntime arrivalRuntime) {
         if (definitions == null
                 || activityProbes == null
                 || leaseRegistry == null
                 || releaseAssignmentCommitter == null
+                || operationalReleaseAssignmentCommitter == null
                 || outboundToteAllocator == null
                 || arrivalRuntime == null) {
             throw new IllegalArgumentException("sticky lease runtime inputs must not be null");
@@ -40,6 +62,7 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
         this.activityProbes = Map.copyOf(activityProbes);
         this.leaseRegistry = leaseRegistry;
         this.releaseAssignmentCommitter = releaseAssignmentCommitter;
+        this.operationalReleaseAssignmentCommitter = operationalReleaseAssignmentCommitter;
         this.outboundToteAllocator = outboundToteAllocator;
         this.arrivalRuntime = arrivalRuntime;
     }
@@ -50,6 +73,10 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
 
     public P2pReleaseAssignmentCommitter releaseAssignmentCommitter() {
         return releaseAssignmentCommitter;
+    }
+
+    public OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter() {
+        return operationalReleaseAssignmentCommitter;
     }
 
     public P2pLineLeaseCatalogSnapshot leaseSnapshot() {

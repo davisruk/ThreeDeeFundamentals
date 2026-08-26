@@ -12,7 +12,7 @@ import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalRouteEntrySelector;
 
 public final class StrictP2pReleaseAssignmentCommitter
-        implements P2pReleaseAssignmentCommitter {
+        implements P2pReleaseAssignmentCommitter, OperationalP2pReleaseAssignmentCommitter {
     private final P2pLineLeaseRegistry leaseRegistry;
     private final P2pReleaseRequirementResolver requirementResolver;
     private final Map<P2pLineId, P2pLineActivityProbe> activityProbes;
@@ -52,12 +52,19 @@ public final class StrictP2pReleaseAssignmentCommitter
             throw new IllegalArgumentException("command and manifest must not be null");
         }
         validateIdentity(command, manifest);
-        RouteRequirements requirements = requirementResolver.resolve(command.orderSheetKey());
+        return prepare(P2pReleaseAssignmentRequest.from(command));
+    }
+
+    @Override
+    public P2pReleaseAssignmentCommit prepare(P2pReleaseAssignmentRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request must not be null");
+        }
+        RouteRequirements requirements = requirementResolver.resolve(request.orderSheetKey());
         if (requirements == null) {
             throw new IllegalStateException("requirementResolver returned null");
         }
-        Optional<P2pPhysicalToteAssignment> optionalAssignment =
-                command.proposedP2pAssignment();
+        Optional<P2pPhysicalToteAssignment> optionalAssignment = request.proposedP2pAssignment();
         if (!requirements.requiresP2p()) {
             if (optionalAssignment.isPresent()) {
                 throw new IllegalStateException("Non-P2P route must not carry a P2P assignment");
@@ -66,7 +73,7 @@ public final class StrictP2pReleaseAssignmentCommitter
         }
         P2pPhysicalToteAssignment assignment = optionalAssignment.orElseThrow(() ->
                 new IllegalStateException("P2P-required route must carry exactly one assignment"));
-        validateRouteTarget(command, requirements, assignment);
+        validateRouteTarget(request, requirements, assignment);
 
         Optional<P2pPhysicalToteAssignment> existing = leaseRegistry.findAssignment(
                 assignment.physicalToteId());
@@ -143,13 +150,13 @@ public final class StrictP2pReleaseAssignmentCommitter
     }
 
     private void validateRouteTarget(
-            ReleasePhysicalToteFromOsrCommand command,
+            P2pReleaseAssignmentRequest request,
             RouteRequirements requirements,
             P2pPhysicalToteAssignment assignment) {
         StationType firstStation = routeEntrySelector.firstStation(requirements)
                 .orElseThrow(() -> new IllegalStateException(
                         "P2P-required route has no first station"));
-        boolean sameTarget = command.releaseTargetId().equals(
+        boolean sameTarget = request.releaseTargetId().equals(
                 assignment.destination().targetId());
         if (firstStation == StationType.P2P && !sameTarget) {
             throw new IllegalStateException(
