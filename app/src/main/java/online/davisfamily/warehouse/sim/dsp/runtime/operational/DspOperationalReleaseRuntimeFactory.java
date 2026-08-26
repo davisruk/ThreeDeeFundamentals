@@ -5,13 +5,19 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalCommandHandler;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02PhysicalToteInventory;
+import online.davisfamily.warehouse.sim.dsp.adapting.MutableToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrPhysicalInventory;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCommandHandler;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshotFactory;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionCatalog;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
@@ -99,6 +105,94 @@ public final class DspOperationalReleaseRuntimeFactory {
                 operationalSnapshotSupplier,
                 commandHandler);
         return new DspOperationalReleaseRuntime(controller, routeTargetAdmissionCatalog);
+    }
+
+    public DspOperationalReleaseRuntime createElasticWithAv02(
+            OperationalReleaseEvaluationSource evaluationSource,
+            OsrPhysicalInventory inventory,
+            InboundToteLifecycleController lifecycleController,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<WarehouseSchedulerSnapshot> logicalSnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            StationAdmissionResolver stationAdmissionResolver,
+            OsrOutboundRouteLaunchTargetRegistry routeTargetRegistry,
+            Av02PhysicalToteInventory av02Inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            DspP2pElasticAllocationRuntime elasticRuntime) {
+        requireNonNull(elasticRuntime, "elasticRuntime");
+        requireNonNull(evaluationSource, "evaluationSource");
+        requireNonNull(inventory, "inventory");
+        requireNonNull(lifecycleController, "lifecycleController");
+        requireNonNull(manifestCatalog, "manifestCatalog");
+        requireNonNull(logicalSnapshotSupplier, "logicalSnapshotSupplier");
+        requireNonNull(clockSnapshotSupplier, "clockSnapshotSupplier");
+        requireNonNull(stationAdmissionResolver, "stationAdmissionResolver");
+        requireNonNull(routeTargetRegistry, "routeTargetRegistry");
+        requireNonNull(av02Inventory, "av02Inventory");
+        requireNonNull(lifecycleLedger, "lifecycleLedger");
+        requireNonNull(loadPlanRegistry, "loadPlanRegistry");
+        if (!evaluationSource.p2pAllocationProfileId()
+                .filter(P2pElasticAllocationSnapshot
+                        .DEADLINE_AWARE_ELASTIC_STICKY_LEASES::equals)
+                .isPresent()) {
+            throw new IllegalArgumentException(
+                    "Elastic runtime requires an elastic P2P evaluation source");
+        }
+        validateP2pTargets(routeTargetRegistry, elasticRuntime.lineDefinitions());
+        validateReleaseTargets(routeTargetRegistry);
+
+        OsrProcessingReleaseSnapshotFactory physicalSnapshotFactory =
+                new OsrProcessingReleaseSnapshotFactory();
+        DspOperationalReleaseSnapshotFactory operationalSnapshotFactory =
+                new DspOperationalReleaseSnapshotFactory();
+        OperationalCandidateRouteAdmissionFactory routeAdmissionFactory =
+                new OperationalCandidateRouteAdmissionFactory(
+                        new OperationalRouteEntrySelector(),
+                        stationAdmissionResolver,
+                        routeTargetRegistry);
+
+        Supplier<DspOperationalReleaseSnapshot> operationalSnapshotSupplier = () -> {
+            WarehouseSchedulerSnapshot logicalSnapshot = logicalSnapshotSupplier.get();
+            if (logicalSnapshot == null) {
+                throw new IllegalStateException("logicalSnapshotSupplier returned null");
+            }
+            OsrProcessingReleaseSnapshot physicalSnapshot = physicalSnapshotFactory.create(
+                    inventory.snapshot(), lifecycleController.snapshot());
+            Av02InventorySnapshot av02InventorySnapshot = av02Inventory.snapshot();
+            var elasticSnapshot = elasticRuntime.operationalSnapshot();
+            return operationalSnapshotFactory.create(
+                    physicalSnapshot,
+                    manifestCatalog,
+                    av02InventorySnapshot,
+                    logicalSnapshot,
+                    routeAdmissionFactory,
+                    elasticSnapshot.leases(),
+                    routeTargetRegistry.snapshotAdmissions().stream()
+                            .filter(admission -> admission.stationType() == StationType.P2P)
+                            .toList(),
+                    elasticSnapshot.allocation());
+        };
+
+        OsrProcessingReleaseCommandHandler osrHandler =
+                new OsrProcessingReleaseCommandHandler(
+                        inventory,
+                        lifecycleController,
+                        clockSnapshotSupplier,
+                        routeTargetRegistry.processingReleaseTargetRegistry(),
+                        elasticRuntime.releaseAssignmentCommitter());
+        Av02OperationalCommandHandler av02Handler = new Av02OperationalCommandHandler(
+                av02Inventory,
+                lifecycleLedger,
+                loadPlanRegistry,
+                clockSnapshotSupplier,
+                routeTargetRegistry.operationalPhysicalToteReleaseTargetRegistry(),
+                elasticRuntime.operationalReleaseAssignmentCommitter());
+        DspOperationalReleaseController controller = new DspOperationalReleaseController(
+                evaluationSource,
+                operationalSnapshotSupplier,
+                new CompositeOperationalCommandHandler(osrHandler, av02Handler));
+        return new DspOperationalReleaseRuntime(controller, routeTargetRegistry);
     }
 
     public DspOperationalReleaseRuntime createSticky(
@@ -266,6 +360,24 @@ public final class DspOperationalReleaseRuntimeFactory {
         if (!admittedDestinations.equals(new LinkedHashSet<>(configuredDestinations))) {
             throw new IllegalArgumentException(
                     "P2P route admissions must match every configured line destination");
+        }
+    }
+
+    private static void validateReleaseTargets(
+            OsrOutboundRouteLaunchTargetRegistry routeTargetRegistry) {
+        Set<OperationalRouteDestination> configuredDestinations =
+                new LinkedHashSet<>(routeTargetRegistry.destinations());
+        Set<OperationalRouteDestination> osrDestinations = routeTargetRegistry.targets().stream()
+                .map(target -> target.destination())
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Set<OperationalRouteDestination> av02Destinations =
+                routeTargetRegistry.av02Targets().stream()
+                        .map(target -> target.destination())
+                        .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        if (!osrDestinations.equals(configuredDestinations)
+                || !av02Destinations.equals(configuredDestinations)) {
+            throw new IllegalArgumentException(
+                    "Every configured route destination must have OSR and AV02 release targets");
         }
     }
 }

@@ -19,6 +19,7 @@ import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
@@ -100,6 +101,31 @@ public final class ElasticRuntimeTestFixture {
                 new InboundToteManifestCatalog(List.of()),
                 ledger::snapshot,
                 () -> new Av02InventorySnapshot(1, List.of(), List.of()),
+                clock::initialSnapshot,
+                supplySnapshotSupplier,
+                timetable(),
+                () -> new BagPlanningResult(List.of(), List.of(), List.of()),
+                outboundAllocator,
+                bindings,
+                P2pElasticAllocationConfig.productionBaseline(
+                        new P2pWorkloadCostConfig(
+                        Duration.ofMinutes(1), Duration.ZERO, Duration.ZERO)));
+    }
+
+    public DspP2pElasticAllocationRuntime createRuntime(
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier) {
+        return new DspP2pElasticAllocationRuntimeFactory().create(
+                world,
+                definitions,
+                Map.copyOf(probes),
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
                 clock::initialSnapshot,
                 supplySnapshotSupplier,
                 timetable(),

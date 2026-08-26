@@ -686,9 +686,14 @@ world lifecycle remain with the composing scene/runtime.
   `elasticRuntime.operationalReleaseAssignmentCommitter()`.
 - Wrap those handlers in the existing `CompositeOperationalCommandHandler` and give that one
   handler to the one `DspOperationalReleaseController`.
-- Validate that route admissions contain exactly the configured five P2P destinations as existing
-  elastic composition does. Validate that every configured route destination has both an OSR and
-  AV02 release adapter target before constructing the controller.
+- Keep the two target validations distinct:
+  - P2P route admissions must contain exactly the five destinations from the elastic P2P line
+    definitions, as existing elastic composition does. Filter this validation to `StationType.P2P`.
+  - Release adapters must cover every destination in the complete operational launch registry,
+    including Third Party and Adapting destinations as well as P2P. Validate the registry's full
+    destination set against both its OSR and AV02 adapter targets. Do not compare this complete set
+    with the five P2P line definitions and do not reject valid non-P2P destinations.
+  Both validations must complete before constructing the controller.
 - Keep AV02 inventory inspection outside `DspOperationalReleaseRuntime`; the composing debug rig
   already owns the inventory and can register its snapshot directly.
 - Rejected/deferred AV02 target acceptance leaves inventory, assignment, load plan, leases, and
@@ -698,12 +703,31 @@ world lifecycle remain with the composing scene/runtime.
 ### Behavioral tests
 
 - Mixed OSR and AV02 candidates are submitted in one snapshot and produce at most one applied
-  command per completed evaluation.
-- Full shared launch capacity defers either source without mutation.
+  command per completed evaluation. Use the real combined runtime and prove that the unselected
+  source remains available for the following evaluation.
+- Full shared launch capacity defers either source without mutation. Before the deferred
+  evaluation, capture the OSR inventory, AV02 inventory, lifecycle ledger, load-plan registry,
+  elastic lease/allocation state, release-target state, and shared launch queue. Assert that every
+  captured value remains unchanged after the deferred result is handled. Do not limit this test to
+  queue occupancy and source inventory alone.
 - AV02 release uses the exact preselected P2P assignment and the exact generic launch request.
-- OSR-only `createElastic(...)`, synchronous evaluation, and threaded evaluation remain compatible.
-- A worker evaluation receives detached data and performs no inventory, lifecycle, lease, load-plan,
-  target, or queue mutation.
+  Assert the complete queued request identity and routing data, including physical tote, source,
+  order sheet, service centre, pharmacy IDs, role, source sequence, destination, release time, and
+  P2P assignment. Where the production path preserves an object instance, use identity assertions
+  rather than reconstructing an equal expected value.
+- Construct the combined runtime with at least one non-P2P launch destination and verify that its
+  paired OSR and AV02 adapters are accepted. This test must fail if either adapter is absent, and it
+  must prevent validation from treating the five P2P line definitions as the complete route set.
+- Retain the existing OSR-only `createElastic(...)` compatibility tests and exercise the combined
+  overload with both synchronous and threaded evaluation sources.
+- The threaded combined-runtime test must submit a mixed OSR/AV02 snapshot to a real
+  `ThreadedOperationalReleaseEvaluationSource`. Capture OSR inventory, AV02 inventory, lifecycle,
+  elastic lease/allocation, load-plan, target, and shared queue state before submission. Wait until
+  worker evaluation has completed without allowing the simulation controller to apply the result,
+  then assert that all captured mutable state is unchanged. Finally allow the simulation thread to
+  poll and apply the completed result and assert that exactly one selected source is mutated. The
+  worker must receive only the detached `DspOperationalReleaseSnapshot`; do not pass live mutable
+  inventories, registries, targets, queues, or controllers into worker-side test collaborators.
 
 ### Implementation verification
 
