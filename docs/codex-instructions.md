@@ -46,7 +46,7 @@ If continuing transfer-zone or mounted-machine architectural discussion, inspect
 
 Do not make code or document changes unless the user explicitly agrees in the current session.
 
-The user normally wants architecture discussions to produce a plan that a lower-capability implementation model can execute step by step. Plans are expected to be created or reviewed by a higher-capability planning model and must be decision-complete for the selected slice. The planning model owns architectural decisions and implementation-significant design choices; the implementation model should primarily inspect the named code, make the specified changes, correct mechanical compile/test failures, and verify the result rather than infer missing architecture.
+The user normally wants architecture discussions to produce a plan that a lower-capability implementation model can execute step by step. Plans are expected to be created or reviewed by a higher-capability planning model and must be decision-complete for the selected slice. When multi-agent execution is available, the preferred workflow is higher-capability step ownership with lower-capability delegated implementation: the parent retains the complete plan step, architectural intent, acceptance criteria, and review responsibility while implementation subagents perform bounded coding and focused verification. The planning model and step-owning parent own architectural decisions and implementation-significant design choices; implementation subagents should primarily inspect the named code, make the specified changes, correct mechanical compile/test failures, and verify the delegated slice rather than infer missing architecture.
 
 Plans should:
 
@@ -60,7 +60,7 @@ Plans should:
 
 `Implementation verification` must contain the focused Gradle compile/test command that the implementation model is authorized to run, or explicitly state that there is no model-run command for the step. `User verification` must contain any broader regression, full-suite, visual, or deliberately user-reserved check, or explicitly state that no additional user verification is required for the step. Do not leave verification ownership implicit.
 
-### Planning-model / implementation-model contract
+### Planning model / step execution owner / implementation subagent contract
 
 For every implementation-significant choice that can be resolved by inspecting the repository, the planning model should resolve it in the plan rather than delegate it to the implementation model. Where applicable, make explicit:
 
@@ -90,6 +90,63 @@ For non-trivial steps, identify the expected change surface where practical: fil
 Tests in a decision-complete plan are behavioral specifications, not only class names. For important cases, state the setup/condition, action, and required observable result. Suggested test method names are useful when they make the intended contract unambiguous.
 
 The implementation model must follow the plan rather than redesign it. It may resolve mechanical coding details and correct compile/test failures that do not change the specified architecture. If implementation reveals a choice that changes public APIs, ownership, lifecycle, ordering, threading, compatibility strategy, or another architectural contract not resolved by the plan, stop and report the decision instead of choosing one.
+
+### Feature-plan and step-execution lifecycle
+
+Use these roles distinctly even when the same model performs more than one role at different times:
+
+- **Planning model**: creates or materially revises the complete feature plan before implementation begins. The plan contains the ordered implementation steps, decision-complete design choices, acceptance criteria, implementation verification, and user verification.
+- **Step execution owner**: executes exactly the user-selected existing plan step. It owns scope, delegation, repository-state validation, acceptance review, and the decision that implementation is ready for any required user verification.
+- **Implementation subagent**: performs bounded coding and focused verification delegated by the step execution owner. It does not own feature planning or architecture.
+
+The user initiates each implementation step. Do not automatically begin the next plan step. A subagent reporting completion means only that implementation has returned for review. Parent acceptance means that implementation is ready for any required user verification. The step is complete only after parent acceptance and successful completion of every required user verification, or when the plan explicitly states that no additional user verification is required. Then stop and wait for the user to initiate the next step.
+
+Starting a step does not reopen feature planning. Before delegation, the step execution owner must re-read the complete selected step and its named prerequisites, inspect enough current repository state to confirm the plan's assumptions and exact implementation surface, and record the existing worktree state with `git status --short`. Turning the existing step into an execution checklist is encouraged; creating a replacement feature plan is not.
+
+During execution, the step execution owner may refine the selected step when assessment reveals missing execution detail needed to implement or prove the already-approved architecture and behavior. Permitted refinements include adding or clarifying test cases, focused verification commands, user verification commands, acceptance criteria, expected change-surface guidance, and explicit unchanged boundaries. Any such addition or change must be written into the active plan step before delegation or corrective implementation continues.
+
+Such refinements must not change architectural decisions, domain behavior, feature scope, public APIs/contracts, ownership boundaries, lifecycle semantics, ordering rules, threading boundaries, compatibility strategy, or another implementation-significant decision established by the feature plan. A refinement makes the existing step more complete or precise; it does not redesign it.
+
+An internal execution checklist may decompose and track requirements already written in the active plan, but it must not introduce or alter acceptance criteria, test obligations, verification ownership, or scope. Do not keep a corrected requirement only in the step execution owner's reasoning or an ephemeral checklist: subsequent subagent tasks and final review must use the persistently refined active plan step.
+
+A formal plan revision is required when execution discovers that the approved architecture or intended behavior is materially wrong, incomplete, implementation-significantly ambiguous, or inconsistent with the current repository. Stop and report the precise issue rather than silently changing the architecture during implementation.
+
+### Multi-agent step ownership and delegation
+
+When multi-agent execution is available, prefer a higher-capability parent as the owner of each implementation step and delegate bounded coding work to lower-capability implementation subagents. This hierarchy is intended to improve capability allocation and review quality, not maximize parallelism.
+
+Before delegation, the parent must:
+
+- read the complete current plan step and its named prerequisites
+- inspect enough current repository code to confirm that the plan still matches reality
+- retain every requirement, non-goal, compatibility constraint, implementation-verification requirement, and acceptance criterion from the original step
+- derive an explicit internal acceptance checklist when the step has several independent obligations
+- decompose the step only when useful; delegation must not silently narrow or redefine scope
+- resolve implementation-significant decisions left open by the plan when repository inspection is sufficient; if a new architectural decision is required, stop and report it
+
+Delegated tasks must state the bounded ownership, relevant files/types or implementation analogue, important constraints, authorized verification, and unchanged boundaries. Subagents must not broaden scope, redesign APIs, introduce alternative abstractions, or silently omit delegated work.
+
+Prefer one implementation subagent at a time. Use parallel implementation subagents only for genuinely disjoint slices with non-overlapping write scopes or another clear isolation boundary.
+
+The parent and subagents share one worktree. Only one agent may write at a time unless the parent establishes genuinely non-overlapping write scopes. Every delegated task must identify pre-existing modified or untracked files that the subagent must preserve. Subagents must not revert, overwrite, stage, or absorb changes outside delegated ownership. Neither parent nor subagent may commit, amend, merge, rebase, pull, push, or change branches unless the user explicitly requests that Git operation.
+
+A subagent report must include:
+
+- files changed
+- behavior implemented
+- focused compile/tests run and their results
+- any delegated work not completed
+- assumptions, ambiguities, unexpected repository state, and concerns relevant to parent review
+
+After a subagent returns, the parent must inspect the actual diff and review it against the complete active plan step and acceptance checklist, not merely the subagent summary. Check for omitted behavior, narrowed scope, architectural-boundary violations, compatibility regressions, and tests that prove only the implemented subset. If additional non-architectural execution detail is needed, update the active plan step and delegate the bounded corrective work before acceptance.
+
+The parent may request at most two corrective delegations after the initial implementation attempt for one plan step. This limit is cumulative across replacement subagents and cannot be reset by starting a new task. If the same gap remains, implementation is still incomplete after the second corrective delegation, or correction requires an architectural decision, stop and report the precise issue to the user. The parent owns architectural judgement and plan refinement; it must not silently switch into the implementation role to bypass the corrective limit.
+
+A step is not ready for user verification merely because delegated code compiles or newly added tests pass. The parent must confirm that every active-plan and acceptance-checklist item is satisfied. The step becomes complete only after required user verification succeeds. Completion does not authorize starting the next step.
+
+Implementation subagents may run only plan-authorized focused verification. Broader regression, complete-suite, visual, or user-reserved verification must be requested from the user with the exact command or check.
+
+The parent normally accepts the subagent's reported focused verification result and does not duplicate a green run. It may rerun the same plan-authorized focused command only when code changed after the reported run, the result is missing or ambiguous, or review identifies a concrete concern requiring confirmation. This exception does not authorize broader verification.
 
 ### Verification during implementation
 
@@ -140,7 +197,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is the active implementation feature, with Steps 1-7 complete and Step 8 next. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Full-day execution and metrics follows AV02. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is the active implementation feature, with Steps 1-11 complete and Step 12 next. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Full-day execution and metrics follows AV02. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
 
 Completed bag-planning behavior:
 
@@ -237,7 +294,7 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-av02-operational-allocation`: implementation in progress; Steps 1-7 are complete and Step 8 is next
+- `feature/dsp-av02-operational-allocation`: implementation in progress; Steps 1-11 are complete and Step 12 is next
 
 Current scheduler decisions:
 
@@ -307,7 +364,7 @@ Known Phase 1 machine/station work:
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
 - deadline-aware elastic line allocation: complete, verified, and merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
-- AV02 operational allocation: active implementation branch; Steps 1-7 complete; allocate only logical EMPTY inbound fulfilment totes and keep P2P outbound tote supply independent
+- AV02 operational allocation: active implementation branch; Steps 1-11 complete and Step 12 is next; allocate only logical EMPTY inbound fulfilment totes and keep P2P outbound tote supply independent
 - full-day execution and metrics: expected after AV02 operational allocation
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
@@ -323,6 +380,6 @@ Production layout context:
 
 ## Testing Practice
 
-The implementation agent may run the focused compile/test command or focused set of tests specified for the current implementation step, subject to the verification rules above. Full regression runs, the complete Gradle test suite, and other broad verification remain user-run checkpoints: ask the user to execute them and provide the exact command in full.
+Lower-capability implementation subagents run the focused compile/test command or focused set of tests specified for the current implementation step, subject to the verification rules above. The higher-capability parent reviews the complete step and normally relies on the reported focused result rather than duplicating a green run. Full regression runs, the complete Gradle test suite, and other broad verification remain user-run checkpoints: ask the user to execute them and provide the exact command in full.
 
 Prefer stable event/contract assertions over transient state assertions after arbitrary update counts, especially in PRL/PCR/bagger tests.
