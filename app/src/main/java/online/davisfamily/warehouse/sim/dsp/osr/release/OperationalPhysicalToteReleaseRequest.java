@@ -1,9 +1,13 @@
 package online.davisfamily.warehouse.sim.dsp.osr.release;
 
 import java.time.Duration;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteIdentity;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
@@ -14,12 +18,31 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
  */
 public record OperationalPhysicalToteReleaseRequest(
         OperationalPhysicalToteIdentity identity,
+        List<String> pharmacyIds,
         Duration releaseTime,
         Optional<P2pPhysicalToteAssignment> p2pAssignment) {
 
     public OperationalPhysicalToteReleaseRequest {
         if (identity == null) {
             throw new IllegalArgumentException("identity must not be null");
+        }
+        if (pharmacyIds == null || pharmacyIds.isEmpty()) {
+            throw new IllegalArgumentException("pharmacyIds must not be null or empty");
+        }
+        Set<String> normalizedPharmacyIds = new LinkedHashSet<>();
+        for (String pharmacyId : pharmacyIds) {
+            if (pharmacyId == null || pharmacyId.isBlank()) {
+                throw new IllegalArgumentException("pharmacyIds must not contain blank values");
+            }
+            normalizedPharmacyIds.add(pharmacyId.trim());
+        }
+        pharmacyIds = List.copyOf(normalizedPharmacyIds);
+        if ((identity.orderType() == OrderType.FULL_PACK
+                || identity.orderType() == OrderType.ASSOCIATED
+                || identity.orderType() == OrderType.EMPTY)
+                && pharmacyIds.size() != 1) {
+            throw new IllegalArgumentException(
+                    identity.orderType() + " release must identify exactly one pharmacy");
         }
         if (releaseTime == null) {
             throw new IllegalArgumentException("releaseTime must not be null");

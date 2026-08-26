@@ -2,28 +2,33 @@
 
 ## Purpose
 
-This document is the entry-point handoff for follow-up Codex sessions. The current direction is to introduce a DSP/OSR scheduler as a domain-first implementation, while preserving the local machine-state architecture already established in the tote-to-bag/P2P work.
+This document is the entry-point handoff for follow-up Codex sessions. The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work.
 
-Read these documents before starting:
+Always read these documents before starting:
 
 1. `docs/codex-context.md`
 2. The active AV02 plan, `docs/scheduler/dsp-av02-operational-allocation-plan.md`
-3. The completed elastic-allocation plan, `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
-4. The completed sticky-line lease plan, `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
-5. The completed P2P arrival-consumer plan, `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
-6. `docs/scheduler/dsp-scheduler-implementation-plan.md`
-7. The completed warehouse transport-routing plan, `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
-8. The completed OSR outbound route-launch plan, `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-9. The completed route-target integration plan, `docs/scheduler/dsp-operational-route-target-integration-plan.md`
-10. The completed dependency-ready operational release plan, `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
-11. The completed physical release plan, `docs/scheduler/dsp-osr-processing-release-plan.md`
-12. The completed supply plan, `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
-13. The completed operational-clock foundation plan, `docs/scheduler/dsp-operational-simulation-clock-plan.md`
-14. The completed OSR inventory foundation plan, `docs/scheduler/dsp-osr-physical-inventory-plan.md`
-15. The completed outbound foundation plan, `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
-16. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
-17. `docs/scheduler/dsp-operational-scheduling-requirements.md`
-18. `docs/machines/phase-1-stations-roadmap.md`
+
+The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
+
+Use these completed programme documents as references only when the active work touches their boundaries:
+
+- `docs/scheduler/dsp-scheduler-implementation-plan.md`
+- `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
+- `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`
+- `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`
+- `docs/scheduler/dsp-warehouse-transport-routing-plan.md`
+- `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+- `docs/scheduler/dsp-operational-route-target-integration-plan.md`
+- `docs/scheduler/dsp-dependency-ready-operational-release-plan.md`
+- `docs/scheduler/dsp-osr-processing-release-plan.md`
+- `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`
+- `docs/scheduler/dsp-operational-simulation-clock-plan.md`
+- `docs/scheduler/dsp-osr-physical-inventory-plan.md`
+- `docs/scheduler/dsp-outbound-tote-allocation-plan.md`
+- `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
+- `docs/scheduler/dsp-operational-scheduling-requirements.md`
+- `docs/machines/phase-1-stations-roadmap.md`
 
 Read these domain documents when touching their areas:
 
@@ -41,16 +46,58 @@ If continuing transfer-zone or mounted-machine architectural discussion, inspect
 
 Do not make code or document changes unless the user explicitly agrees in the current session.
 
-The user normally wants architecture discussions to produce a plan that a weaker model can execute step by step. Plans should be decision-complete for the selected slice:
+The user normally wants architecture discussions to produce a plan that a lower-capability implementation model can execute step by step. Plans are expected to be created or reviewed by a higher-capability planning model and must be decision-complete for the selected slice. The planning model owns architectural decisions and implementation-significant design choices; the implementation model should primarily inspect the named code, make the specified changes, correct mechanical compile/test failures, and verify the result rather than infer missing architecture.
+
+Plans should:
 
 - keep implementation slices small, explicit, and reversible
 - limit each slice to the current domain's files where practical
 - creation of new files is fine when it avoids awkward coupling
 - avoid unnecessary refactors
 - include expected output per step
-- include the focused Gradle command for the user to run
-- do not run Gradle tasks yourself unless the user explicitly asks
+- include separate `Implementation verification` and `User verification` sections per step
 - stop and report if a step exposes a new architectural decision
+
+`Implementation verification` must contain the focused Gradle compile/test command that the implementation model is authorized to run, or explicitly state that there is no model-run command for the step. `User verification` must contain any broader regression, full-suite, visual, or deliberately user-reserved check, or explicitly state that no additional user verification is required for the step. Do not leave verification ownership implicit.
+
+### Planning-model / implementation-model contract
+
+For every implementation-significant choice that can be resolved by inspecting the repository, the planning model should resolve it in the plan rather than delegate it to the implementation model. Where applicable, make explicit:
+
+- the exact existing files/classes/interfaces/records to modify
+- the exact new types to create and their packages
+- the responsibility and ownership boundary of each new type
+- architecturally significant fields, constructor signatures, method signatures, return values, and optionality
+- the existing implementation analogue or pattern to follow, including which aspects to reuse and which domain-specific aspects must not be copied
+- the exact existing API that must remain compatible and the compatibility mechanism to use, such as a delegating constructor, overload, factory, or adapter
+- validation and revalidation sequence where ordering affects correctness
+- mutation sequence and the point at which mutation begins where atomicity or partial failure matters
+- simulation-thread/worker-thread ownership for reads, decisions, and mutations
+- deterministic ordering/comparator semantics where ordering is part of the contract
+- expected behavior for stale, duplicate, rejected, capacity-blocked, or otherwise invalid operations
+- tests to add or modify and the behavior each test must prove
+- files or architectural areas that must explicitly remain unchanged when that protects an important boundary
+- the limited implementation details that remain discretionary, normally local naming, private helper decomposition, and mechanically equivalent code structure
+
+Do not leave implementation-significant alternatives unresolved in a final plan. Avoid phrases such as `constructor or factory`, `adapter if necessary`, `where practical`, `as appropriate`, or `for example` when they leave the implementation model to choose an architecture. Inspect the current repository and select the intended approach. If the correct choice cannot be established without a new architectural decision, identify that decision explicitly and stop planning that slice rather than guessing.
+
+When a step changes several stateful components, include an explicit application sequence when useful: first the ordered prevalidation/revalidation operations, then a clearly identified mutation boundary, then the ordered mutations. The implementation model should not have to design a transaction from prose requirements.
+
+When introducing a type that resembles an existing implementation, name the concrete analogue and state both what should be copied/reused and what must remain different. Prefer repository-specific guidance over general architectural explanation.
+
+For non-trivial steps, identify the expected change surface where practical: files to create, files to modify, tests to create or update, and important files that should not be changed. This is especially important when a lower-capability implementation model could otherwise broaden the refactor.
+
+Tests in a decision-complete plan are behavioral specifications, not only class names. For important cases, state the setup/condition, action, and required observable result. Suggested test method names are useful when they make the intended contract unambiguous.
+
+The implementation model must follow the plan rather than redesign it. It may resolve mechanical coding details and correct compile/test failures that do not change the specified architecture. If implementation reveals a choice that changes public APIs, ownership, lifecycle, ordering, threading, compatibility strategy, or another architectural contract not resolved by the plan, stop and report the decision instead of choosing one.
+
+### Verification during implementation
+
+The implementation model may run focused Gradle compile/test tasks named by the plan while implementing a step so that compiler and test feedback can be used to correct mechanical errors before proceeding. A focused verification command may run one test class or a set of tests, provided all tests are directly part of the current implementation step. Keep these checks bounded to the current slice and use normal Gradle output; do not enable `--info`, `--debug`, or other verbose logging unless the failure cannot otherwise be diagnosed.
+
+If a focused compile/test command fails with a small, directly actionable compiler or test error, the implementation model may diagnose the failure, make a corrective change, and rerun the focused command.  After the initial failed verification, the implementation model may perform at most two edit-and-rerun correction cycles for that checkpoint. If the command is still failing after two corrective attempts, if the failure becomes broad or noisy, or if fixing it would require an architectural decision not resolved by the plan, stop and report the failure rather than continuing speculative changes.
+
+The implementation model must not run full regression suites, the complete Gradle test suite, or other broad verification outside the current step. When broader verification is required, ask the user to execute it and provide the exact command in full. The same rule applies whenever a verification command is intentionally reserved for user execution by the plan.
 
 ## Current Position
 
@@ -93,7 +140,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is the active planned feature. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Full-day execution and metrics follows AV02. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is the active implementation feature, with Steps 1-7 complete and Step 8 next. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Full-day execution and metrics follows AV02. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
 
 Completed bag-planning behavior:
 
@@ -190,7 +237,7 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-av02-operational-allocation`: decision-complete plan created; implementation has not started
+- `feature/dsp-av02-operational-allocation`: implementation in progress; Steps 1-7 are complete and Step 8 is next
 
 Current scheduler decisions:
 
@@ -260,7 +307,7 @@ Known Phase 1 machine/station work:
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
 - deadline-aware elastic line allocation: complete, verified, and merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
-- AV02 operational allocation: active planned branch; allocate only logical EMPTY inbound fulfilment totes and keep P2P outbound tote supply independent
+- AV02 operational allocation: active implementation branch; Steps 1-7 complete; allocate only logical EMPTY inbound fulfilment totes and keep P2P outbound tote supply independent
 - full-day execution and metrics: expected after AV02 operational allocation
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
@@ -276,6 +323,6 @@ Production layout context:
 
 ## Testing Practice
 
-The user runs Gradle tasks. When ready for verification, ask the user to run the focused command and wait for feedback.
+The implementation agent may run the focused compile/test command or focused set of tests specified for the current implementation step, subject to the verification rules above. Full regression runs, the complete Gradle test suite, and other broad verification remain user-run checkpoints: ask the user to execute them and provide the exact command in full.
 
 Prefer stable event/contract assertions over transient state assertions after arbitrary update counts, especially in PRL/PCR/bagger tests.

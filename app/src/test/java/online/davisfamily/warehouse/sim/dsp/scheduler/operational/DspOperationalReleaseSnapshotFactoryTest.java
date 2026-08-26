@@ -177,7 +177,8 @@ class DspOperationalReleaseSnapshotFactoryTest {
                         "sc-1",
                         PhysicalToteRole.PRE_P2P,
                         2),
-                PhysicalToteRecord.preP2p(av02PhysicalId));
+                PhysicalToteRecord.preP2p(av02PhysicalId),
+                emptyItem.pharmacyId());
 
         DspOperationalReleaseSnapshot snapshot = factory.create(
                 new OsrProcessingReleaseSnapshot(List.of(osrCandidate)),

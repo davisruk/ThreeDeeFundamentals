@@ -55,6 +55,7 @@ class Av02AllocationControllerTest {
         Av02AllocatedTote allocated = fixture.inventory.head().orElseThrow();
         assertEquals("av02-000001", allocated.physicalToteId().value());
         assertEquals(PhysicalToteRole.PRE_P2P, allocated.physicalTote().role());
+        assertEquals(List.of("pharmacy-1"), allocated.pharmacyIds());
         assertEquals(1, fixture.inventory.occupancy());
         assertEquals(allocated, fixture.controller.lastAllocatedTote().orElseThrow());
         assertEquals(
@@ -272,7 +273,8 @@ class Av02AllocationControllerTest {
                         order.serviceCentreId(),
                         PhysicalToteRole.PRE_P2P,
                         sourceSequenceNumber),
-                PhysicalToteRecord.preP2p(id));
+                PhysicalToteRecord.preP2p(id),
+                order.items().getFirst().pharmacyId());
     }
 
     private static WarehouseSchedulerSnapshot scheduler(

@@ -126,6 +126,7 @@ public final class Av02OperationalCommandHandler implements SchedulerCommandHand
         OperationalPhysicalToteReleaseRequest request =
                 new OperationalPhysicalToteReleaseRequest(
                         allocatedTote.identity(),
+                        allocatedTote.pharmacyIds(),
                         releaseTime,
                         releaseCommand.proposedP2pAssignment());
         SchedulerCommandApplicationResult targetResult = target.accept(request);

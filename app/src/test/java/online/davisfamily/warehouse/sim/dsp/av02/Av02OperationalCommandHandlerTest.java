@@ -73,6 +73,7 @@ class Av02OperationalCommandHandlerTest {
                 fixture.ledger.tote(fixture.physicalToteId).orElseThrow().state());
         assertEquals(1, fixture.target.callCount);
         assertEquals(OperationalPhysicalToteSource.AV02, fixture.target.request.source());
+        assertEquals(List.of("pharmacy-1"), fixture.target.request.pharmacyIds());
     }
 
     @Test
@@ -187,7 +188,8 @@ class Av02OperationalCommandHandlerTest {
                         "104",
                         online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole.PRE_P2P,
                         1),
-                physicalTote);
+                physicalTote,
+                order.items().getFirst().pharmacyId());
         Av02PhysicalToteInventory inventory = new Av02PhysicalToteInventory(
                 new Av02AllocationConfig(1));
         inventory.store(allocatedTote);

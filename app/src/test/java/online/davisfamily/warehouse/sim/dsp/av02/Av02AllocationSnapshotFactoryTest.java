@@ -351,7 +351,10 @@ class Av02AllocationSnapshotFactoryTest {
                 order.serviceCentreId(),
                 PhysicalToteRole.PRE_P2P,
                 sourceSequenceNumber);
-        return new Av02AllocatedTote(identity, PhysicalToteRecord.preP2p(id));
+        return new Av02AllocatedTote(
+                identity,
+                PhysicalToteRecord.preP2p(id),
+                order.items().getFirst().pharmacyId());
     }
 
     private static PhysicalToteLifecycleSnapshot emptyLifecycle() {

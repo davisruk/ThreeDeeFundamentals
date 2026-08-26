@@ -1,5 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.av02;
 
+import java.util.List;
+
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRecord;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
@@ -10,7 +12,8 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysic
 
 public record Av02AllocatedTote(
         OperationalPhysicalToteIdentity identity,
-        PhysicalToteRecord physicalTote) {
+        PhysicalToteRecord physicalTote,
+        String pharmacyId) {
 
     public Av02AllocatedTote {
         if (identity == null) {
@@ -18,6 +21,9 @@ public record Av02AllocatedTote(
         }
         if (physicalTote == null) {
             throw new IllegalArgumentException("physicalTote must not be null");
+        }
+        if (pharmacyId == null || pharmacyId.isBlank()) {
+            throw new IllegalArgumentException("pharmacyId must not be blank");
         }
         if (identity.source() != OperationalPhysicalToteSource.AV02) {
             throw new IllegalArgumentException("identity source must be AV02");
@@ -32,6 +38,7 @@ public record Av02AllocatedTote(
         if (!identity.physicalToteId().equals(physicalTote.id())) {
             throw new IllegalArgumentException("identity and physical tote IDs must match");
         }
+        pharmacyId = pharmacyId.trim();
     }
 
     public PhysicalToteId physicalToteId() {
@@ -48,5 +55,9 @@ public record Av02AllocatedTote(
 
     public long sourceSequenceNumber() {
         return identity.sourceSequenceNumber();
+    }
+
+    public List<String> pharmacyIds() {
+        return List.of(pharmacyId);
     }
 }

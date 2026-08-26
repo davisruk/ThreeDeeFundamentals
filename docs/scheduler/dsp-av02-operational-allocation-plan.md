@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-av02-operational-allocation`
 
-Status: decision-complete plan; implementation has not started.
+Status: implementation in progress; Steps 1-7 are complete and Step 8 is next.
 
 ## Purpose
 
@@ -339,133 +339,514 @@ Ask the user to run:
 
 Proposed commit message: `Apply AV02 releases atomically`
 
-## Step 8: Remove The Inbound-Manifest Assumption From Transport
+## Step 8: Establish The Source-Neutral Launch Contract
 
-Scope:
+### Design intent
 
-- Add source-neutral `OperationalRouteLaunchRequest` and migrate downstream hydration/transport
-  interfaces to it.
-- Adapt the existing OSR launch target/controller to publish that request while preserving exact
-  OSR release/manifest ownership in the OSR-specific upstream object.
-- Add the AV02 launch adapter/controller using the same bounded launch-to-transport ownership
-  sequence. Both sources feed the existing warehouse transport ingress and route catalog; do not
-  duplicate route followers, transfer routing, in-flight registry, arrival controllers, or station
-  queues.
-- Change `RoutedPhysicalTote` and `P2pArrivalAdmissionRequest.from(...)` to use source-neutral
-  identity rather than dereferencing an inbound manifest.
-- Migrate `DetachedOutboundToteFactory`, `DetachedToteRenderableFactory`, and load-plan hydration to
-  source-neutral launch requests. Preserve exact request/load-plan/tote/renderable identity checks.
-- Keep compatibility adapters for OSR-focused fixture construction where practical; update tests
-  mechanically where the static request type must become source-neutral.
-- Prove AV02 and OSR requests traverse the same transport runtime, preserve source identity, arrive
-  at the exact first station, and never teleport directly to P2P.
+This step introduces the immutable contract needed by transport without migrating the transport
+runtime yet. The split is deliberate: Step 8 must compile with the existing OSR transport path
+still intact, and Step 9 performs the mechanical downstream migration. Pharmacy identity must be
+preserved explicitly because an AV02 EMPTY tote initially has an empty load plan and therefore its
+pharmacy cannot be reconstructed from packs or an inbound manifest.
 
-Ask the user to run:
+Read before implementation:
+
+- `OperationalPhysicalToteIdentity`
+- `OperationalPhysicalToteReleaseRequest`
+- `Av02AllocatedTote`
+- `Av02AllocationController`
+- `Av02OperationalCommandHandler`
+- `OsrProcessingReleaseRequest`
+- `OsrOutboundRouteLaunchRequest`
+
+### Required change surface
+
+Create:
+
+- `online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest`
+- `online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory`
+- `OperationalRouteLaunchRequestTest` in the matching test package
+
+Modify:
+
+- `Av02AllocatedTote`
+- `Av02AllocationController`
+- `OperationalPhysicalToteReleaseRequest`
+- `Av02OperationalCommandHandler`
+- their existing focused tests and fixtures
+
+Do not modify the route-launch queue, hydrator, routed-tote, arrival, route catalog, transport
+controller, scheduler ranking, or P2P lease logic in this step.
+
+### Locked API and validation
+
+- Append `String pharmacyId` to `Av02AllocatedTote`. Normalize it, reject blank values, and expose
+  `List<String> pharmacyIds()` returning exactly `List.of(pharmacyId)`. Do not infer pharmacy from
+  the empty `ToteLoadPlan`.
+- `Av02AllocationController` must copy `Av02AllocationCandidate.pharmacyId()` into the allocated
+  tote. Update existing test fixtures explicitly; do not add a placeholder compatibility pharmacy.
+- Extend `OperationalPhysicalToteReleaseRequest` to contain, in order:
+  `OperationalPhysicalToteIdentity identity`, `List<String> pharmacyIds`, `Duration releaseTime`,
+  and `Optional<P2pPhysicalToteAssignment> p2pAssignment`.
+- The release request must normalize and de-duplicate pharmacy IDs in encounter order, reject null,
+  blank, or empty values, and require exactly one pharmacy for `FULL_PACK`, `ASSOCIATED`, and
+  `EMPTY`. Keep multi-pharmacy ADAPTED support.
+- `Av02OperationalCommandHandler` must construct the release request from the exact allocated tote
+  identity and its exact one-element pharmacy list. All Step 7 prevalidation, downstream-first
+  acceptance, commit, and departure ordering remains unchanged.
+- Define `OperationalRouteLaunchRequest` as a record containing exactly
+  `OperationalPhysicalToteReleaseRequest releaseRequest` and
+  `OperationalRouteDestination destination`. Provide delegating accessors for identity, source,
+  physical tote ID, order sheet, order type, service centre, pharmacy IDs, release time, and P2P
+  assignment. Retain the exact release-request instance; do not copy it.
+- When the first destination is P2P and an assignment is present, require the destination to equal
+  the assignment destination. A non-P2P first destination may retain a later P2P assignment.
+- Implement `OperationalRouteLaunchRequestFactory` as a final utility class with a private
+  constructor and two static methods:
+  `fromOsr(OsrProcessingReleaseRequest, OperationalRouteDestination)` and
+  `fromOperational(OperationalPhysicalToteReleaseRequest, OperationalRouteDestination)`.
+- `fromOsr(...)` must create an `OSR` `OperationalPhysicalToteIdentity` from the exact manifest,
+  using `INBOUND_PACK`, manifest source sequence, and distinct manifest pharmacy IDs. It then
+  creates the source-neutral release and launch requests using the exact release time, assignment,
+  and destination.
+- `fromOperational(...)` must retain the exact supplied source-neutral release request and only add
+  the destination. Reject an OSR identity in this method; OSR must use `fromOsr(...)` so the live
+  manifest remains the authoritative conversion source.
+- Leave `OsrOutboundRouteLaunchRequest` and every existing downstream signature unchanged until
+  Step 9. Do not create constructors accepting either request type.
+
+### Behavioral tests
+
+- `shouldCreateSourceNeutralOsrLaunchWithoutLosingManifestDerivedIdentity`: convert an OSR release
+  and prove source, physical ID, sheet, type, service centre, pharmacies, sequence, release time,
+  destination, and optional assignment match the manifest/release.
+- `shouldRetainExactOperationalReleaseRequestForAv02`: create an AV02 release request and prove the
+  launch request owns the exact same object and preserves its single pharmacy.
+- `shouldAllowLaterP2pAssignmentForNonP2pFirstDestination`: use Third Party or Adapting as the first
+  destination and retain the exact P2P assignment.
+- `shouldRejectMismatchedDirectP2pDestinationAndInvalidPharmacyIdentity`.
+- Extend allocation and command-handler tests to prove the candidate pharmacy survives allocation
+  and target acceptance without a manifest or populated load plan.
+
+### Implementation verification
+
+The implementation model runs:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.osr.release.launch.* --tests online.davisfamily.warehouse.sim.dsp.transport.* --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.*
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationDomainTest --tests online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationControllerTest --tests online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalCommandHandlerTest --tests online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestTest
 ```
 
-Proposed commit message: `Generalize warehouse launch identity`
+### User verification
 
-## Step 9: Count Allocated EMPTY Totes As P2P Work
+No additional user-run verification is required for this step.
 
-Scope:
+Proposed commit message: `Define source-neutral route launch requests`
 
-- Extend `P2pServiceCentreWorkSnapshotFactory` to resolve an EMPTY sheet's active `PRE_P2P`
-  assignment from lifecycle state without requiring an inbound manifest.
-- Count the allocated physical tote under its exact service centre until `CONSUMED_AT_P2P`.
-- Retain only authorized, unallocated EMPTY sheets in
-  `unallocatedEmptyOrdersByServiceCentre`; remove a sheet from diagnostics as soon as AV02 creates
-  its physical assignment.
-- Extend `P2pWorkloadSnapshotFactory` validation so AV02 physical totes are validated through
-  lifecycle/source-neutral identity rather than `InboundToteManifestCatalog`.
-- Preserve existing manifest validation for OSR-originated totes and reject ambiguous/mismatched
-  source identity.
-- Prove elastic demand sees unallocated EMPTY diagnostics before allocation, physical tote work
-  after allocation, and no remaining work after P2P consumption.
+## Step 9: Migrate The Existing Transport Path To Source-Neutral Launches
 
-Ask the user to run:
+### Design intent
+
+Both physical sources must feed one bounded launch FIFO and the existing hydration, transport,
+route-following, station-arrival, and P2P-arrival runtime. The established OSR-named queue,
+controller, hydrator, transport queue, and snapshots are retained by name in this feature to avoid
+an unrelated rename. Their payload contract becomes source-neutral. A later naming cleanup must be
+separate and behavior-preserving.
+
+Read before implementation:
+
+- every main/test use of `OsrOutboundRouteLaunchRequest`
+- `OsrOutboundRouteLaunchQueue`, `OsrOutboundRouteLaunchTarget`, and
+  `OsrOutboundRouteLaunchTargetRegistry`
+- `OsrOutboundRouteLaunchController`
+- `OsrOutboundToteHydrator` and `LoadPlanOsrOutboundToteHydrator`
+- `DetachedOutboundToteFactory`, `DetachedToteRenderableFactory`, and
+  `RouteBoundDetachedOutboundToteFactory`
+- `RoutedPhysicalTote`
+- `P2pArrivalAdmissionRequest`
+- `DspWarehouseTransportRuntimeFactory`
+
+### Required change surface
+
+Create:
+
+- `Av02OutboundRouteLaunchTarget` in the existing `osr.release.launch` package
+- `Av02OutboundRouteLaunchTargetTest`
+
+Modify all production and test signatures that currently consume
+`OsrOutboundRouteLaunchRequest` downstream of a release target so they consume
+`OperationalRouteLaunchRequest` instead. Delete `OsrOutboundRouteLaunchRequest.java` after all
+callers are migrated. Do not retain a dual-request constructor, overloaded queue method, wrapper,
+or deprecated adapter.
+
+### Locked migration and ownership sequence
+
+- `OsrOutboundRouteLaunchTarget.accept(OsrProcessingReleaseRequest)` converts through
+  `OperationalRouteLaunchRequestFactory.fromOsr(...)` and enqueues the resulting generic request.
+- `Av02OutboundRouteLaunchTarget` implements `OperationalPhysicalToteReleaseTarget`, has the same
+  destination/queue constructor shape as the OSR target, converts through
+  `fromOperational(...)`, and returns the same applied/deferred/rejected results for duplicate and
+  full-queue conditions.
+- Extend `OsrOutboundRouteLaunchTargetRegistry` to construct one OSR adapter target and one AV02
+  adapter target for every configured destination. Add
+  `operationalPhysicalToteReleaseTargetRegistry()` returning one immutable
+  `OperationalPhysicalToteReleaseTargetRegistry` built from the AV02 targets. Keep the existing OSR
+  processing registry unchanged.
+- `OsrOutboundRouteLaunchQueue` continues to be the sole bounded FIFO and stores exact
+  `OperationalRouteLaunchRequest` instances. Duplicate identity and FIFO invariant behavior stays
+  unchanged.
+- Migrate `OsrOutboundRouteLaunchController`, `OsrOutboundToteHydrator`,
+  `LoadPlanOsrOutboundToteHydrator`, `DetachedOutboundToteFactory`,
+  `DetachedToteRenderableFactory`, `RouteBoundDetachedOutboundToteFactory`, and
+  `RoutedPhysicalTote` to the generic request. Preserve exact request and load-plan object identity.
+- `P2pArrivalAdmissionRequest.from(RoutedPhysicalTote)` must read order type, service centre,
+  order sheet, pharmacy IDs, source-neutral physical ID, destination, and assignment from the
+  generic launch request. It must not access `InboundToteManifest`.
+- Retain `P2pArrivalAdmissionRequest.from(InboundToteManifest, destination)` only as the existing
+  direct compatibility factory for isolated OSR fixtures. Production routed arrival must use the
+  routed-tote overload.
+- Hydration order remains: peek exact launch head, validate transport capacity/duplicate absence,
+  resolve exact load plan, create tote/renderable/route follower, revalidate exact head and
+  capacity, enqueue transport, then dequeue the exact launch head. A failed hydration or changed
+  capacity leaves the launch queue untouched and publishes no renderable.
+- Both sources use `DspWarehouseTransportRuntimeFactory`; do not add an AV02 hydrator, transport
+  queue, route catalog, in-flight registry, route follower, arrival controller, or station queue.
+- Update `DspWarehouseTransportDebugRig` fixtures mechanically to construct generic OSR launch
+  requests through `OperationalRouteLaunchRequestFactory.fromOsr(...)`. Do not add operational
+  AV02 behavior to the scene until Step 12.
+
+### Behavioral tests
+
+- Preserve all existing OSR queue/controller/hydration/transport behavior using the generic type.
+- `shouldApplyOsrAndAv02TargetsToTheSameBoundedFifo`: accept one request from each source and prove
+  FIFO order, exact source identity, and common capacity.
+- `shouldDeferAv02WithoutMutationWhenSharedLaunchQueueIsFull` and
+  `shouldRejectDuplicateAv02PhysicalIdentity`.
+- `shouldHydrateAv02OnlyAfterLaunchAcceptance`: prove no tote/renderable exists while waiting at
+  AV02 and exact identity appears only after hydration.
+- `shouldCreateP2pArrivalFromAv02RoutedIdentityWithoutManifest` and preserve OSR routed arrival.
+- Prove a Third Party-first or Adapting-first AV02 request retains its later P2P assignment without
+  being sent directly to P2P.
+
+### Implementation verification
+
+The implementation model runs:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticP2pAllocationPlannerTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.osr.release.launch.* --tests online.davisfamily.warehouse.sim.dsp.transport.* --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalAdmissionTest --tests online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntimeFactoryTest --tests online.davisfamily.warehouse.testing.DspWarehouseTransportDebugRigTest
 ```
+
+### User verification
+
+No additional user-run verification is required for this step.
+
+Proposed commit message: `Generalize warehouse launch transport`
+
+## Step 10: Count Allocated EMPTY Totes As P2P Work
+
+### Design intent
+
+Unallocated EMPTY work is a logical diagnostic. Once AV02 allocates a physical tote, the diagnostic
+must be replaced by physical workload until that exact `PRE_P2P` tote reaches
+`CONSUMED_AT_P2P`. OSR manifests remain authoritative for OSR tote ownership; AV02 inventory and
+lifecycle state are authoritative for AV02 ownership.
+
+### Required change surface
+
+Modify:
+
+- `P2pServiceCentreWorkSnapshotFactory` and its test
+- `P2pWorkloadSnapshotFactory` and its test
+- `DspP2pStickyLeaseRuntimeFactory`
+- `DspP2pElasticAllocationRuntimeFactory`
+- focused runtime-factory tests affected by the signature change
+
+Do not modify allocation policy, deadline calculation, line-count rules, lease retention rules,
+outbound bag/tote allocation, or manifest contents.
+
+### Locked APIs and source resolution
+
+- Add the decision-complete `P2pServiceCentreWorkSnapshotFactory.create(...)` overload accepting,
+  in order: order states, manifest catalog, `Av02InventorySnapshot`, lifecycle snapshot, and
+  `Set<OrderSheetKey> authorizedEmptyOrderSheetKeys`.
+- Keep the existing three-argument overload. It delegates with an empty AV02 snapshot and treats
+  all nonterminal P2P-required EMPTY sheets in its supplied order states as authorized. This is the
+  explicit compatibility behavior for existing sticky-only fixtures. Construct the compatibility
+  snapshot as `new Av02InventorySnapshot(1, List.of(), List.of())`; do not add a second empty
+  singleton API.
+- Resolve AV02 allocation history for an EMPTY sheet before examining active assignment state.
+  Search both waiting and departed AV02 inventory and require at most one matching identity.
+- If no AV02 identity exists, require that no active lifecycle assignment exists. Add the sheet to
+  `unallocatedEmptyOrdersByServiceCentre` only when it is authorized; omit unauthorized work.
+- If an AV02 identity exists in `ACTIVE_PRE_P2P`, require exactly one active assignment for the same
+  physical ID and sheet at `PRE_P2P`, require the lifecycle record to use `PRE_P2P`, and count that
+  physical ID under the identity's service centre. Never also emit the unallocated diagnostic.
+- If the matching lifecycle record is `CONSUMED_AT_P2P`, require there is no active assignment and
+  omit both physical work and the unallocated diagnostic. AV02 history therefore prevents a
+  completed authorized EMPTY sheet from reappearing as unallocated work.
+- Reject duplicate AV02 history, an active EMPTY assignment with no AV02 identity, wrong
+  role/stage/service centre, any other lifecycle state, or an OSR manifest for the same physical ID.
+- Add a `P2pWorkloadSnapshotFactory.create(...)` overload accepting the existing inputs followed by
+  `Av02InventorySnapshot` and `PhysicalToteLifecycleSnapshot`. Keep the existing overload for
+  OSR-only compatibility by delegating with empty AV02 state.
+- Resolve every remaining physical tote from exactly one source. OSR IDs must have a matching
+  manifest and `INBOUND_PACK` lifecycle role. AV02 IDs must have a matching AV02 identity and
+  `PRE_P2P` lifecycle role. Reject IDs present in both or neither source and reject service-centre
+  mismatches.
+- Extend `DspP2pStickyLeaseRuntimeFactory` with an overload accepting
+  `Supplier<Av02InventorySnapshot>` and `Supplier<Set<OrderSheetKey>>`. Existing overloads delegate
+  with empty AV02 inventory and compatibility authorization.
+- `DspP2pElasticAllocationRuntimeFactory` must use current supply
+  `authorizedEmptyOrderSheetKeys()`, current AV02 inventory, and current lifecycle for both initial
+  validation and every allocation snapshot. Add `Supplier<Av02InventorySnapshot>` to its `create`
+  signature immediately after the lifecycle supplier. Do not cache these mutable source objects;
+  obtain detached snapshots on each calculation.
+
+### Behavioral tests
+
+- Authorized, unallocated EMPTY appears only in the diagnostic map.
+- Allocation replaces that diagnostic with the exact AV02 physical ID.
+- The physical ID remains until `CONSUMED_AT_P2P`, then disappears without restoring the diagnostic.
+- Unauthorized EMPTY is omitted.
+- OSR behavior remains unchanged.
+- Missing, duplicate, wrong-role, wrong-stage, and cross-service-centre source identities fail
+  before workload estimation.
+- Elastic demand uses the logical diagnostic before allocation and the physical tote afterwards
+  without double counting.
+
+### Implementation verification
+
+The implementation model runs:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.DspP2pStickyLeaseRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticP2pAllocationPlannerTest
+```
+
+### User verification
+
+No additional user-run verification is required for this step.
 
 Proposed commit message: `Include AV02 totes in elastic workload`
 
-## Step 10: Compose AV02 Into The Operational Runtime
+## Step 11: Compose AV02 Into Operational Release
 
-Scope:
+### Design intent
 
-- Extend elastic operational runtime composition with AV02 config, allocation controller,
-  inventory, deterministic ID allocator, shared mutable load-plan registry, and composite command
-  handler.
-- Register controller order explicitly: clock/supply updates, AV02 allocation snapshot/application,
-  operational snapshot/evaluation/application, launch hydration, transport ingress/arrival, local
-  station consumers, and lease retention.
-- Ensure every scheduler-worker input is detached and immutable. No worker may call AV02 inventory,
-  lifecycle, load-plan registry, lease registry, or route queues.
-- Add compact AV02 inspection: capacity/occupancy, waiting IDs/sheets, last allocation/departure,
-  blocked reason, source identity, and current route/P2P assignment.
-- Reuse `warehouse_transport_state` for fixture diagnostics unless a selectable AV02 placeholder is
-  already available. Do not add detailed geometry.
-- Preserve synchronous fallback, threaded evaluation, and `ALT+R` reconstruction.
+AV02 allocation and OSR/AV02 operational release remain separate controller responsibilities.
+Operational release uses one evaluation source, one global candidate snapshot, and the existing
+exact-type `CompositeOperationalCommandHandler`. This step wires existing components; it must not
+introduce a second scheduler or a second transport path.
 
-Ask the user to run:
+### Required change surface
+
+Modify:
+
+- `DspOperationalReleaseRuntimeFactory`
+- `DspOperationalReleaseRuntimeFactoryTest`
+
+Create:
+
+- `DspAv02OperationalRuntimeTest` under the AV02 test package
+
+Do not modify `DspOperationalReleaseRuntime`. It continues to own only the operational evaluation
+controller and route-admission catalog. AV02 allocation, transport, elastic, supply, and simulation
+world lifecycle remain with the composing scene/runtime.
+
+### Locked factory composition
+
+- Add exactly this overload to `DspOperationalReleaseRuntimeFactory`:
+
+  ```java
+  public DspOperationalReleaseRuntime createElasticWithAv02(
+          OperationalReleaseEvaluationSource evaluationSource,
+          OsrPhysicalInventory inventory,
+          InboundToteLifecycleController lifecycleController,
+          InboundToteManifestCatalog manifestCatalog,
+          Supplier<WarehouseSchedulerSnapshot> logicalSnapshotSupplier,
+          Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+          StationAdmissionResolver stationAdmissionResolver,
+          OsrOutboundRouteLaunchTargetRegistry routeTargetRegistry,
+          Av02PhysicalToteInventory av02Inventory,
+          PhysicalToteLifecycleLedger lifecycleLedger,
+          MutableToteLoadPlanRegistry loadPlanRegistry,
+          DspP2pElasticAllocationRuntime elasticRuntime)
+  ```
+
+  Use the existing argument names and validation conventions. The concrete launch registry is
+  required because this composition needs both its OSR and AV02 adapter registries.
+- Do not alter or delegate away the existing `createElastic(...)`; it remains the OSR-only
+  compatibility entry point.
+- The combined snapshot supplier must obtain one current logical snapshot, OSR physical snapshot,
+  AV02 inventory snapshot, lease snapshot, route admissions, and elastic allocation snapshot, then
+  call the existing AV02-aware `DspOperationalReleaseSnapshotFactory.create(...)` overload. Every
+  object submitted to the worker remains detached and immutable.
+- Construct the existing OSR command handler with the OSR processing target registry.
+- Construct `Av02OperationalCommandHandler` with AV02 inventory, lifecycle ledger, shared mutable
+  load plans, clock supplier, the launch registry's
+  `operationalPhysicalToteReleaseTargetRegistry()`, and
+  `elasticRuntime.operationalReleaseAssignmentCommitter()`.
+- Wrap those handlers in the existing `CompositeOperationalCommandHandler` and give that one
+  handler to the one `DspOperationalReleaseController`.
+- Validate that route admissions contain exactly the configured five P2P destinations as existing
+  elastic composition does. Validate that every configured route destination has both an OSR and
+  AV02 release adapter target before constructing the controller.
+- Keep AV02 inventory inspection outside `DspOperationalReleaseRuntime`; the composing debug rig
+  already owns the inventory and can register its snapshot directly.
+- Rejected/deferred AV02 target acceptance leaves inventory, assignment, load plan, leases, and
+  launch queue unchanged. Applied acceptance enqueues first, commits the assignment, then records
+  AV02 departure exactly as established in Step 7.
+
+### Behavioral tests
+
+- Mixed OSR and AV02 candidates are submitted in one snapshot and produce at most one applied
+  command per completed evaluation.
+- Full shared launch capacity defers either source without mutation.
+- AV02 release uses the exact preselected P2P assignment and the exact generic launch request.
+- OSR-only `createElastic(...)`, synchronous evaluation, and threaded evaluation remain compatible.
+- A worker evaluation receives detached data and performs no inventory, lifecycle, lease, load-plan,
+  target, or queue mutation.
+
+### Implementation verification
+
+The implementation model runs:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02OperationalRuntimeTest --tests online.davisfamily.warehouse.testing.DspWarehouseTransportDebugRigTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02OperationalRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalCommandHandlerTest
 ```
 
-Proposed commit message: `Compose AV02 operational allocation`
+### User verification
 
-## Step 11: Prove The EMPTY Flow End To End
+No additional user-run verification is required for this step.
 
-Scope:
+Proposed commit message: `Compose AV02 operational release`
 
-- Add a deterministic simulation-time scenario containing:
-  - one direct-P2P EMPTY order;
-  - one Third Party-only EMPTY order whose initial load plan is empty;
-  - one EMPTY order with adapted dependencies;
-  - OSR-originated FULL_PACK and ASSOCIATED work in the same service-centre cohort;
-  - a later authorized service centre;
-  - AV02 and downstream queue backpressure.
-- Prove authorization does not consume OSR capacity, unresolved dependencies prevent AV02
-  allocation, and AV02 capacity bounds physical creation.
-- Complete dependencies explicitly, allocate one deterministic physical tote, install its empty
-  load plan, rank it globally with OSR candidates, pin it to one elastic feeding line, and release it
-  to its real first station.
-- For Third Party/Adapting cases, prove station completion mutates the same physical tote's load plan
-  and onward transport retains physical/source/P2P identity.
-- Prove P2P consumption terminates the inbound `PRE_P2P` tote while outbound allocation introduces
-  a separate physical tote. Capacity overflow remains covered by existing outbound generated-sheet
-  tests rather than being attributed to AV02.
-- Prove no fabricated EMPTY manifest, no OSR occupancy/departure event, no duplicate command, no
-  tote teleport, no cross-pharmacy output, and no wall-clock waits.
+## Step 12: Integrate AV02 Allocation, Launch, And Inspection In The Debug Runtime
 
-Ask the user to run:
+### Design intent
+
+The existing `dsp-warehouse-transport` scene is the visual integration target. It remains a cheap
+debug rig, but one scenario entry must now originate from real AV02 allocation and operational
+release rather than from its scheduled OSR request list.
+
+### Required change surface
+
+Modify:
+
+- `DspWarehouseTransportDebugRig`
+- `DspWarehouseTransportDebugRigTest`
+- inspection helpers used by `warehouse_transport_state`
+
+Do not add AV02 geometry. Reuse `warehouse_transport_state` as the selectable diagnostic object.
+
+### Locked controller order and fixture behavior
+
+- Construct one `Av02AllocationConfig`, `Av02PhysicalToteInventory`, deterministic ID allocator,
+  shared `PhysicalToteLifecycleLedger`, and shared `MapBackedToteLoadPlanRegistry` for the rig.
+- Use the existing `Av02AllocationSnapshotFactory` and `Av02AllocationController`; the rig owns the
+  suppliers needed to submit and freshly revalidate one monotonically sequenced allocation command.
+  Do not duplicate allocation logic in a rig controller.
+- Register controllers in this order: clock/supply fixture updates, AV02 allocation,
+  operational release evaluation/application, shared launch hydration, transport ingress,
+  transport arrival, local station consumers, then lease retention/activity controllers.
+- Replace exactly one current scheduled OSR fixture request with one logical EMPTY order authorized
+  through the supply snapshot. Keep remaining OSR route examples so mixed-source behavior remains
+  visible.
+- The EMPTY fixture starts as non-rendered logical work, receives `av02-000001`, waits when launch
+  capacity is unavailable, and creates its tote/renderable only during shared hydration.
+- Route the EMPTY fixture to its real first station according to `RouteRequirements`; do not call a
+  station queue or P2P target directly.
+- Extend inspection with compact lines for AV02 capacity/occupancy, waiting and departed physical
+  IDs/sheets, last allocation, last operational application result, launch source, selected first
+  destination, and pinned P2P line. Keep existing transport/P2P diagnostics and current panel-width
+  handling.
+- `ALT+R` continues to reconstruct the complete rig; no component receives a mutable reset method.
+
+### Behavioral tests
+
+- Before allocation there is no AV02 renderable or launch entry.
+- Allocation installs one empty load plan and one waiting inventory entry but no renderable.
+- Backpressure retains the exact AV02 entry and assignment without duplicate launch.
+- Acceptance removes the exact inventory head, hydrates once, and publishes one renderable into the
+  same transport runtime as OSR requests.
+- Inspection reports source `AV02`, physical ID `av02-000001`, pharmacy, destination, and assignment.
+- Existing scheduled OSR examples and reset reconstruction remain deterministic.
+
+### Implementation verification
+
+The implementation model runs:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.testing.DspWarehouseTransportDebugRigTest --tests online.davisfamily.warehouse.sim.dsp.transport.routing.DspWarehouseTransportRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseRuntimeFactoryTest
+```
+
+### User verification
+
+No additional user-run verification is required until the final visual checkpoint in Step 14.
+
+Proposed commit message: `Integrate AV02 warehouse launch diagnostics`
+
+## Step 13: Prove The EMPTY Flow End To End
+
+### Required change surface
+
+Create `DspAv02OperationalAllocationScenarioTest` under the AV02 test package. Keep it deterministic
+and simulation-time driven; do not use sleeps, wall-clock polling, arbitrary tick-count assertions,
+or debug-rig geometry.
+
+### Locked scenarios and assertions
+
+- Include one direct-P2P EMPTY order, one Third Party-first EMPTY order with an initially empty load
+  plan, one EMPTY order with adapted dependencies, OSR FULL_PACK and ASSOCIATED work in the same
+  service-centre cohort, a later authorized service centre, AV02 capacity one, and downstream
+  launch/route backpressure.
+- Authorization alone consumes no OSR or AV02 physical capacity.
+- An unresolved adapted dependency prevents AV02 allocation.
+- AV02 capacity creates at most one physical tote and deterministic IDs are monotonic.
+- The allocated tote has one pharmacy, an empty initial load plan, and no manifest.
+- One global release ranking compares AV02 and OSR candidates and applies at most one command.
+- Every P2P-required AV02 tote is pinned before departure, including a non-P2P first destination.
+- Third Party/Adapting completion mutates the exact physical tote's shared load plan; onward launch,
+  station FIFO, and P2P arrival retain the same source, tote, pharmacy, destination, and assignment.
+- P2P consumption terminates the inbound `PRE_P2P` assignment. Existing outbound allocation then
+  introduces a different physical tote; generated output sheets remain outbound-owned.
+- Prove no EMPTY manifest, OSR occupancy/departure event for AV02, duplicate command, direct
+  AV02-to-P2P teleport, cross-pharmacy output, or wall-clock wait.
+
+### Implementation verification
+
+The implementation model runs:
 
 ```powershell
 .\gradlew test --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02OperationalAllocationScenarioTest
 ```
 
+### User verification
+
+No additional user-run verification is required for this step.
+
 Proposed commit message: `Prove operational EMPTY tote flow`
 
-## Step 12: Regression, Visual Check, And Branch Closure
+## Step 14: Regression, Visual Check, And Branch Closure
 
-Ask the user to run:
+### Implementation verification
+
+No model-run verification is required. The implementation model reviews the branch diff and reports
+the exact user commands below without executing them.
+
+### User verification
+
+Run the focused regression set:
 
 ```powershell
 .\gradlew test --tests online.davisfamily.warehouse.sim.dsp.av02.* --tests online.davisfamily.warehouse.sim.dsp.lifecycle.* --tests online.davisfamily.warehouse.sim.dsp.supply.* --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.* --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.* --tests online.davisfamily.warehouse.sim.dsp.osr.release.* --tests online.davisfamily.warehouse.sim.dsp.transport.* --tests online.davisfamily.warehouse.sim.dsp.p2p.* --tests online.davisfamily.warehouse.sim.dsp.outbound.* --tests online.davisfamily.warehouse.testing.DspWarehouseTransportDebugRigTest
 ```
 
-Then ask the user to run:
+Then run the complete suite:
 
 ```powershell
 .\gradlew test
 ```
 
-Visual checks:
+Run visual checks:
 
 ```powershell
 .\gradlew run --args="--scene=dsp-warehouse-transport"
@@ -475,7 +856,7 @@ Visual checks:
 Verify:
 
 - AV02 allocation/waiting/source diagnostics are readable;
-- an AV02 tote is not rendered until warehouse launch hydration;
+- an AV02 tote is not rendered until shared warehouse launch hydration;
 - OSR and AV02 physical sources remain distinguishable;
 - the AV02 tote follows the selected first-station route and never teleports to P2P;
 - sticky owner/pharmacy/assignment diagnostics remain correct;
@@ -490,7 +871,7 @@ Architecture verification:
 - P2P outbound tote supply remains independent and unchanged;
 - one global scheduler ranks OSR and AV02 candidates;
 - workers receive immutable snapshots and all mutations remain on the simulation thread;
-- exact physical/source/load-plan/P2P identity survives the complete transport chain;
+- exact physical/source/pharmacy/load-plan/P2P identity survives the complete transport chain;
 - no manifest is fabricated for EMPTY;
 - no calibrated timing claim, Exception behavior, second route engine, or mutable reset was added.
 

@@ -66,7 +66,7 @@ class Av02AllocationDomainTest {
                 "av02-000001", "empty-1", 1, "104", 0);
         PhysicalToteRecord record = PhysicalToteRecord.preP2p(identity.physicalToteId());
 
-        Av02AllocatedTote allocatedTote = new Av02AllocatedTote(identity, record);
+        Av02AllocatedTote allocatedTote = new Av02AllocatedTote(identity, record, "pharmacy-1");
 
         assertSame(identity, allocatedTote.identity());
         assertSame(record, allocatedTote.physicalTote());
@@ -75,7 +75,10 @@ class Av02AllocationDomainTest {
         assertEquals("104", allocatedTote.serviceCentreId());
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Av02AllocatedTote(identity, PhysicalToteRecord.preP2p(id("different"))));
+                () -> new Av02AllocatedTote(
+                        identity,
+                        PhysicalToteRecord.preP2p(id("different")),
+                        "pharmacy-1"));
     }
 
     @Test
@@ -128,7 +131,10 @@ class Av02AllocationDomainTest {
             long sourceSequenceNumber) {
         OperationalPhysicalToteIdentity identity = av02Identity(
                 physicalToteId, orderId, 1, "104", sourceSequenceNumber);
-        return new Av02AllocatedTote(identity, PhysicalToteRecord.preP2p(identity.physicalToteId()));
+        return new Av02AllocatedTote(
+                identity,
+                PhysicalToteRecord.preP2p(identity.physicalToteId()),
+                "pharmacy-" + orderId);
     }
 
     private static OperationalPhysicalToteIdentity av02Identity(

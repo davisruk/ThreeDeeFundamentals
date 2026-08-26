@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation is now planned on `feature/dsp-av02-operational-allocation` as the final physical-work prerequisite before full-day execution and metrics.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation is in progress on `feature/dsp-av02-operational-allocation`, with Steps 1-7 complete and Step 8 next, as the final physical-work prerequisite before full-day execution and metrics.
 
 Read:
 
@@ -208,10 +208,10 @@ The agreed next programme is split into short-lived branches from `master`:
 13. P2P-local arrival consumption;
 14. sticky P2P service-centre leases (complete, verified, and merged);
 15. deadline-aware elastic line allocation (complete, verified, and merged);
-16. AV02 operational allocation (active planned branch);
+16. AV02 operational allocation (active implementation branch; Steps 1-7 complete and Step 8 next);
 17. full-day analysis, metrics, and inspection.
 
-Each branch must have its own decision-complete, step-based plan before implementation. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
+Each branch must have its own decision-complete, step-based plan before implementation. Implementation plans are intended to be executable by a lower-capability coding model with minimal architectural inference; `docs/codex-instructions.md` defines the planning-model/implementation-model handoff and decision-completeness contract. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
 Current programme position:
 
@@ -230,7 +230,7 @@ Current programme position:
 - P2P-local arrival consumption: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
 - sticky service-centre leases: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
 - deadline-aware elastic line allocation: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`;
-- AV02 operational allocation: active planned branch, with decision-complete plan at `docs/scheduler/dsp-av02-operational-allocation-plan.md`;
+- AV02 operational allocation: active implementation branch, with Steps 1-7 complete and Step 8 next in `docs/scheduler/dsp-av02-operational-allocation-plan.md`;
 - full-day execution and metrics: expected after AV02 operational allocation;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
@@ -285,7 +285,7 @@ Planned Phase 1 order:
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
 - deadline-aware elastic line allocation: complete, verified, and merged
-- AV02 operational allocation: active planned branch
+- AV02 operational allocation: active implementation branch; Steps 1-7 complete and Step 8 next
 - full-day execution and metrics: expected after AV02 operational allocation
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
@@ -347,7 +347,7 @@ Current performance direction:
 - Loaded order/item data is not the same thing as active sim/render objects.
 - Orders waiting in OSR are data only.
 - Packs inside unreleased OSR orders are data only.
-- Create a tote renderable only when an OSR order is released or an EMPTY order allocates a tote at AV02.
+- Create a tote renderable only when an OSR-originated tote or an AV02-allocated EMPTY tote is hydrated and launched into warehouse transport. AV02 allocation and waiting remain domain state only.
 - Create pack renderables only for released/active totes.
 - Hide or skip contained pack renderables when the tote lid is closed.
 - Once packs enter a bag/bagger black-box stage, individual pack renderables can be hidden, retired, or pooled while logical contents remain in domain state.
@@ -385,15 +385,15 @@ The production P2P/tote-to-bag area has five P2P instances, each with its own ti
 
 ## Current Testing Practice
 
-The user runs Gradle tasks and reports results.
+The implementation model runs plan-authorized focused Gradle tasks, while the user runs broad regression, full-suite Gradle tasks, and visual checks. The user reports the results of user-run verification.
 
-When requesting verification, provide a focused command such as:
+Each plan step must distinguish `Implementation verification` from `User verification` as defined in `docs/codex-instructions.md`. A focused implementation command may look like:
 
 ```powershell
 .\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest
 ```
 
-For scheduler work, each implementation step should introduce a focused test class and ask the user to run only that test first.
+For scheduler work, each implementation step should provide focused behavioral coverage for its slice. The implementation model runs the focused command unless the plan explicitly reserves it for the user. Ask the user only for the broader or deliberately user-reserved checks listed under `User verification`.
 
 Use stable event/outcome assertions. Avoid tests that depend on transient PRL/PCR state after arbitrary update counts unless the transient state itself is the contract being tested.
 

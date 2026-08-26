@@ -161,6 +161,9 @@ class Av02PhysicalToteInventoryTest {
                 "104",
                 PhysicalToteRole.PRE_P2P,
                 sourceSequenceNumber);
-        return new Av02AllocatedTote(identity, PhysicalToteRecord.preP2p(id));
+        return new Av02AllocatedTote(
+                identity,
+                PhysicalToteRecord.preP2p(id),
+                "pharmacy-empty");
     }
 }

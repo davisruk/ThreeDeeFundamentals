@@ -83,14 +83,17 @@ public final class Av02AllocationController implements SimulationController {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "Fresh AV02 command has no matching eligible candidate"));
-        allocate(candidate.order(), context.getSimulationTimeSeconds());
+        allocate(candidate.order(), candidate.pharmacyId(), context.getSimulationTimeSeconds());
     }
 
     public Optional<Av02AllocatedTote> lastAllocatedTote() {
         return lastAllocatedTote;
     }
 
-    private void allocate(NotionalToteOrder order, double simulationTimeSeconds) {
+    private void allocate(
+            NotionalToteOrder order,
+            String pharmacyId,
+            double simulationTimeSeconds) {
         if (inventory.full()
                 || inventory.snapshot().waitingTotes().stream()
                         .anyMatch(tote -> tote.orderSheetKey().equals(order.orderSheetKey()))
@@ -126,7 +129,8 @@ public final class Av02AllocationController implements SimulationController {
                         order.serviceCentreId(),
                         PhysicalToteRole.PRE_P2P,
                         order.sequenceNumber()),
-                physicalTote);
+                physicalTote,
+                pharmacyId);
         try {
             inventory.store(allocatedTote);
             loadPlanRegistry.putLoadPlan(new ToteLoadPlan(allocatedId, List.of()));
