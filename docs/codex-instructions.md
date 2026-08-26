@@ -46,7 +46,7 @@ If continuing transfer-zone or mounted-machine architectural discussion, inspect
 
 Do not make code or document changes unless the user explicitly agrees in the current session.
 
-The user normally wants architecture discussions to produce a plan that a lower-capability implementation model can execute step by step. Plans are expected to be created or reviewed by a higher-capability planning model and must be decision-complete for the selected slice. When multi-agent execution is available, the preferred workflow is higher-capability step ownership with lower-capability delegated implementation: the parent retains the complete plan step, architectural intent, acceptance criteria, and review responsibility while implementation subagents perform bounded coding and focused verification. The planning model and step-owning parent own architectural decisions and implementation-significant design choices; implementation subagents should primarily inspect the named code, make the specified changes, correct mechanical compile/test failures, and verify the delegated slice rather than infer missing architecture.
+The user normally wants architecture discussions to produce a plan that the registered `implementer` subagent implementation model can execute step by step. Plans are expected to be created or reviewed by a higher-capability planning model and must be decision-complete for the selected slice. When multi-agent execution is available, the preferred workflow is higher-capability step ownership with the registered `implementer` delegated subagent: the parent retains the complete plan step, architectural intent, acceptance criteria, and review responsibility while implementation subagents perform bounded coding and focused verification. The planning model and step-owning parent own architectural decisions and implementation-significant design choices; implementation subagents should primarily inspect the named code, make the specified changes, correct mechanical compile/test failures, and verify the delegated slice rather than infer missing architecture.
 
 Plans should:
 
@@ -85,7 +85,7 @@ When a step changes several stateful components, include an explicit application
 
 When introducing a type that resembles an existing implementation, name the concrete analogue and state both what should be copied/reused and what must remain different. Prefer repository-specific guidance over general architectural explanation.
 
-For non-trivial steps, identify the expected change surface where practical: files to create, files to modify, tests to create or update, and important files that should not be changed. This is especially important when a lower-capability implementation model could otherwise broaden the refactor.
+For non-trivial steps, identify the expected change surface where practical: files to create, files to modify, tests to create or update, and important files that should not be changed. This is especially important when the the registered `implementer`subagent could otherwise broaden the refactor.
 
 Tests in a decision-complete plan are behavioral specifications, not only class names. For important cases, state the setup/condition, action, and required observable result. Suggested test method names are useful when they make the intended contract unambiguous.
 
@@ -113,7 +113,9 @@ A formal plan revision is required when execution discovers that the approved ar
 
 ### Multi-agent step ownership and delegation
 
-When multi-agent execution is available, prefer a higher-capability parent as the owner of each implementation step and delegate bounded coding work to lower-capability implementation subagents. This hierarchy is intended to improve capability allocation and review quality, not maximize parallelism.
+When multi-agent execution is available, prefer a higher-capability parent as the owner of each implementation step and delegate bounded coding work to the registered `implementer` subagent. This hierarchy is intended to improve capability allocation and review quality, not maximize parallelism. Do not use a generic/default subagent for implementation work when the registered `implementer` role is available.
+
+The step execution owner must remain the parent agent and retain step scope, architectural decisions, acceptance review, and final completion responsibility.
 
 Before delegation, the parent must:
 
@@ -380,6 +382,6 @@ Production layout context:
 
 ## Testing Practice
 
-Lower-capability implementation subagents run the focused compile/test command or focused set of tests specified for the current implementation step, subject to the verification rules above. The higher-capability parent reviews the complete step and normally relies on the reported focused result rather than duplicating a green run. Full regression runs, the complete Gradle test suite, and other broad verification remain user-run checkpoints: ask the user to execute them and provide the exact command in full.
+The registered `implementer` subagent runs the focused compile/test command or focused set of tests specified for the current implementation step, subject to the verification rules above. The higher-capability parent reviews the complete step and normally relies on the reported focused result rather than duplicating a green run. Full regression runs, the complete Gradle test suite, and other broad verification remain user-run checkpoints: ask the user to execute them and provide the exact command in full.
 
 Prefer stable event/contract assertions over transient state assertions after arbitrary update counts, especially in PRL/PCR/bagger tests.
