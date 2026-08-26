@@ -8,12 +8,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocatedTote;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleState;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRecord;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.outbound.AllocatedOutboundBag;
@@ -28,16 +34,39 @@ public final class P2pWorkloadSnapshotFactory {
             BagPlanningResult bagPlanningResult,
             OutboundAllocationSnapshot outboundAllocationSnapshot,
             P2pWorkloadCostConfig costConfig) {
+        return create(
+                workSnapshot,
+                manifestCatalog,
+                bagPlanningResult,
+                outboundAllocationSnapshot,
+                costConfig,
+                new Av02InventorySnapshot(1, List.of(), List.of()),
+                compatibilityLifecycleSnapshot(manifestCatalog));
+    }
+
+    public P2pWorkloadSnapshot create(
+            P2pServiceCentreWorkSnapshot workSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            BagPlanningResult bagPlanningResult,
+            OutboundAllocationSnapshot outboundAllocationSnapshot,
+            P2pWorkloadCostConfig costConfig,
+            Av02InventorySnapshot av02InventorySnapshot,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
         if (workSnapshot == null
                 || manifestCatalog == null
                 || bagPlanningResult == null
                 || outboundAllocationSnapshot == null
-                || costConfig == null) {
+                || costConfig == null
+                || av02InventorySnapshot == null
+                || lifecycleSnapshot == null) {
             throw new IllegalArgumentException("workload inputs must not be null");
         }
 
         Map<PhysicalToteId, String> remainingToteOwners = validateRemainingTotes(
-                workSnapshot, manifestCatalog);
+                workSnapshot,
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot);
         Map<BagKey, PlannedBag> plannedBags = indexPlannedBags(
                 bagPlanningResult, manifestCatalog);
         Set<BagKey> allocatedBagKeys = validateAllocatedBags(
@@ -89,16 +118,53 @@ public final class P2pWorkloadSnapshotFactory {
 
     private static Map<PhysicalToteId, String> validateRemainingTotes(
             P2pServiceCentreWorkSnapshot workSnapshot,
-            InboundToteManifestCatalog manifestCatalog) {
+            InboundToteManifestCatalog manifestCatalog,
+            Av02InventorySnapshot av02InventorySnapshot,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
         Map<PhysicalToteId, String> owners = new LinkedHashMap<>();
+        Map<PhysicalToteId, Av02AllocatedTote> av02Totes = indexAv02Totes(av02InventorySnapshot);
         workSnapshot.remainingToteIdsByServiceCentre().forEach((serviceCentreId, toteIds) -> {
             for (PhysicalToteId toteId : toteIds) {
                 InboundToteManifest manifest = manifestCatalog.findByPhysicalToteId(toteId)
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Remaining P2P tote has no inbound manifest: " + toteId.value()));
-                if (!manifest.serviceCentreId().equals(serviceCentreId)) {
+                        .orElse(null);
+                Av02AllocatedTote av02Tote = av02Totes.get(toteId);
+                if (manifest != null && av02Tote != null) {
                     throw new IllegalStateException(
-                            "Remaining P2P tote service centre does not match its manifest");
+                            "Remaining P2P tote is present in both OSR and AV02 sources: "
+                                    + toteId.value());
+                }
+                if (manifest == null && av02Tote == null) {
+                    throw new IllegalStateException(
+                            "Remaining P2P tote has no OSR manifest or AV02 identity: "
+                                    + toteId.value());
+                }
+
+                PhysicalToteRecord lifecycleRecord = lifecycleSnapshot.totes().get(toteId);
+                if (lifecycleRecord == null || !lifecycleRecord.id().equals(toteId)) {
+                    throw new IllegalStateException(
+                            "Remaining P2P tote has no physical lifecycle record: "
+                                    + toteId.value());
+                }
+                if (manifest != null) {
+                    if (!manifest.serviceCentreId().equals(serviceCentreId)) {
+                        throw new IllegalStateException(
+                                "Remaining P2P tote service centre does not match its manifest");
+                    }
+                    if (lifecycleRecord.role() != PhysicalToteRole.INBOUND_PACK) {
+                        throw new IllegalStateException(
+                                "OSR physical tote lifecycle record must use INBOUND_PACK role: "
+                                        + toteId.value());
+                    }
+                } else {
+                    if (!av02Tote.serviceCentreId().equals(serviceCentreId)
+                            || av02Tote.identity().physicalToteRole() != PhysicalToteRole.PRE_P2P
+                            || av02Tote.physicalTote().role() != PhysicalToteRole.PRE_P2P
+                            || lifecycleRecord.role() != PhysicalToteRole.PRE_P2P
+                            || lifecycleRecord.state() != PhysicalToteLifecycleState.ACTIVE_PRE_P2P) {
+                        throw new IllegalStateException(
+                                "AV02 physical tote identity, lifecycle role, or service centre does not match: "
+                                        + toteId.value());
+                    }
                 }
                 if (owners.putIfAbsent(toteId, serviceCentreId) != null) {
                     throw new IllegalStateException(
@@ -107,6 +173,34 @@ public final class P2pWorkloadSnapshotFactory {
             }
         });
         return Map.copyOf(owners);
+    }
+
+    private static Map<PhysicalToteId, Av02AllocatedTote> indexAv02Totes(
+            Av02InventorySnapshot snapshot) {
+        Map<PhysicalToteId, Av02AllocatedTote> result = new LinkedHashMap<>();
+        List<Av02AllocatedTote> all = new ArrayList<>();
+        all.addAll(snapshot.waitingTotes());
+        all.addAll(snapshot.departedTotes());
+        for (Av02AllocatedTote tote : all) {
+            if (result.putIfAbsent(tote.physicalToteId(), tote) != null) {
+                throw new IllegalStateException(
+                        "Duplicate AV02 physical tote identity: " + tote.physicalToteId().value());
+            }
+        }
+        return result;
+    }
+
+    private static PhysicalToteLifecycleSnapshot compatibilityLifecycleSnapshot(
+            InboundToteManifestCatalog manifestCatalog) {
+        if (manifestCatalog == null) {
+            return new PhysicalToteLifecycleSnapshot(Map.of(), List.of());
+        }
+        Map<PhysicalToteId, PhysicalToteRecord> records = new LinkedHashMap<>();
+        for (InboundToteManifest manifest : manifestCatalog.manifests()) {
+            records.put(manifest.physicalToteId(),
+                    PhysicalToteRecord.inboundPack(manifest.physicalToteId()));
+        }
+        return new PhysicalToteLifecycleSnapshot(records, List.of());
     }
 
     private static Map<BagKey, PlannedBag> indexPlannedBags(

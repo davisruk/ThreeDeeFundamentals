@@ -15,6 +15,7 @@ import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
@@ -98,6 +99,7 @@ public final class ElasticRuntimeTestFixture {
                         List.of(), Map.of(), Set.of(), Optional.empty()),
                 new InboundToteManifestCatalog(List.of()),
                 ledger::snapshot,
+                () -> new Av02InventorySnapshot(1, List.of(), List.of()),
                 clock::initialSnapshot,
                 supplySnapshotSupplier,
                 timetable(),

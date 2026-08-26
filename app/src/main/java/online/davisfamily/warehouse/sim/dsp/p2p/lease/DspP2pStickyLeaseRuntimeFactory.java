@@ -9,13 +9,17 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocator;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalConsumerBinding;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 
 public final class DspP2pStickyLeaseRuntimeFactory {
@@ -52,12 +56,67 @@ public final class DspP2pStickyLeaseRuntimeFactory {
             OutboundToteAllocator outboundToteAllocator,
             List<P2pStickyArrivalBinding> arrivalBindings,
             P2pLeaseRetentionPolicy retentionPolicy) {
+        return create(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                () -> new Av02InventorySnapshot(1, List.of(), List.of()),
+                compatibilityAuthorizationSupplier(schedulerSnapshotSupplier),
+                outboundToteAllocator,
+                arrivalBindings,
+                retentionPolicy);
+    }
+
+    public DspP2pStickyLeaseRuntime create(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<Set<OrderSheetKey>> authorizedEmptyOrderSheetKeysSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            List<P2pStickyArrivalBinding> arrivalBindings) {
+        return create(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                authorizedEmptyOrderSheetKeysSupplier,
+                outboundToteAllocator,
+                arrivalBindings,
+                new CompletionOnlyP2pLeaseRetentionPolicy());
+    }
+
+    public DspP2pStickyLeaseRuntime create(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<Set<OrderSheetKey>> authorizedEmptyOrderSheetKeysSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            List<P2pStickyArrivalBinding> arrivalBindings,
+            P2pLeaseRetentionPolicy retentionPolicy) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
         requireNonNull(activityProbes, "activityProbes");
         requireNonNull(schedulerSnapshotSupplier, "schedulerSnapshotSupplier");
         requireNonNull(manifestCatalog, "manifestCatalog");
         requireNonNull(lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
+        requireNonNull(av02InventorySnapshotSupplier, "av02InventorySnapshotSupplier");
+        requireNonNull(
+                authorizedEmptyOrderSheetKeysSupplier,
+                "authorizedEmptyOrderSheetKeysSupplier");
         requireNonNull(outboundToteAllocator, "outboundToteAllocator");
         requireNonNull(arrivalBindings, "arrivalBindings");
         requireNonNull(retentionPolicy, "retentionPolicy");
@@ -115,10 +174,23 @@ public final class DspP2pStickyLeaseRuntimeFactory {
                         throw new IllegalStateException(
                                 "lifecycleSnapshotSupplier returned null");
                     }
+                    Av02InventorySnapshot av02InventorySnapshot = av02InventorySnapshotSupplier.get();
+                    if (av02InventorySnapshot == null) {
+                        throw new IllegalStateException(
+                                "av02InventorySnapshotSupplier returned null");
+                    }
+                    Set<OrderSheetKey> authorizedEmptyOrderSheetKeys =
+                            authorizedEmptyOrderSheetKeysSupplier.get();
+                    if (authorizedEmptyOrderSheetKeys == null) {
+                        throw new IllegalStateException(
+                                "authorizedEmptyOrderSheetKeysSupplier returned null");
+                    }
                     return workSnapshotFactory.create(
                             schedulerSnapshot.orderStates(),
                             manifestCatalog,
-                            lifecycleSnapshot);
+                            av02InventorySnapshot,
+                            lifecycleSnapshot,
+                            authorizedEmptyOrderSheetKeys);
                 },
                 definitions.stream().map(definition -> probes.get(definition.lineId())).toList(),
                 registry,
@@ -133,6 +205,24 @@ public final class DspP2pStickyLeaseRuntimeFactory {
                 committer,
                 outboundToteAllocator,
                 arrivalRuntime);
+    }
+
+    private static Supplier<Set<OrderSheetKey>> compatibilityAuthorizationSupplier(
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier) {
+        return () -> {
+            WarehouseSchedulerSnapshot snapshot = schedulerSnapshotSupplier.get();
+            if (snapshot == null) {
+                throw new IllegalStateException("schedulerSnapshotSupplier returned null");
+            }
+            Set<OrderSheetKey> authorized = new LinkedHashSet<>();
+            snapshot.orderStates().stream()
+                    .filter(state -> state.order().orderType() == OrderType.EMPTY)
+                    .filter(state -> state.routeRequirements().requiresP2p())
+                    .filter(state -> state.status() != DspOrderStatus.COMPLETED)
+                    .map(state -> state.order().orderSheetKey())
+                    .forEach(authorized::add);
+            return authorized;
+        };
     }
 
     private static Map<P2pLineId, P2pLineActivityProbe> validateProbes(

@@ -9,6 +9,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
@@ -37,6 +38,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
             InboundToteManifestCatalog manifestCatalog,
             Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
             Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
             Supplier<DspSupplySnapshot> supplySnapshotSupplier,
             DspServiceCentreTimetable timetable,
@@ -50,6 +52,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
         requireNonNull(schedulerSnapshotSupplier, "schedulerSnapshotSupplier");
         requireNonNull(manifestCatalog, "manifestCatalog");
         requireNonNull(lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
+        requireNonNull(av02InventorySnapshotSupplier, "av02InventorySnapshotSupplier");
         requireNonNull(clockSnapshotSupplier, "clockSnapshotSupplier");
         requireNonNull(supplySnapshotSupplier, "supplySnapshotSupplier");
         requireNonNull(timetable, "timetable");
@@ -67,8 +70,11 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                 schedulerSnapshotSupplier, "schedulerSnapshotSupplier");
         PhysicalToteLifecycleSnapshot initialLifecycle = requireSupplied(
                 lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
+        Av02InventorySnapshot initialAv02Inventory = requireSupplied(
+                av02InventorySnapshotSupplier, "av02InventorySnapshotSupplier");
         requireSupplied(clockSnapshotSupplier, "clockSnapshotSupplier");
-        requireSupplied(supplySnapshotSupplier, "supplySnapshotSupplier");
+        DspSupplySnapshot initialSupply = requireSupplied(
+                supplySnapshotSupplier, "supplySnapshotSupplier");
         requireSupplied(bagPlanningResultSupplier, "bagPlanningResultSupplier");
 
         P2pServiceCentreWorkSnapshotFactory workFactory =
@@ -82,8 +88,16 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                             schedulerSnapshotSupplier, "schedulerSnapshotSupplier");
                     PhysicalToteLifecycleSnapshot lifecycle = requireSupplied(
                             lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
+                    Av02InventorySnapshot av02Inventory = requireSupplied(
+                            av02InventorySnapshotSupplier, "av02InventorySnapshotSupplier");
+                    DspSupplySnapshot supply = requireSupplied(
+                            supplySnapshotSupplier, "supplySnapshotSupplier");
                     P2pServiceCentreWorkSnapshot work = workFactory.create(
-                            scheduler.orderStates(), manifestCatalog, lifecycle);
+                            scheduler.orderStates(),
+                            manifestCatalog,
+                            av02Inventory,
+                            lifecycle,
+                            supply.authorizedEmptyOrderSheetKeys());
                     P2pWorkloadSnapshot workload = workloadFactory.create(
                             work,
                             manifestCatalog,
@@ -91,10 +105,12 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                                     bagPlanningResultSupplier,
                                     "bagPlanningResultSupplier"),
                             outboundToteAllocator.snapshot(),
-                            config.workloadCostConfig());
+                            config.workloadCostConfig(),
+                            av02Inventory,
+                            lifecycle);
                     return planner.create(
                             requireSupplied(clockSnapshotSupplier, "clockSnapshotSupplier"),
-                            requireSupplied(supplySnapshotSupplier, "supplySnapshotSupplier"),
+                            supply,
                             workload,
                             timetable,
                             leases,
@@ -104,7 +120,11 @@ public final class DspP2pElasticAllocationRuntimeFactory {
         P2pLineLeaseCatalogSnapshot initialLeases = initialLeaseSnapshot(
                 lineDefinitions, activityProbes);
         P2pServiceCentreWorkSnapshot initialWork = workFactory.create(
-                initialScheduler.orderStates(), manifestCatalog, initialLifecycle);
+                initialScheduler.orderStates(),
+                manifestCatalog,
+                initialAv02Inventory,
+                initialLifecycle,
+                initialSupply.authorizedEmptyOrderSheetKeys());
         if (initialWork == null || allocationFactory.apply(initialLeases) == null) {
             throw new IllegalStateException("elastic runtime prevalidation returned null");
         }
@@ -116,6 +136,10 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                 schedulerSnapshotSupplier,
                 manifestCatalog,
                 lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                () -> requireSupplied(
+                        supplySnapshotSupplier,
+                        "supplySnapshotSupplier").authorizedEmptyOrderSheetKeys(),
                 outboundToteAllocator,
                 arrivalBindings,
                 new ElasticP2pLeaseRetentionPolicy(allocationFactory));

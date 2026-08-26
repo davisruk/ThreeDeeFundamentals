@@ -14,6 +14,8 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocatedTote;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
@@ -21,6 +23,10 @@ import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRecord;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
@@ -31,6 +37,8 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteClosureReason;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocation;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteIdentity;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshot;
 
 class P2pWorkloadSnapshotTest {
@@ -111,6 +119,61 @@ class P2pWorkloadSnapshotTest {
         assertEquals(Duration.ZERO, serviceCentre.estimatedSingleLineWork());
         assertEquals(List.of(empty), serviceCentre.unallocatedEmptyOrderSheetKeys());
         assertEquals(1, serviceCentre.unallocatedEmptyOrderCount());
+    }
+
+    @Test
+    void shouldCountAllocatedAv02ToteAsPhysicalP2pWork() {
+        PhysicalToteId physicalToteId = new PhysicalToteId("av02-empty-1");
+        OrderSheetKey orderSheetKey = new OrderSheetKey("empty-104", 1);
+        Av02AllocatedTote allocated = new Av02AllocatedTote(
+                new OperationalPhysicalToteIdentity(
+                        OperationalPhysicalToteSource.AV02,
+                        physicalToteId,
+                        orderSheetKey,
+                        OrderType.EMPTY,
+                        "104",
+                        PhysicalToteRole.PRE_P2P,
+                        0),
+                PhysicalToteRecord.preP2p(physicalToteId),
+                "pharmacy-104");
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        ledger.register(allocated.physicalTote());
+        ledger.assign(
+                orderSheetKey,
+                physicalToteId,
+                PhysicalToteAssignmentStage.PRE_P2P,
+                Duration.ZERO);
+
+        P2pWorkloadSnapshot snapshot = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        Map.of("104", List.of(physicalToteId)),
+                        Map.of()),
+                new InboundToteManifestCatalog(List.of()),
+                new BagPlanningResult(List.of(), List.of(), List.of()),
+                emptyOutbound(),
+                COSTS,
+                new Av02InventorySnapshot(1, List.of(), List.of(allocated)),
+                ledger.snapshot());
+
+        P2pServiceCentreWorkloadSnapshot serviceCentre = snapshot.require("104");
+        assertEquals(List.of(physicalToteId), serviceCentre.remainingToteIds());
+        assertEquals(Duration.ofSeconds(10), serviceCentre.estimatedSingleLineWork());
+        assertTrue(serviceCentre.hasEstimatedWork());
+    }
+
+    @Test
+    void shouldRejectRemainingPhysicalToteWithNoUniqueSource() {
+        PhysicalToteId physicalToteId = new PhysicalToteId("unknown-1");
+        assertThrows(IllegalStateException.class, () -> factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        Map.of("104", List.of(physicalToteId)),
+                        Map.of()),
+                new InboundToteManifestCatalog(List.of()),
+                new BagPlanningResult(List.of(), List.of(), List.of()),
+                emptyOutbound(),
+                COSTS,
+                new Av02InventorySnapshot(1, List.of(), List.of()),
+                new PhysicalToteLifecycleLedger().snapshot()));
     }
 
     @Test
