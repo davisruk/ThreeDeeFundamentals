@@ -9,13 +9,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocatedTote;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalPhysicalToteCandidate;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
-import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteCandidate;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
@@ -35,7 +40,21 @@ public final class DspOperationalReleaseSnapshotFactory {
                 physicalSnapshot, manifestCatalog, logicalSnapshot);
         return createSnapshot(
                 joinedCandidates,
-                manifestCatalog,
+                buildPharmacyGroups(manifestCatalog),
+                logicalSnapshot,
+                deriveCompatibilityAdmissions(joinedCandidates, logicalSnapshot));
+    }
+
+    public DspOperationalReleaseSnapshot create(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            Av02InventorySnapshot av02InventorySnapshot,
+            WarehouseSchedulerSnapshot logicalSnapshot) {
+        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
+                physicalSnapshot, manifestCatalog, av02InventorySnapshot, logicalSnapshot);
+        return createSnapshot(
+                joinedCandidates,
+                buildPharmacyGroups(joinedCandidates),
                 logicalSnapshot,
                 deriveCompatibilityAdmissions(joinedCandidates, logicalSnapshot));
     }
@@ -54,7 +73,7 @@ public final class DspOperationalReleaseSnapshotFactory {
                 routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
         return createSnapshot(
                 joinedCandidates,
-                manifestCatalog,
+                buildPharmacyGroups(manifestCatalog),
                 logicalSnapshot,
                 routeAdmissions);
     }
@@ -78,7 +97,7 @@ public final class DspOperationalReleaseSnapshotFactory {
                 routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
         return createSnapshot(
                 joinedCandidates,
-                manifestCatalog,
+                buildPharmacyGroups(manifestCatalog),
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
@@ -103,7 +122,34 @@ public final class DspOperationalReleaseSnapshotFactory {
                 routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
         return createSnapshot(
                 joinedCandidates,
-                manifestCatalog,
+                buildPharmacyGroups(manifestCatalog),
+                logicalSnapshot,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pTargetAdmissions,
+                Optional.of(elasticAllocation));
+    }
+
+    public DspOperationalReleaseSnapshot create(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            Av02InventorySnapshot av02InventorySnapshot,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            OperationalCandidateRouteAdmissionFactory routeAdmissionFactory,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions,
+            P2pElasticAllocationSnapshot elasticAllocation) {
+        if (routeAdmissionFactory == null || p2pLineLeases == null
+                || p2pTargetAdmissions == null || elasticAllocation == null) {
+            throw new IllegalArgumentException("elastic operational snapshot inputs must not be null");
+        }
+        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
+                physicalSnapshot, manifestCatalog, av02InventorySnapshot, logicalSnapshot);
+        List<OperationalCandidateRouteAdmission> routeAdmissions =
+                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
+        return createSnapshot(
+                joinedCandidates,
+                buildPharmacyGroups(joinedCandidates),
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
@@ -129,7 +175,7 @@ public final class DspOperationalReleaseSnapshotFactory {
                 indexLogicalStates(logicalSnapshot.orderStates());
         validateServiceCentrePriorities(logicalSnapshot.orderStates());
         List<DspOperationalReleaseCandidate> joinedCandidates = new ArrayList<>();
-        for (OsrProcessingReleaseCandidate physicalCandidate : physicalSnapshot.candidates()) {
+        for (OperationalPhysicalToteCandidate physicalCandidate : physicalSnapshot.candidates()) {
             InboundToteManifest manifest = manifestCatalog
                     .findByPhysicalToteId(physicalCandidate.physicalToteId())
                     .orElseThrow(() -> new IllegalArgumentException(
@@ -154,14 +200,47 @@ public final class DspOperationalReleaseSnapshotFactory {
         return List.copyOf(joinedCandidates);
     }
 
+    private static List<DspOperationalReleaseCandidate> joinCandidates(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            Av02InventorySnapshot av02InventorySnapshot,
+            WarehouseSchedulerSnapshot logicalSnapshot) {
+        if (av02InventorySnapshot == null) {
+            throw new IllegalArgumentException("av02InventorySnapshot must not be null");
+        }
+        List<DspOperationalReleaseCandidate> joinedCandidates = new ArrayList<>(
+                joinCandidates(physicalSnapshot, manifestCatalog, logicalSnapshot));
+        Map<OrderSheetKey, DspSchedulerOrderState> logicalStatesBySheet =
+                indexLogicalStates(logicalSnapshot.orderStates());
+        for (Av02AllocatedTote allocatedTote : av02InventorySnapshot.waitingTotes()) {
+            OperationalPhysicalToteCandidate physicalCandidate =
+                    new Av02OperationalPhysicalToteCandidate(allocatedTote.identity());
+            DspSchedulerOrderState logicalState = logicalStatesBySheet.get(
+                    physicalCandidate.orderSheetKey());
+            if (logicalState == null) {
+                throw new IllegalArgumentException(
+                        "No logical order state for AV02 sheet "
+                                + physicalCandidate.orderSheetKey());
+            }
+            validateAv02Identity(physicalCandidate, logicalState);
+            validateLogicalStatus(logicalState, physicalCandidate.physicalToteId());
+            NotionalToteOrder logicalOrder = logicalState.order();
+            joinedCandidates.add(new DspOperationalReleaseCandidate(
+                    physicalCandidate,
+                    logicalState,
+                    distinctPharmacyIds(logicalOrder.items())));
+        }
+        return List.copyOf(joinedCandidates);
+    }
+
     private static DspOperationalReleaseSnapshot createSnapshot(
             List<DspOperationalReleaseCandidate> joinedCandidates,
-            InboundToteManifestCatalog manifestCatalog,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
             WarehouseSchedulerSnapshot logicalSnapshot,
             List<OperationalCandidateRouteAdmission> routeAdmissions) {
         return new DspOperationalReleaseSnapshot(
                 joinedCandidates,
-                buildPharmacyGroups(manifestCatalog),
+                pharmacyGroups,
                 logicalSnapshot.stationAdmissions(),
                 logicalSnapshot.preparedLineKeys(),
                 routeAdmissions);
@@ -169,14 +248,14 @@ public final class DspOperationalReleaseSnapshotFactory {
 
     private static DspOperationalReleaseSnapshot createSnapshot(
             List<DspOperationalReleaseCandidate> joinedCandidates,
-            InboundToteManifestCatalog manifestCatalog,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
             WarehouseSchedulerSnapshot logicalSnapshot,
             List<OperationalCandidateRouteAdmission> routeAdmissions,
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
             List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions) {
         return createSnapshot(
                 joinedCandidates,
-                manifestCatalog,
+                pharmacyGroups,
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
@@ -186,7 +265,7 @@ public final class DspOperationalReleaseSnapshotFactory {
 
     private static DspOperationalReleaseSnapshot createSnapshot(
             List<DspOperationalReleaseCandidate> joinedCandidates,
-            InboundToteManifestCatalog manifestCatalog,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
             WarehouseSchedulerSnapshot logicalSnapshot,
             List<OperationalCandidateRouteAdmission> routeAdmissions,
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
@@ -208,7 +287,7 @@ public final class DspOperationalReleaseSnapshotFactory {
         }
         return new DspOperationalReleaseSnapshot(
                 joinedCandidates,
-                buildPharmacyGroups(manifestCatalog),
+                pharmacyGroups,
                 logicalSnapshot.stationAdmissions(),
                 logicalSnapshot.preparedLineKeys(),
                 routeAdmissions,
@@ -302,8 +381,63 @@ public final class DspOperationalReleaseSnapshotFactory {
         return List.copyOf(groups);
     }
 
+    private static List<ServiceCentrePharmacyGroup> buildPharmacyGroups(
+            List<DspOperationalReleaseCandidate> candidates) {
+        List<IndexedCandidate> indexedCandidates = new ArrayList<>();
+        for (int index = 0; index < candidates.size(); index++) {
+            indexedCandidates.add(new IndexedCandidate(index, candidates.get(index)));
+        }
+        indexedCandidates.sort(Comparator
+                .comparingLong((IndexedCandidate value) ->
+                        value.candidate().physicalCandidate().sourceSequenceNumber())
+                .thenComparingInt(IndexedCandidate::catalogIndex)
+                .thenComparing(value ->
+                        value.candidate().physicalCandidate().physicalToteId().value()));
+
+        Map<String, Set<String>> pharmaciesByServiceCentre = new LinkedHashMap<>();
+        Map<String, Integer> nextGroupIndexByServiceCentre = new LinkedHashMap<>();
+        List<ServiceCentrePharmacyGroup> groups = new ArrayList<>();
+        for (IndexedCandidate indexedCandidate : indexedCandidates) {
+            DspOperationalReleaseCandidate candidate = indexedCandidate.candidate();
+            String serviceCentreId = candidate.physicalCandidate().serviceCentreId();
+            Set<String> encounteredPharmacies = pharmaciesByServiceCentre.computeIfAbsent(
+                    serviceCentreId, ignored -> new LinkedHashSet<>());
+            for (String pharmacyId : candidate.pharmacyIds()) {
+                if (encounteredPharmacies.add(pharmacyId)) {
+                    int groupIndex = nextGroupIndexByServiceCentre.getOrDefault(
+                            serviceCentreId, 0);
+                    groups.add(new ServiceCentrePharmacyGroup(
+                            serviceCentreId,
+                            pharmacyId,
+                            groupIndex,
+                            candidate.physicalCandidate().sourceSequenceNumber()));
+                    nextGroupIndexByServiceCentre.put(serviceCentreId, groupIndex + 1);
+                }
+            }
+        }
+        return List.copyOf(groups);
+    }
+
+    private static void validateAv02Identity(
+            OperationalPhysicalToteCandidate physicalCandidate,
+            DspSchedulerOrderState logicalState) {
+        if (physicalCandidate.orderType() != logicalState.order().orderType()
+                || physicalCandidate.orderType() != OrderType.EMPTY) {
+            throw new IllegalArgumentException(
+                    "AV02 physical and logical order type must be EMPTY and match");
+        }
+        if (!physicalCandidate.orderSheetKey().equals(logicalState.order().orderSheetKey())) {
+            throw new IllegalArgumentException("AV02 physical and logical order sheet must match");
+        }
+        if (!physicalCandidate.serviceCentreId()
+                .equals(logicalState.order().serviceCentreId().trim())) {
+            throw new IllegalArgumentException(
+                    "AV02 physical and logical service centre must match");
+        }
+    }
+
     private static void validateJoinedIdentity(
-            OsrProcessingReleaseCandidate physicalCandidate,
+            OperationalPhysicalToteCandidate physicalCandidate,
             InboundToteManifest manifest,
             DspSchedulerOrderState logicalState) {
         if (!physicalCandidate.physicalToteId().equals(manifest.physicalToteId())) {
@@ -381,4 +515,8 @@ public final class DspOperationalReleaseSnapshotFactory {
     }
 
     private record IndexedManifest(int catalogIndex, InboundToteManifest manifest) {}
+
+    private record IndexedCandidate(
+            int catalogIndex,
+            DspOperationalReleaseCandidate candidate) {}
 }

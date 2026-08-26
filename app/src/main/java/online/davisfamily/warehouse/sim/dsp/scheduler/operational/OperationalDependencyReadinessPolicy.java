@@ -7,8 +7,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
-import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
-import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteCandidate;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public final class OperationalDependencyReadinessPolicy {
@@ -28,10 +27,6 @@ public final class OperationalDependencyReadinessPolicy {
 
         NotionalToteOrder logicalOrder = candidate.logicalOrderState().order();
         OrderType orderType = logicalOrder.orderType();
-        if (orderType == OrderType.EMPTY) {
-            throw new IllegalArgumentException(
-                    "EMPTY orders cannot be operational physical release candidates");
-        }
         if (orderType != OrderType.ASSOCIATED) {
             return List.copyOf(blocks);
         }
@@ -56,10 +51,9 @@ public final class OperationalDependencyReadinessPolicy {
     }
 
     private static void addActiveSheetAssignmentBlock(
-            OsrProcessingReleaseCandidate physicalCandidate,
+            OperationalPhysicalToteCandidate physicalCandidate,
             List<OperationalReleaseBlock> blocks) {
-        if (physicalCandidate.availability()
-                != OsrProcessingReleaseAvailability.BLOCKED_BY_ACTIVE_SHEET_ASSIGNMENT) {
+        if (physicalCandidate.blockingPhysicalToteId().isEmpty()) {
             return;
         }
         String blockingPhysicalToteId = physicalCandidate.blockingPhysicalToteId()

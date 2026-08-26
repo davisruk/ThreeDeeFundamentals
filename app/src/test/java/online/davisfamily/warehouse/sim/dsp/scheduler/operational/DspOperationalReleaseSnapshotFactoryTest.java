@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,8 +15,13 @@ import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocatedTote;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalPhysicalToteCandidate;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRecord;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
@@ -27,6 +33,8 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteIdentity;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
@@ -133,6 +141,66 @@ class DspOperationalReleaseSnapshotFactoryTest {
         assertEquals(List.of("pharmacy-1"), joined.pharmacyIds());
         assertEquals(Set.of(preparedLineKey), snapshot.preparedLineKeys());
         assertEquals(0, snapshot.groupIndexFor(joined));
+    }
+
+    @Test
+    void shouldJoinOsrAndAv02PhysicalCandidatesWithoutCreatingAnEmptyManifest() {
+        DspOrderItem osrItem = item("line-osr", "product-osr", "pharmacy-osr");
+        InboundToteManifest osrManifest = manifest(
+                "tote-osr", "order-osr", OrderType.FULL_PACK, "sc-1", List.of(osrItem), 1);
+        OsrProcessingReleaseCandidate osrCandidate = physicalCandidate(osrManifest);
+        DspSchedulerOrderState osrState = logicalState(
+                "order-osr", OrderType.FULL_PACK, "sc-1", List.of(osrItem), 999,
+                DspOrderStatus.WAITING);
+
+        DspOrderItem emptyItem = item("line-empty", "product-empty", "pharmacy-empty");
+        NotionalToteOrder emptyOrder = new NotionalToteOrder(
+                "order-empty",
+                "notional-order-empty",
+                "sc-1",
+                1,
+                OrderType.EMPTY,
+                List.of(emptyItem),
+                999,
+                2);
+        DspSchedulerOrderState emptyState = new DspSchedulerOrderState(
+                emptyOrder,
+                new RouteRequirements(false, false, false, true, false, StartLocation.AV02),
+                DspOrderStatus.WAITING);
+        PhysicalToteId av02PhysicalId = new PhysicalToteId("av02-000001");
+        Av02AllocatedTote allocatedEmpty = new Av02AllocatedTote(
+                new OperationalPhysicalToteIdentity(
+                        OperationalPhysicalToteSource.AV02,
+                        av02PhysicalId,
+                        emptyOrder.orderSheetKey(),
+                        OrderType.EMPTY,
+                        "sc-1",
+                        PhysicalToteRole.PRE_P2P,
+                        2),
+                PhysicalToteRecord.preP2p(av02PhysicalId));
+
+        DspOperationalReleaseSnapshot snapshot = factory.create(
+                new OsrProcessingReleaseSnapshot(List.of(osrCandidate)),
+                new InboundToteManifestCatalog(List.of(osrManifest)),
+                new Av02InventorySnapshot(2, List.of(allocatedEmpty), List.of()),
+                logicalSnapshot(List.of(osrState, emptyState)));
+
+        assertEquals(2, snapshot.candidates().size());
+        assertSame(osrCandidate, snapshot.candidates().get(0).physicalCandidate());
+        assertEquals(OperationalPhysicalToteSource.OSR,
+                snapshot.candidates().get(0).physicalCandidate().source());
+        assertTrue(snapshot.candidates().stream()
+                .map(candidate -> candidate.physicalCandidate())
+                .anyMatch(candidate -> candidate instanceof Av02OperationalPhysicalToteCandidate));
+        DspOperationalReleaseCandidate av02Candidate = snapshot.candidates().stream()
+                .filter(candidate -> candidate.physicalCandidate().source()
+                        == OperationalPhysicalToteSource.AV02)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(OrderType.EMPTY, av02Candidate.physicalCandidate().orderType());
+        assertEquals(List.of("pharmacy-empty"), av02Candidate.pharmacyIds());
+        assertEquals(0, snapshot.groupIndexFor(snapshot.candidates().get(0)));
+        assertEquals(1, snapshot.groupIndexFor(av02Candidate));
     }
 
     @Test

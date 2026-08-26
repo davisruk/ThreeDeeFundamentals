@@ -5,6 +5,7 @@ import java.util.Optional;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 
 public record OsrProcessingReleaseCandidate(
         PhysicalToteId physicalToteId,
@@ -13,7 +14,8 @@ public record OsrProcessingReleaseCandidate(
         String serviceCentreId,
         long sourceSequenceNumber,
         OsrProcessingReleaseAvailability availability,
-        Optional<PhysicalToteId> blockingPhysicalToteId) {
+        Optional<PhysicalToteId> blockingPhysicalToteId)
+        implements OperationalPhysicalToteCandidate {
 
     public OsrProcessingReleaseCandidate {
         if (physicalToteId == null) {
@@ -55,5 +57,10 @@ public record OsrProcessingReleaseCandidate(
                         "Candidate physical tote cannot block its own release");
             }
         }
+    }
+
+    @Override
+    public OperationalPhysicalToteSource source() {
+        return OperationalPhysicalToteSource.OSR;
     }
 }
