@@ -1,12 +1,14 @@
 package online.davisfamily.warehouse.testing;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import online.davisfamily.threedee.behaviour.routing.RouteFollower.TravelDirection;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -35,16 +37,54 @@ import online.davisfamily.warehouse.rendering.model.tracks.TrackDriveType;
 import online.davisfamily.warehouse.rendering.model.tracks.TrackSpec;
 import online.davisfamily.warehouse.rendering.model.tracks.WarehouseSegmentMetadata;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.av02.AllocateEmptyToteAtAv02Command;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationConfig;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationController;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationSnapshotFactory;
+import online.davisfamily.warehouse.sim.dsp.av02.DeterministicAv02PhysicalToteIdAllocator;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02PhysicalToteInventory;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalCommandHandler;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchTargetRegistry;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteTargetAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
+import online.davisfamily.warehouse.sim.dsp.osr.OsrPhysicalInventory;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseController;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseControllerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.SynchronousOperationalReleaseEvaluationSource;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
+import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseDecision;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseScheduler;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotFactory;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalCandidateRouteAdmissionFactory;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalRouteEntrySelector;
+import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
+import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreAuthorizationState;
+import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
+import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClock;
+import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockConfig;
+import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockController;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.ContainedPackP2pTipperPayloadFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactory;
@@ -65,7 +105,9 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapsho
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseRegistry;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.StrictP2pReleaseAssignmentCommitter;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pArrivalAdmissionPolicy;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.WarehouseSnapshotP2pReleaseRequirementResolver;
 import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreDeadlineSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
@@ -96,14 +138,17 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     static final String P2P_TARGET_ID = "warehouse-p2p";
 
     private static final double RELEASE_INTERVAL_SECONDS = 3d;
+    private static final double AV02_P2P_ADMISSION_OPEN_SECONDS = 9d;
     private static final double P2P_HOLD_SECONDS = 12d;
     private static final double ROUTE_SPEED = 1d;
     private static final String DEBUG_ACTIVE_PHARMACY_ID = "pharmacy-104-1";
+    private static final String AV02_ORDER_ID = "warehouse-empty-1";
     private final List<RenderableObject> objects;
     private final SelectionInspectionRegistry inspectionRegistry;
     private final OsrOutboundRouteLaunchQueue launchQueue =
-            new OsrOutboundRouteLaunchQueue("warehouse-debug-launch", 8);
-    private final Map<String, ToteLoadPlan> loadPlans = new LinkedHashMap<>();
+            new OsrOutboundRouteLaunchQueue("warehouse-debug-launch", 1);
+    private final MapBackedToteLoadPlanRegistry loadPlans =
+            new MapBackedToteLoadPlanRegistry();
     private final List<OperationalRouteLaunchRequest> scheduledRequests;
     private final Map<String, StationRoutedToteArrivalQueue> arrivalQueues =
             new LinkedHashMap<>();
@@ -114,6 +159,22 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     private final DspWarehouseTransportRuntime runtime;
     private final TipperInputQueue p2pInputQueue;
     private final DspP2pArrivalConsumerRuntime p2pArrivalRuntime;
+    private final DspOperationalClockController clockController;
+    private final Av02AllocationSnapshotFactory av02AllocationSnapshotFactory =
+            new Av02AllocationSnapshotFactory();
+    private final Av02PhysicalToteInventory av02Inventory;
+    private final PhysicalToteLifecycleLedger lifecycleLedger =
+            new PhysicalToteLifecycleLedger();
+    private final Av02AllocationController av02AllocationController;
+    private final DspOperationalReleaseController operationalReleaseController;
+    private final OsrOutboundRouteLaunchTargetRegistry routeTargetRegistry;
+    private Av02AllocationSnapshot latestAv02AllocationSnapshot;
+    private DspSupplySnapshot latestSupplySnapshot;
+    private long nextAv02AllocationSnapshotSequence;
+    private double debugSimulationTimeSeconds;
+    private String lastOperationalLaunchSource = "none";
+    private String lastOperationalDestination = "none";
+    private String lastPinnedP2pLine = "none";
     private final List<P2pLineDefinition> p2pLineDefinitions;
     private final Map<P2pLineId, P2pLineActivityProbe> p2pActivityProbes;
     private final P2pLineLeaseRegistry p2pLeaseRegistry;
@@ -266,26 +327,94 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
 
         P2pPhysicalToteAssignment firstP2pAssignment = assignment(
                 "transport-p2p-1", debugLine);
-        P2pPhysicalToteAssignment secondP2pAssignment = assignment(
-                "transport-p2p-2", debugLine);
         p2pLeaseRegistry.acquireLease(
                 debugLine.lineId(), "104", P2pLineActivitySnapshot.idle());
         p2pLeaseRegistry.commitAssignment(firstP2pAssignment);
-        p2pLeaseRegistry.commitAssignment(secondP2pAssignment);
         scheduledRequests = List.of(
                 request("transport-p2p-1", p2pDestination, 1, firstP2pAssignment),
                 request("transport-third-party", thirdPartyDestination, 2),
-                request("transport-adapting", adaptingDestination, 3),
-                request("transport-p2p-2", p2pDestination, 4, secondP2pAssignment));
-        scheduledRequests.forEach(request -> loadPlans.put(
-                request.physicalToteId().value(),
-                new ToteLoadPlan(request.physicalToteId(), List.of())));
+                request("transport-adapting", adaptingDestination, 3));
+        scheduledRequests.forEach(request -> loadPlans.putLoadPlan(
+                new ToteLoadPlan(
+                        request.physicalToteId(), List.of())));
+
+        NotionalToteOrder av02Order = av02Order();
+        DspOperationalClock clock = new DspOperationalClock(
+                DspOperationalClockConfig.productionBaseline(LocalDate.of(2026, 8, 26)));
+        clockController = new DspOperationalClockController(clock);
+        av02Inventory = new Av02PhysicalToteInventory(new Av02AllocationConfig(1));
+        latestSupplySnapshot = supplySnapshot(av02Order);
+        latestAv02AllocationSnapshot = av02AllocationSnapshot(
+                av02Order, nextAv02AllocationSnapshotSequence++);
+
+        InboundToteManifestCatalog manifestCatalog = new InboundToteManifestCatalog(List.of());
+        OsrPhysicalInventory osrInventory = new OsrPhysicalInventory(
+                new OsrInventoryConfig(8, List.of()));
+        List<OperationalRouteDestination> launchDestinations = new ArrayList<>();
+        launchDestinations.add(thirdPartyDestination);
+        launchDestinations.add(adaptingDestination);
+        p2pLineDefinitions.forEach(definition ->
+                launchDestinations.add(definition.destination()));
+        routeTargetRegistry = new OsrOutboundRouteLaunchTargetRegistry(
+                launchQueue,
+                launchDestinations);
+
+        av02AllocationController = new Av02AllocationController(
+                () -> latestAv02AllocationSnapshot.command(),
+                () -> latestAv02AllocationSnapshot,
+                av02Inventory,
+                lifecycleLedger,
+                new DeterministicAv02PhysicalToteIdAllocator(),
+                loadPlans);
+        OperationalCandidateRouteAdmissionFactory routeAdmissionFactory =
+                new OperationalCandidateRouteAdmissionFactory(
+                        new OperationalRouteEntrySelector(),
+                        this::stationAdmission,
+                        routeTargetRegistry);
+        DspOperationalReleaseSnapshotFactory operationalSnapshotFactory =
+                new DspOperationalReleaseSnapshotFactory();
+        StrictP2pReleaseAssignmentCommitter p2pAssignmentCommitter =
+                new StrictP2pReleaseAssignmentCommitter(
+                        p2pLeaseRegistry,
+                        new WarehouseSnapshotP2pReleaseRequirementResolver(
+                                () -> schedulerSnapshot(av02Order)),
+                        p2pActivityProbes);
+        operationalReleaseController = new DspOperationalReleaseController(
+                new SynchronousOperationalReleaseEvaluationSource(
+                        new DspOperationalReleaseScheduler()),
+                () -> operationalSnapshotFactory.create(
+                        new online.davisfamily.warehouse.sim.dsp.osr.release
+                                .OsrProcessingReleaseSnapshotFactory().create(
+                                        osrInventory.snapshot(), lifecycleLedger.snapshot()),
+                        manifestCatalog,
+                        av02Inventory.snapshot(),
+                        schedulerSnapshot(av02Order),
+                        routeAdmissionFactory,
+                        p2pLeaseSnapshot(),
+                        p2pTargetAdmissions(),
+                        elasticAllocationInspectionSnapshot()),
+                new Av02OperationalCommandHandler(
+                        av02Inventory,
+                        lifecycleLedger,
+                        loadPlans,
+                        clockController::snapshot,
+                        routeTargetRegistry.operationalPhysicalToteReleaseTargetRegistry(),
+                        p2pAssignmentCommitter));
+
+        launchQueue.enqueue(scheduledRequests.getFirst());
+
+        sim.addController(clockController);
+        sim.addController(new Av02FixtureSnapshotController(av02Order));
+        sim.addController(av02AllocationController);
+        sim.addController(operationalReleaseController);
+        sim.addController(new OperationalReleaseInspectionController());
+        sim.addController(new ScheduledLaunchController(1, RELEASE_INTERVAL_SECONDS));
 
         runtime = new DspWarehouseTransportRuntimeFactory().create(
                 sim,
                 objects,
                 launchQueue,
-                loadPlans::get,
+                loadPlans,
                 routeCatalog,
                 (request, loadPlan) -> createInspectableTote(
                         request, tr, toteGeometry, inspectionRegistry),
@@ -308,7 +437,6 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
         addQueueMarker(tr, adaptingDestination, new Vec3(5.05f, 0.10f, 3.2f), 0xFF58A66A);
         addQueueMarker(tr, p2pDestination, new Vec3(7.8f, 0.10f, -2.45f), 0xFFB75BC7);
 
-        sim.addController(new ScheduledLaunchController());
         sim.addController(new TerminalQueuePresentationController());
         float toteInteriorFloorLocalY = 0.04f
                 + (toteGeometry.getOuterHeight() - toteGeometry.getInnerHeight())
@@ -341,6 +469,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     @Override
     public void close() {
         p2pArrivalRuntime.close();
+        operationalReleaseController.close();
         runtime.close();
     }
 
@@ -357,7 +486,78 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
     }
 
     List<String> expectedPhysicalToteIds() {
-        return scheduledRequests.stream().map(request -> request.physicalToteId().value()).toList();
+        List<String> expected = new ArrayList<>(scheduledRequests.stream()
+                .map(request -> request.physicalToteId().value())
+                .toList());
+        av02AllocationController.lastAllocatedTote()
+                .map(tote -> tote.physicalToteId().value())
+                .ifPresent(expected::add);
+        return List.copyOf(expected);
+    }
+
+    int av02Capacity() {
+        return av02Inventory.capacity();
+    }
+
+    int av02Occupancy() {
+        return av02Inventory.occupancy();
+    }
+
+    List<String> av02WaitingPhysicalToteIds() {
+        return av02Inventory.snapshot().waitingTotes().stream()
+                .map(tote -> tote.physicalToteId().value())
+                .toList();
+    }
+
+    List<String> av02DepartedPhysicalToteIds() {
+        return av02Inventory.snapshot().departedTotes().stream()
+                .map(tote -> tote.physicalToteId().value())
+                .toList();
+    }
+
+    List<String> pendingLaunchPhysicalToteIds() {
+        return routeTargetRegistry.launchQueueSnapshot().entries().stream()
+                .map(entry -> entry.physicalToteId().value())
+                .toList();
+    }
+
+    long successfulHydrationCount() {
+        return runtime.routeLaunchController().snapshot().successfulHydrationCount();
+    }
+
+    String activeAv02PhysicalToteId() {
+        return lifecycleLedger.snapshot()
+                .activeAssignmentFor(new OrderSheetKey(AV02_ORDER_ID, 1))
+                .map(assignment -> assignment.physicalToteId().value())
+                .orElse("none");
+    }
+
+    List<String> operationalLaunchTargetIds() {
+        return routeTargetRegistry.destinations().stream()
+                .map(OperationalRouteDestination::targetId)
+                .toList();
+    }
+
+    List<String> warehouseRouteTargetIds() {
+        return runtime.routeCatalogSnapshot().entries().stream()
+                .map(entry -> entry.destination().targetId())
+                .toList();
+    }
+
+    Av02AllocationSnapshot av02AllocationSnapshot() {
+        return latestAv02AllocationSnapshot;
+    }
+
+    DspOperationalReleaseControllerSnapshot operationalReleaseSnapshot() {
+        return operationalReleaseController.snapshot();
+    }
+
+    boolean hasRenderable(String physicalToteId) {
+        return objects.stream().anyMatch(object -> object.id.equals(physicalToteId));
+    }
+
+    ToteLoadPlan loadPlan(String physicalToteId) {
+        return loadPlans.getLoadPlanFor(new PhysicalToteId(physicalToteId));
     }
 
     boolean observedP2pBackpressure() {
@@ -462,6 +662,7 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                     "P2P tipper input: " + p2pInput.toteIds().size()
                             + " / " + p2pInput.capacity(),
                     "Blocked: " + (arrival.blocked() ? arrival.blockedReason() : "none")));
+            description.addAll(describeAv02State());
             p2pLeaseSnapshot().lines().forEach(line -> description.add(
                     "P2P lease " + line.definition().lineId().value()
                             + ": owner=" + line.serviceCentreId().orElse("none")
@@ -486,6 +687,34 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
                     elasticAllocationInspectionSnapshot()));
             return List.copyOf(description);
         });
+    }
+
+    private List<String> describeAv02State() {
+        var av02 = av02Inventory.snapshot();
+        var operational = operationalReleaseController.snapshot();
+        String lastAllocation = av02AllocationController.lastAllocatedTote()
+                .map(tote -> tote.physicalToteId().value()
+                        + " sheet=" + tote.orderSheetKey()
+                        + " pharmacy=" + tote.pharmacyId())
+                .orElse("none");
+        String application = operational.lastCommandApplicationResult()
+                .map(result -> result.applied()
+                        ? "applied"
+                        : (result.deferred() ? "deferred: " : "rejected: ") + result.reason())
+                .orElse("none");
+        return List.of(
+                "AV02 capacity: " + av02.occupancy() + " / " + av02.capacity(),
+                "AV02 waiting: " + av02.waitingTotes().stream()
+                        .map(tote -> tote.physicalToteId().value() + "/" + tote.orderSheetKey())
+                        .toList(),
+                "AV02 departed: " + av02.departedTotes().stream()
+                        .map(tote -> tote.physicalToteId().value() + "/" + tote.orderSheetKey())
+                        .toList(),
+                "AV02 last allocation: " + lastAllocation,
+                "Operational application: " + application,
+                "Launch source: " + lastOperationalLaunchSource,
+                "Selected first destination: " + lastOperationalDestination,
+                "Pinned P2P line: " + lastPinnedP2pLine);
     }
 
     private P2pElasticAllocationSnapshot elasticAllocationInspectionSnapshot() {
@@ -584,9 +813,183 @@ public final class DspWarehouseTransportDebugRig implements DebugSceneRuntime {
         return List.copyOf(description);
     }
 
+    private StationAdmissionSnapshot stationAdmission(
+            StationType stationType,
+            DspSchedulerOrderState candidate,
+            WarehouseSchedulerSnapshot snapshot) {
+        if (stationType != StationType.P2P) {
+            return new StationAdmissionSnapshot(
+                    stationType,
+                    new StationCapacity(1, 1),
+                    new StationSnapshot(stationType, 0, 0),
+                    false,
+                    "Warehouse transport debug fixture only admits P2P EMPTY work",
+                    Optional.empty());
+        }
+        return new StationAdmissionSnapshot(
+                StationType.P2P,
+                new StationCapacity(1, 1),
+                new StationSnapshot(StationType.P2P, 0, 0),
+                true,
+                "",
+                Optional.of(P2P_TARGET_ID));
+    }
+
+    private List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions() {
+        return routeTargetRegistry.snapshotAdmissions().stream()
+                .filter(admission -> admission.stationType() == StationType.P2P)
+                .map(admission -> {
+                    if (debugSimulationTimeSeconds >= AV02_P2P_ADMISSION_OPEN_SECONDS) {
+                        return admission;
+                    }
+                    return new OperationalRouteTargetAdmissionSnapshot(
+                            admission.stationType(),
+                            admission.targetId(),
+                            admission.capacity(),
+                            admission.capacity());
+                })
+                .toList();
+    }
+
+    private NotionalToteOrder av02Order() {
+        DspOrderItem item = new DspOrderItem(
+                "line-" + AV02_ORDER_ID,
+                "product-" + AV02_ORDER_ID,
+                1,
+                DEBUG_ACTIVE_PHARMACY_ID,
+                "patient-" + AV02_ORDER_ID,
+                "prescription-" + AV02_ORDER_ID,
+                DspOrderLineType.FULL_PACK,
+                AV02_ORDER_ID,
+                1,
+                0);
+        return new NotionalToteOrder(
+                AV02_ORDER_ID,
+                "notional-" + AV02_ORDER_ID,
+                "104",
+                1,
+                OrderType.EMPTY,
+                List.of(item),
+                999,
+                5);
+    }
+
+    private WarehouseSchedulerSnapshot schedulerSnapshot(NotionalToteOrder av02Order) {
+        return new WarehouseSchedulerSnapshot(
+                List.of(new DspSchedulerOrderState(
+                        av02Order,
+                        new online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements(
+                                false, false, false, true, false, StartLocation.AV02),
+                        DspOrderStatus.WAITING)),
+                Map.of(
+                        StationType.P2P,
+                        new StationAdmissionSnapshot(
+                                StationType.P2P,
+                                new StationCapacity(1, 1),
+                                new StationSnapshot(StationType.P2P, 0, 0),
+                                true,
+                                "",
+                                Optional.of(P2P_TARGET_ID))),
+                Set.of(),
+                Optional.of("104"));
+    }
+
+    private Av02AllocationSnapshot av02AllocationSnapshot(
+            NotionalToteOrder av02Order,
+            long sequence) {
+        return av02AllocationSnapshotFactory.create(
+                sequence,
+                schedulerSnapshot(av02Order),
+                latestSupplySnapshot,
+                av02Inventory.snapshot(),
+                lifecycleLedger.snapshot());
+    }
+
+    private DspSupplySnapshot supplySnapshot(NotionalToteOrder av02Order) {
+        ServiceCentreSupplySnapshot serviceCentre = new ServiceCentreSupplySnapshot(
+                "104",
+                999,
+                ServiceCentreAuthorizationState.AUTHORIZED,
+                Optional.of(Duration.ZERO),
+                0,
+                0,
+                0,
+                0,
+                Set.of(av02Order.orderSheetKey()),
+                List.of());
+        return new DspSupplySnapshot(
+                "warehouse-debug-av02",
+                0,
+                1200,
+                0,
+                Optional.of("104"),
+                Optional.empty(),
+                Set.of(av02Order.orderSheetKey()),
+                List.of(serviceCentre),
+                0);
+    }
+
+    private final class Av02FixtureSnapshotController implements SimulationController {
+        private final NotionalToteOrder av02Order;
+
+        private Av02FixtureSnapshotController(NotionalToteOrder av02Order) {
+            this.av02Order = av02Order;
+        }
+
+        @Override
+        public void update(SimulationContext context, double dtSeconds) {
+            debugSimulationTimeSeconds = context.getSimulationTimeSeconds();
+            latestSupplySnapshot = supplySnapshot(av02Order);
+            latestAv02AllocationSnapshot = av02AllocationSnapshot(
+                    av02Order, nextAv02AllocationSnapshotSequence++);
+        }
+    }
+
+    private final class OperationalReleaseInspectionController implements SimulationController {
+        private Optional<PhysicalToteId> observedAppliedTote = Optional.empty();
+
+        @Override
+        public void update(SimulationContext context, double dtSeconds) {
+            var snapshot = operationalReleaseController.snapshot();
+            var result = snapshot.lastCommandApplicationResult().orElse(null);
+            PhysicalToteId physicalToteId = snapshot.lastPhysicalToteId().orElse(null);
+            if (result == null || !result.applied() || physicalToteId == null
+                    || observedAppliedTote.filter(physicalToteId::equals).isPresent()) {
+                return;
+            }
+            DspOperationalReleaseDecision decision = snapshot.lastEvaluation()
+                    .flatMap(evaluation -> evaluation.releaseDecision())
+                    .orElse(null);
+            if (decision == null) {
+                return;
+            }
+            observedAppliedTote = Optional.of(physicalToteId);
+            lastOperationalLaunchSource = decision.command().source().name();
+            lastOperationalDestination = decision.routeEntry().stationType()
+                    + "/" + decision.routeEntry().targetId();
+            lastPinnedP2pLine = decision.command().proposedP2pAssignment()
+                    .map(assignment -> assignment.lineId().value())
+                    .orElse("none");
+        }
+    }
+
     private final class ScheduledLaunchController implements SimulationController {
         private int nextRequestIndex;
         private double nextReleaseTimeSeconds;
+
+        private ScheduledLaunchController(
+                int initialRequestIndex,
+                double firstReleaseTimeSeconds) {
+            if (initialRequestIndex < 0 || initialRequestIndex > scheduledRequests.size()) {
+                throw new IllegalArgumentException("initialRequestIndex is outside scheduled requests");
+            }
+            if (!Double.isFinite(firstReleaseTimeSeconds) || firstReleaseTimeSeconds < 0d) {
+                throw new IllegalArgumentException(
+                        "firstReleaseTimeSeconds must be finite and nonnegative");
+            }
+            nextRequestIndex = initialRequestIndex;
+            nextReleaseTimeSeconds = firstReleaseTimeSeconds;
+        }
 
         @Override
         public void update(SimulationContext context, double dtSeconds) {
