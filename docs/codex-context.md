@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation is in progress on `feature/dsp-av02-operational-allocation`, with Steps 1-13 complete and Step 14 next, as the final physical-work prerequisite before full-day execution and metrics.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation is complete and verified on `feature/dsp-av02-operational-allocation`, pending merge to `master`. Generic station processing and route continuation are the next architectural features before the deferred operational EMPTY end-to-end proof and full-day execution.
 
 Read:
 
@@ -208,8 +208,11 @@ The agreed next programme is split into short-lived branches from `master`:
 13. P2P-local arrival consumption;
 14. sticky P2P service-centre leases (complete, verified, and merged);
 15. deadline-aware elastic line allocation (complete, verified, and merged);
-16. AV02 operational allocation (active implementation branch; Steps 1-13 complete and Step 14 next);
-17. full-day analysis, metrics, and inspection.
+16. AV02 operational allocation (complete and verified; pending merge to `master`);
+17. generic station processing boundary;
+18. station route continuation;
+19. deferred operational EMPTY end-to-end proof;
+20. full-day analysis, metrics, and inspection.
 
 Each branch must have its own decision-complete, step-based plan before implementation. Implementation plans are intended to be executable by a lower-capability coding model with minimal architectural inference. When multi-agent execution is available, a higher-capability parent owns and accepts each complete plan step while delegating bounded implementation and focused verification to lower-capability subagents. `docs/codex-instructions.md` defines the planning, delegation, corrective-cycle, review, and verification contracts. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
@@ -230,8 +233,10 @@ Current programme position:
 - P2P-local arrival consumption: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
 - sticky service-centre leases: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
 - deadline-aware elastic line allocation: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`;
-- AV02 operational allocation: active implementation branch, with Steps 1-13 complete and Step 14 next in `docs/scheduler/dsp-av02-operational-allocation-plan.md`;
-- full-day execution and metrics: expected after AV02 operational allocation;
+- AV02 operational allocation: complete and verified, pending merge to `master`, with detailed plan at `docs/scheduler/dsp-av02-operational-allocation-plan.md`;
+- station processing boundary: next branch after AV02 is verified and merged;
+- station route continuation and the deferred operational EMPTY proof: follow the processing boundary through separate decision-complete plans;
+- full-day execution and metrics: expected only after those operational station boundaries and proof;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -285,8 +290,10 @@ Planned Phase 1 order:
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
 - deadline-aware elastic line allocation: complete, verified, and merged
-- AV02 operational allocation: active implementation branch; Steps 1-13 complete and Step 14 next
-- full-day execution and metrics: expected after AV02 operational allocation
+- AV02 operational allocation: complete and verified; pending merge to `master`
+- generic station processing and route continuation: next architectural work after AV02 merge
+- operational EMPTY end-to-end proof: deferred until those production boundaries exist
+- full-day execution and metrics: expected after the deferred proof
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

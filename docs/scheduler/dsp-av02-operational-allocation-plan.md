@@ -2,7 +2,18 @@
 
 Branch: `feature/dsp-av02-operational-allocation`
 
-Status: implementation in progress; Steps 1-13 are complete and Step 14 is next.
+Status: complete and verified; pending merge to `master`. Steps 1-13 implement the production
+scope, and Step 14 regression, full-suite, visual, and reset verification is green. The cross-station
+operational EMPTY proof is explicitly deferred until the generic station processing and route-
+continuation boundaries exist.
+
+Verified closure:
+
+- the focused regression set and complete Gradle test suite are green;
+- `dsp-warehouse-transport` and `tote-to-bag` visual checks are green;
+- AV02/OSR source diagnostics, first-route transport, sticky P2P diagnostics, existing pack/bag and
+  outbound-capacity behavior, and deterministic `ALT+R` reset were verified;
+- no test-only station handoff was added to manufacture the deferred cross-station proof.
 
 ## Purpose
 
@@ -10,8 +21,9 @@ Make logical `EMPTY` work a first-class operational fulfilment flow by introduci
 inbound fulfilment tote at AV02, then sending that tote through the same station-routing, sticky P2P,
 hydration, transport, arrival, and consumption boundaries used by OSR-originated work.
 
-This branch is the final physical-work prerequisite before full-day execution and metrics. It does
-not implement Exception Station behavior.
+This branch establishes AV02 allocation, shared first-route launch, and direct P2P lifecycle
+completion. It does not add production continuation from Third Party or Adapting to later route
+destinations, and it does not implement Exception Station behavior.
 
 ## Locked Requirements
 
@@ -857,7 +869,7 @@ The implementation model runs exactly:
 
 ### User verification
 
-No additional user-run verification is required until the final visual checkpoint in Step 15.
+No additional user-run verification is required until the final visual checkpoint in Step 14.
 
 Proposed commit message: `Integrate AV02 warehouse launch diagnostics`
 
@@ -931,16 +943,32 @@ No additional user-run verification is required for this step.
 
 Proposed commit message: `Complete AV02 totes at P2P`
 
-## Step 14: Prove The Operational EMPTY Flow End To End
+## Deferred Operational EMPTY End-To-End Proof
 
-### Required change surface
+Status: deferred and not executable from this plan. The material in this section is an acceptance
+catalogue for later replanning, not an implementation step.
+
+### Draft future change surface
 
 Create only:
 
 - `app/src/test/java/online/davisfamily/warehouse/sim/dsp/av02/DspAv02OperationalAllocationScenarioTest.java`
 
-This is a test-composition step. If a production API change appears necessary, stop and report the
-missing contract rather than adding it here.
+Do not create this test on the AV02 branch and do not simulate station completion with a test-only
+handoff. The production contracts required by this scenario do not yet exist.
+
+Before this proof is replanned, complete:
+
+1. `feature/dsp-station-processing-boundary`, defining generic production arrival, claim,
+   processing-completion, and disposition contracts for Third Party, Adapting, and P2P consumers;
+2. a station route-continuation branch, publishing `CONTINUE` dispositions back into source-neutral
+   warehouse transport while preserving physical tote identity, renderable ownership, route state,
+   the current replacement load plan, and pinned P2P assignment. `CONSUME` dispositions terminate
+   the inbound physical journey instead.
+
+The later architect-owned plan may reuse the catalogue below, but must validate it against those
+completed production APIs first. It must also prove that P2P-created outbound totes are independent
+new physical journeys and are published only when ready for downstream dispatch.
 
 Use these concrete analogues:
 
@@ -953,7 +981,7 @@ Use these concrete analogues:
 
 Copy only private test-fixture structure; do not move test helpers into production packages.
 
-### Locked fixture catalogue
+### Draft fixture catalogue
 
 Each test constructs a fresh nested `ScenarioFixture`. The fixture owns one `SimulationWorld`,
 shared lifecycle ledger, AV02 inventory capacity one, OSR inventory, manifest catalog, mutable
@@ -975,7 +1003,7 @@ Give adapted work one `PreparedLineKey` that starts unresolved. Give Third Party
 one deterministic pack each. AV02 IDs must be `av02-000001`, then `av02-000002` after capacity is
 released. OSR physical IDs and outbound IDs must use different prefixes.
 
-### Required test methods
+### Draft acceptance scenarios
 
 1. `shouldAllocateOnlyAuthorizedDependencyReadyEmptyWithinCapacity`
    - authorization alone leaves both physical inventories unchanged;
@@ -1017,7 +1045,7 @@ released. OSR physical IDs and outbound IDs must use different prefixes.
      and leaves the AV02 source sheet only in provenance/history;
    - assert no cross-pharmacy output or AV02-created outbound tote.
 
-### Deterministic progression rule
+### Future deterministic progression rule
 
 Do not use sleeps or wall-clock polling. Controller-only transitions use explicit `SimulationContext`
 times. Transport progression may use a private `advanceUntil(BooleanSupplier condition,
@@ -1025,21 +1053,17 @@ SimulationWorld world, double stepSeconds, int maximumSteps)` helper with a name
 the maximum only as a failure guard. Assertions must target the terminal event/state, never the
 number of updates consumed.
 
-### Implementation verification
+### Deferred verification catalogue
 
-The implementation model runs exactly:
+The eventual implementation should include a focused equivalent of:
 
 ```powershell
 .\gradlew test --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02OperationalAllocationScenarioTest
 ```
 
-### User verification
+This command is not part of AV02 branch closure and must not be run until the deferred test exists.
 
-No additional user-run verification is required for this step.
-
-Proposed commit message: `Prove operational EMPTY tote flow`
-
-## Step 15: Regression, Visual Check, And Branch Closure
+## Step 14: Regression, Visual Check, And Branch Closure
 
 This step is owned by the parent/architect and the user. Do not delegate it to the registered
 implementer. The parent reviews the complete branch diff against this plan and the expected final
@@ -1091,7 +1115,10 @@ The parent verifies from the actual diff that:
   confined to the documented cheap visual fixture;
 - one global scheduler ranks OSR and AV02 and applies at most one command;
 - worker inputs remain immutable and mutations remain on the simulation thread;
-- exact physical/source/pharmacy/load-plan/P2P identity survives transport and P2P completion;
+- exact physical/source/pharmacy/load-plan/P2P identity survives first-route transport, and direct
+  P2P work preserves it through P2P completion;
+- direct-P2P AV02 work completes through the production P2P lifecycle boundary, while non-P2P
+  first destinations stop at their station-arrival boundary pending the separate continuation work;
 - P2P outbound tote supply and generated output-sheet ownership remain independent;
 - no calibrated timing claim, Exception behavior, second route engine, or mutable reset was added.
 
@@ -1105,8 +1132,9 @@ After all user verification is green, the parent/architect must:
 - update `Current Direction`, `Current programme position`, and relevant lifecycle/testing notes in
   `docs/codex-context.md`;
 - update only stale reading-order/current-position text in `docs/codex-instructions.md`;
-- create a separate decision-complete full-day execution and metrics plan through the normal
-  architect planning workflow. This is not implementer work and does not begin automatically.
+- record `feature/dsp-station-processing-boundary` as the next branch, followed by a separate
+  station route-continuation branch and then the deferred operational EMPTY end-to-end proof;
+- do not create the full-day execution and metrics plan until those prerequisites are complete.
 
 Proposed commit message: `Complete AV02 operational allocation`
 
@@ -1117,9 +1145,10 @@ Proposed commit message: `Complete AV02 operational allocation`
 - AV02 and OSR physical candidates participate in one global operational scheduler and one-command
   application boundary.
 - Every P2P-required AV02 tote is pinned to one exact elastic feeding line before departure and
-  retains that assignment through its actual first-station route and P2P arrival.
+  retains that assignment through its actual first-station route. Direct-P2P AV02 totes preserve it
+  through P2P arrival and lifecycle completion.
 - Source-neutral launch identity lets OSR and AV02 totes share hydration, warehouse transport,
-  station queues, and P2P arrival without a second route engine.
+  first-station queues, and direct P2P arrival without a second route engine.
 - Allocated EMPTY work contributes physical P2P workload until consumption; unallocated authorized
   EMPTY remains an explicit diagnostic.
 - P2P consumes the AV02 inbound tote. Independent outbound reservoirs, bag-capacity closure, and

@@ -172,7 +172,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is the active implementation feature, with Steps 1-13 complete and Step 14 next. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Full-day execution and metrics follows AV02. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete and verified, pending merge to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. After AV02 is merged, generic station processing and route continuation must be implemented before the deferred operational EMPTY end-to-end proof and full-day execution. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
 
 Completed bag-planning behavior:
 
@@ -225,7 +225,7 @@ Completed physical OSR processing-release behavior:
 - `ReleasePhysicalToteFromOsrCommand` remains separate from the legacy order-centric debug command.
 - `OsrProcessingReleaseCommandHandler` revalidates live state, accepts downstream first, then commits `recordDeparture(...)` followed by lifecycle `activate(...)` using one simulation time.
 - Rejected, deferred, stale, or failed target applications leave inventory and lifecycle unchanged.
-- Production route-target integration and sticky P2P leases are complete. EMPTY/AV02 allocation remains follow-on work.
+- Production route-target integration and sticky P2P leases are complete. EMPTY/AV02 allocation is complete and verified, pending merge to `master`.
 
 Completed dependency-ready operational release behavior:
 
@@ -269,7 +269,7 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-av02-operational-allocation`: implementation in progress; Steps 1-13 are complete and Step 14 is next
+- `feature/dsp-av02-operational-allocation`: complete and verified; pending merge to `master`
 
 Current scheduler decisions:
 
@@ -339,8 +339,10 @@ Known Phase 1 machine/station work:
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
 - deadline-aware elastic line allocation: complete, verified, and merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
-- AV02 operational allocation: active implementation branch; Steps 1-13 complete and Step 14 is next; Prove The Operational EMPTY Flow End To End
-- full-day execution and metrics: expected after AV02 operational allocation
+- AV02 operational allocation: complete and verified; pending merge to `master`
+- station processing boundary: next branch after AV02 merge
+- station route continuation and operational EMPTY end-to-end proof: subsequent separately planned work
+- full-day execution and metrics: expected after those station boundaries and the deferred proof
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

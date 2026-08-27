@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, and deadline-aware elastic line allocation are complete, verified, and merged. AV02 operational allocation is the active planned branch and is the final physical-work prerequisite before full-day execution and metrics.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, and deadline-aware elastic line allocation are complete, verified, and merged. AV02 operational allocation is complete and verified, pending merge to `master`. Generic station processing and route continuation must follow before the deferred operational EMPTY end-to-end proof and full-day execution.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -884,7 +884,7 @@ Verified contracts:
 
 ### `feature/dsp-av02-operational-allocation`
 
-Status: decision-complete plan created on the active feature branch; implementation has not started.
+Status: complete and verified; pending merge to `master`.
 
 Detailed implementation doc:
 
@@ -902,9 +902,23 @@ Purpose:
   explicit workload diagnostic.
 - Keep P2P-created outbound totes and generated output sheets independent and unchanged.
 
-Expected next branch:
+Verified implementation boundary:
 
-- full-day execution and metrics using loaded 12N volumes and the explicitly uncalibrated profile.
+- AV02 and OSR share one operational ranking, first-route launch, hydration, and transport path.
+- Direct-P2P AV02 work reaches P2P lifecycle completion without a fabricated inbound manifest.
+- Third Party-first and Adapting-first work reaches its production station-arrival boundary; onward
+  station continuation is not faked by a test-only handoff.
+- Focused regression, complete-suite, warehouse transport/tote-to-bag visual, and reset checks are
+  green.
+
+Expected next branches:
+
+- `feature/dsp-station-processing-boundary` for generic station arrival, claim, processing
+  completion, and disposition contracts;
+- a separately planned station route-continuation branch for same-tote onward transport;
+- a deferred operational EMPTY end-to-end proof after both boundaries are merged;
+- full-day execution and metrics only after that proof, using loaded 12N volumes and the explicitly
+  uncalibrated profile.
 
 ## Current Assumptions
 
