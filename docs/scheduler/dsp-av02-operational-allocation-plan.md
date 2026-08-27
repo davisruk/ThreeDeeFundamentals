@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-av02-operational-allocation`
 
-Status: implementation in progress; Steps 1-12 are complete and Step 13 is next.
+Status: implementation in progress; Steps 1-13 are complete and Step 14 is next.
 
 ## Purpose
 
