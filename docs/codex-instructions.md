@@ -92,7 +92,10 @@ When introducing a type that resembles an existing implementation, name the conc
 
 For non-trivial steps, identify the expected change surface where practical: files to create, files to modify, tests to create or update, and important files that should not be changed. This is especially important when the lower-capability implementation model could otherwise broaden the refactor.
 
-Tests in a decision-complete plan are behavioral specifications, not only class names. For important cases, state the setup/condition, action, and required observable result. Suggested test method names are useful when they make the intended contract unambiguous.
+For each plan step, define a decision-complete test contract. Specify the test classes to create or modify, the behavioural scenarios to cover, the production boundary or entry point each scenario must exercise, and the significant positive, negative, state-transition, sequencing, and no-mutation assertions. Where multiple validation cases are equivalent, explicitly state which representative cases are sufficient; otherwise treat each named case as required. The implementation model must not infer the intended coverage strategy.
+
+Before finalising a step, the planning model must verify that the specified tests would catch an implementation that satisfies the happy path but violates the step's important boundary, sequencing, lifecycle, failure-state, or no-mutation behaviour.
+
 
 The implementation model must follow the plan rather than redesign it. It may resolve mechanical coding details and correct compile/test failures that do not change the specified architecture. If implementation reveals a choice that changes public APIs, ownership, lifecycle, ordering, threading, compatibility strategy, or another architectural contract not resolved by the plan, stop and report the decision instead of choosing one.
 
