@@ -31,12 +31,17 @@ class WarehouseTransportIngressControllerSnapshotTest {
                         Optional.of(destination),
                         Optional.of(toteId),
                         " blocked ",
+                        3,
+                        2,
                         1);
 
         assertEquals(2, snapshot.transportRemainingCapacity());
         assertEquals(2, snapshot.inFlightRemainingCapacity());
         assertTrue(snapshot.blocked());
         assertEquals("blocked", snapshot.blockedReason());
+        assertEquals(3, snapshot.successfulIngressCount());
+        assertEquals(2, snapshot.initialPublicationCount());
+        assertEquals(1, snapshot.exactObjectReentryCount());
     }
 
     @Test
@@ -46,24 +51,28 @@ class WarehouseTransportIngressControllerSnapshotTest {
                 RoutedToteRoutingTestFixtures.destination(StationType.P2P, "p2p");
 
         assertInvalid(-1, 0, 1, 0, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), "", 0);
+                Optional.empty(), Optional.empty(), Optional.empty(), "", 0, 0, 0);
         assertInvalid(1, 2, 1, 0, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), "", 0);
+                Optional.empty(), Optional.empty(), Optional.empty(), "", 0, 0, 0);
         assertInvalid(1, 0, 1, 0, Optional.of(toteId), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), "", 0);
+                Optional.empty(), Optional.empty(), Optional.empty(), "", 0, 0, 0);
         assertInvalid(1, 0, 1, 0, Optional.empty(), Optional.empty(),
-                Optional.of(toteId), Optional.empty(), Optional.empty(), "", 1);
+                Optional.of(toteId), Optional.empty(), Optional.empty(), "", 1, 1, 0);
         assertInvalid(1, 0, 1, 0, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.of(toteId), "", 0);
+                Optional.empty(), Optional.empty(), Optional.of(toteId), "", 0, 0, 0);
         assertInvalid(1, 0, 1, 0, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), "blocked", 0);
+                Optional.empty(), Optional.empty(), Optional.empty(), "blocked", 0, 0, 0);
         assertInvalid(1, 0, 1, 0, Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), "", 1);
+                Optional.empty(), Optional.empty(), Optional.empty(), "", 1, 0, 0);
+        assertInvalid(1, 0, 1, 0, Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(), Optional.empty(), "", 1, 1, 1);
+        assertInvalid(1, 0, 1, 0, Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(), Optional.empty(), "", 1, -1, 2);
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new WarehouseTransportIngressControllerSnapshot(
                         1, 0, 1, 0, null, Optional.of(destination),
-                        Optional.empty(), Optional.empty(), Optional.empty(), "", 0));
+                        Optional.empty(), Optional.empty(), Optional.empty(), "", 0, 0, 0));
     }
 
     private static void assertInvalid(
@@ -77,7 +86,9 @@ class WarehouseTransportIngressControllerSnapshotTest {
             Optional<OperationalRouteDestination> lastDestination,
             Optional<PhysicalToteId> blockedId,
             String blockedReason,
-            long successfulCount) {
+            long successfulCount,
+            long initialPublicationCount,
+            long exactObjectReentryCount) {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new WarehouseTransportIngressControllerSnapshot(
@@ -91,6 +102,8 @@ class WarehouseTransportIngressControllerSnapshotTest {
                         lastDestination,
                         blockedId,
                         blockedReason,
-                        successfulCount));
+                        successfulCount,
+                        initialPublicationCount,
+                        exactObjectReentryCount));
     }
 }

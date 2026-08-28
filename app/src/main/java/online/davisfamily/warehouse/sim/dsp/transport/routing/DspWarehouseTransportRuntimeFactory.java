@@ -54,7 +54,7 @@ public final class DspWarehouseTransportRuntimeFactory {
                 arrivalQueues);
     }
 
-    DspWarehouseTransportRuntime create(
+    public DspWarehouseTransportRuntime create(
             SimulationWorld simulationWorld,
             OsrOutboundRouteLaunchQueue sharedLaunchQueue,
             ToteLoadPlanProvider loadPlanProvider,

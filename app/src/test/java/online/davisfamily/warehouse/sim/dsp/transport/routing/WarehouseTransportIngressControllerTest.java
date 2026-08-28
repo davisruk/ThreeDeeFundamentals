@@ -7,8 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -19,8 +21,10 @@ import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueue;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
+import online.davisfamily.warehouse.sim.tote.Tote;
 
 class WarehouseTransportIngressControllerTest {
 
@@ -64,6 +68,110 @@ class WarehouseTransportIngressControllerTest {
 
         assertTrue(fixture.queue.peek().isEmpty());
         assertSame(head, fixture.inFlight.find(head.physicalToteId()).orElseThrow());
+    }
+
+    @Test
+    void shouldReenterPublishedExactObjectsWithoutRepublishingAndReleaseHeldMotion() {
+        Fixture fixture = fixture(2);
+        RoutedPhysicalTote initial = fixture.routedTote("reentry");
+        fixture.queue.enqueue(initial);
+        TestPublisher publisher = new TestPublisher(null);
+        WarehouseTransportIngressController controller = fixture.controller(publisher);
+
+        controller.update(new SimulationContext(), 0d);
+        fixture.inFlight.completeArrival(initial);
+
+        RoutedPhysicalTote continued = new RoutedPhysicalTote(
+                OperationalRouteLaunchRequestFactory.continueTo(
+                        initial.launchRequest(), fixture.destination),
+                initial.loadPlan(),
+                initial.tote(),
+                initial.renderable());
+        continued.tote().setInteractionMode(Tote.ToteMotionState.HELD);
+        fixture.queue.enqueue(continued);
+
+        controller.update(new SimulationContext(), 0d);
+
+        assertEquals(List.of(initial), publisher.published);
+        assertTrue(fixture.queue.peek().isEmpty());
+        assertSame(continued, fixture.inFlight.find(continued.physicalToteId()).orElseThrow());
+        assertEquals(Tote.ToteMotionState.MOVING, continued.tote().getInteractionMode());
+        assertEquals(2, controller.snapshot().successfulIngressCount());
+        assertEquals(1, controller.snapshot().initialPublicationCount());
+        assertEquals(1, controller.snapshot().exactObjectReentryCount());
+    }
+
+    @Test
+    void shouldBlockConflictingPublishedObjectsWithoutAnyStateMutation() {
+        Fixture fixture = fixture(2);
+        RoutedPhysicalTote initial = fixture.routedTote("conflict");
+        fixture.queue.enqueue(initial);
+        TestPublisher publisher = new TestPublisher(null);
+        WarehouseTransportIngressController controller = fixture.controller(publisher);
+        controller.update(new SimulationContext(), 0d);
+        fixture.inFlight.completeArrival(initial);
+
+        RoutedPhysicalTote conflicting = fixture.routedTote("conflict");
+        conflicting.tote().setInteractionMode(Tote.ToteMotionState.HELD);
+        fixture.queue.enqueue(conflicting);
+        var beforeQueue = fixture.queue.snapshot();
+        var beforeInFlight = fixture.inFlight.snapshot();
+        var beforeIngress = controller.snapshot();
+        var beforeSegment = conflicting.tote().getRouteFollower().getCurrentSegment();
+        var beforeDistance = conflicting.tote().getRouteFollower().getDistanceAlongSegment();
+        var beforeDirection = conflicting.tote().getRouteFollower().getTravelDirection();
+
+        controller.update(new SimulationContext(), 0d);
+
+        assertEquals(beforeQueue, fixture.queue.snapshot());
+        assertEquals(beforeInFlight, fixture.inFlight.snapshot());
+        assertEquals(beforeIngress.successfulIngressCount(),
+                controller.snapshot().successfulIngressCount());
+        assertEquals(beforeIngress.initialPublicationCount(),
+                controller.snapshot().initialPublicationCount());
+        assertEquals(beforeIngress.exactObjectReentryCount(),
+                controller.snapshot().exactObjectReentryCount());
+        assertSame(beforeSegment, conflicting.tote().getRouteFollower().getCurrentSegment());
+        assertEquals(beforeDistance, conflicting.tote().getRouteFollower().getDistanceAlongSegment());
+        assertEquals(beforeDirection, conflicting.tote().getRouteFollower().getTravelDirection());
+        assertEquals(Tote.ToteMotionState.HELD, conflicting.tote().getInteractionMode());
+        assertEquals(1, publisher.published.size());
+        assertTrue(controller.snapshot().blockedReason().contains("conflicting"));
+    }
+
+    @Test
+    void shouldRetainHeldExactReentryWhenInFlightCapacityIsFull() {
+        Fixture fixture = fixture(1);
+        RoutedPhysicalTote initial = fixture.routedTote("held-reentry");
+        fixture.queue.enqueue(initial);
+        TestPublisher publisher = new TestPublisher(null);
+        WarehouseTransportIngressController controller = fixture.controller(publisher);
+        controller.update(new SimulationContext(), 0d);
+        fixture.inFlight.completeArrival(initial);
+
+        RoutedPhysicalTote occupying = fixture.routedTote("occupying");
+        fixture.queue.enqueue(occupying);
+        controller.update(new SimulationContext(), 0d);
+        RoutedPhysicalTote continued = new RoutedPhysicalTote(
+                OperationalRouteLaunchRequestFactory.continueTo(
+                        initial.launchRequest(), fixture.destination),
+                initial.loadPlan(),
+                initial.tote(),
+                initial.renderable());
+        continued.tote().setInteractionMode(Tote.ToteMotionState.HELD);
+        fixture.queue.enqueue(continued);
+        var beforeInFlight = fixture.inFlight.snapshot();
+        var beforeQueue = fixture.queue.snapshot();
+
+        controller.update(new SimulationContext(), 0d);
+
+        assertEquals(beforeInFlight, fixture.inFlight.snapshot());
+        assertEquals(beforeQueue, fixture.queue.snapshot());
+        assertEquals(Tote.ToteMotionState.HELD, continued.tote().getInteractionMode());
+        assertTrue(controller.snapshot().blockedReason().contains("capacity"));
+        assertEquals(2, controller.snapshot().successfulIngressCount());
+        assertEquals(2, controller.snapshot().initialPublicationCount());
+        assertEquals(0, controller.snapshot().exactObjectReentryCount());
     }
 
     @Test
@@ -128,11 +236,14 @@ class WarehouseTransportIngressControllerTest {
         RoutedPhysicalTote published = publishedFixture.routedTote("published");
         publishedFixture.queue.enqueue(published);
         TestPublisher alreadyPublished = new TestPublisher(null);
-        alreadyPublished.publishedIds.add(published.physicalToteId());
+        alreadyPublished.markPublished(published);
         WarehouseTransportIngressController publishedController =
                 publishedFixture.controller(alreadyPublished);
         publishedController.update(new SimulationContext(), 0.1d);
-        assertTrue(publishedController.snapshot().blockedReason().contains("already published"));
+        assertTrue(publishedFixture.queue.peek().isEmpty());
+        assertSame(published,
+                publishedFixture.inFlight.find(published.physicalToteId()).orElseThrow());
+        assertEquals(1, publishedController.snapshot().exactObjectReentryCount());
     }
 
     @Test
@@ -266,6 +377,7 @@ class WarehouseTransportIngressControllerTest {
 
     private static final class TestPublisher implements WarehouseTransportPublisher {
         private final Set<PhysicalToteId> publishedIds = new HashSet<>();
+        private final Map<PhysicalToteId, RoutedPhysicalTote> publishedById = new HashMap<>();
         private final List<RoutedPhysicalTote> published = new ArrayList<>();
         private final java.util.function.Consumer<RoutedPhysicalTote> onPublish;
 
@@ -279,6 +391,23 @@ class WarehouseTransportIngressControllerTest {
         }
 
         @Override
+        public WarehouseTransportPublicationState publicationState(RoutedPhysicalTote routedTote) {
+            RoutedPhysicalTote publishedTote = publishedById.get(routedTote.physicalToteId());
+            if (publishedTote == null) {
+                return WarehouseTransportPublicationState.UNPUBLISHED;
+            }
+            return publishedTote.tote() == routedTote.tote()
+                    && publishedTote.renderable() == routedTote.renderable()
+                    ? WarehouseTransportPublicationState.PUBLISHED_EXACT_OBJECTS
+                    : WarehouseTransportPublicationState.PHYSICAL_ID_CONFLICT;
+        }
+
+        private void markPublished(RoutedPhysicalTote routedTote) {
+            publishedIds.add(routedTote.physicalToteId());
+            publishedById.put(routedTote.physicalToteId(), routedTote);
+        }
+
+        @Override
         public void publish(RoutedPhysicalTote routedTote) {
             if (onPublish != null) {
                 onPublish.accept(routedTote);
@@ -286,6 +415,7 @@ class WarehouseTransportIngressControllerTest {
             if (!publishedIds.add(routedTote.physicalToteId())) {
                 throw new IllegalArgumentException("duplicate publication");
             }
+            publishedById.put(routedTote.physicalToteId(), routedTote);
             published.add(routedTote);
         }
     }

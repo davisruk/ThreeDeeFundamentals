@@ -6,6 +6,8 @@ import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 public interface WarehouseTransportPublisher {
     boolean contains(PhysicalToteId physicalToteId);
 
+    WarehouseTransportPublicationState publicationState(RoutedPhysicalTote routedTote);
+
     /**
      * Publishes the exact routed tote as one acceptance operation. Implementations must
      * complete expected validation before mutating simulation or render collections.

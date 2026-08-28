@@ -1,8 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.transport.routing;
 
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
@@ -13,7 +13,8 @@ public final class SimulationWorldWarehouseTransportPublisher
         implements WarehouseTransportPublisher {
     private final SimulationWorld simulationWorld;
     private final List<RenderableObject> renderables;
-    private final Set<PhysicalToteId> publishedPhysicalToteIds = new LinkedHashSet<>();
+    private final Map<PhysicalToteId, PublishedObjects> publishedPhysicalTotes =
+            new LinkedHashMap<>();
 
     public SimulationWorldWarehouseTransportPublisher(
             SimulationWorld simulationWorld,
@@ -36,7 +37,23 @@ public final class SimulationWorldWarehouseTransportPublisher
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");
         }
-        return publishedPhysicalToteIds.contains(physicalToteId);
+        return publishedPhysicalTotes.containsKey(physicalToteId);
+    }
+
+    @Override
+    public WarehouseTransportPublicationState publicationState(
+            RoutedPhysicalTote routedTote) {
+        if (routedTote == null) {
+            throw new IllegalArgumentException("routedTote must not be null");
+        }
+        PublishedObjects published = publishedPhysicalTotes.get(routedTote.physicalToteId());
+        if (published == null) {
+            return WarehouseTransportPublicationState.UNPUBLISHED;
+        }
+        return published.tote == routedTote.tote()
+                && published.renderable == routedTote.renderable()
+                ? WarehouseTransportPublicationState.PUBLISHED_EXACT_OBJECTS
+                : WarehouseTransportPublicationState.PHYSICAL_ID_CONFLICT;
     }
 
     @Override
@@ -52,7 +69,7 @@ public final class SimulationWorldWarehouseTransportPublisher
                     "Routed tote publication identity is inconsistent: "
                             + physicalToteId.value());
         }
-        if (publishedPhysicalToteIds.contains(physicalToteId)) {
+        if (publishedPhysicalTotes.containsKey(physicalToteId)) {
             throw new IllegalArgumentException(
                     "Physical tote is already published: " + physicalToteId.value());
         }
@@ -72,6 +89,13 @@ public final class SimulationWorldWarehouseTransportPublisher
 
         simulationWorld.addTrackableObject(routedTote.tote());
         renderables.add(routedTote.renderable());
-        publishedPhysicalToteIds.add(physicalToteId);
+        publishedPhysicalTotes.put(
+                physicalToteId,
+                new PublishedObjects(routedTote.tote(), routedTote.renderable()));
+    }
+
+    private record PublishedObjects(
+            online.davisfamily.warehouse.sim.tote.Tote tote,
+            RenderableObject renderable) {
     }
 }

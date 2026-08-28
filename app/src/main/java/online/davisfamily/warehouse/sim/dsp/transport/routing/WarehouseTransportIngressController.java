@@ -10,6 +10,7 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteD
 import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueue;
 import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueueSnapshot;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
+import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 
 public final class WarehouseTransportIngressController implements SimulationController {
     private final OsrOutboundTransportQueue transportQueue;
@@ -21,6 +22,8 @@ public final class WarehouseTransportIngressController implements SimulationCont
     private Optional<PhysicalToteId> blockedPhysicalToteId = Optional.empty();
     private String blockedReason = "";
     private long successfulIngressCount;
+    private long initialPublicationCount;
+    private long exactObjectReentryCount;
 
     public WarehouseTransportIngressController(
             OsrOutboundTransportQueue transportQueue,
@@ -77,8 +80,9 @@ public final class WarehouseTransportIngressController implements SimulationCont
             recordBlock(head, bindingFailure);
             return;
         }
-        if (publisher.contains(head.physicalToteId())) {
-            recordBlock(head, "Physical tote is already published in warehouse transport");
+        WarehouseTransportPublicationState publicationState = publisher.publicationState(head);
+        if (publicationState == WarehouseTransportPublicationState.PHYSICAL_ID_CONFLICT) {
+            recordBlock(head, "Physical tote publication has conflicting physical objects");
             return;
         }
         if (inFlightRegistry.contains(head.physicalToteId())) {
@@ -90,7 +94,9 @@ public final class WarehouseTransportIngressController implements SimulationCont
             return;
         }
 
-        publisher.publish(head);
+        if (publicationState == WarehouseTransportPublicationState.UNPUBLISHED) {
+            publisher.publish(head);
+        }
         inFlightRegistry.register(head);
         RoutedPhysicalTote dequeued = transportQueue.dequeue().orElseThrow(() ->
                 new IllegalStateException(
@@ -98,6 +104,13 @@ public final class WarehouseTransportIngressController implements SimulationCont
         if (dequeued != head) {
             throw new IllegalStateException(
                     "Outbound transport queue dequeued a different tote after publication");
+        }
+
+        if (publicationState == WarehouseTransportPublicationState.PUBLISHED_EXACT_OBJECTS) {
+            head.tote().setInteractionMode(ToteMotionState.MOVING);
+            exactObjectReentryCount++;
+        } else {
+            initialPublicationCount++;
         }
 
         successfulIngressCount++;
@@ -128,7 +141,9 @@ public final class WarehouseTransportIngressController implements SimulationCont
                 lastIngressDestination,
                 blockedPhysicalToteId,
                 blockedReason,
-                successfulIngressCount);
+                successfulIngressCount,
+                initialPublicationCount,
+                exactObjectReentryCount);
     }
 
     private static String routeBindingFailure(

@@ -106,6 +106,8 @@ class DspWarehouseTransportRuntimeFactoryTest {
         publisher.publish(routedTote);
 
         assertTrue(publisher.contains(routedTote.physicalToteId()));
+        assertEquals(WarehouseTransportPublicationState.PUBLISHED_EXACT_OBJECTS,
+                publisher.publicationState(routedTote));
         assertEquals(List.of(routedTote.renderable()), renderables);
         assertThrows(IllegalArgumentException.class, () -> publisher.publish(routedTote));
 
@@ -115,6 +117,15 @@ class DspWarehouseTransportRuntimeFactoryTest {
         renderables.add(RoutedToteRoutingTestFixtures.renderable("tote-2"));
         assertThrows(IllegalArgumentException.class, () -> publisher.publish(conflicting));
         assertFalse(publisher.contains(conflicting.physicalToteId()));
+        assertEquals(WarehouseTransportPublicationState.UNPUBLISHED,
+                publisher.publicationState(conflicting));
+
+        RoutedPhysicalTote sameIdDifferentObjects =
+                RoutedToteRoutingTestFixtures.routedTote("tote-1", destination);
+        assertEquals(WarehouseTransportPublicationState.PHYSICAL_ID_CONFLICT,
+                publisher.publicationState(sameIdDifferentObjects));
+        assertThrows(IllegalArgumentException.class,
+                () -> publisher.publicationState(null));
     }
 
     @Test

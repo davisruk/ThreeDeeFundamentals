@@ -16,7 +16,9 @@ public record WarehouseTransportIngressControllerSnapshot(
         Optional<OperationalRouteDestination> lastIngressDestination,
         Optional<PhysicalToteId> blockedPhysicalToteId,
         String blockedReason,
-        long successfulIngressCount) {
+        long successfulIngressCount,
+        long initialPublicationCount,
+        long exactObjectReentryCount) {
 
     public WarehouseTransportIngressControllerSnapshot {
         requireOccupancy("transport", transportCapacity, transportOccupancy);
@@ -43,6 +45,16 @@ public record WarehouseTransportIngressControllerSnapshot(
         if (successfulIngressCount < 0) {
             throw new IllegalArgumentException("successfulIngressCount must be >= 0");
         }
+        if (initialPublicationCount < 0) {
+            throw new IllegalArgumentException("initialPublicationCount must be >= 0");
+        }
+        if (exactObjectReentryCount < 0) {
+            throw new IllegalArgumentException("exactObjectReentryCount must be >= 0");
+        }
+        if (initialPublicationCount + exactObjectReentryCount != successfulIngressCount) {
+            throw new IllegalArgumentException(
+                    "initial publication and exact-object re-entry counts must sum to ingress count");
+        }
         if ((successfulIngressCount == 0) != lastIngressPhysicalToteId.isEmpty()) {
             throw new IllegalArgumentException(
                     "last ingress identity must be present exactly when ingress count is positive");
@@ -59,6 +71,35 @@ public record WarehouseTransportIngressControllerSnapshot(
 
     public boolean blocked() {
         return blockedPhysicalToteId.isPresent();
+    }
+
+    /** Compatibility constructor for snapshots captured before publication-state counters. */
+    public WarehouseTransportIngressControllerSnapshot(
+            int transportCapacity,
+            int transportOccupancy,
+            int inFlightCapacity,
+            int inFlightOccupancy,
+            Optional<PhysicalToteId> headPhysicalToteId,
+            Optional<OperationalRouteDestination> headDestination,
+            Optional<PhysicalToteId> lastIngressPhysicalToteId,
+            Optional<OperationalRouteDestination> lastIngressDestination,
+            Optional<PhysicalToteId> blockedPhysicalToteId,
+            String blockedReason,
+            long successfulIngressCount) {
+        this(
+                transportCapacity,
+                transportOccupancy,
+                inFlightCapacity,
+                inFlightOccupancy,
+                headPhysicalToteId,
+                headDestination,
+                lastIngressPhysicalToteId,
+                lastIngressDestination,
+                blockedPhysicalToteId,
+                blockedReason,
+                successfulIngressCount,
+                successfulIngressCount,
+                0);
     }
 
     private static void requireOccupancy(String owner, int capacity, int occupancy) {

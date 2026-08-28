@@ -17,18 +17,21 @@ import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
 import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
+import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteEntryQueue;
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetDefinition;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueue;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
@@ -37,6 +40,114 @@ import online.davisfamily.warehouse.sim.transfer.TransferRoutingDecision;
 import online.davisfamily.warehouse.sim.transfer.TransferZoneMachine;
 
 class DspWarehouseTransportRoutingScenarioTest {
+
+    @Test
+    void shouldReenterExactPublishedObjectsThroughASecondTransportArrivalLeg() {
+        WarehouseTransferRoutingTableTest.Topology topology =
+                WarehouseTransferRoutingTableTest.topology();
+        OperationalRouteDestination destination = topology.p2p();
+        WarehouseRouteDefinition definition = topology.catalog().find(destination).orElseThrow();
+        OsrOutboundTransportQueue transportQueue = new OsrOutboundTransportQueue("reentry", 2);
+        WarehouseTransportInFlightRegistry inFlight = new WarehouseTransportInFlightRegistry(1);
+        StationRoutedToteArrivalQueue arrivalQueue =
+                new StationRoutedToteArrivalQueue(destination, 2);
+        StationRoutedToteArrivalRegistry arrivals =
+                new StationRoutedToteArrivalRegistry(List.of(arrivalQueue));
+        SimulationContext context = new SimulationContext();
+        List<RenderableObject> renderables = new ArrayList<>();
+        List<RoutedPhysicalTote> published = new ArrayList<>();
+        Map<String, RoutedPhysicalTote> publishedById = new LinkedHashMap<>();
+        WarehouseTransportPublisher publisher = new WarehouseTransportPublisher() {
+            @Override
+            public boolean contains(online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId id) {
+                return publishedById.containsKey(id.value());
+            }
+
+            @Override
+            public WarehouseTransportPublicationState publicationState(RoutedPhysicalTote tote) {
+                RoutedPhysicalTote existing = publishedById.get(tote.physicalToteId().value());
+                if (existing == null) {
+                    return WarehouseTransportPublicationState.UNPUBLISHED;
+                }
+                return existing.tote() == tote.tote()
+                        && existing.renderable() == tote.renderable()
+                        ? WarehouseTransportPublicationState.PUBLISHED_EXACT_OBJECTS
+                        : WarehouseTransportPublicationState.PHYSICAL_ID_CONFLICT;
+            }
+
+            @Override
+            public void publish(RoutedPhysicalTote tote) {
+                if (publishedById.containsKey(tote.physicalToteId().value())) {
+                    throw new IllegalArgumentException("duplicate publication");
+                }
+                publishedById.put(tote.physicalToteId().value(), tote);
+                published.add(tote);
+                renderables.add(tote.renderable());
+                context.addTrackedObject(tote.tote());
+            }
+        };
+        WarehouseTransportIngressController ingress = new WarehouseTransportIngressController(
+                transportQueue, topology.catalog(), inFlight, publisher);
+        WarehouseTransportArrivalController arrival = new WarehouseTransportArrivalController(
+                topology.catalog(), inFlight, arrivals);
+        RoutedPhysicalTote initial = source("reentry", destination);
+        initial.tote().getRouteFollower().setCurrentSegment(definition.entrySegment());
+        initial.tote().getRouteFollower().setDistanceAlongSegment(definition.entryDistance());
+        initial.tote().getRouteFollower().setTravelDirection(definition.entryDirection());
+        transportQueue.enqueue(initial);
+
+        ingress.update(context, 0d);
+        assertEquals(1, published.size());
+        assertEquals(1, inFlight.snapshot().occupancy());
+
+        initial.tote().getRouteFollower().setCurrentSegment(definition.terminalSegment());
+        arrival.handleDetection(new DetectionEvent(
+                "terminal",
+                0d,
+                definition.terminalArrivalSensorId(),
+                initial.physicalToteId().value(),
+                DetectionType.ENTER),
+                context);
+        arrival.update(context, 0d);
+        assertSame(initial, arrivalQueue.dequeue().orElseThrow());
+        assertEquals(0, inFlight.snapshot().occupancy());
+
+        RoutedPhysicalTote continued = new RoutedPhysicalTote(
+                OperationalRouteLaunchRequestFactory.continueTo(
+                        initial.launchRequest(), destination),
+                initial.loadPlan(),
+                initial.tote(),
+                initial.renderable());
+        continued.tote().setInteractionMode(ToteMotionState.HELD);
+        continued.tote().getRouteFollower().setCurrentSegment(definition.entrySegment());
+        continued.tote().getRouteFollower().setDistanceAlongSegment(definition.entryDistance());
+        continued.tote().getRouteFollower().setTravelDirection(definition.entryDirection());
+        transportQueue.enqueue(continued);
+
+        ingress.update(context, 0d);
+        assertEquals(1, published.size());
+        assertSame(continued, inFlight.find(continued.physicalToteId()).orElseThrow());
+        assertEquals(ToteMotionState.MOVING, continued.tote().getInteractionMode());
+        assertEquals(1, renderables.size());
+        assertEquals(1, context.getTrackedObjects().size());
+        assertEquals(1, ingress.snapshot().initialPublicationCount());
+        assertEquals(1, ingress.snapshot().exactObjectReentryCount());
+
+        continued.tote().getRouteFollower().setCurrentSegment(definition.terminalSegment());
+        arrival.handleDetection(new DetectionEvent(
+                "terminal",
+                0d,
+                definition.terminalArrivalSensorId(),
+                continued.physicalToteId().value(),
+                DetectionType.ENTER),
+                context);
+        arrival.update(context, 0d);
+
+        assertSame(continued, arrivalQueue.peek().orElseThrow());
+        assertEquals(0, inFlight.snapshot().occupancy());
+        assertEquals(WarehouseTransportPublicationState.PUBLISHED_EXACT_OBJECTS,
+                publisher.publicationState(continued));
+    }
 
     @Test
     void shouldRouteMixedDestinationsFromOneLaunchFifoToExactArrivalQueues() {
@@ -296,6 +407,7 @@ class DspWarehouseTransportRoutingScenarioTest {
         private final List<RoutedPhysicalTote> sources;
         private final List<RoutedPhysicalTote> published = new ArrayList<>();
         private final Set<String> publishedIds = new LinkedHashSet<>();
+        private final Map<String, RoutedPhysicalTote> publishedById = new LinkedHashMap<>();
         private final Map<String, DestinationAwareTransferTargetDecisionStrategy> strategies =
                 new LinkedHashMap<>();
         private final Map<String, StationRoutedToteArrivalQueue> arrivalQueues =
@@ -327,10 +439,23 @@ class DspWarehouseTransportRoutingScenarioTest {
                 }
 
                 @Override
+                public WarehouseTransportPublicationState publicationState(RoutedPhysicalTote tote) {
+                    RoutedPhysicalTote publishedTote = publishedById.get(tote.physicalToteId().value());
+                    if (publishedTote == null) {
+                        return WarehouseTransportPublicationState.UNPUBLISHED;
+                    }
+                    return publishedTote.tote() == tote.tote()
+                            && publishedTote.renderable() == tote.renderable()
+                            ? WarehouseTransportPublicationState.PUBLISHED_EXACT_OBJECTS
+                            : WarehouseTransportPublicationState.PHYSICAL_ID_CONFLICT;
+                }
+
+                @Override
                 public void publish(RoutedPhysicalTote tote) {
                     if (!publishedIds.add(tote.physicalToteId().value())) {
                         throw new IllegalArgumentException("duplicate publication");
                     }
+                    publishedById.put(tote.physicalToteId().value(), tote);
                     published.add(tote);
                     context.addTrackedObject(tote.tote());
                 }
