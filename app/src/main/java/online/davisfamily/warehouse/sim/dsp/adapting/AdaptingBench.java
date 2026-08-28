@@ -103,6 +103,15 @@ public class AdaptingBench {
         return Optional.of(completion);
     }
 
+    /**
+     * Returns the staged completion without consuming it or changing bench state.
+     */
+    public Optional<AdaptingBenchCompletion> peekCompletion() {
+        return state == AdaptingBenchState.COMPLETED
+                ? Optional.ofNullable(lastCompletion)
+                : Optional.empty();
+    }
+
     public void clearBlocked() {
         if (state != AdaptingBenchState.BLOCKED) {
             throw new IllegalStateException("Bench is not blocked: " + id);

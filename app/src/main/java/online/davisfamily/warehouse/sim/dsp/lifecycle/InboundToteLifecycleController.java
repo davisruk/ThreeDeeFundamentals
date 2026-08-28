@@ -88,6 +88,18 @@ public final class InboundToteLifecycleController {
     public PhysicalToteRecord consumeAtAdapting(
             PhysicalToteId toteId,
             Duration consumptionTime) {
+        validateConsumeAtAdapting(toteId, consumptionTime);
+        InboundToteManifest manifest = requireManifest(toteId);
+        ledger.terminateActiveAssignment(
+                manifest.orderSheetKey(),
+                consumptionTime,
+                PhysicalToteAssignmentEndReason.CONSUMED_AT_ADAPTING);
+        return ledger.transitionTote(toteId, PhysicalToteLifecycleState.CONSUMED_AT_ADAPTING);
+    }
+
+    public void validateConsumeAtAdapting(
+            PhysicalToteId toteId,
+            Duration consumptionTime) {
         InboundToteManifest manifest = requireManifest(toteId);
         requireNonNegative(consumptionTime, "consumptionTime");
         if (manifest.orderType() != OrderType.ADAPTED) {
@@ -101,12 +113,6 @@ public final class InboundToteLifecycleController {
         }
         PhysicalToteAssignment activeAssignment = requireActiveAssignment(manifest, null);
         requireNotBeforeActivation(consumptionTime, activeAssignment);
-
-        ledger.terminateActiveAssignment(
-                manifest.orderSheetKey(),
-                consumptionTime,
-                PhysicalToteAssignmentEndReason.CONSUMED_AT_ADAPTING);
-        return ledger.transitionTote(toteId, PhysicalToteLifecycleState.CONSUMED_AT_ADAPTING);
     }
 
     public PhysicalToteRecord consumeAtP2p(

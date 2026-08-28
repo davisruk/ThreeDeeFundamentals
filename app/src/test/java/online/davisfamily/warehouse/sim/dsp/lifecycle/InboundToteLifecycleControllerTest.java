@@ -73,6 +73,107 @@ class InboundToteLifecycleControllerTest {
     }
 
     @Test
+    void shouldValidateAdaptingConsumptionWithoutMutationBeforeApplyingIt() {
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        InboundToteManifest manifest = manifest("tote-validate", sheet("order-validate"),
+                OrderType.ADAPTED, 0);
+        InboundToteLifecycleController controller = controller(ledger, manifest);
+        controller.activate(manifest.physicalToteId(), Duration.ofSeconds(2));
+        PhysicalToteLifecycleSnapshot before = controller.snapshot();
+
+        controller.validateConsumeAtAdapting(
+                manifest.physicalToteId(), Duration.ofSeconds(3));
+
+        assertEquals(before, controller.snapshot());
+        assertEquals(PhysicalToteLifecycleState.INBOUND_PACK_TOTE,
+                controller.snapshot().totes().get(manifest.physicalToteId()).state());
+
+        PhysicalToteRecord consumed = controller.consumeAtAdapting(
+                manifest.physicalToteId(), Duration.ofSeconds(3));
+        assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_ADAPTING, consumed.state());
+        assertEquals(PhysicalToteAssignmentEndReason.CONSUMED_AT_ADAPTING,
+                controller.snapshot().assignmentHistoryFor(manifest.orderSheetKey())
+                        .getFirst().endReason().orElseThrow());
+    }
+
+    @Test
+    void shouldRejectDistinctInvalidAdaptingConsumptionStatesWithoutMutation() {
+        InboundToteManifest unknownManifest = manifest(
+                "tote-known", sheet("order-known"), OrderType.ADAPTED, 0);
+        InboundToteLifecycleController unknownController = controller(
+                new PhysicalToteLifecycleLedger(), unknownManifest);
+        PhysicalToteLifecycleSnapshot unknownBefore = unknownController.snapshot();
+        assertThrows(IllegalArgumentException.class,
+                () -> unknownController.validateConsumeAtAdapting(
+                        new PhysicalToteId("unknown"), Duration.ZERO));
+        assertEquals(unknownBefore, unknownController.snapshot());
+
+        InboundToteManifest fullPack = manifest(
+                "tote-full", sheet("order-full"), OrderType.FULL_PACK, 0);
+        InboundToteLifecycleController wrongTypeController = controller(
+                new PhysicalToteLifecycleLedger(), fullPack);
+        wrongTypeController.activate(fullPack.physicalToteId(), Duration.ZERO);
+        PhysicalToteLifecycleSnapshot wrongTypeBefore = wrongTypeController.snapshot();
+        assertThrows(IllegalStateException.class,
+                () -> wrongTypeController.validateConsumeAtAdapting(
+                        fullPack.physicalToteId(), Duration.ofSeconds(1)));
+        assertEquals(wrongTypeBefore, wrongTypeController.snapshot());
+
+        InboundToteManifest missingAssignment = manifest(
+                "tote-missing-assignment", sheet("order-missing-assignment"),
+                OrderType.ADAPTED, 0);
+        InboundToteLifecycleController missingAssignmentController = controller(
+                new PhysicalToteLifecycleLedger(), missingAssignment);
+        PhysicalToteLifecycleSnapshot missingBefore = missingAssignmentController.snapshot();
+        assertThrows(IllegalStateException.class,
+                () -> missingAssignmentController.validateConsumeAtAdapting(
+                        missingAssignment.physicalToteId(), Duration.ZERO));
+        assertEquals(missingBefore, missingAssignmentController.snapshot());
+
+        InboundToteManifest beforeActivation = manifest(
+                "tote-before", sheet("order-before"), OrderType.ADAPTED, 0);
+        InboundToteLifecycleController beforeController = controller(
+                new PhysicalToteLifecycleLedger(), beforeActivation);
+        beforeController.activate(beforeActivation.physicalToteId(), Duration.ofSeconds(5));
+        PhysicalToteLifecycleSnapshot beforeTimeSnapshot = beforeController.snapshot();
+        assertThrows(IllegalArgumentException.class,
+                () -> beforeController.validateConsumeAtAdapting(
+                        beforeActivation.physicalToteId(), Duration.ofSeconds(4)));
+        assertEquals(beforeTimeSnapshot, beforeController.snapshot());
+
+        InboundToteManifest repeated = manifest(
+                "tote-repeated", sheet("order-repeated"), OrderType.ADAPTED, 0);
+        InboundToteLifecycleController repeatedController = controller(
+                new PhysicalToteLifecycleLedger(), repeated);
+        repeatedController.activate(repeated.physicalToteId(), Duration.ZERO);
+        repeatedController.consumeAtAdapting(repeated.physicalToteId(), Duration.ofSeconds(1));
+        PhysicalToteLifecycleSnapshot repeatedSnapshot = repeatedController.snapshot();
+        assertThrows(IllegalStateException.class,
+                () -> repeatedController.validateConsumeAtAdapting(
+                        repeated.physicalToteId(), Duration.ofSeconds(2)));
+        assertEquals(repeatedSnapshot, repeatedController.snapshot());
+    }
+
+    @Test
+    void shouldShareNullAndNegativeTimeValidationBetweenAdaptingEntryPoints() {
+        InboundToteManifest manifest = manifest(
+                "tote-arguments", sheet("order-arguments"), OrderType.ADAPTED, 0);
+        InboundToteLifecycleController controller = controller(
+                new PhysicalToteLifecycleLedger(), manifest);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> controller.validateConsumeAtAdapting(manifest.physicalToteId(), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> controller.consumeAtAdapting(manifest.physicalToteId(), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> controller.validateConsumeAtAdapting(
+                        manifest.physicalToteId(), Duration.ofSeconds(-1)));
+        assertThrows(IllegalArgumentException.class,
+                () -> controller.consumeAtAdapting(
+                        manifest.physicalToteId(), Duration.ofSeconds(-1)));
+    }
+
+    @Test
     void shouldConsumeAssociatedAndFullPackTotesAtP2p() {
         PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
         InboundToteManifest associated = manifest(

@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.adapting;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -15,6 +16,82 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 class AdaptingAreaAdmissionTest {
+
+    @Test
+    void shouldSubmitDirectAndQueuedVisitsToTheExactSelectedBench() {
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingArea area = new AdaptingArea(List.of(
+                new AdaptingBench("bench-1", sharedStore, 5d),
+                new AdaptingBench("bench-2", sharedStore, 5d)), 1, storageMap());
+        AdaptingBenchId selectedBench = new AdaptingBenchId("bench-2");
+        AdaptingVisit first = storeVisit("exact-first", "line-first", "target-first");
+        AdaptingVisit second = storeVisit("exact-second", "line-second", "target-second");
+
+        AdaptingBenchSelection direct = area.submitVisitTo(selectedBench, first);
+        assertTrue(direct.accepted());
+        assertEquals(selectedBench, direct.benchId());
+        assertEquals("exact-first", area.bench(selectedBench).snapshot().activeToteId());
+        assertEquals(AdaptingBenchState.IDLE,
+                area.bench(new AdaptingBenchId("bench-1")).state());
+
+        area.bench(selectedBench).startProcessing();
+        AdaptingBenchSelection queued = area.submitVisitTo(selectedBench, second);
+        assertTrue(queued.accepted());
+        assertEquals(selectedBench, queued.benchId());
+        assertEquals(List.of("exact-second"),
+                area.admissionSnapshotFor(first.profile()).benchAdmissions().stream()
+                        .filter(admission -> admission.benchId().equals(selectedBench))
+                        .findFirst().orElseThrow().queueSnapshot().toteIds());
+        assertEquals("exact-first", area.bench(selectedBench).snapshot().activeToteId());
+    }
+
+    @Test
+    void shouldBlockExactBenchWithoutRedirectingToAnotherAvailableBench() {
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingBench bench1 = new AdaptingBench("bench-1", sharedStore, 5d);
+        AdaptingBench bench2 = new AdaptingBench("bench-2", sharedStore, 5d);
+        AdaptingArea area = new AdaptingArea(List.of(bench1, bench2), 1, storageMap());
+        AdaptingBenchId selectedBench = new AdaptingBenchId("bench-1");
+
+        area.submitVisitTo(selectedBench, storeVisit("full-active", "line-active", "target-active"));
+        bench1.startProcessing();
+        area.submitVisitTo(selectedBench, storeVisit("full-queued", "line-queued", "target-queued"));
+
+        var before = area.admissionSnapshotFor(
+                storeVisit("exact-blocked", "line-blocked", "target-blocked").profile());
+        AdaptingVisit blockedVisit = storeVisit("exact-blocked", "line-blocked", "target-blocked");
+
+        assertFalse(area.canAcceptVisitAt(selectedBench));
+        AdaptingBenchSelection selection = area.submitVisitTo(selectedBench, blockedVisit);
+
+        assertFalse(selection.accepted());
+        assertTrue(selection.blockedReason().contains("full"));
+        assertEquals(before, area.admissionSnapshotFor(blockedVisit.profile()));
+        assertEquals(AdaptingBenchState.IDLE, bench2.state());
+        assertEquals("full-active", bench1.snapshot().activeToteId());
+    }
+
+    @Test
+    void shouldRejectNullAndUnknownExactBenchBeforeMutation() {
+        AdaptedLineStore sharedStore = new AdaptedLineStore();
+        AdaptingArea area = new AdaptingArea(List.of(
+                new AdaptingBench("bench-1", sharedStore, 1d)), 1, storageMap());
+        AdaptingVisit visit = storeVisit("exact-invalid", "line-invalid", "target-invalid");
+        var before = area.admissionSnapshotFor(visit.profile());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> area.canAcceptVisitAt(null));
+        assertThrows(IllegalArgumentException.class,
+                () -> area.canAcceptVisitAt(new AdaptingBenchId("unknown")));
+        assertThrows(IllegalArgumentException.class,
+                () -> area.submitVisitTo(new AdaptingBenchId("unknown"), visit));
+        assertThrows(IllegalArgumentException.class,
+                () -> area.submitVisitTo(new AdaptingBenchId("bench-1"), null));
+
+        assertEquals(before, area.admissionSnapshotFor(visit.profile()));
+        assertEquals(AdaptingBenchState.IDLE,
+                area.bench(new AdaptingBenchId("bench-1")).state());
+    }
 
     @Test
     void shouldSelectLowestBenchIdWhenMultipleBenchesCanAccept() {

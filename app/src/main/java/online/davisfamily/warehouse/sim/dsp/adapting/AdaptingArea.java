@@ -105,14 +105,40 @@ public class AdaptingArea {
             return selection;
         }
 
-        BenchSlot slot = slot(selection.benchId());
+        return submitVisitTo(selection.benchId(), visit);
+    }
+
+    /**
+     * Returns whether the supplied, already-selected bench can accept one visit either directly
+     * or into its bounded local FIFO.
+     */
+    public boolean canAcceptVisitAt(AdaptingBenchId benchId) {
+        return slot(benchId).canAcceptVisit();
+    }
+
+    /**
+     * Submits a visit only to the supplied bench. This method deliberately does not perform the
+     * area's pharmacy-affinity selection and therefore cannot redirect an arrived tote.
+     */
+    public AdaptingBenchSelection submitVisitTo(
+            AdaptingBenchId benchId,
+            AdaptingVisit visit) {
+        BenchSlot slot = slot(benchId);
+        if (visit == null) {
+            throw new IllegalArgumentException("visit must not be null");
+        }
+        if (!slot.canAcceptVisit()) {
+            return AdaptingBenchSelection.blocked(
+                    "Bench queue and processing slot are full");
+        }
+
         if (slot.bench.canAcceptVisit() && slot.pendingVisits.isEmpty()) {
             slot.bench.acceptVisit(visit);
         } else {
             slot.queue.enqueue(visit.physicalToteId().value());
             slot.pendingVisits.addLast(visit);
         }
-        return selection;
+        return AdaptingBenchSelection.accepted(slot.benchId);
     }
 
     public boolean dispatchNextQueuedVisit(AdaptingBenchId benchId) {
