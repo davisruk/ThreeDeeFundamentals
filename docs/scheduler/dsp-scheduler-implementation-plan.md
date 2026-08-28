@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, and deadline-aware elastic line allocation are complete, verified, and merged. AV02 operational allocation is complete and verified, pending merge to `master`. Generic station processing is complete and verified on `feature/dsp-station-processing-boundary`, pending merge to `master`; station route continuation must follow before the deferred operational EMPTY end-to-end proof and full-day execution.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, and deadline-aware elastic line allocation are complete, verified, and merged. AV02 operational allocation and generic station processing are complete, verified, and merged to `master`. Generic station route continuation is complete and verified on `feature/dsp-station-route-continuation`, pending merge to `master`; the next separately planned branch is the deferred operational EMPTY end-to-end proof, followed by full-day execution and metrics.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -884,7 +884,7 @@ Verified contracts:
 
 ### `feature/dsp-av02-operational-allocation`
 
-Status: complete and verified; pending merge to `master`.
+Status: complete, verified, and merged to `master`.
 
 Detailed implementation doc:
 
@@ -911,17 +911,17 @@ Verified implementation boundary:
 - Focused regression, complete-suite, warehouse transport/tote-to-bag visual, and reset checks are
   green.
 
-Expected next branches:
+Follow-on status:
 
-- `feature/dsp-station-route-continuation` for same-tote continuation, next-destination selection,
-  and source-neutral transport publication from completed dispositions;
-- a deferred operational EMPTY end-to-end proof after both boundaries are merged;
+- `feature/dsp-station-route-continuation` is complete and verified, pending merge to `master`;
+- the deferred operational EMPTY end-to-end proof is the next separately planned branch after the
+  continuation boundary is merged;
 - full-day execution and metrics only after that proof, using loaded 12N volumes and the explicitly
   uncalibrated profile.
 
 ### `feature/dsp-station-processing-boundary`
 
-Status: complete and verified; pending merge to `master`.
+Status: complete, verified, and merged to `master`.
 
 Detailed implementation doc:
 
@@ -951,13 +951,52 @@ Verified implementation boundary:
 - No route continuation, next-destination selection, transport republishing, Exception behavior,
   mutable reset, or outbound dispatch was added.
 
-Expected next branches:
+Follow-on status:
 
-- `feature/dsp-station-route-continuation` for same-tote continuation and source-neutral transport
-  publication;
-- deferred operational EMPTY end-to-end proof after processing and continuation are complete;
+- `feature/dsp-station-route-continuation` is complete and verified, pending merge to `master`;
+- the deferred operational EMPTY end-to-end proof is the next separately planned branch after
+  processing and continuation are complete;
 - full-day execution and metrics only after that proof, using loaded 12N volumes and the explicitly
   uncalibrated profile.
+
+### `feature/dsp-station-route-continuation`
+
+Status: complete and verified; pending merge to `master`.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-station-route-continuation-plan.md`
+
+Purpose:
+
+- Complete generic same-tote handoff after Third Party and Adapting station processing.
+- Terminally present and acknowledge `CONSUME` dispositions while routing supported `CONTINUE`
+  dispositions through the existing source-neutral warehouse transport path.
+- Preserve the exact source-neutral release request, current replacement load plan, physical tote,
+  renderable, route follower, and pinned P2P assignment across every continued leg.
+
+Verified implementation boundary:
+
+- One simulation-thread-owned coordinator drains the global disposition FIFO without overtaking;
+  exact downstream transport acceptance unlocks a `CONTINUE`, while `CONSUME` remains terminal and
+  unclaimable after presentation.
+- Pure route order selects only supported next destinations: Third Party to Adapting or P2P, and
+  Adapting `COLLECT` to P2P. Adapting `STORE` and P2P consume inbound totes.
+- Adapting uses the live area policy for exact bench selection; P2P uses only the committed exact
+  assignment. Each continuation publishes a new immutable envelope around the same physical objects
+  and re-enters through the existing common warehouse entry, ingress, in-flight, transfer, terminal
+  sensor, and station-arrival boundaries.
+- Initial publication occurs once; exact-object re-entry does not append duplicate world/renderable
+  objects, and conflicting same-id physical objects fail without mutation. Scheduler worker state,
+  P2P leases, lifecycle mutation, station domain ownership, and outbound allocation remain outside
+  the continuation controller.
+
+Explicit deferrals and follow-on:
+
+- The deferred operational EMPTY end-to-end proof is the next separately planned branch.
+- Full-day execution and metrics follow that proof.
+- Station-to-station visual topology, outbound dispatch/32R, Exception handling, and MANUAL/
+  MANUAL_MERGE handling remain deferred.
 
 ## Current Assumptions
 

@@ -1,9 +1,10 @@
 # Phase 1 Station Roadmap
 
 Status: active reference. Adapting and Third Party Phase 1 are complete and merged. Generic
-production station processing is complete and verified on `feature/dsp-station-processing-boundary`,
-pending merge to `master`; station route continuation is the next station-architecture work before
-Exception Station Phase 1 resumes.
+production station processing is complete, verified, and merged to `master`. Generic station route
+continuation is complete and verified on `feature/dsp-station-route-continuation`, pending merge to
+`master`; the deferred operational EMPTY end-to-end proof is next before Exception Station Phase 1
+resumes.
 
 ## Summary
 
@@ -11,11 +12,11 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
-The generic transfer-machine work, Adapting Station Phase 1, Third Party Area Phase 1, and simulation
-reset are complete and merged. Their debug rigs prove local processing and continuation, while
-production operational routing now ends at the generic station-processing disposition boundary.
-Station route continuation remains a separate next branch. Exception Station Phase 1 remains later
-work.
+The generic transfer-machine work, Adapting Station Phase 1, Third Party Area Phase 1, simulation
+reset, generic station processing, and generic station route continuation are complete and verified
+within their documented boundaries. Production operational routing now supports the implemented
+same-tote continuation boundary; the deferred operational EMPTY end-to-end proof remains the next
+separately planned branch. Exception Station Phase 1 remains later work.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -143,8 +144,9 @@ Implemented notes:
 
 ### Runtime Interlude: Production Station Processing And Continuation
 
-Status: processing boundary complete and verified on `feature/dsp-station-processing-boundary`,
-pending merge to `master`; route continuation is separately planned next.
+Status: processing and continuation boundaries are complete and verified. Processing is merged to
+`master`; continuation is complete on `feature/dsp-station-route-continuation` and pending merge to
+`master`.
 
 Purpose:
 
@@ -169,12 +171,23 @@ Implemented notes:
   after their lifecycle contracts succeed.
 - P2P claim ownership begins at tipper-input acceptance and completes at actual tipper completion;
   consumed inbound totes are held/hidden and remain separate from outbound tote allocation.
-- Route continuation, next-destination selection, continued transport publication, and outbound
-  dispatch are not part of this boundary.
+- The continuation coordinator drains one global disposition FIFO without overtaking. `CONSUME` is
+  presented and acknowledged terminally; `CONTINUE` remains locked until exact downstream transport
+  acceptance and then re-enters through the existing common warehouse entry, ingress, in-flight,
+  transfer, terminal-sensor, and station-arrival path.
+- Supported route order is Third Party to Adapting/P2P and Adapting `COLLECT` to P2P. Adapting
+  `STORE` and P2P consume; Adapting target selection uses the live area policy and P2P uses the
+  committed exact assignment. Every continued leg preserves the source-neutral release request,
+  current replacement load plan, physical tote, renderable, route follower, and pinned assignment.
+- Initial publication occurs once; exact-object re-entry does not duplicate world/renderable objects,
+  while conflicting same-id physical objects fail without mutation. Scheduler worker state, P2P
+  leases, lifecycle mutation, station domain ownership, and outbound allocation remain unchanged.
 
-Next branch:
+Next separately planned branch:
 
-- `feature/dsp-station-route-continuation` for same-tote onward transport and disposition handling.
+- Deferred operational EMPTY end-to-end proof after the continuation boundary is merged.
+- Full-day execution and metrics follow that proof. Station-to-station visual topology, outbound
+  dispatch/32R, Exception handling, and MANUAL/MANUAL_MERGE handling remain deferred.
 
 ### 3. Exception Station Phase 1
 

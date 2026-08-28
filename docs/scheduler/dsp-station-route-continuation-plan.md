@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-station-route-continuation`
 
-Status: decision-complete plan; implementation not started.
+Status: complete and verified; pending merge to `master`.
 
 ## Purpose
 
@@ -1054,7 +1054,11 @@ stop and report the inconsistency.
 
 Proposed commit message: `Complete station route continuation`
 
-## Expected Final Contract
+## Final Implemented Contract
+
+Steps 1-6 are implemented. Step 7 focused regression and complete-suite verification were completed
+by the user, and the end-of-feature architecture review reported `PASS` for every review item with no
+`FAIL` or `UNPROVEN` findings.
 
 - A station owns a physical tote until it publishes one exact disposition.
 - `CONSUME` is presented terminally, acknowledged once in FIFO order, and can never be reclaimed.
@@ -1074,3 +1078,12 @@ Proposed commit message: `Complete station route continuation`
   continuation state.
 - P2P consumes inbound totes, and independent outbound tote allocation/dispatch remains a separate
   physical journey and later feature.
+
+## Post-feature Direction
+
+- The next separately planned branch is the deferred operational EMPTY end-to-end proof using the
+  completed AV02 allocation and station route-continuation boundaries.
+- Full-day execution and metrics follow that proof, using loaded 12N volumes and the explicitly
+  uncalibrated profile.
+- Station-to-station visual topology, outbound dispatch/32R, Exception handling, and MANUAL/
+  MANUAL_MERGE handling remain explicit deferrals.

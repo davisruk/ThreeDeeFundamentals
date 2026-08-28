@@ -83,7 +83,7 @@ Important constraint:
 
 ## Scheduler Direction
 
-The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation is complete and verified on `feature/dsp-av02-operational-allocation`, pending merge to `master`. The generic station processing boundary is complete and verified on `feature/dsp-station-processing-boundary`, pending merge to `master`; separately planned station route continuation is next before the deferred operational EMPTY end-to-end proof and full-day execution.
+The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation and the generic station processing boundary are complete, verified, and merged to `master`. Generic station route continuation is complete and verified on `feature/dsp-station-route-continuation`, pending merge to `master`; the next separately planned branch is the deferred operational EMPTY end-to-end proof, followed by full-day execution and metrics.
 
 Read:
 
@@ -97,9 +97,10 @@ Read:
 8. `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`
 9. `docs/scheduler/dsp-av02-operational-allocation-plan.md`
 10. `docs/scheduler/dsp-station-processing-boundary-plan.md`
-11. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-12. `docs/machines/exceptions-station-requirements.md`
-13. `docs/machines/phase-1-stations-roadmap.md`
+11. `docs/scheduler/dsp-station-route-continuation-plan.md`
+12. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+13. `docs/machines/exceptions-station-requirements.md`
+14. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
@@ -166,9 +167,17 @@ Current scheduler decisions:
   COLLECT preserves the exact replacement load plan, while Adapting STORE and P2P terminate the
   inbound lifecycle only after their lifecycle contracts succeed.
 - P2P claims begin at tipper-input acceptance and complete only at actual tipper completion.
-  Consumed inbound totes are held/hidden and remain separate from outbound allocation. Route
-  continuation, next-destination selection, continued transport publication, and outbound dispatch
-  remain a separately planned follow-on feature.
+  Consumed inbound totes are held/hidden and remain separate from outbound allocation.
+- Generic station route continuation drains one global disposition FIFO: terminal `CONSUME` is
+  presented and acknowledged once; `CONTINUE` selects a pure next station and exact target, preserves
+  the source-neutral release request/current plan/tote/renderable/follower, and re-enters through the
+  shared common-entry transport path without duplicate publication.
+- Continuation supports Third Party to Adapting/P2P and Adapting `COLLECT` to P2P; Adapting `STORE`
+  and P2P consume. Scheduler worker state, P2P leases, lifecycle mutation, and outbound allocation
+  remain outside this boundary.
+- The deferred operational EMPTY end-to-end proof is next; full-day execution and metrics follow it.
+  Station-to-station visual topology, outbound dispatch/32R, Exception handling, and MANUAL/
+  MANUAL_MERGE handling remain deferred.
 - Machine wait queues now separate scheduler release admission from machine processing admission in the integrated debug P2P path:
   - release admission means there is station input waiting space
   - machine processing admission remains local to the downstream machine
@@ -218,11 +227,11 @@ The agreed next programme is split into short-lived branches from `master`:
 13. P2P-local arrival consumption;
 14. sticky P2P service-centre leases (complete, verified, and merged);
 15. deadline-aware elastic line allocation (complete, verified, and merged);
-16. AV02 operational allocation (complete and verified; pending merge to `master`);
-17. generic station processing boundary (complete and verified; pending merge to `master`);
-18. station route continuation (next separately planned branch);
-19. deferred operational EMPTY end-to-end proof after route continuation;
-20. full-day analysis, metrics, and inspection.
+16. AV02 operational allocation (complete, verified, and merged to `master`);
+17. generic station processing boundary (complete, verified, and merged to `master`);
+18. station route continuation (complete and verified; pending merge to `master`);
+19. deferred operational EMPTY end-to-end proof (next separately planned branch);
+20. full-day analysis, metrics, and inspection after that proof.
 
 Each branch must have its own decision-complete, step-based plan before implementation. Implementation plans are intended to be executable by a lower-capability coding model with minimal architectural inference. When multi-agent execution is available, a higher-capability parent owns and accepts each complete plan step while delegating bounded implementation and focused verification to lower-capability subagents. `docs/codex-instructions.md` defines the planning, delegation, corrective-cycle, review, and verification contracts. Exception Station Phase 1 should resume after the bag/provenance and outbound-tote foundation is in place, because short picks, NS bags, and exception correction must operate on the correct physical lifecycle.
 
@@ -243,10 +252,10 @@ Current programme position:
 - P2P-local arrival consumption: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-arrival-consumer-plan.md`;
 - sticky service-centre leases: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-p2p-sticky-line-leases-plan.md`;
 - deadline-aware elastic line allocation: complete, verified, and merged, with detailed plan at `docs/scheduler/dsp-deadline-aware-elastic-line-allocation-plan.md`;
-- AV02 operational allocation: complete and verified, pending merge to `master`, with detailed plan at `docs/scheduler/dsp-av02-operational-allocation-plan.md`;
-- station processing boundary: complete and verified, pending merge to `master`, with detailed plan at `docs/scheduler/dsp-station-processing-boundary-plan.md`;
-- station route continuation: next separately planned branch, `feature/dsp-station-route-continuation`;
-- operational EMPTY end-to-end proof: deferred until route continuation is complete;
+- AV02 operational allocation: complete, verified, and merged to `master`, with detailed plan at `docs/scheduler/dsp-av02-operational-allocation-plan.md`;
+- station processing boundary: complete, verified, and merged to `master`, with detailed plan at `docs/scheduler/dsp-station-processing-boundary-plan.md`;
+- station route continuation: complete and verified on `feature/dsp-station-route-continuation`, pending merge to `master`, with detailed plan at `docs/scheduler/dsp-station-route-continuation-plan.md`;
+- operational EMPTY end-to-end proof: next separately planned branch after the continuation boundary is merged;
 - full-day execution and metrics: expected only after that proof;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
@@ -301,11 +310,11 @@ Planned Phase 1 order:
 - P2P-local arrival consumption: complete, verified, and merged
 - sticky service-centre leases: complete, verified, and merged
 - deadline-aware elastic line allocation: complete, verified, and merged
-- AV02 operational allocation: complete and verified; pending merge to `master`
-- generic station processing boundary: complete and verified; pending merge to `master`
-- station route continuation: next separately planned branch, `feature/dsp-station-route-continuation`
-- operational EMPTY end-to-end proof: deferred until route continuation is complete
-- full-day execution and metrics: expected after the deferred proof
+- AV02 operational allocation: complete, verified, and merged to `master`
+- generic station processing boundary: complete, verified, and merged to `master`
+- station route continuation: complete and verified on `feature/dsp-station-route-continuation`, pending merge to `master`
+- operational EMPTY end-to-end proof: next separately planned branch after the continuation boundary is merged
+- full-day execution and metrics: expected after that proof
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 

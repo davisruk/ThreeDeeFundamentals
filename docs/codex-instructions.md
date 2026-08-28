@@ -15,8 +15,7 @@ Always read these documents before starting:
 
 1. `docs/codex-context.md`
 2. The completed station-processing boundary plan, `docs/scheduler/dsp-station-processing-boundary-plan.md`
-3. The active route-continuation plan for `feature/dsp-station-route-continuation` (it must be
-   created before implementation)
+3. The completed route-continuation plan for `feature/dsp-station-route-continuation`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 
@@ -187,7 +186,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete, verified, and merged to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Generic station processing is complete, verified, and merged to `master`; `feature/dsp-station-route-continuation` is now the active feature for same-tote continuation before the deferred operational EMPTY end-to-end proof and full-day execution. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete, verified, and merged to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Generic station processing is complete, verified, and merged to `master`; generic station route continuation is complete and verified on `feature/dsp-station-route-continuation`, pending merge to `master`. The next separately planned branch is the deferred operational EMPTY end-to-end proof, followed by full-day execution and metrics. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
 
 Completed bag-planning behavior:
 
@@ -284,11 +283,12 @@ Completed scheduler work:
 - `feature/dsp-osr-outbound-route-launch`
 - `feature/dsp-av02-operational-allocation`
 - `feature/dsp-station-processing-boundary`
+- `feature/dsp-station-route-continuation`
 
-Current active branch:
+Current feature branch:
 
-- `feature/dsp-station-route-continuation`: active; its decision-complete plan must be recorded
-  before implementation
+- `feature/dsp-station-route-continuation`: complete and verified; pending merge to `master`
+- next separately planned branch: deferred operational EMPTY end-to-end proof
 
 Current scheduler decisions:
 
@@ -360,10 +360,11 @@ Known Phase 1 machine/station work:
 - deadline-aware elastic line allocation: complete, verified, and merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
 - AV02 operational allocation: complete, verified, and merged to `master`
 - station processing boundary: complete, verified, and merged to `master`
-- station route continuation: active branch, `feature/dsp-station-route-continuation`; plan required
-  before implementation
-- operational EMPTY end-to-end proof: deferred until route continuation is complete
-- full-day execution and metrics: expected after the deferred proof
+- station route continuation: complete and verified on `feature/dsp-station-route-continuation`,
+  pending merge to `master`
+- operational EMPTY end-to-end proof: next separately planned branch after the continuation boundary
+  is merged
+- full-day execution and metrics: expected after that proof
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine
