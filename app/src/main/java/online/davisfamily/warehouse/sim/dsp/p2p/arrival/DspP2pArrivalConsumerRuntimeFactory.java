@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
 
@@ -16,8 +17,18 @@ public final class DspP2pArrivalConsumerRuntimeFactory {
     public DspP2pArrivalConsumerRuntime create(
             SimulationWorld simulationWorld,
             List<P2pArrivalConsumerBinding> bindings) {
+        return create(simulationWorld, bindings, new StationProcessingCoordinator());
+    }
+
+    public DspP2pArrivalConsumerRuntime create(
+            SimulationWorld simulationWorld,
+            List<P2pArrivalConsumerBinding> bindings,
+            StationProcessingCoordinator coordinator) {
         if (simulationWorld == null) {
             throw new IllegalArgumentException("simulationWorld must not be null");
+        }
+        if (coordinator == null) {
+            throw new IllegalArgumentException("coordinator must not be null");
         }
         List<P2pArrivalConsumerBinding> validatedBindings = validateBindings(bindings);
 
@@ -29,12 +40,13 @@ public final class DspP2pArrivalConsumerRuntimeFactory {
                     binding.admissionPolicy(),
                     binding.routeBinding(),
                     binding.payloadFactory(),
-                    binding.target()));
+                    binding.target(),
+                    coordinator));
             targets.add(binding.target());
         }
 
         controllers.forEach(simulationWorld::addController);
-        return new DspP2pArrivalConsumerRuntime(controllers, targets);
+        return new DspP2pArrivalConsumerRuntime(controllers, targets, coordinator);
     }
 
     private static List<P2pArrivalConsumerBinding> validateBindings(
