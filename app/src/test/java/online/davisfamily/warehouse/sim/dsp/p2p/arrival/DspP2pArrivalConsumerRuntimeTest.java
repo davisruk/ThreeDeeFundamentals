@@ -11,6 +11,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingSnapshot;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 
 class DspP2pArrivalConsumerRuntimeTest {
@@ -36,6 +37,8 @@ class DspP2pArrivalConsumerRuntimeTest {
                 .toList());
         assertThrows(UnsupportedOperationException.class,
                 () -> before.add(before.get(0)));
+        StationProcessingSnapshot coordinatorBefore = runtime.coordinatorSnapshot();
+        assertTrue(coordinatorBefore.activeClaims().isEmpty());
 
         RoutedPhysicalTote routedTote = P2pArrivalRuntimeTestFixtures.routedTote(
                 "tote-1", first.binding().destination(), first.terminal());
@@ -55,6 +58,12 @@ class DspP2pArrivalConsumerRuntimeTest {
         assertEquals(List.of("p2p-1", "p2p-2"), runtime.targetSnapshots().stream()
                 .map(snapshot -> snapshot.destination().targetId())
                 .toList());
+        StationProcessingSnapshot coordinatorAfter = runtime.coordinatorSnapshot();
+        assertEquals(1, coordinatorAfter.activeClaims().size());
+        assertEquals("tote-1", coordinatorAfter.activeClaims().getFirst().physicalToteId().value());
+        assertTrue(coordinatorBefore.activeClaims().isEmpty());
+        assertThrows(UnsupportedOperationException.class,
+                () -> coordinatorAfter.activeClaims().clear());
 
         assertFalse(runtime.isClosed());
         runtime.close();
