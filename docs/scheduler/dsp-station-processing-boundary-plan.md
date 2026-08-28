@@ -622,6 +622,103 @@ return motion are not part of this target.
   repeated completion fail before lifecycle/disposition mutation.
 - Existing STORE and COLLECT flow tests retain their domain behavior.
 
+### Decision-complete test contract
+
+The required Step 4 test classes are `AdaptingAreaAdmissionTest`,
+`AdaptingStationProcessingTargetTest`, `AdaptingStationProcessingControllerTest`,
+`AdaptingStoreFlowTest`, `AdaptingCollectFlowTest`, and
+`InboundToteLifecycleControllerTest`. Use private fixtures inside the two new adapter tests; do not
+add a production fixture or bypass `AdaptingArea`, `AdaptingAreaController`, or
+`InboundToteLifecycleController` with a test-only state machine.
+
+`AdaptingAreaAdmissionTest` exercises `canAcceptVisitAt(...)`, `submitVisitTo(...)`, and the
+unchanged `submitVisit(...)` entry point:
+
+- prove direct installation on an idle explicitly selected bench and FIFO installation on that
+  same selected bench while it is busy; assert the returned bench id, active visit, queued physical
+  ids, and queue order;
+- fill one selected bench's processing slot and FIFO while leaving another bench idle, then assert
+  `canAcceptVisitAt(...)` is false and `submitVisitTo(...)` returns blocked without changing either
+  bench, either queue, or the visit; this is the required proof that exact-target submission never
+  falls back to area-wide selection;
+- retain one existing area-wide `submitVisit(...)` selection case proving it may still choose the
+  other available bench;
+- reject null and unknown bench ids before changing bench, queue, or storage snapshots.
+
+Bench capacity and queueing are visit-type-neutral. A STORE visit is representative for the
+COLLECT form in the exact-bench API tests; separate STORE and COLLECT behavior remains required at
+the target/controller boundaries below.
+
+`AdaptingStationProcessingTargetTest` exercises the production target both directly through
+`evaluate(...)`/`accept(...)` and, for FIFO ownership, through a real
+`StationArrivalClaimController.update(...)` bound to a real `StationRoutedToteArrivalQueue`:
+
+- accept one OSR ADAPTED STORE visit, one OSR ASSOCIATED COLLECT visit, and one AV02 EMPTY COLLECT
+  visit at their exact destination bench; assert the same routed object is claimed at the rounded
+  time, an immediately installed `QUEUED` visit starts processing, and an area-FIFO visit remains
+  queued until dispatch;
+- close only the selected bench while another bench is available, enqueue two arrivals, and prove
+  the exact head remains in the station FIFO with the claimant's blocked id/reason set and no visit,
+  claim, dequeue, route-follower, motion, renderable, load-plan, storage, readiness, or lifecycle
+  mutation;
+- evaluate a permitted tote, then make its plan stale and, separately, close selected-bench
+  capacity before `accept(...)`; both acceptance-time revalidation cases must fail before visit
+  submission or claim mutation;
+- reject wrong destination, unknown sheet, order-type mismatch, service-centre mismatch, absent
+  station visit, missing current plan, changed plan instance, and duplicate physical claim. For
+  each case assert identical pre/post area admission/bench/queue snapshots, coordinator snapshot,
+  registry entries, storage/readiness state, and station FIFO ownership where a FIFO is used.
+
+ASSOCIATED and EMPTY use the same COLLECT target mechanics after `AdaptingVisitFactory` has derived
+the visit, but both positive cases are required because they prove distinct OSR and AV02 physical
+source identities. Wrong physical source/order-role combinations are already rejected by
+`OperationalPhysicalToteIdentity`; one representative constructor-level assertion is sufficient
+and the target test must not fabricate an invalid identity.
+
+`AdaptingStationProcessingControllerTest` exercises only
+`AdaptingStationProcessingController.update(...)` with real benches and the real area controller:
+
+- complete ASSOCIATED COLLECT with an existing plan and EMPTY COLLECT with an initially empty plan;
+  assert each completion consumes the exact staged records once, installs one exact replacement
+  plan instance, publishes one `CONTINUE`, retains source/routed identity, and dispatches/starts the
+  next visit for that same bench only after completion application;
+- complete ADAPTED STORE from an active manifested lifecycle; assert prepared readiness is
+  published, the exact assignment terminates at the rounded absolute time, lifecycle reaches
+  `CONSUMED_AT_ADAPTING`, the retained current plan is used, and one `CONSUME` is published;
+- complete two benches in reverse claim order and with reverse insertion order, then assert sorted
+  bench-id completion order and at most one disposition per controller update; add two queued visits
+  on one bench and assert their selected-bench FIFO order survives successive completion/dispatch
+  cycles;
+- reject completion identity mismatches for physical id, sheet, service centre, and STORE/COLLECT
+  type; reject missing/stale COLLECT plan, invalid STORE lifecycle/time, and repeated completion.
+  Assert no new coordinator disposition, lifecycle transition, readiness publication, load-plan
+  replacement, completion consumption, or queued-visit dispatch after the failing prevalidation.
+
+Bench ticking is existing domain-machine behavior and may already stage STORE records or take
+COLLECT records when the bench reaches `COMPLETED`. Failure assertions begin from that completed
+bench snapshot: they require no additional generic-boundary, lifecycle, readiness, plan,
+completion-consumption, or dispatch mutation and do not require rollback of domain work already
+performed by `AdaptingBench.tick(...)`.
+
+`InboundToteLifecycleControllerTest` exercises `validateConsumeAtAdapting(...)` and
+`consumeAtAdapting(...)` directly:
+
+- valid non-mutating validation must leave the complete lifecycle snapshot byte-for-byte/equality
+  unchanged; applying consumption with the same tote/time must then terminate the exact assignment
+  before transitioning the tote;
+- unknown physical id, non-ADAPTED manifest, missing active assignment, completion before activation,
+  and repeated/already-consumed state are distinct validation branches and each is required; every
+  rejection must leave tote records and complete assignment history unchanged;
+- null tote/time and negative time are ordinary argument validation. One null-input case
+  and one invalid-time case are representative, provided both validation and mutation entry points
+  are shown to share the same validation path.
+
+`AdaptingStoreFlowTest` and `AdaptingCollectFlowTest` remain regression owners for detailed store,
+prepared-record, and pack-plan factory semantics. The new controller test proves generic ownership
+and sequencing and must not duplicate every line-level domain permutation. Existing FULL_PACK
+COLLECT rejection in `AdaptingCollectFlowTest` is representative for the visit-factory contract;
+the target test need only assert that no claim is created for that rejected visit.
+
 ### Expected output
 
 The production Adapting boundary distinguishes same-tote collection from terminal preparation-tote
@@ -649,7 +746,8 @@ Create:
 
 - `p2p.arrival.P2pStationProcessingTarget`;
 - `p2p.arrival.StationProcessingP2pToteCompletedListener`;
-- their focused tests.
+- `p2p.arrival.P2pStationProcessingTargetTest`;
+- `p2p.arrival.StationProcessingP2pToteCompletedListenerTest`.
 
 Modify:
 
@@ -744,6 +842,100 @@ wrong-destination callback fails before lifecycle mutation.
   completion cases publish nothing and preserve claim state as specified above.
 - P2P completion does not create or publish an outbound tote.
 
+### Decision-complete test contract
+
+The required Step 5 test classes are `P2pStationProcessingTargetTest`,
+`StationProcessingP2pToteCompletedListenerTest`, `P2pArrivalConsumerControllerTest`,
+`P2pTipperArrivalTargetTest`, `DspP2pArrivalConsumerScenarioTest`,
+`DspP2pArrivalConsumerRuntimeTest`, `DspP2pArrivalConsumerRuntimeFactoryTest`, and
+`OperationalLifecycleP2pToteCompletedListenerTest`.
+
+`P2pStationProcessingTargetTest` exercises `P2pStationProcessingTarget.evaluate(...)` and
+`accept(...)` with the real `P2pArrivalRouteBinding`, admission request/policy, payload factory,
+`P2pTipperArrivalTarget`, `TipperInputQueue`, and shared coordinator:
+
+- permit an exact terminal-segment arrival, then accept it; assert one payload containing the exact
+  tote/renderable reaches the exact tipper-input queue, the target retains the exact load-plan
+  instance, one active claim is registered after downstream acceptance, and no disposition or
+  direct tipper-flow mutation occurs;
+- deny sticky admission and, separately, fill the exact tipper-input target; assert the returned
+  policy reason or `TIPPER_INPUT_FULL`, no payload creation on policy denial, no target acceptance,
+  and identical coordinator, source tote, route, renderable, plan, and tipper-input snapshots;
+- reject a non-terminal route segment, wrong destination/line assignment, stale or duplicate claim,
+  null policy decision, and null payload result before target/claim mutation;
+- evaluate successfully, then close admission and, separately, fill target capacity before
+  `accept(...)`; acceptance must repeat evaluation and leave the target queue and coordinator
+  unchanged in both cases.
+
+All non-permitted policy reasons share one target branch, so one representative denied policy with
+its exact reason is sufficient. OSR FULL_PACK and ASSOCIATED use the same target admission path;
+one manifested source is representative here. AV02-versus-manifest source resolution is not
+equivalent and is covered at completion below.
+
+`StationProcessingP2pToteCompletedListenerTest` exercises only
+`StationProcessingP2pToteCompletedListener.onToteCompleted(...)` with a recording lifecycle
+delegate for sequencing tests and the real `OperationalLifecycleP2pToteCompletedListener` for
+source integration:
+
+- for one manifested FULL_PACK claim and one departed AV02 EMPTY claim, assert the exact active
+  tote instance is required, absolute time is rounded, the lifecycle delegate runs once before
+  coordinator completion, lifecycle reaches its source-specific terminal P2P state, and one exact
+  `CONSUME` disposition is published with the claim's current plan;
+- make the lifecycle delegate fail after wrapper prevalidation; assert the delegate was called
+  once, the active claim remains the exact same instance, no disposition/completed id is added, and
+  lifecycle state reflects only whatever the delegate itself committed before throwing. The real
+  production delegate is expected to fail before mutation for its documented stale cases;
+- reject wrong tote instance with the same physical id, non-P2P claim destination, completion time
+  before claim, and repeated completion before calling the lifecycle delegate; assert unchanged
+  coordinator and lifecycle snapshots and no outbound allocation/publication;
+- reject a callback with no active claim and prove the delegate was not called. Unknown and
+  pre-claim callbacks are equivalent at this wrapper because both fail the same active-claim lookup;
+  one representative is sufficient. Repeated completion is not equivalent because it must also
+  prove completed-id history prevents a second delegate call/disposition.
+
+The wrapper test needs one manifested order type only because
+`OperationalLifecycleP2pToteCompletedListenerTest` already proves FULL_PACK and ASSOCIATED share
+the manifest delegate. Departed AV02 EMPTY is a separate required positive case. Waiting AV02,
+dual-source, wrong AV02 role/state/sheet, stale assignment, and before-activation cases remain
+required in `OperationalLifecycleP2pToteCompletedListenerTest`; one stale-assignment failure is
+representative at the wrapper for the rule that delegate rejection leaves the station claim active.
+
+`P2pArrivalConsumerControllerTest` exercises both the retained five-argument constructor and the
+new coordinator-aware overload through `update(...)`:
+
+- rerun the existing empty, one-head-per-update, policy deferral, target-capacity retry,
+  terminal-route, exact payload, and snapshot cases through the coordinator-aware path; assert
+  accepted arrivals now create active claims and still preserve every existing diagnostic field and
+  constant;
+- run one successful and one deferred case through the compatibility constructor and assert the
+  same source/target occupancy and block diagnostics; the private coordinator is compatibility
+  state and need not be exposed by this controller;
+- on any rejected/null policy or payload result, assert source FIFO, target queue, tote/renderable,
+  route follower, plan, and supplied coordinator are unchanged.
+
+`DspP2pArrivalConsumerRuntimeFactoryTest` exercises both `create(...)` overloads with a recording
+`SimulationWorld`:
+
+- the coordinator-aware overload must use the exact supplied coordinator for every binding and
+  preserve supplied binding order; the two-argument compatibility overload must create one private
+  coordinator shared by every controller in that returned runtime;
+- zero, one, and multiple bindings must expose matching ordered controller/target snapshots and
+  one shared coordinator snapshot; claiming on two bindings must appear in that snapshot in actual
+  claim order;
+- duplicate source queue, target queue, or target id, null binding, and null supplied coordinator
+  must fail before any controller registration. These uniqueness cases protect different identity
+  domains and are all required; one null list element is representative for collection-element
+  validation.
+
+`DspP2pArrivalConsumerRuntimeTest` proves coordinator snapshots are fresh immutable values, earlier
+snapshots remain unchanged after later claims, close is idempotent, and close neither removes
+registered controllers nor mutates queues/claims. `DspP2pArrivalConsumerScenarioTest` retains its
+real station FIFO -> generic claimant -> exact tipper-input continuity and independent-line retry
+scenarios; add assertions that acceptance creates a claim but no disposition and that blocked
+lines create neither. `P2pTipperArrivalTargetTest` remains the regression owner for exact payload,
+duplicate, conflicting-plan, and full-target mutation behavior; do not duplicate its full matrix
+in the new target test.
+
 ### Expected output
 
 P2P uses the same arrival/claim/disposition vocabulary as other stations without collapsing its
@@ -754,7 +946,7 @@ two-stage tipper admission or long-lived processing path.
 The implementation model runs exactly:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pStationProcessingTargetTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.StationProcessingP2pToteCompletedListenerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalConsumerControllerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerScenarioTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.OperationalLifecycleP2pToteCompletedListenerTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pStationProcessingTargetTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.StationProcessingP2pToteCompletedListenerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalConsumerControllerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pTipperArrivalTargetTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerScenarioTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.OperationalLifecycleP2pToteCompletedListenerTest
 ```
 
 ### User verification
@@ -784,6 +976,58 @@ tote hiders.
 - Repeated updates are idempotent; mixed dispositions are applied in disposition FIFO order.
 - The controller does not alter load-plan registry, lifecycle ledger, provenance, source identity,
   pinned P2P assignment, route follower, or outbound state.
+
+### Decision-complete test contract
+
+`StationConsumedToteControllerTest` is the only new Step 6 test class. Its production entry point
+is `StationConsumedToteController.update(...)` observing real pending dispositions in a
+`StationProcessingCoordinator`; do not invoke a private presentation helper directly and do not
+remove/dequeue dispositions as test setup.
+
+Required scenarios:
+
+1. `shouldApplyConsumePresentationExactlyOnceWithoutTakingDisposition`
+   - create and complete one real claim as `CONSUME`, with lids open, tote moving, and renderable
+     visible before the controller update;
+   - assert the exact tote becomes `HELD`, both lids are closed, the exact renderable becomes
+     invisible, the coordinator snapshot and pending FIFO are unchanged, and
+     `peekDisposition()` still returns the exact same disposition instance;
+   - after the first update, deliberately make that tote visible/moving/open again and update the
+     controller; assert those externally changed values remain, proving the physical id is not
+     processed twice.
+
+2. `shouldLeaveContinuePresentationAndOwnershipUnchanged`
+   - publish a `CONTINUE` disposition for a visible moving/open tote;
+   - assert visibility, lid state, motion, route segment/follower, current plan, arrived
+     destination, source identity, and optional pinned assignment are exact pre-update values, and
+     the disposition remains pending.
+
+3. `shouldProcessNewMixedDispositionsInCoordinatorFifoOrder`
+   - publish a known mixed sequence containing `CONTINUE`, STORE-style `CONSUME`, and P2P-style
+     `CONSUME`, update, then append another `CONSUME` and update again;
+   - assert neither consume is skipped, the continue is untouched, the late disposition is applied,
+     pending FIFO identity/order never changes, and already applied physical ids are not reapplied;
+   - STORE and P2P consume presentations are equivalent at this controller, so distinct source
+     fixtures are required only to prove source-neutral behavior, not separate presentation
+     branches. Because presentation effects are independent and the controller exposes no event
+     history, final state plus unchanged coordinator FIFO is sufficient evidence of FIFO scanning;
+     do not add a production event log solely for this test.
+
+4. `shouldNotMutateLogicalOrDownstreamState`
+   - capture full lifecycle, registry, provenance, and any supplied outbound-allocation snapshots
+     around one consume update;
+   - assert equality and exact plan/source/assignment references afterward. The controller must be
+     constructed only with its station-processing dependency, so these sentinels also prove it has
+     no path to logical or outbound mutation.
+
+5. `shouldRejectInvalidConstructionAndUpdateWithoutPresentationMutation`
+   - reject a null coordinator/dependency, null context, negative `dtSeconds`, and one representative
+     non-finite `dtSeconds` before changing tote, renderable, processed-id, or coordinator state;
+   - NaN and infinities are equivalent non-finite validation cases, so one is sufficient.
+
+The focused Adapting and P2P listener tests in this step are regression witnesses that both real
+producers publish `CONSUME`; they do not need to repeat the presentation matrix owned by
+`StationConsumedToteControllerTest`.
 
 ### Expected output
 
@@ -871,6 +1115,71 @@ source queue.
   consume presentation occur after all claims.
 - Runtime snapshots remain value-only and reset is achieved by creating a fresh runtime.
 
+### Decision-complete test contract
+
+The required Step 7 test classes are `DspStationProcessingRuntimeFactoryTest`,
+`DspStationProcessingRuntimeTest`, and the existing `DspP2pArrivalConsumerRuntimeTest`. Use a
+private `RecordingSimulationWorld` analogous to
+`DspP2pArrivalConsumerRuntimeFactoryTest.RecordingSimulationWorld`, a private recording
+`StationProcessingCompletionController`, and existing package-local station-processing fixtures.
+Do not add controller-list access to `SimulationWorld` or a production test hook.
+
+`DspStationProcessingRuntimeFactoryTest` exercises only
+`DspStationProcessingRuntimeFactory.create(...)`:
+
+- compose an empty binding/controller set and assert exactly one
+  `StationConsumedToteController` is registered;
+- supply an intentionally unsorted mix of Third Party, multiple Adapting benches, and P2P bindings;
+  assert runtime destinations and claimant snapshots are sorted by station-type name then target id,
+  all `StationArrivalClaimController`s are registered first in that order, completion controllers
+  follow in id order, and exactly one consume controller is last;
+- assert every target and completion controller uses the exact supplied coordinator, one Adapting
+  completion controller covers all of its bench destinations only once, and no separately composed
+  P2P compatibility runtime/controller is registered;
+- enqueue two heads on each of two independent destinations and update the recording world once;
+  assert both first heads are claimed before any completion-controller observation, both second
+  heads remain, completion runs only after the claimant registrations, and consume presentation
+  observes only dispositions published earlier in that update.
+
+Every factory rejection below must use a fresh recording world containing a valid first entry and
+the invalid later entry where applicable, then assert zero controllers were registered and all
+queues, targets, coordinator, completion controllers, and station state equal their pre-call
+snapshots:
+
+- null world, coordinator, bindings list, completion-controller list, and one null element in each
+  list;
+- duplicate source queue instance, duplicate target instance, and duplicate destination value;
+- unsupported station type;
+- target using a foreign coordinator and completion controller using a foreign coordinator;
+- duplicate completion-controller id;
+- missing or double coverage of a Third Party/Adapting destination, coverage of a P2P destination,
+  and coverage of a destination absent from bindings.
+
+The three binding uniqueness rules protect different identities and are individually required. A
+shared target necessarily also repeats its destination, so one shared-target-instance case is
+sufficient even if destination validation is the first reported failure; do not require a specific
+exception message or validation order. Source/target destination mismatch and null binding fields
+cannot survive `StationProcessingBinding` construction and remain owned by
+`StationProcessingBindingTest`; the factory test need not fabricate an invalid record. One null
+element per collection is representative for all element positions.
+
+`DspStationProcessingRuntimeTest` exercises the returned runtime's public accessors and `close()`:
+
+- assert ordered destination and claimant-snapshot collections are immutable value copies, the
+  coordinator snapshot contains no live routed/target/controller objects, and an earlier snapshot
+  remains unchanged after later world updates;
+- drive one claim, one completion, and consume presentation through `SimulationWorld.update(...)`
+  and assert fresh snapshots expose the correct source occupancy, active/pending ownership, and
+  deterministic controller sequence without exposing the live coordinator;
+- call `close()` twice and assert `isClosed()` remains true while queues, claims, dispositions,
+  station state, registered-controller behavior, and subsequent simulation updates are unchanged;
+- construct a second fresh runtime and assert it starts with empty ownership/closed state, proving
+  reset by reconstruction rather than mutable reset.
+
+`DspP2pArrivalConsumerRuntimeTest` remains a compatibility regression: its isolated P2P runtime
+still owns its private/supplied coordinator as specified in Step 5, exposes immutable snapshots,
+and closes idempotently. It does not need to repeat mixed generic-runtime registration cases.
+
 ### Expected output
 
 Production scenes can compose all station consumers through one explicit runtime while retaining
@@ -951,6 +1260,93 @@ assert arbitrary update counts and do not use sleeps.
    - deliberately complete mixed station work in a known order;
    - coordinator pending order exactly matches completion order regardless of claim order;
    - dequeue transfers exact disposition ownership once and completed ids cannot be reclaimed.
+
+### Decision-complete test contract
+
+`DspStationProcessingBoundaryScenarioTest` is the only Step 8 test class. Every scenario constructs
+a fresh private fixture and drives the production entry point `SimulationWorld.update(...)` after
+composition through `DspStationProcessingRuntimeFactory`. Arrivals enter only through real
+`StationRoutedToteArrivalQueue.enqueue(...)`; station claims must never be created by calling a
+target or coordinator directly. Domain completion must be driven through the real Third Party area
+controller, Adapting benches/controller, and actual P2P tipper-completion listener. Direct
+coordinator mutation calls are permitted only to dequeue already-published dispositions and for the
+final assertions that completed physical ids cannot be reclaimed or recompleted; they must not
+manufacture scenario progress.
+
+For all five methods, capture a reusable `BoundaryState` value before the action containing every
+station FIFO snapshot, coordinator snapshot, current load-plan identity by physical id, lifecycle
+snapshot, Third Party/Adapting domain snapshots, prepared readiness, tipper-input snapshot, tote
+motion/lids/visibility/route segment, launch/source identity, pinned assignment, and outbound
+allocator/output-sheet/bag state. Each failure assertion names which fields may change; every other
+field must compare equal or retain the exact object reference as appropriate.
+
+Additional required detail for `shouldClaimOnlyAfterExactStationAcceptance`:
+
+- use a full selected Adapting bench while another bench is free to prove selected-target capacity,
+  and a P2P admission denial caused by a mismatched pinned assignment to prove candidate-specific
+  admission; in both cases assert the exact FIFO head and complete `BoundaryState` are unchanged;
+- then open the same selected capacity/assignment and update once; assert the exact routed instance
+  moves from source FIFO to the matching active claim, no other FIFO head moves, and no disposition
+  exists at acceptance time;
+- one wrong destination case through the generic binding is sufficient. Third Party capacity,
+  alternative sticky-policy reasons, and every identity-field mismatch are equivalent integration
+  failures already exhaustively owned by Steps 3–5 and need not be repeated here.
+
+Additional required detail for
+`shouldPreserveReplacementPlanAtThirdPartyAndAdaptingCollectDispositions`:
+
+- use separate physical totes and claims, complete them through real domain timers/controllers at
+  explicit absolute times, and assert the old immutable plan remains unchanged while the registry
+  and disposition share the exact replacement instance;
+- update again after each observable domain completion and assert no second plan replacement,
+  completion application, or disposition;
+- assert both dispositions remain pending/held/visible with their arrived destination and route
+  unchanged; launch queues, warehouse transport, and every station-arrival FIFO must contain no
+  republished copy.
+
+ASSOCIATED and EMPTY COLLECT are both unit-tested in Step 4. The mixed scenario uses AV02 EMPTY
+COLLECT because it additionally proves source-neutral AV02 plan replacement; ASSOCIATED is
+representative-equivalent for generic COLLECT sequencing and need not be duplicated here.
+
+Additional required detail for `shouldConsumeAdaptedStoreWithoutContinuingInboundTote`:
+
+- prove the state sequence active manifested `PRE_P2P` assignment -> completed STORE bench ->
+  prepared readiness plus terminated assignment/`CONSUMED_AT_ADAPTING` -> pending `CONSUME` ->
+  held, closed-lid, invisible presentation;
+- assert the disposition retains the original claim/current plan, remains in the coordinator FIFO,
+  and no P2P source/tipper queue, route-launch/transport boundary, outbound allocator, output sheet,
+  bag receiver, or bag/provenance record gains an entry;
+- repeat world updates after terminal presentation and assert lifecycle, readiness, disposition,
+  and presentation are exactly-once/idempotent.
+
+Additional required detail for `shouldCompleteP2pOnlyAtTipperCompletion`:
+
+- use AV02 EMPTY as the required source-specific case, including a departed AV02 inventory entry and
+  exact active assignment; existing Step 5 tests are representative for manifested P2P lifecycle;
+- assert arrival claim and later tipper-input dispatch do not consume lifecycle or publish a
+  disposition; only the real tipper completion callback may terminate the assignment/lifecycle and
+  publish `CONSUME` at rounded time;
+- before completion, attempt one wrong-tote-instance callback and assert complete `BoundaryState`
+  equality; then complete the exact tote and assert terminal presentation occurs after disposition
+  publication, with no outbound tote/output sheet/bag side effect;
+- a repeated callback/update must leave coordinator completed history, lifecycle, AV02 inventory
+  history, and presentation unchanged.
+
+Additional required detail for `shouldKeepDispositionFifoAcrossStationTypes`:
+
+- claim work in an order deliberately different from completion order, complete at least one
+  `CONTINUE` and two `CONSUME` dispositions from different station families, and assert pending
+  order follows completion publication time exactly;
+- assert consume presentation does not dequeue or reorder the FIFO; dequeue each entry and require
+  the exact original disposition instance and exact replacement/current plan in that order;
+- after dequeue, assert pending ownership is empty while completed count/history remains, then
+  require reclaim/recompletion of each completed physical id to fail without changing coordinator,
+  lifecycle, station, plan, route, or outbound state.
+
+The scenario class owns cross-boundary sequencing and identity continuity, not exhaustive
+constructor validation. Null inputs, every equivalent identity-field mismatch, every policy reason,
+and all source-specific lifecycle divergence cases remain required in their focused Step 4–7 test
+classes and are intentionally not repeated here.
 
 ### Expected output
 
