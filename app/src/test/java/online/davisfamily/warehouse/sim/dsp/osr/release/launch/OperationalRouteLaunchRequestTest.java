@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.osr.release.launch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -96,6 +97,57 @@ class OperationalRouteLaunchRequestTest {
 
         assertSame(releaseRequest, launchRequest.releaseRequest());
         assertSame(assignment, launchRequest.p2pAssignment().orElseThrow());
+    }
+
+    @Test
+    void shouldContinueToNewDestinationWhileRetainingExactReleaseRequestAndAssignment() {
+        OperationalRouteDestination assignedDestination = destination(StationType.P2P, "p2p-1");
+        P2pPhysicalToteAssignment assignment = new P2pPhysicalToteAssignment(
+                av02Identity().physicalToteId(),
+                av02Identity().serviceCentreId(),
+                new P2pLineId("line-1"),
+                assignedDestination);
+        OperationalPhysicalToteReleaseRequest releaseRequest =
+                new OperationalPhysicalToteReleaseRequest(
+                        av02Identity(),
+                        List.of("pharmacy-a"),
+                        Duration.ofSeconds(9),
+                        Optional.of(assignment));
+        OperationalRouteLaunchRequest previous =
+                OperationalRouteLaunchRequestFactory.fromOperational(
+                        releaseRequest,
+                        destination(StationType.ADAPTING, "adapting-1"));
+
+        OperationalRouteDestination next = destination(StationType.P2P, "p2p-1");
+        OperationalRouteLaunchRequest continued =
+                OperationalRouteLaunchRequestFactory.continueTo(previous, next);
+
+        assertNotSame(previous, continued);
+        assertSame(releaseRequest, continued.releaseRequest());
+        assertSame(assignment, continued.p2pAssignment().orElseThrow());
+        assertEquals(next, continued.destination());
+        assertEquals(previous.source(), continued.source());
+        assertEquals(previous.physicalToteId(), continued.physicalToteId());
+        assertEquals(previous.orderSheetKey(), continued.orderSheetKey());
+        assertEquals(previous.orderType(), continued.orderType());
+        assertEquals(previous.serviceCentreId(), continued.serviceCentreId());
+        assertEquals(previous.pharmacyIds(), continued.pharmacyIds());
+        assertEquals(previous.releaseTime(), continued.releaseTime());
+    }
+
+    @Test
+    void shouldRejectNullContinuationInputs() {
+        OperationalRouteDestination destination = destination(StationType.ADAPTING, "adapting-1");
+        OperationalRouteLaunchRequest previous =
+                OperationalRouteLaunchRequestFactory.fromOperational(
+                        new OperationalPhysicalToteReleaseRequest(
+                                av02Identity(), List.of("pharmacy-a"), Duration.ZERO, Optional.empty()),
+                        destination);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> OperationalRouteLaunchRequestFactory.continueTo(null, destination));
+        assertThrows(IllegalArgumentException.class,
+                () -> OperationalRouteLaunchRequestFactory.continueTo(previous, null));
     }
 
     @Test

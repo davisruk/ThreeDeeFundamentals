@@ -53,6 +53,20 @@ public final class OperationalRouteLaunchRequestFactory {
         return new OperationalRouteLaunchRequest(releaseRequest, destination);
     }
 
+    public static OperationalRouteLaunchRequest continueTo(
+            OperationalRouteLaunchRequest previousRequest,
+            OperationalRouteDestination nextDestination) {
+        if (previousRequest == null) {
+            throw new IllegalArgumentException("previousRequest must not be null");
+        }
+        if (nextDestination == null) {
+            throw new IllegalArgumentException("nextDestination must not be null");
+        }
+        return new OperationalRouteLaunchRequest(
+                previousRequest.releaseRequest(),
+                nextDestination);
+    }
+
     private static List<String> distinctPharmacyIds(List<DspOrderItem> items) {
         Set<String> pharmacyIds = new LinkedHashSet<>();
         for (DspOrderItem item : items) {
