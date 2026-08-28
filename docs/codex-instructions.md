@@ -7,12 +7,14 @@ Repository documentation is the persistent source of truth. Do not rely on resum
 
 End-of-feature architecture review is a clean context boundary. When the implementation session has accumulated substantial working context, the user may deliberately compact the session before beginning the architecture review so that the review has sufficient context capacity to inspect the feature diff and relevant production flows without an automatic compaction occurring mid-review. Before such compaction, ensure that all implementation-significant state needed by the review is persisted in the repository, active plan, or other authoritative documentation. The review must reconstruct its evidence from those persistent sources rather than depend on pre-compaction conversational memory.
 
+Documentation closure is also a clean context boundary. When architecture review has consumed substantial working context, the user may deliberately compact the session before documentation closure. Documentation closure must remain reconstructable from the repository, completed feature plan, architecture-review result, and other persistent documentation rather than depend on detailed pre-compaction conversational context.
+
 The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work.
 
 Always read these documents before starting:
 
 1. `docs/codex-context.md`
-2. The active AV02 plan, `docs/scheduler/dsp-av02-operational-allocation-plan.md`
+2. The active station-processing plan, `docs/scheduler/dsp-station-processing-boundary-plan.md`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 
@@ -105,13 +107,16 @@ The implementation model must follow the plan rather than redesign it. It may re
 
 Use these roles distinctly even when the same model performs more than one role at different times:
 
-- **Planning model**: creates or materially revises the complete feature plan before implementation begins. The plan contains the ordered implementation steps, decision-complete design choices, acceptance criteria, implementation verification, and user verification.
+- **Planning model**: creates or materially revises the complete feature plan before implementation begins. The plan contains the ordered implementation steps, decision-complete design choices, acceptance criteria, implementation verification, user verification, an explicit end-of-feature architecture review contract where applicable, and a decision-complete documentation-closure contract.
 - **Implementation agent**: directly executes the user-selected existing plan step. It owns faithful execution of that step, repository-state validation, focused implementation verification, and reporting back for any required user verification.
 - **Step execution owner**: executes exactly the user-selected existing plan step. It owns scope, delegation, repository-state validation, acceptance review, and the decision that implementation is ready for any required user verification. Exists only when the user explicitly requests multi-agent orchestration. The higher-capability parent then owns the complete selected step, delegation, assessment, permitted non-architectural plan refinement, and acceptance of delegated implementation.
 - **Implementation subagent**: Exists only during explicitly requested multi-agent orchestration and performs bounded implementation work delegated by the step execution owner. It does not own feature planning or architecture.
 - **Architecture review model**: performs the end-of-feature architecture-conformance review after implementation and verification are complete. The normal reviewer should be a lower-cost implementation-capable model when the feature plan contains an explicit architecture review contract. Review the actual feature diff against that contract and trace directly relevant existing production code where necessary. For every review item, report PASS, FAIL, or UNPROVEN and identify the concrete classes, methods, or control flow that provide the evidence. Do not infer compliance merely because an expected class or API exists. Report unnecessary production changes and material scope caveats. Escalate unresolved architectural concerns to the user rather than redesigning the feature during review.
+- **Documentation closure model**: performs the bounded end-of-feature documentation reconciliation after user verification and architecture review are green. The normal documentation closure model should be a lower-cost implementation-capable model. It must follow the explicit documentation-closure contract in the feature plan, deriving updates from the verified implementation, the plan's final implemented contract, and existing programme documentation. It must not introduce new architectural decisions, reinterpret the implemented contract, or broaden programme scope. If those sources conflict materially, the required documentation change is not specified by the plan, or closure would require an architectural decision, stop and report the inconsistency rather than resolving it.
 
 A higher-capability planning model is not required for every completed-feature review when the architecture review contract is explicit and the normal architecture review returns no FAIL or UNPROVEN result. Use higher-capability review when requested by the user, when the normal review exposes an unresolved architectural concern, when a scope caveat could affect architectural completeness, or when the feature introduces a materially new architectural mechanism that warrants independent architectural assessment.
+
+The planning model must make documentation closure decision-complete for the lower-cost documentation closure model. The closure contract must identify the documents to update and the specific programme state, feature status, implemented contract, next-work direction, deferrals, reading-order changes, or other established facts that each document must reflect. Do not require the documentation closure model to infer architectural conclusions or programme direction from the implementation. Where a document requires only stale current-position or reading-order text to change, state that boundary explicitly.
 
 The user initiates each implementation step. Do not automatically begin the next plan step. In the normal direct-execution workflow, completion of implementation and focused implementation verification means the step is ready for any required user verification. In explicitly requested multi-agent mode, a subagent reporting completion means only that implementation has returned for parent review; parent acceptance means that implementation is ready for any required user verification. The step is complete only after successful completion of every required user verification, or when the plan explicitly states that no additional user verification is required. Then stop and wait for the user to initiate the next step.
 
@@ -180,7 +185,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete and verified, pending merge to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. After AV02 is merged, generic station processing and route continuation must be implemented before the deferred operational EMPTY end-to-end proof and full-day execution. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete and verified, pending merge to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Generic station processing is complete and verified on `feature/dsp-station-processing-boundary`, pending merge to `master`; separately planned station route continuation must follow before the deferred operational EMPTY end-to-end proof and full-day execution. Exception Station behavior remains deferred under the current all-lines-fulfilled assumption.
 
 Completed bag-planning behavior:
 
@@ -277,7 +282,9 @@ Completed scheduler work:
 
 Current active branch:
 
-- `feature/dsp-av02-operational-allocation`: complete and verified; pending merge to `master`
+- `feature/dsp-station-processing-boundary`: complete and verified; pending merge to `master`
+
+Next planned branch: `feature/dsp-station-route-continuation`
 
 Current scheduler decisions:
 
@@ -348,9 +355,10 @@ Known Phase 1 machine/station work:
 - sticky service-centre leases: complete, verified, and merged
 - deadline-aware elastic line allocation: complete, verified, and merged; preserve exact assignment pinning, immutable snapshots, full quiescence, and close-before-release
 - AV02 operational allocation: complete and verified; pending merge to `master`
-- station processing boundary: next branch after AV02 merge
-- station route continuation and operational EMPTY end-to-end proof: subsequent separately planned work
-- full-day execution and metrics: expected after those station boundaries and the deferred proof
+- station processing boundary: complete and verified; pending merge to `master`
+- station route continuation: next separately planned branch, `feature/dsp-station-route-continuation`
+- operational EMPTY end-to-end proof: deferred until route continuation is complete
+- full-day execution and metrics: expected after the deferred proof
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

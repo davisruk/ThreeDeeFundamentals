@@ -1,7 +1,8 @@
 # Phase 1 Station Roadmap
 
 Status: active reference. Adapting and Third Party Phase 1 are complete and merged. Generic
-production station processing and route continuation are the next station-architecture work before
+production station processing is complete and verified on `feature/dsp-station-processing-boundary`,
+pending merge to `master`; station route continuation is the next station-architecture work before
 Exception Station Phase 1 resumes.
 
 ## Summary
@@ -11,10 +12,10 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
 The generic transfer-machine work, Adapting Station Phase 1, Third Party Area Phase 1, and simulation
-reset are complete and merged. Their debug rigs prove local processing and continuation, but
-production operational routing currently ends at the selected first-station arrival boundary. The
-next branch must introduce a generic station processing boundary, followed by a separate route-
-continuation branch. Exception Station Phase 1 remains later work.
+reset are complete and merged. Their debug rigs prove local processing and continuation, while
+production operational routing now ends at the generic station-processing disposition boundary.
+Station route continuation remains a separate next branch. Exception Station Phase 1 remains later
+work.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -142,7 +143,8 @@ Implemented notes:
 
 ### Runtime Interlude: Production Station Processing And Continuation
 
-Status: next architectural work after AV02 operational allocation is verified and merged.
+Status: processing boundary complete and verified on `feature/dsp-station-processing-boundary`,
+pending merge to `master`; route continuation is separately planned next.
 
 Purpose:
 
@@ -150,15 +152,29 @@ Purpose:
   processing-completion, and disposition boundary.
 - Give Third Party, Adapting, and P2P consumers a common ownership contract without forcing their
   domain processing behavior into one machine implementation.
-- Publish same-tote `CONTINUE` dispositions into source-neutral warehouse transport while
+- Emit same-tote `CONTINUE` dispositions for later source-neutral warehouse transport while
   preserving physical identity, current load plan, renderable ownership, route state, and any
   pinned P2P assignment.
 - Let `CONSUME` terminate an inbound physical journey, including Adapting STORE behavior.
 - Keep a P2P-created outbound tote distinct from inbound continuation; outbound dispatch is a new
   physical journey and is published only when that tote is ready to leave bagging.
 
-Create separate decision-complete plans and branches for the processing boundary and route
-continuation. Do not hide either missing production contract in a test-only handoff.
+Implemented notes:
+
+- The generic boundary claims one exact station-arrival FIFO head only after the matching target
+  accepts it, then records active ownership and one immutable completion disposition through a
+  shared simulation-thread coordinator.
+- Third Party and Adapting retain their real area/bench completion controllers. COLLECT preserves
+  the exact replacement load plan as `CONTINUE`; Adapting STORE and P2P complete as `CONSUME` only
+  after their lifecycle contracts succeed.
+- P2P claim ownership begins at tipper-input acceptance and completes at actual tipper completion;
+  consumed inbound totes are held/hidden and remain separate from outbound tote allocation.
+- Route continuation, next-destination selection, continued transport publication, and outbound
+  dispatch are not part of this boundary.
+
+Next branch:
+
+- `feature/dsp-station-route-continuation` for same-tote onward transport and disposition handling.
 
 ### 3. Exception Station Phase 1
 

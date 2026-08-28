@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, and deadline-aware elastic line allocation are complete, verified, and merged. AV02 operational allocation is complete and verified, pending merge to `master`. Generic station processing and route continuation must follow before the deferred operational EMPTY end-to-end proof and full-day execution.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, and deadline-aware elastic line allocation are complete, verified, and merged. AV02 operational allocation is complete and verified, pending merge to `master`. Generic station processing is complete and verified on `feature/dsp-station-processing-boundary`, pending merge to `master`; station route continuation must follow before the deferred operational EMPTY end-to-end proof and full-day execution.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -913,10 +913,49 @@ Verified implementation boundary:
 
 Expected next branches:
 
-- `feature/dsp-station-processing-boundary` for generic station arrival, claim, processing
-  completion, and disposition contracts;
-- a separately planned station route-continuation branch for same-tote onward transport;
+- `feature/dsp-station-route-continuation` for same-tote continuation, next-destination selection,
+  and source-neutral transport publication from completed dispositions;
 - a deferred operational EMPTY end-to-end proof after both boundaries are merged;
+- full-day execution and metrics only after that proof, using loaded 12N volumes and the explicitly
+  uncalibrated profile.
+
+### `feature/dsp-station-processing-boundary`
+
+Status: complete and verified; pending merge to `master`.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-station-processing-boundary-plan.md`
+
+Purpose:
+
+- Establish one generic station-arrival FIFO, claim, real domain-processing completion, and
+  disposition boundary for Third Party, Adapting, and P2P.
+- Preserve exact physical identity, current load-plan identity, route state, and pinned P2P
+  assignment through station ownership without turning the stations into one generic machine.
+- Terminate Adapting STORE and P2P inbound journeys with `CONSUME`; preserve Third Party and
+  Adapting COLLECT same-tote journeys as `CONTINUE` dispositions for later continuation.
+
+Verified implementation boundary:
+
+- Each claimant evaluates and accepts one exact station-arrival FIFO head before dequeuing that
+  same routed object; deferred heads remain queued and unchanged.
+- One simulation-thread-owned coordinator retains insertion-ordered active claims and FIFO
+  immutable dispositions without entering worker snapshots.
+- Third Party and Adapting use their existing area/bench controllers for timers and domain
+  mutation. COLLECT dispositions retain the exact replacement load-plan instance; STORE and P2P
+  emit `CONSUME` only after their lifecycle contracts succeed.
+- P2P claims begin at tipper-input acceptance and complete only through the actual tipper
+  completion callback. Consumed inbound totes are held/hidden and are not eligible as outbound
+  totes.
+- No route continuation, next-destination selection, transport republishing, Exception behavior,
+  mutable reset, or outbound dispatch was added.
+
+Expected next branches:
+
+- `feature/dsp-station-route-continuation` for same-tote continuation and source-neutral transport
+  publication;
+- deferred operational EMPTY end-to-end proof after processing and continuation are complete;
 - full-day execution and metrics only after that proof, using loaded 12N volumes and the explicitly
   uncalibrated profile.
 

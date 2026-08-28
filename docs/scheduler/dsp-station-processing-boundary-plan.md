@@ -2,7 +2,10 @@
 
 Branch: `feature/dsp-station-processing-boundary`
 
-Status: planned; no implementation has started.
+Status: complete and verified; pending merge to `master`.
+
+Verification: Step 9 focused regression and complete-suite user verification passed; the
+end-of-feature architecture review passed.
 
 ## Purpose
 
@@ -1413,7 +1416,7 @@ Review the actual diff and verify:
 
 ### Documentation closure
 
-After user verification is green:
+After user verification and the end-of-feature architecture review are green, perform documentation closure as a bounded reconciliation task. Do not introduce new architectural decisions, reinterpret the implemented contract, or broaden programme scope. Derive closure updates from the verified implementation, this plan's final contract, and the existing programme documentation. If those sources conflict materially or closure would require an architectural decision, stop and report the inconsistency.
 
 - mark this plan `complete and verified` and record the final implemented contract;
 - update the current-programme entries in `docs/scheduler/dsp-scheduler-implementation-plan.md`;
@@ -1425,7 +1428,7 @@ After user verification is green:
 
 Proposed commit message: `Complete station processing boundary`
 
-## Expected Final Contract
+## Final Implemented Contract
 
 - Warehouse transport owns a routed physical tote until terminal arrival queues it.
 - The station-arrival FIFO owns it until one exact station target accepts a claim.
