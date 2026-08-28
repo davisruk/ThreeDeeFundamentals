@@ -18,6 +18,7 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingAdmissionDecision;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingDispositionType;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
@@ -49,6 +50,42 @@ class P2pStationProcessingTargetTest {
         assertEquals(routed.physicalToteId(),
                 coordinator.snapshot().activeClaims().getFirst().physicalToteId());
         assertTrue(coordinator.snapshot().pendingDispositions().isEmpty());
+    }
+
+    @Test
+    void shouldEvaluateContinuedToteWithoutTimeSentinelAndValidateRealClaimTimeBeforeMutation() {
+        P2pArrivalRuntimeTestFixtures.BindingFixture fixture =
+                P2pArrivalRuntimeTestFixtures.binding("p2p-continued");
+        StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
+        P2pStationProcessingTarget target = target(fixture,
+                new AllowAllP2pArrivalAdmissionPolicy(),
+                fixture.binding().payloadFactory(),
+                coordinator);
+        RoutedPhysicalTote routed = P2pArrivalRuntimeTestFixtures.routedTote(
+                "continued-tote", fixture.binding().destination(), fixture.terminal());
+        coordinator.claim(routed, Duration.ofSeconds(1));
+        var disposition = coordinator.complete(
+                routed.physicalToteId(),
+                StationProcessingDispositionType.CONTINUE,
+                routed.loadPlan(),
+                Duration.ofSeconds(2));
+        coordinator.acknowledgeDisposition(disposition);
+        var coordinatorBefore = coordinator.snapshot();
+        var inputBefore = fixture.inputQueue().snapshot();
+
+        assertTrue(target.evaluate(routed).permitted());
+        assertEquals(coordinatorBefore, coordinator.snapshot());
+        assertEquals(inputBefore, fixture.inputQueue().snapshot());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> target.accept(routed, Duration.ofSeconds(1)));
+        assertEquals(coordinatorBefore, coordinator.snapshot());
+        assertEquals(inputBefore, fixture.inputQueue().snapshot());
+        assertFalse(fixture.target().hasAccepted(routed.physicalToteId()));
+
+        var claim = target.accept(routed, Duration.ofSeconds(3));
+        assertSame(routed, claim.routedTote());
+        assertTrue(fixture.target().hasAccepted(routed.physicalToteId()));
     }
 
     @Test

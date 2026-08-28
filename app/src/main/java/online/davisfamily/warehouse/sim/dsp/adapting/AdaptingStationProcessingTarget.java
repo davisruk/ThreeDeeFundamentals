@@ -88,7 +88,7 @@ public final class AdaptingStationProcessingTarget implements StationProcessingT
     @Override
     public StationProcessingAdmissionDecision evaluate(RoutedPhysicalTote routedTote) {
         validateAndResolveVisit(routedTote);
-        coordinator.validateCanClaim(routedTote, Duration.ZERO);
+        coordinator.validateCanEvaluateClaim(routedTote);
         if (!area.canAcceptVisitAt(benchId)) {
             return StationProcessingAdmissionDecision.defer(
                     "Adapting bench " + benchId.value()

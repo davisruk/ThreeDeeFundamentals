@@ -42,6 +42,10 @@ class StationProcessingSnapshotTest {
         assertEquals(first.physicalToteId(), snapshot.lastCompletedPhysicalToteId().orElseThrow());
         assertEquals(StationProcessingDispositionType.CONTINUE,
                 snapshot.lastCompletedType().orElseThrow());
+        assertEquals(0, snapshot.acknowledgedContinuationCount());
+        assertEquals(0, snapshot.acknowledgedConsumeCount());
+        assertTrue(snapshot.lastAcknowledgedPhysicalToteId().isEmpty());
+        assertTrue(snapshot.lastAcknowledgedType().isEmpty());
 
         assertThrows(UnsupportedOperationException.class,
                 () -> snapshot.activeClaims().clear());
@@ -53,6 +57,12 @@ class StationProcessingSnapshotTest {
         assertTrue(afterDequeue.pendingDispositions().isEmpty());
         assertEquals(1, afterDequeue.completedCount());
         assertEquals(first.physicalToteId(), afterDequeue.lastCompletedPhysicalToteId().orElseThrow());
+        assertEquals(1, afterDequeue.acknowledgedContinuationCount());
+        assertEquals(0, afterDequeue.acknowledgedConsumeCount());
+        assertEquals(first.physicalToteId(),
+                afterDequeue.lastAcknowledgedPhysicalToteId().orElseThrow());
+        assertEquals(StationProcessingDispositionType.CONTINUE,
+                afterDequeue.lastAcknowledgedType().orElseThrow());
     }
 
     @Test

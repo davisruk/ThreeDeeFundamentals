@@ -24,21 +24,51 @@ import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 public final class StationProcessingCoordinator {
     private final Map<PhysicalToteId, StationProcessingClaim> activeClaims = new LinkedHashMap<>();
     private final Deque<StationProcessingDisposition> pendingDispositions = new ArrayDeque<>();
-    private final Set<PhysicalToteId> completedPhysicalToteIds = new LinkedHashSet<>();
+    private final Set<PhysicalToteId> unacknowledgedCompletedPhysicalToteIds =
+            new LinkedHashSet<>();
+    private final Set<PhysicalToteId> terminalConsumedPhysicalToteIds = new LinkedHashSet<>();
+    private final Map<PhysicalToteId, Duration> lastCompletedAtByPhysicalToteId =
+            new LinkedHashMap<>();
+    private long completedCount;
+    private long acknowledgedContinuationCount;
+    private long acknowledgedConsumeCount;
     private Optional<PhysicalToteId> lastCompletedPhysicalToteId = Optional.empty();
     private Optional<StationProcessingDispositionType> lastCompletedType = Optional.empty();
+    private Optional<PhysicalToteId> lastAcknowledgedPhysicalToteId = Optional.empty();
+    private Optional<StationProcessingDispositionType> lastAcknowledgedType = Optional.empty();
+
+    /**
+     * Validates coordinator ownership eligibility for a target evaluation that has no claim time.
+     */
+    public void validateCanEvaluateClaim(RoutedPhysicalTote routedTote) {
+        if (routedTote == null) {
+            throw new IllegalArgumentException("routedTote must not be null");
+        }
+        validateClaimOwnership(routedTote.physicalToteId());
+    }
 
     public void validateCanClaim(
             RoutedPhysicalTote routedTote,
             Duration claimedAt) {
         validateClaimInput(routedTote, claimedAt);
         PhysicalToteId physicalToteId = routedTote.physicalToteId();
+        validateClaimOwnership(physicalToteId);
+        Duration previousCompletedAt = lastCompletedAtByPhysicalToteId.get(physicalToteId);
+        if (previousCompletedAt != null && claimedAt.compareTo(previousCompletedAt) < 0) {
+            throw new IllegalArgumentException(
+                    "claimedAt must not precede the previous station completion time: "
+                            + physicalToteId.value());
+        }
+    }
+
+    private void validateClaimOwnership(PhysicalToteId physicalToteId) {
         if (activeClaims.containsKey(physicalToteId)) {
             throw new IllegalStateException(
                     "Physical tote already has an active station processing claim: "
                             + physicalToteId.value());
         }
-        if (completedPhysicalToteIds.contains(physicalToteId)) {
+        if (unacknowledgedCompletedPhysicalToteIds.contains(physicalToteId)
+                || terminalConsumedPhysicalToteIds.contains(physicalToteId)) {
             throw new IllegalStateException(
                     "Physical tote already has a completed station processing disposition: "
                             + physicalToteId.value());
@@ -98,7 +128,9 @@ public final class StationProcessingCoordinator {
                 currentLoadPlan,
                 completedAt);
         pendingDispositions.addLast(disposition);
-        completedPhysicalToteIds.add(physicalToteId);
+        unacknowledgedCompletedPhysicalToteIds.add(physicalToteId);
+        lastCompletedAtByPhysicalToteId.put(physicalToteId, completedAt);
+        completedCount++;
         lastCompletedPhysicalToteId = Optional.of(physicalToteId);
         lastCompletedType = Optional.of(type);
         return disposition;
@@ -108,8 +140,69 @@ public final class StationProcessingCoordinator {
         return Optional.ofNullable(pendingDispositions.peekFirst());
     }
 
+    /**
+     * Validates that the supplied disposition is the exact current FIFO head and can be
+     * acknowledged. This method does not mutate coordinator state.
+     */
+    public void validateCanAcknowledgeDisposition(
+            StationProcessingDisposition expectedHead) {
+        if (expectedHead == null) {
+            throw new IllegalArgumentException("expectedHead must not be null");
+        }
+        StationProcessingDisposition actualHead = pendingDispositions.peekFirst();
+        if (actualHead == null) {
+            throw new IllegalStateException("There is no pending station processing disposition");
+        }
+        if (actualHead != expectedHead) {
+            throw new IllegalStateException(
+                    "Station processing disposition acknowledgement requires the exact FIFO head");
+        }
+        if (!unacknowledgedCompletedPhysicalToteIds.contains(expectedHead.physicalToteId())) {
+            throw new IllegalStateException(
+                    "Pending station processing disposition has no completion ownership: "
+                            + expectedHead.physicalToteId().value());
+        }
+    }
+
+    /**
+     * Acknowledges one exact pending disposition after its downstream owner has accepted it.
+     * CONTINUE dispositions release their temporary completion lock; CONSUME dispositions become
+     * permanently terminal.
+     */
+    public StationProcessingDisposition acknowledgeDisposition(
+            StationProcessingDisposition expectedHead) {
+        validateCanAcknowledgeDisposition(expectedHead);
+
+        StationProcessingDisposition removed = pendingDispositions.removeFirst();
+        if (removed != expectedHead) {
+            throw new IllegalStateException(
+                    "Station processing disposition ownership changed while acknowledging");
+        }
+
+        PhysicalToteId physicalToteId = expectedHead.physicalToteId();
+        unacknowledgedCompletedPhysicalToteIds.remove(physicalToteId);
+        if (expectedHead.type() == StationProcessingDispositionType.CONSUME) {
+            terminalConsumedPhysicalToteIds.add(physicalToteId);
+            acknowledgedConsumeCount++;
+        } else {
+            acknowledgedContinuationCount++;
+        }
+        lastAcknowledgedPhysicalToteId = Optional.of(physicalToteId);
+        lastAcknowledgedType = Optional.of(expectedHead.type());
+        return removed;
+    }
+
+    /**
+     * Compatibility dequeue for callers that own the downstream acknowledgement boundary.
+     * Production continuation code should call {@link #acknowledgeDisposition} with its captured
+     * exact head.
+     */
+    @Deprecated
     public Optional<StationProcessingDisposition> dequeueDisposition() {
-        return Optional.ofNullable(pendingDispositions.pollFirst());
+        StationProcessingDisposition head = pendingDispositions.peekFirst();
+        return head == null
+                ? Optional.empty()
+                : Optional.of(acknowledgeDisposition(head));
     }
 
     /**
@@ -141,9 +234,13 @@ public final class StationProcessingCoordinator {
         return new StationProcessingSnapshot(
                 active,
                 pending,
-                completedPhysicalToteIds.size(),
+                completedCount,
                 lastCompletedPhysicalToteId,
-                lastCompletedType);
+                lastCompletedType,
+                acknowledgedContinuationCount,
+                acknowledgedConsumeCount,
+                lastAcknowledgedPhysicalToteId,
+                lastAcknowledgedType);
     }
 
     private static void validateClaimInput(

@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.station.processing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,8 +57,24 @@ class StationProcessingCoordinatorTest {
                 List.of(coordinator.dequeueDisposition().orElseThrow(),
                         coordinator.dequeueDisposition().orElseThrow()));
         assertTrue(coordinator.dequeueDisposition().isEmpty());
+
+        RoutedPhysicalToteAtNextStation nextLeg = rerouted(first,
+                new OperationalRouteDestination(StationType.ADAPTING, "bench-next"));
+        StationProcessingClaim nextClaim = assertDoesNotThrow(
+                () -> coordinator.claim(nextLeg.routedTote(), Duration.ofSeconds(5)));
+        assertSame(nextLeg.routedTote(), nextClaim.routedTote());
+        StationProcessingDisposition nextDisposition = coordinator.complete(
+                nextClaim.physicalToteId(),
+                StationProcessingDispositionType.CONTINUE,
+                replacement,
+                Duration.ofSeconds(6));
+        assertSame(nextDisposition, coordinator.acknowledgeDisposition(nextDisposition));
+        assertEquals(3, coordinator.snapshot().completedCount());
+        assertEquals(2, coordinator.snapshot().acknowledgedContinuationCount());
+        assertEquals(1, coordinator.snapshot().acknowledgedConsumeCount());
+
         assertThrows(IllegalStateException.class,
-                () -> coordinator.claim(first, Duration.ofSeconds(5)));
+                () -> coordinator.claim(second, Duration.ofSeconds(5)));
     }
 
     @Test
@@ -113,5 +130,83 @@ class StationProcessingCoordinatorTest {
                         routedTote.loadPlan(),
                         Duration.ofSeconds(1)));
         assertEquals(afterFirstCompletion, coordinator.snapshot());
+    }
+
+    @Test
+    void shouldRejectAcknowledgementUnlessItIsTheExactFifoHead() {
+        StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
+        var first = StationProcessingTestFixtures.routedTote(
+                "tote-ack-first", StationProcessingTestFixtures.destination("third-party-ack-first"));
+        var second = StationProcessingTestFixtures.routedTote(
+                "tote-ack-second", StationProcessingTestFixtures.destination("third-party-ack-second"));
+        coordinator.claim(first, Duration.ZERO);
+        coordinator.claim(second, Duration.ZERO);
+        StationProcessingDisposition firstDisposition = coordinator.complete(
+                first.physicalToteId(),
+                StationProcessingDispositionType.CONTINUE,
+                first.loadPlan(),
+                Duration.ofSeconds(1));
+        StationProcessingDisposition secondDisposition = coordinator.complete(
+                second.physicalToteId(),
+                StationProcessingDispositionType.CONSUME,
+                second.loadPlan(),
+                Duration.ofSeconds(2));
+        StationProcessingSnapshot before = coordinator.snapshot();
+
+        assertThrows(IllegalStateException.class,
+                () -> coordinator.validateCanAcknowledgeDisposition(secondDisposition));
+        assertThrows(IllegalStateException.class,
+                () -> coordinator.acknowledgeDisposition(secondDisposition));
+        assertThrows(IllegalStateException.class,
+                () -> coordinator.acknowledgeDisposition(new StationProcessingDisposition(
+                        firstDisposition.claim(),
+                        firstDisposition.type(),
+                        firstDisposition.currentLoadPlan(),
+                        firstDisposition.completedAt())));
+        assertEquals(before, coordinator.snapshot());
+        assertEquals(List.of(firstDisposition, secondDisposition), coordinator.pendingDispositions());
+
+        assertSame(firstDisposition, coordinator.acknowledgeDisposition(firstDisposition));
+        assertThrows(IllegalStateException.class,
+                () -> coordinator.acknowledgeDisposition(firstDisposition));
+        assertEquals(1, coordinator.snapshot().acknowledgedContinuationCount());
+        assertEquals(0, coordinator.snapshot().acknowledgedConsumeCount());
+    }
+
+    @Test
+    void shouldRejectReclaimBeforePreviousCompletionTimeWithoutMutation() {
+        StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
+        var first = StationProcessingTestFixtures.routedTote(
+                "tote-ack-time", StationProcessingTestFixtures.destination("third-party-ack-time"));
+        coordinator.claim(first, Duration.ofSeconds(1));
+        StationProcessingDisposition disposition = coordinator.complete(
+                first.physicalToteId(),
+                StationProcessingDispositionType.CONTINUE,
+                first.loadPlan(),
+                Duration.ofSeconds(4));
+        coordinator.acknowledgeDisposition(disposition);
+        StationProcessingSnapshot before = coordinator.snapshot();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> coordinator.claim(first, Duration.ofSeconds(3)));
+        assertEquals(before, coordinator.snapshot());
+        assertTrue(coordinator.pendingDispositions().isEmpty());
+    }
+
+    private static RoutedPhysicalToteAtNextStation rerouted(
+            online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote source,
+            OperationalRouteDestination destination) {
+        return new RoutedPhysicalToteAtNextStation(
+                new online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote(
+                        new online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest(
+                                source.launchRequest().releaseRequest(),
+                                destination),
+                        source.loadPlan(),
+                        source.tote(),
+                        source.renderable()));
+    }
+
+    private record RoutedPhysicalToteAtNextStation(
+            online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote routedTote) {
     }
 }

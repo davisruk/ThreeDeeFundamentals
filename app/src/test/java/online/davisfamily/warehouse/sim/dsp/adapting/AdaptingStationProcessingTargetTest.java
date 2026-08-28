@@ -37,6 +37,7 @@ import online.davisfamily.warehouse.sim.dsp.station.processing.StationArrivalCla
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingAdmissionDecision;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingBinding;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingDispositionType;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingOrderCatalog;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
@@ -71,6 +72,35 @@ class AdaptingStationProcessingTargetTest {
         empty.target().accept(empty.routedTote(), Duration.ofSeconds(1));
         assertEquals(AdaptingBenchState.PROCESSING_COLLECT,
                 empty.area().bench(new AdaptingBenchId("empty")).state());
+    }
+
+    @Test
+    void shouldEvaluateContinuedToteWithoutTimeSentinelAndValidateRealClaimTimeBeforeMutation() {
+        Fixture fixture = fixture(order("continued", OrderType.ASSOCIATED),
+                OperationalPhysicalToteSource.OSR, "continued", 2d, true);
+        fixture.coordinator().claim(fixture.routedTote(), Duration.ofSeconds(1));
+        var disposition = fixture.coordinator().complete(
+                fixture.routedTote().physicalToteId(),
+                StationProcessingDispositionType.CONTINUE,
+                fixture.routedTote().loadPlan(),
+                Duration.ofSeconds(2));
+        fixture.coordinator().acknowledgeDisposition(disposition);
+        var coordinatorBefore = fixture.coordinator().snapshot();
+        var areaBefore = fixture.area().stationSnapshot();
+
+        assertTrue(fixture.target().evaluate(fixture.routedTote()).permitted());
+        assertEquals(coordinatorBefore, fixture.coordinator().snapshot());
+        assertEquals(areaBefore, fixture.area().stationSnapshot());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> fixture.target().accept(fixture.routedTote(), Duration.ofSeconds(1)));
+        assertEquals(coordinatorBefore, fixture.coordinator().snapshot());
+        assertEquals(areaBefore, fixture.area().stationSnapshot());
+
+        var claim = fixture.target().accept(fixture.routedTote(), Duration.ofSeconds(3));
+        assertSame(fixture.routedTote(), claim.routedTote());
+        assertEquals(AdaptingBenchState.PROCESSING_COLLECT,
+                fixture.area().bench(new AdaptingBenchId("continued")).state());
     }
 
     @Test

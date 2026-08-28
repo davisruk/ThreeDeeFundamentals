@@ -15,7 +15,11 @@ public record StationProcessingSnapshot(
         List<PendingDisposition> pendingDispositions,
         long completedCount,
         Optional<PhysicalToteId> lastCompletedPhysicalToteId,
-        Optional<StationProcessingDispositionType> lastCompletedType) {
+        Optional<StationProcessingDispositionType> lastCompletedType,
+        long acknowledgedContinuationCount,
+        long acknowledgedConsumeCount,
+        Optional<PhysicalToteId> lastAcknowledgedPhysicalToteId,
+        Optional<StationProcessingDispositionType> lastAcknowledgedType) {
 
     public record ActiveClaim(
             PhysicalToteId physicalToteId,
@@ -84,7 +88,50 @@ public record StationProcessingSnapshot(
             throw new IllegalArgumentException(
                     "last completed physical tote ID and type must be present together");
         }
+        if (acknowledgedContinuationCount < 0) {
+            throw new IllegalArgumentException(
+                    "acknowledgedContinuationCount must be >= 0");
+        }
+        if (acknowledgedConsumeCount < 0) {
+            throw new IllegalArgumentException("acknowledgedConsumeCount must be >= 0");
+        }
+        if (lastAcknowledgedPhysicalToteId == null) {
+            throw new IllegalArgumentException(
+                    "lastAcknowledgedPhysicalToteId must not be null");
+        }
+        if (lastAcknowledgedType == null) {
+            throw new IllegalArgumentException("lastAcknowledgedType must not be null");
+        }
+        if (lastAcknowledgedPhysicalToteId.isPresent() != lastAcknowledgedType.isPresent()) {
+            throw new IllegalArgumentException(
+                    "last acknowledged physical tote ID and type must be present together");
+        }
+        if (acknowledgedContinuationCount + acknowledgedConsumeCount > completedCount) {
+            throw new IllegalArgumentException(
+                    "acknowledged disposition count must not exceed completed count");
+        }
         activeClaims = List.copyOf(activeClaims);
         pendingDispositions = List.copyOf(pendingDispositions);
+    }
+
+    /**
+     * Compatibility constructor for callers that only know the original completion fields.
+     */
+    public StationProcessingSnapshot(
+            List<ActiveClaim> activeClaims,
+            List<PendingDisposition> pendingDispositions,
+            long completedCount,
+            Optional<PhysicalToteId> lastCompletedPhysicalToteId,
+            Optional<StationProcessingDispositionType> lastCompletedType) {
+        this(
+                activeClaims,
+                pendingDispositions,
+                completedCount,
+                lastCompletedPhysicalToteId,
+                lastCompletedType,
+                0,
+                0,
+                Optional.empty(),
+                Optional.empty());
     }
 }

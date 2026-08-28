@@ -82,7 +82,7 @@ public final class ThirdPartyStationProcessingTarget implements StationProcessin
     @Override
     public StationProcessingAdmissionDecision evaluate(RoutedPhysicalTote routedTote) {
         validateAndResolveVisit(routedTote);
-        coordinator.validateCanClaim(routedTote, Duration.ZERO);
+        coordinator.validateCanEvaluateClaim(routedTote);
         if (!area.canAccept()) {
             return StationProcessingAdmissionDecision.defer(CAPACITY_BLOCKED_REASON);
         }

@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.station.processing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -477,14 +478,21 @@ class DspStationProcessingBoundaryScenarioTest {
                 fixture.coordinator.snapshot().lastCompletedType().orElseThrow());
         BoundaryState beforeReclaim = fixture.boundaryState();
         for (StationProcessingDisposition completed : pending) {
-            assertThrows(IllegalStateException.class,
-                    () -> fixture.coordinator.claim(
-                            completed.claim().routedTote(), Duration.ofSeconds(11)));
+            if (completed.type() == StationProcessingDispositionType.CONTINUE) {
+                assertDoesNotThrow(() -> fixture.coordinator.validateCanClaim(
+                        completed.claim().routedTote(), Duration.ofSeconds(11)));
+            } else {
+                assertThrows(IllegalStateException.class,
+                        () -> fixture.coordinator.claim(
+                                completed.claim().routedTote(), Duration.ofSeconds(11)));
+            }
             assertEquals(beforeReclaim, fixture.boundaryState());
-            assertThrows(IllegalStateException.class,
-                    () -> fixture.coordinator.complete(
-                            completed.physicalToteId(), completed.type(),
-                            completed.currentLoadPlan(), Duration.ofSeconds(11)));
+            if (completed.type() == StationProcessingDispositionType.CONSUME) {
+                assertThrows(IllegalStateException.class,
+                        () -> fixture.coordinator.complete(
+                                completed.physicalToteId(), completed.type(),
+                                completed.currentLoadPlan(), Duration.ofSeconds(11)));
+            }
             assertEquals(beforeReclaim, fixture.boundaryState());
         }
     }

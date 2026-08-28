@@ -492,15 +492,22 @@ renderables, route followers, mutable queues, target resolver, coordinator, or c
 
 ### Required change surface
 
-Modify only:
+Modify:
 
 - `app/src/main/java/.../dsp/station/processing/StationProcessingCoordinator.java`;
 - `app/src/main/java/.../dsp/station/processing/StationProcessingSnapshot.java`;
+- `app/src/main/java/.../dsp/thirdparty/ThirdPartyStationProcessingTarget.java`;
+- `app/src/main/java/.../dsp/adapting/AdaptingStationProcessingTarget.java`;
+- `app/src/main/java/.../dsp/p2p/arrival/P2pStationProcessingTarget.java`;
 - `app/src/test/java/.../dsp/station/processing/StationProcessingCoordinatorTest.java`;
 - `app/src/test/java/.../dsp/station/processing/StationProcessingSnapshotTest.java`;
+- `app/src/test/java/.../dsp/thirdparty/ThirdPartyStationProcessingTargetTest.java`;
+- `app/src/test/java/.../dsp/adapting/AdaptingStationProcessingTargetTest.java`;
+- `app/src/test/java/.../dsp/p2p/arrival/P2pStationProcessingTargetTest.java`;
 - focused existing tests that call `dequeueDisposition()` and assert the old permanent lock.
 
-Do not modify station adapters, transport, routing, lifecycle, or runtime composition in this step.
+Do not modify `StationProcessingTarget`, `StationArrivalClaimController`, station-domain
+controllers, transport, routing, lifecycle, or runtime composition in this step.
 
 ### Behavioral specification
 
@@ -509,6 +516,18 @@ Do not modify station adapters, transport, routing, lifecycle, or runtime compos
   different destination with a later/nondecreasing claim time.
 - A later claim whose time precedes that physical id's prior completion is rejected with complete
   state equality.
+- `StationProcessingCoordinator.validateCanEvaluateClaim(RoutedPhysicalTote)` validates only the
+  coordinator's ownership eligibility: the routed tote is non-null and its physical id has no
+  active claim, unacknowledged disposition, or acknowledged terminal consumption. It deliberately
+  performs no claim-time chronology check because target evaluation has no simulation-time input.
+- `StationProcessingCoordinator.validateCanClaim(RoutedPhysicalTote, Duration)` retains full input,
+  ownership, and previous-completion chronology validation. Each production target calls
+  `validateCanEvaluateClaim(...)` from `evaluate(...)`, then calls the full
+  `validateCanClaim(..., claimedAt)` in `accept(...)` before its first local station mutation.
+  `StationProcessingCoordinator.claim(...)` repeats the full validation before coordinator
+  mutation.
+- Do not use `Duration.ZERO` as an evaluation sentinel and do not add time to the public
+  `StationProcessingTarget.evaluate(...)` contract.
 - That second claim and completion add a second cumulative completion without erasing the first
   completion history.
 - Acknowledged `CONSUME` remains permanently unclaimable.
@@ -536,6 +555,17 @@ ordered active/pending values, old-snapshot stability, and absence of live objec
 boundary scenario tests that intentionally dequeue dispositions must update only their post-dequeue
 claimability expectation; station behavior remains unchanged.
 
+Each of `ThirdPartyStationProcessingTargetTest`, `AdaptingStationProcessingTargetTest`, and
+`P2pStationProcessingTargetTest` must seed an acknowledged prior `CONTINUE` for the candidate
+physical id and prove:
+
+- `evaluate(...)` permits the otherwise-valid continued candidate without mutating coordinator or
+  local station state;
+- `accept(...)` with a claim time before the prior completion fails before visit/payload/queue
+  mutation and preserves complete coordinator and local target state;
+- `accept(...)` with a later/nondecreasing claim time succeeds through the existing real target
+  boundary.
+
 ### Expected output
 
 The coordinator can own several ordered station visits for one physical journey without allowing
@@ -546,7 +576,7 @@ overlap, premature reclaim, duplicate completion, or reuse after terminal consum
 The implementation model runs exactly:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinatorTest --tests online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.station.processing.DspStationProcessingBoundaryScenarioTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinatorTest --tests online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.station.processing.DspStationProcessingBoundaryScenarioTest --tests online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyStationProcessingTargetTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingTargetTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pStationProcessingTargetTest
 ```
 
 ### User verification

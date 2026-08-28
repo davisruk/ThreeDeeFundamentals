@@ -90,7 +90,7 @@ public final class P2pStationProcessingTarget implements StationProcessingTarget
             return StationProcessingAdmissionDecision.defer(
                     P2pArrivalConsumerController.TIPPER_INPUT_FULL);
         }
-        coordinator.validateCanClaim(routedTote, Duration.ZERO);
+        coordinator.validateCanEvaluateClaim(routedTote);
         return StationProcessingAdmissionDecision.permit();
     }
 
