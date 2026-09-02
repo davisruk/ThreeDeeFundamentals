@@ -2,7 +2,17 @@
 
 Branch: `feature/dsp-operational-empty-end-to-end-proof`
 
-Status: active planned work; implementation has not started.
+Status: complete and verified; pending merge to `master`.
+
+Verified closure:
+
+- the focused Step 5 regression set and complete Gradle test suite are green by user verification;
+- the end-of-feature architecture review returned PASS for every review item, with no FAIL or
+  UNPROVEN result;
+- the implementation adds only
+  `app/src/test/java/online/davisfamily/warehouse/sim/dsp/av02/DspAv02OperationalAllocationScenarioTest.java`;
+  no production source changes were made;
+- the feature branch is complete and verified but is not yet merged to `master`.
 
 ## Purpose
 
@@ -24,10 +34,11 @@ authorized/dependency-ready logical EMPTY
 This is a proof branch, not a new runtime-mechanism branch. Repository inspection confirms that the
 production allocation, release, routing, processing, continuation, lifecycle, bag-planning, and
 outbound-allocation APIs required by the deferred AV02 acceptance catalogue now exist. The feature
-therefore adds one integration scenario class and makes no production-code changes.
+added one integration scenario class and made no production-code changes.
 
-The proof closes the last physical-work prerequisite before a separately planned full-day execution
-and metrics branch. It does not claim calibrated throughput and does not introduce a full-day runner.
+The proof closes the last physical-work prerequisite before a separately planned full-day execution,
+metrics, and inspection branch. It does not claim calibrated throughput and does not introduce a
+full-day runner.
 
 ## Required Reading Before Implementation
 
@@ -591,10 +602,10 @@ No additional user verification is required for this step.
 
 Proposed commit message: `Prove EMPTY inbound outbound separation`
 
-## Step 5: Regression And Branch Closure
+## Step 5: Regression And Branch Closure (Complete)
 
-This step is owned by the architecture review/documentation closure workflow and the user after
-Steps 1-4 are accepted. Do not start the full-day execution/metrics feature during closure.
+This step is complete after user verification, architecture review, and bounded documentation
+reconciliation. Do not start the full-day execution/metrics feature during closure.
 
 ### Implementation verification
 
@@ -669,7 +680,15 @@ reconciliation. Do not introduce a new architectural decision or begin the next 
 
 Proposed commit message: `Complete operational EMPTY proof`
 
-## Expected Final Contract
+## Closure Record
+
+- Step 5 focused regression and complete-suite verification were reported green by the user.
+- Architecture review passed all fifteen contract items; no unnecessary production changes or
+  unresolved architectural concerns were found.
+- At closure, `feature/dsp-operational-empty-end-to-end-proof` tracks the corresponding origin
+  branch and remains pending merge to `master`.
+
+## Implemented Final Contract (Verified)
 
 - Authorized, dependency-ready logical EMPTY work receives one deterministic physical AV02
   `PRE_P2P` tote without consuming OSR capacity or fabricating a manifest.
@@ -685,5 +704,7 @@ Proposed commit message: `Complete operational EMPTY proof`
 - P2P completion terminally consumes the inbound AV02 physical journey exactly once.
 - A completed bag may then enter a distinct outbound physical tote lifecycle. The outbound tote is
   never the AV02 tote; bag/pack provenance and output-sheet allocation provide the explainable join.
-- The proof adds no production behavior. Full-day execution/metrics remains the next separately
-  planned programme feature.
+- The proof adds no production behavior. Station-to-station visual topology, renderer integration,
+  calibrated timing, outbound dispatch/32R, Exception handling, and MANUAL/MANUAL_MERGE handling
+  remain deferred. Full-day execution, metrics, and inspection are the next separately planned
+  programme feature after this branch is merged.

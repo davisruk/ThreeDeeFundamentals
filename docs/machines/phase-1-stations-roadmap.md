@@ -2,8 +2,9 @@
 
 Status: active reference. Adapting and Third Party Phase 1 are complete and merged. Generic
 production station processing and generic station route continuation are complete, verified, and
-merged to `master`. The operational EMPTY end-to-end proof is active planned work on
-`feature/dsp-operational-empty-end-to-end-proof` before Exception Station Phase 1 resumes.
+merged to `master`. The operational EMPTY end-to-end proof is complete and verified on
+`feature/dsp-operational-empty-end-to-end-proof`, pending merge to `master`; the next separately
+planned full-day execution, metrics, and inspection branch precedes Exception Station Phase 1.
 
 ## Summary
 
@@ -14,8 +15,9 @@ Phase 1 station work should be state-complete and visually cheap. The goal is to
 The generic transfer-machine work, Adapting Station Phase 1, Third Party Area Phase 1, simulation
 reset, generic station processing, and generic station route continuation are complete, verified,
 and merged within their documented boundaries. Production operational routing now supports the
-implemented same-tote continuation boundary. The active operational EMPTY proof is a test-only
-integration feature; Exception Station Phase 1 remains later work.
+implemented same-tote continuation boundary. The operational EMPTY proof is a completed test-only
+integration feature with no production-code changes; full-day execution, metrics, and inspection
+are the next separately planned work, while Exception Station Phase 1 remains later work.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -180,12 +182,16 @@ Implemented notes:
   while conflicting same-id physical objects fail without mutation. Scheduler worker state, P2P
   leases, lifecycle mutation, station domain ownership, and outbound allocation remain unchanged.
 
-Active planned branch:
+Completed proof and follow-on:
 
-- `feature/dsp-operational-empty-end-to-end-proof`, creating one production-boundary integration
-  scenario class and no production code.
-- Full-day execution and metrics follow that proof. Station-to-station visual topology, outbound
-  dispatch/32R, Exception handling, and MANUAL/MANUAL_MERGE handling remain deferred.
+- `feature/dsp-operational-empty-end-to-end-proof` is complete and verified, creating one
+  production-boundary integration scenario class and no production code; the branch is pending
+  merge to `master`.
+- The scenario proves AV02 allocation, shared OSR/AV02 release, real station processing and
+  continuation, exact P2P completion, and independent outbound tote allocation.
+- Full-day execution, metrics, and inspection are the next separately planned branch. Station-
+  to-station visual topology, renderer integration, outbound dispatch/32R, Exception handling,
+  and MANUAL/MANUAL_MERGE handling remain deferred.
 
 ### 3. Exception Station Phase 1
 
