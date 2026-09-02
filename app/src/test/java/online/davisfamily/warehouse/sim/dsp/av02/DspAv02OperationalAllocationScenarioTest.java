@@ -3,8 +3,10 @@ package online.davisfamily.warehouse.sim.dsp.av02;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -16,10 +18,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.behaviour.routing.RouteFollower;
+import online.davisfamily.threedee.behaviour.routing.RouteFollower.TravelDirection;
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.threedee.matrices.Mat4;
 import online.davisfamily.threedee.matrices.Vec3;
@@ -28,6 +32,9 @@ import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent;
+import online.davisfamily.threedee.sim.framework.events.DetectionEvent.DetectionType;
+import online.davisfamily.threedee.sim.framework.objects.TrackableObject;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineStore;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineStoreSnapshot;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingArea;
@@ -36,14 +43,24 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBench;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchCompletion;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchId;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchSelection;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchSnapshot;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStorageMap;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisit;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingVisitFactory;
+import online.davisfamily.warehouse.sim.dsp.adapting.DefaultCollectedPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.adapting.MutableToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingController;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingTarget;
+import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceSnapshot;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.Av02ToteLifecycleController;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignment;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentEndReason;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
@@ -55,6 +72,7 @@ import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
@@ -62,16 +80,31 @@ import online.davisfamily.warehouse.sim.dsp.osr.OsrInventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrPhysicalInventory;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteLaunchRequest;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteIdentity;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchController;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchControllerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueueSnapshot;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchTargetRegistry;
+import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteReleaseRequest;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticStickyP2pLineAllocationPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntimeSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.ElasticRuntimeTestFixture;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.ContainedPackP2pTipperPayloadFactory;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalRouteBinding;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pStationProcessingTarget;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pTipperArrivalTarget;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pTipperArrivalTargetSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.arrival.StationProcessingP2pToteCompletedListener;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.InboundLifecycleP2pToteCompletedListener;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.OperationalLifecycleP2pToteCompletedListener;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pArrivalAdmissionPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseControllerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
@@ -94,10 +127,64 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalRel
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalDependencyReadinessPolicy;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalRouteEntryAdmissionPolicy;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.PharmacyGroupedSourceSequenceRankingPolicy;
+import online.davisfamily.warehouse.sim.dsp.routing.DspRouteDeriver;
+import online.davisfamily.warehouse.sim.dsp.routing.InMemoryProductMasterRepository;
 import online.davisfamily.warehouse.sim.dsp.transport.LoadPlanOsrOutboundToteHydrator;
 import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueue;
+import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueueSnapshot;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.RouteBoundDetachedOutboundToteFactory;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.SimulationWorldWarehouseTransportPublisher;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueueSnapshot;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalRegistry;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseRouteCatalog;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseRouteDefinition;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportArrivalController;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportArrivalControllerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportIngressController;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportIngressControllerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportInFlightRegistry;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportInFlightSnapshot;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportPublisher;
+import online.davisfamily.warehouse.sim.dsp.station.continuation.DspStationRouteContinuationRuntime;
+import online.davisfamily.warehouse.sim.dsp.station.continuation.DspStationRouteContinuationRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.station.continuation.OperationalStationRouteContinuationTargetResolver;
+import online.davisfamily.warehouse.sim.dsp.station.continuation.StationRouteContinuationControllerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.station.continuation.StationRouteContinuationSelector;
+import online.davisfamily.warehouse.sim.dsp.station.processing.DspStationProcessingRuntime;
+import online.davisfamily.warehouse.sim.dsp.station.processing.DspStationProcessingRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationArrivalClaimControllerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingBinding;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingDisposition;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingDispositionType;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingOrderCatalog;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingSnapshot;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ProductMasterThirdPartyPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyArea;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaConfig;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaController;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaSnapshot;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyStationProcessingController;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyStationProcessingTarget;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyVisitFactory;
+import online.davisfamily.warehouse.sim.machine.queue.MachineWaitQueueSnapshot;
 import online.davisfamily.warehouse.sim.tote.Tote;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
+import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueueController;
+import online.davisfamily.warehouse.sim.totebag.control.TipperDownstreamFlow;
+import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
+import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
+import online.davisfamily.warehouse.sim.totebag.pack.Pack;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
+import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
+import online.davisfamily.warehouse.sim.dsp.outbound.DeterministicOutboundToteIdSource;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocator;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteConfig;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocator;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 /** Real allocation-boundary scenario for operational EMPTY work. */
@@ -288,6 +375,254 @@ class DspAv02OperationalAllocationScenarioTest {
         }
     }
 
+    @Test
+    void shouldPreserveAv02IdentityThroughThirdPartyAndAdaptingToP2pCompletion() {
+        assertThirdPartyJourneyWithContinuationBackpressure();
+        assertAdaptingJourneyToP2pCompletion();
+    }
+
+    private void assertThirdPartyJourneyWithContinuationBackpressure() {
+        try (JourneyFixture fixture = JourneyFixture.create(false)) {
+            RoutedPhysicalTote first = fixture.releaseAndHydrate();
+            RoutedIdentityState launchIdentity = fixture.identityState(first);
+            assertEquals(OperationalPhysicalToteSource.AV02, first.launchRequest().source());
+            assertEquals(EMPTY_THIRD_PARTY_104, first.launchRequest().orderSheetKey());
+            assertEquals(StationType.THIRD_PARTY, first.destination().stationType());
+            assertEquals("third-party-1", first.destination().targetId());
+            assertEquals(fixture.order.sequenceNumber(),
+                    first.launchRequest().identity().sourceSequenceNumber());
+            assertEquals(Duration.ZERO, first.launchRequest().releaseTime());
+            assertTrue(first.launchRequest().p2pAssignment().isPresent());
+            assertEquals(fixture.p2pLine.lineId(),
+                    first.launchRequest().p2pAssignment().orElseThrow().lineId());
+            assertEquals(1, fixture.inFlightRegistry.snapshot().occupancy());
+            assertSame(first, fixture.inFlightRegistry.find(fixture.physicalToteId).orElseThrow());
+
+            fixture.arriveAt(fixture.topology.thirdPartyDestination());
+            assertSame(first, fixture.thirdPartyQueue.peek().orElseThrow());
+            assertTrue(fixture.coordinator.snapshot().activeClaims().isEmpty());
+            fixture.step(0d);
+            assertSame(first,
+                    fixture.coordinator.requireActiveClaim(fixture.physicalToteId).routedTote());
+            assertEquals(StationType.THIRD_PARTY,
+                    fixture.coordinator.requireActiveClaim(fixture.physicalToteId)
+                            .destination().stationType());
+            assertTrue(fixture.p2pInputQueue.snapshot().toteIds().isEmpty());
+
+            ToteLoadPlan originalPlan = first.loadPlan();
+            RoutedPhysicalTote blocker = fixture.fillContinuationQueue();
+            fixture.step(1d);
+            StationProcessingDisposition disposition = fixture.coordinator.peekDisposition()
+                    .orElseThrow();
+            assertEquals(StationProcessingDispositionType.CONTINUE, disposition.type());
+            ToteLoadPlan replacementPlan = disposition.currentLoadPlan();
+            assertNotSame(originalPlan, replacementPlan);
+            assertSame(replacementPlan,
+                    fixture.allocation.loadPlans.getLoadPlanFor(fixture.physicalToteId));
+            assertSame(replacementPlan, disposition.currentLoadPlan());
+            assertEquals(List.of("pack-line-empty-third-party-104-1"),
+                    replacementPlan.getPackPlans().stream().map(plan -> plan.packId()).toList());
+            assertEquals(EMPTY_THIRD_PARTY_104,
+                    fixture.provenanceRegistry.find("pack-line-empty-third-party-104-1")
+                            .orElseThrow().sourceOrderSheetKey());
+            assertSame(first, disposition.claim().routedTote());
+            assertSame(first.tote(), disposition.claim().routedTote().tote());
+            assertSame(first.renderable(), disposition.claim().routedTote().renderable());
+            assertEquals(1, fixture.transportQueue.snapshot().occupancy());
+            assertEquals(0, fixture.continuationRuntime.snapshot().continuedCount());
+
+            OperationalEmptyState beforeBlockedRetry = fixture.state();
+            fixture.step(0d);
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(
+                    beforeBlockedRetry, fixture.state());
+            assertSame(disposition, fixture.coordinator.peekDisposition().orElseThrow());
+            assertTrue(fixture.continuationRuntime.snapshot().blocked());
+            assertEquals(fixture.physicalToteId,
+                    fixture.continuationRuntime.snapshot().blockedPhysicalToteId()
+                            .orElseThrow());
+
+            assertSame(blocker, fixture.transportQueue.dequeue().orElseThrow());
+            fixture.releaseContinuationBlocker(blocker);
+            fixture.step(0d);
+            assertTrue(fixture.coordinator.pendingDispositions().isEmpty());
+            RoutedPhysicalTote continued = fixture.transportQueue.peek().orElseThrow();
+            assertEquals(fixture.topology.p2pDestination(), continued.destination());
+            assertIdentityContinuity(first, continued, replacementPlan,
+                    launchIdentity.releaseRequest());
+            assertEquals(1, fixture.continuationRuntime.snapshot().continuedCount());
+
+            fixture.step(0d);
+            RoutedPhysicalTote reentered = fixture.inFlightRegistry.find(fixture.physicalToteId)
+                    .orElseThrow();
+            assertSame(continued, reentered);
+            fixture.arriveAt(fixture.topology.p2pDestination());
+            assertSame(continued, fixture.p2pQueue.peek().orElseThrow());
+            fixture.step(0d);
+            assertSame(continued,
+                    fixture.coordinator.requireActiveClaim(fixture.physicalToteId).routedTote());
+            assertTrue(fixture.p2pInputQueue.snapshot().toteIds()
+                    .contains(fixture.physicalToteId.value()));
+            assertEquals(PhysicalToteLifecycleState.ACTIVE_PRE_P2P,
+                    fixture.allocation.lifecycle.tote(fixture.physicalToteId)
+                            .orElseThrow().state());
+            assertTrue(fixture.coordinator.pendingDispositions().isEmpty());
+            assertEquals(0, fixture.outboundAllocator.snapshot().allocatedBags().size());
+
+            OperationalEmptyState beforeWrongObject = fixture.state();
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.p2pCompletionListener.onToteCompleted(
+                            fixture.wrongTote(), fixture.eventContext()));
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(
+                    beforeWrongObject, fixture.state());
+            assertSame(continued,
+                    fixture.coordinator.requireActiveClaim(fixture.physicalToteId).routedTote());
+
+            fixture.advanceUntil(
+                    () -> fixture.allocation.lifecycle.tote(fixture.physicalToteId)
+                            .orElseThrow().state() == PhysicalToteLifecycleState.CONSUMED_AT_P2P,
+                    0.25d, 80, "Third Party EMPTY P2P completion");
+            fixture.assertTerminalCompletion(continued);
+            assertIdentityContinuity(first, continued, replacementPlan,
+                    launchIdentity.releaseRequest());
+            assertEquals(List.of(fixture.topology.thirdPartyDestination(),
+                    fixture.topology.p2pDestination()), fixture.stationHistory);
+            assertEquals(1, fixture.ingressController.snapshot().initialPublicationCount());
+            assertEquals(1, fixture.ingressController.snapshot().exactObjectReentryCount());
+
+            OperationalEmptyState terminal = fixture.state();
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(terminal, fixture.state());
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.p2pCompletionListener.onToteCompleted(
+                            fixture.wrongTote(), fixture.eventContext()));
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(terminal, fixture.state());
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.p2pCompletionListener.onToteCompleted(
+                            fixture.wrongTote(), fixture.eventContext()));
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(terminal, fixture.state());
+        }
+    }
+
+    private void assertAdaptingJourneyToP2pCompletion() {
+        try (JourneyFixture fixture = JourneyFixture.create(true)) {
+            assertTrue(fixture.allocation.runtimeState.snapshot().preparedLineKeys()
+                    .contains(EMPTY_ADAPTED_LINE));
+            assertTrue(fixture.allocation.adaptedStore.snapshot().stagedLineKeys()
+                    .contains(EMPTY_ADAPTED_LINE));
+
+            RoutedPhysicalTote first = fixture.releaseAndHydrate();
+            RoutedIdentityState launchIdentity = fixture.identityState(first);
+            assertEquals(OperationalPhysicalToteSource.AV02, first.launchRequest().source());
+            assertEquals(EMPTY_ADAPTED_104, first.launchRequest().orderSheetKey());
+            assertEquals(StationType.ADAPTING, first.destination().stationType());
+            assertEquals("adapting-1", first.destination().targetId());
+            assertTrue(first.launchRequest().p2pAssignment().isPresent());
+            assertEquals(fixture.p2pLine.lineId(),
+                    first.launchRequest().p2pAssignment().orElseThrow().lineId());
+            assertTrue(fixture.manifestCatalog.findByPhysicalToteId(fixture.physicalToteId)
+                    .isEmpty());
+
+            fixture.arriveAt(fixture.topology.adaptingDestination());
+            assertSame(first, fixture.adaptingQueue.peek().orElseThrow());
+            fixture.step(0d);
+            assertSame(first,
+                    fixture.coordinator.requireActiveClaim(fixture.physicalToteId).routedTote());
+            assertTrue(fixture.p2pInputQueue.snapshot().toteIds().isEmpty());
+
+            ToteLoadPlan originalPlan = first.loadPlan();
+            fixture.step(1d);
+            ToteLoadPlan replacementPlan = fixture.allocation.loadPlans
+                    .getLoadPlanFor(fixture.physicalToteId);
+            assertNotSame(originalPlan, replacementPlan);
+            assertEquals(List.of("pack-adapted-line-empty-104-1"),
+                    replacementPlan.getPackPlans().stream().map(plan -> plan.packId()).toList());
+            assertEquals(new OrderSheetKey("prepared-empty-adapted-104", 1),
+                    fixture.provenanceRegistry.find("pack-adapted-line-empty-104-1")
+                            .orElseThrow().sourceOrderSheetKey());
+            assertFalse(fixture.allocation.adaptedStore.contains(EMPTY_ADAPTED_LINE));
+
+            RoutedPhysicalTote continued = fixture.transportQueue.peek().orElseThrow();
+            assertEquals(fixture.topology.p2pDestination(), continued.destination());
+            assertIdentityContinuity(first, continued, replacementPlan,
+                    launchIdentity.releaseRequest());
+            assertEquals(1, fixture.continuationRuntime.snapshot().continuedCount());
+
+            fixture.step(0d);
+            assertTrue(fixture.coordinator.pendingDispositions().isEmpty());
+
+            fixture.step(0d);
+            assertSame(continued,
+                    fixture.inFlightRegistry.find(fixture.physicalToteId).orElseThrow());
+            fixture.arriveAt(fixture.topology.p2pDestination());
+            assertSame(continued, fixture.p2pQueue.peek().orElseThrow());
+            fixture.step(0d);
+            assertSame(continued,
+                    fixture.coordinator.requireActiveClaim(fixture.physicalToteId).routedTote());
+            assertTrue(fixture.p2pInputQueue.snapshot().toteIds()
+                    .contains(fixture.physicalToteId.value()));
+            assertEquals(PhysicalToteLifecycleState.ACTIVE_PRE_P2P,
+                    fixture.allocation.lifecycle.tote(fixture.physicalToteId)
+                            .orElseThrow().state());
+            assertTrue(fixture.coordinator.pendingDispositions().isEmpty());
+
+            OperationalEmptyState beforeWrongObject = fixture.state();
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.p2pCompletionListener.onToteCompleted(
+                            fixture.wrongTote(), fixture.eventContext()));
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(
+                    beforeWrongObject, fixture.state());
+
+            fixture.advanceUntil(
+                    () -> fixture.allocation.lifecycle.tote(fixture.physicalToteId)
+                            .orElseThrow().state() == PhysicalToteLifecycleState.CONSUMED_AT_P2P,
+                    0.25d, 80, "Adapting EMPTY P2P completion");
+            fixture.assertTerminalCompletion(continued);
+            assertEquals(List.of(fixture.topology.adaptingDestination(),
+                    fixture.topology.p2pDestination()), fixture.stationHistory);
+            assertEquals(1, fixture.ingressController.snapshot().initialPublicationCount());
+            assertEquals(1, fixture.ingressController.snapshot().exactObjectReentryCount());
+
+            OperationalEmptyState terminal = fixture.state();
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(terminal, fixture.state());
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.p2pCompletionListener.onToteCompleted(
+                            fixture.wrongTote(), fixture.eventContext()));
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(terminal, fixture.state());
+            assertThrows(IllegalStateException.class,
+                    () -> fixture.p2pCompletionListener.onToteCompleted(
+                            fixture.wrongTote(), fixture.eventContext()));
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(terminal, fixture.state());
+        }
+    }
+
+    private static void assertIdentityContinuity(
+            RoutedPhysicalTote previous,
+            RoutedPhysicalTote next,
+            ToteLoadPlan expectedPlan,
+            OperationalPhysicalToteReleaseRequest releaseRequest) {
+        assertNotSame(previous, next);
+        assertSame(releaseRequest, previous.launchRequest().releaseRequest());
+        assertSame(releaseRequest, next.launchRequest().releaseRequest());
+        assertSame(previous.launchRequest().identity(), next.launchRequest().identity());
+        assertSame(previous.tote(), next.tote());
+        assertSame(previous.renderable(), next.renderable());
+        assertSame(previous.tote().getRouteFollower(), next.tote().getRouteFollower());
+        assertSame(expectedPlan, next.loadPlan());
+        assertSame(previous.launchRequest().p2pAssignment().orElseThrow(),
+                next.launchRequest().p2pAssignment().orElseThrow());
+        assertEquals(previous.launchRequest().source(), next.launchRequest().source());
+        assertEquals(previous.physicalToteId(), next.physicalToteId());
+        assertEquals(previous.launchRequest().orderSheetKey(), next.launchRequest().orderSheetKey());
+        assertEquals(previous.launchRequest().orderType(), next.launchRequest().orderType());
+        assertEquals(previous.launchRequest().serviceCentreId(),
+                next.launchRequest().serviceCentreId());
+        assertEquals(previous.launchRequest().pharmacyIds(),
+                next.launchRequest().pharmacyIds());
+        assertEquals(previous.launchRequest().identity().sourceSequenceNumber(),
+                next.launchRequest().identity().sourceSequenceNumber());
+        assertEquals(previous.launchRequest().releaseTime(),
+                next.launchRequest().releaseTime());
+    }
+
     private static OrderSheetKey sheet(String orderId) {
         return new OrderSheetKey(orderId, 1);
     }
@@ -400,8 +735,585 @@ class DspAv02OperationalAllocationScenarioTest {
                 0);
     }
 
+    private static final class JourneyFixture implements AutoCloseable {
+        private static final PackDimensions PACK_DIMENSIONS =
+                new PackDimensions(0.20f, 0.10f, 0.08f);
+
+        private final ScenarioFixture allocation;
+        private final RecordingSimulationWorld world;
+        private final NotionalToteOrder order;
+        private final boolean adaptingFirst;
+        private final PhysicalToteId physicalToteId = new PhysicalToteId("av02-000001");
+        private final ElasticRuntimeTestFixture elasticFixture =
+                new ElasticRuntimeTestFixture();
+        private final InboundToteManifestCatalog manifestCatalog =
+                new InboundToteManifestCatalog(List.of());
+        private final InboundToteLifecycleController inboundLifecycle;
+        private final Av02ToteLifecycleController av02Lifecycle;
+        private final StationProcessingCoordinator coordinator =
+                new StationProcessingCoordinator();
+        private final StationProcessingOrderCatalog orderCatalog;
+        private final PackProvenanceRegistry provenanceRegistry =
+                new PackProvenanceRegistry();
+        private final StoredBagReceiver bagReceiver = new StoredBagReceiver("journey-bags");
+        private final OutputSheetAllocator outputSheetAllocator;
+        private final OutboundToteAllocator outboundAllocator;
+        private final JourneyTopology topology = JourneyTopology.create();
+        private final P2pLineDefinition p2pLine;
+        private final OsrOutboundRouteLaunchQueue launchQueue =
+                new OsrOutboundRouteLaunchQueue("journey-launch", 1);
+        private final OsrOutboundTransportQueue transportQueue =
+                new OsrOutboundTransportQueue("journey-transport", 1);
+        private final WarehouseTransportInFlightRegistry inFlightRegistry =
+                new WarehouseTransportInFlightRegistry(1);
+        private final List<RenderableObject> renderables = new ArrayList<>();
+        private final Map<OperationalRouteDestination, StationRoutedToteArrivalQueue>
+                stationQueues = new java.util.LinkedHashMap<>();
+        private final StationRoutedToteArrivalRegistry arrivalRegistry;
+        private final DspP2pElasticAllocationRuntime elasticRuntime;
+        private final OsrOutboundRouteLaunchTargetRegistry routeTargetRegistry;
+        private final DspOperationalReleaseRuntime operationalRuntime;
+        private final OsrOutboundRouteLaunchController launchController;
+        private final WarehouseTransportIngressController ingressController;
+        private final WarehouseTransportArrivalController arrivalController;
+        private final WarehouseTransportPublisher transportPublisher;
+        private final ThirdPartyArea thirdPartyArea;
+        private final ThirdPartyAreaController thirdPartyAreaController;
+        private final AdaptingArea adaptingArea;
+        private final AdaptingAreaController adaptingAreaController;
+        private final P2pTipperArrivalTarget p2pTarget;
+        private final TipperInputQueue p2pInputQueue =
+                new TipperInputQueue("journey-p2p-input", 1);
+        private final StationProcessingBinding thirdPartyBinding;
+        private final StationProcessingBinding adaptingBinding;
+        private final StationProcessingBinding p2pBinding;
+        private final StationRoutedToteArrivalQueue thirdPartyQueue;
+        private final StationRoutedToteArrivalQueue adaptingQueue;
+        private final StationRoutedToteArrivalQueue p2pQueue;
+        private final StationProcessingP2pToteCompletedListener p2pCompletionListener;
+        private final SimulationContext eventContext = new SimulationContext();
+        private final List<OperationalRouteDestination> stationHistory = new ArrayList<>();
+        private final Map<PhysicalToteId, RoutedPhysicalTote> latestById =
+                new java.util.LinkedHashMap<>();
+        private final RoutedPhysicalTote bootstrap;
+        private DspStationProcessingRuntime stationRuntime;
+        private DspStationRouteContinuationRuntime continuationRuntime;
+        private ToteTrackTipperFlowController tipperFlow;
+        private boolean composed;
+        private double simulationTime;
+
+        private JourneyFixture(boolean adaptingFirst) {
+            this.adaptingFirst = adaptingFirst;
+            OrderSheetKey sheet = adaptingFirst ? EMPTY_ADAPTED_104 : EMPTY_THIRD_PARTY_104;
+            String pharmacy = adaptingFirst ? "pharmacy-104-b" : "pharmacy-104-a";
+            DspOrderLineType lineType = adaptingFirst
+                    ? DspOrderLineType.ADAPTED : DspOrderLineType.FULL_PACK;
+            order = emptyOrder(sheet.orderId(), SERVICE_CENTRE_104, PRIORITY_104,
+                    adaptingFirst ? 3 : 2, pharmacy, lineType);
+            allocation = new ScenarioFixture(List.of(order));
+            world = allocation.world;
+            allocation.authorizeAllEmptySheets();
+            if (adaptingFirst) {
+                allocation.completePreparedInputThroughRealAdaptingStore();
+            }
+            allocation.submitCurrentAllocationCommand();
+            allocation.update();
+            assertTrue(allocation.av02Inventory.findWaiting(physicalToteId).isPresent());
+
+            orderCatalog = new StationProcessingOrderCatalog(List.of(order));
+            inboundLifecycle = new InboundToteLifecycleController(
+                    allocation.lifecycle, manifestCatalog);
+            av02Lifecycle = new Av02ToteLifecycleController(
+                    allocation.lifecycle, new DeterministicAv02PhysicalToteIdAllocator());
+            outputSheetAllocator = new OutputSheetAllocator(List.of(order.orderSheetKey()));
+            outboundAllocator = new OutboundToteAllocator(
+                    allocation.lifecycle, new DeterministicOutboundToteIdSource(),
+                    outputSheetAllocator, new OutboundToteConfig(4));
+
+            InMemoryProductMasterRepository products = new InMemoryProductMasterRepository(List.of(
+                    new ProductMasterRecord(
+                            order.items().getFirst().productId(),
+                            adaptingFirst ? "Adapted EMPTY product" : "Third Party EMPTY product",
+                            adaptingFirst ? Optional.empty() : Optional.of("Y74"),
+                            Optional.of(PACK_DIMENSIONS))));
+            DspPackPlanFactory packPlanFactory = new DspPackPlanFactory(provenanceRegistry);
+            thirdPartyArea = new ThirdPartyArea(new ThirdPartyAreaConfig(0, 1, 1d));
+            thirdPartyAreaController = new ThirdPartyAreaController(
+                    thirdPartyArea, allocation.loadPlans,
+                    new ProductMasterThirdPartyPackPlanFactory(
+                            products,
+                            (visit, lineWork) -> visit.orderSheetKey().orderId(),
+                            packPlanFactory));
+
+            AdaptingStorageMap storageMap = new AdaptingStorageMap();
+            AdaptingBenchId adaptingBenchId = new AdaptingBenchId("adapting-1");
+            storageMap.configureAvailableBenches(List.of(adaptingBenchId));
+            storageMap.assignPharmacyToBench(pharmacy, adaptingBenchId);
+            adaptingArea = new AdaptingArea(
+                    List.of(new AdaptingBench(adaptingBenchId.value(), allocation.adaptedStore, 1d)),
+                    0, storageMap);
+            adaptingAreaController = new AdaptingAreaController(
+                    adaptingArea,
+                    allocation.runtimeState,
+                    allocation.loadPlans,
+                    new DefaultCollectedPackPlanFactory(
+                            PACK_DIMENSIONS, packPlanFactory));
+
+            p2pLine = elasticFixture.definitions().getFirst();
+            thirdPartyQueue = new StationRoutedToteArrivalQueue(
+                    topology.thirdPartyDestination(), 1);
+            adaptingQueue = new StationRoutedToteArrivalQueue(
+                    topology.adaptingDestination(), 1);
+            p2pQueue = new StationRoutedToteArrivalQueue(
+                    topology.p2pDestination(), 1);
+            stationQueues.put(topology.thirdPartyDestination(), thirdPartyQueue);
+            stationQueues.put(topology.adaptingDestination(), adaptingQueue);
+            stationQueues.put(topology.p2pDestination(), p2pQueue);
+            for (P2pLineDefinition definition : elasticFixture.definitions()) {
+                stationQueues.putIfAbsent(definition.destination(),
+                        new StationRoutedToteArrivalQueue(definition.destination(), 1));
+            }
+            arrivalRegistry = new StationRoutedToteArrivalRegistry(
+                    stationQueues.values().stream().toList());
+            transportPublisher = new SimulationWorldWarehouseTransportPublisher(
+                    world, renderables);
+
+            DspRouteDeriver routeDeriver = new DspRouteDeriver(products);
+            elasticRuntime = elasticFixture.createRuntime(
+                    this::logicalSnapshot,
+                    manifestCatalog,
+                    allocation.lifecycle::snapshot,
+                    allocation.av02Inventory::snapshot,
+                    this::supplySnapshot);
+            routeTargetRegistry = new OsrOutboundRouteLaunchTargetRegistry(
+                    launchQueue, mixedDestinations(elasticFixture));
+            DspOperationalClock clock = new DspOperationalClock(
+                    DspOperationalClockConfig.productionBaseline(LocalDate.of(2026, 8, 26)));
+            operationalRuntime = new DspOperationalReleaseRuntimeFactory()
+                    .createElasticWithAv02(
+                            new SynchronousOperationalReleaseEvaluationSource(elasticScheduler()),
+                            allocation.osrInventory,
+                            inboundLifecycle,
+                            manifestCatalog,
+                            this::logicalSnapshot,
+                            clock::initialSnapshot,
+                            MixedRuntimeFixture::openAdmission,
+                            routeTargetRegistry,
+                            allocation.av02Inventory,
+                            allocation.lifecycle,
+                            allocation.loadPlans,
+                            elasticRuntime);
+            world.addController(operationalRuntime.controller());
+
+            RouteBoundDetachedOutboundToteFactory detachedFactory =
+                    new RouteBoundDetachedOutboundToteFactory(
+                            topology.catalog,
+                            (request, plan) -> renderable(request.physicalToteId().value()),
+                            1d, new Vec3(), 0f);
+            launchController = new OsrOutboundRouteLaunchController(
+                    launchQueue, transportQueue,
+                    new LoadPlanOsrOutboundToteHydrator(allocation.loadPlans, detachedFactory));
+            ingressController = new WarehouseTransportIngressController(
+                    transportQueue, topology.catalog, inFlightRegistry, transportPublisher);
+            arrivalController = new WarehouseTransportArrivalController(
+                    topology.catalog, inFlightRegistry, arrivalRegistry);
+
+            ThirdPartyVisitFactory thirdPartyVisitFactory = new ThirdPartyVisitFactory(products);
+            ThirdPartyStationProcessingTarget thirdPartyTarget =
+                    new ThirdPartyStationProcessingTarget(
+                            topology.thirdPartyDestination(), orderCatalog, allocation.loadPlans,
+                            thirdPartyVisitFactory, thirdPartyArea, coordinator);
+            AdaptingStationProcessingTarget adaptingTarget =
+                    new AdaptingStationProcessingTarget(
+                            topology.adaptingDestination(), orderCatalog, allocation.loadPlans,
+                            new AdaptingVisitFactory(), adaptingArea, coordinator);
+            p2pTarget = new P2pTipperArrivalTarget(
+                    topology.p2pDestination(), p2pInputQueue);
+            P2pStationProcessingTarget p2pProcessingTarget = new P2pStationProcessingTarget(
+                    new StickyP2pArrivalAdmissionPolicy(
+                            p2pLine, elasticRuntime::leaseSnapshot),
+                    new P2pArrivalRouteBinding(topology.p2pTerminal(), topology.p2pTipper()),
+                    new ContainedPackP2pTipperPayloadFactory(1f, 1f, 0f, 0f, 0f, 0f),
+                    p2pTarget, coordinator);
+            thirdPartyBinding = new StationProcessingBinding(thirdPartyQueue, thirdPartyTarget);
+            adaptingBinding = new StationProcessingBinding(adaptingQueue, adaptingTarget);
+            p2pBinding = new StationProcessingBinding(p2pQueue, p2pProcessingTarget);
+
+            bootstrap = bootstrapTote();
+            world.addTrackableObject(bootstrap.tote());
+            InboundLifecycleP2pToteCompletedListener inboundP2pListener =
+                    new InboundLifecycleP2pToteCompletedListener(inboundLifecycle);
+            OperationalLifecycleP2pToteCompletedListener operationalP2pListener =
+                    new OperationalLifecycleP2pToteCompletedListener(
+                            manifestCatalog, inboundP2pListener,
+                            allocation.av02Inventory, av02Lifecycle);
+            p2pCompletionListener = new StationProcessingP2pToteCompletedListener(
+                    operationalP2pListener, coordinator);
+        }
+
+        private static JourneyFixture create(boolean adaptingFirst) {
+            return new JourneyFixture(adaptingFirst);
+        }
+
+        private RoutedPhysicalTote releaseAndHydrate() {
+            world.update(0.1d);
+            simulationTime += 0.1d;
+            OperationalRouteLaunchRequest request = launchQueue.peek().orElseThrow();
+            assertEquals(physicalToteId, request.physicalToteId());
+            assertEquals(adaptingFirst ? StationType.ADAPTING : StationType.THIRD_PARTY,
+                    request.destination().stationType());
+            composeControllers();
+            world.update(0d);
+            refreshLatestFromInFlight();
+            RoutedPhysicalTote routed = latestById.get(physicalToteId);
+            if (routed == null) {
+                throw new AssertionError("Initial AV02 route was not hydrated into transport");
+            }
+            assertSame(request, routed.launchRequest());
+            assertSame(allocation.loadPlans.getLoadPlanFor(physicalToteId), routed.loadPlan());
+            return routed;
+        }
+
+        private void composeControllers() {
+            if (composed) {
+                return;
+            }
+            world.addController(launchController);
+            world.addController(ingressController);
+            world.registerListener(DetectionEvent.class, arrivalController.detectionHandler());
+            world.addController(arrivalController);
+
+            TippingMachine tippingMachine = new TippingMachine("journey-tipper", 0d, 0d, 0d);
+            tipperFlow = new ToteTrackTipperFlowController(
+                    bootstrap.tote(),
+                    toteId -> toteId.equals(bootstrap.physicalToteId().value())
+                            ? bootstrap.loadPlan() : p2pTarget.getLoadPlanFor(toteId),
+                    topology.p2pTipper(), 0.25f, -1.02f, tippingMachine,
+                    acceptingDownstreamFlow(), 0.01d,
+                    (tote, context) -> {
+                        if (!tote.getId().equals(bootstrap.physicalToteId().value())) {
+                            p2pCompletionListener.onToteCompleted(tote, context);
+                        }
+                    });
+            world.addSimObject(tippingMachine);
+            world.addController(tipperFlow);
+            world.addController(new TipperInputQueueController(p2pInputQueue, tipperFlow));
+
+            stationRuntime = new DspStationProcessingRuntimeFactory().create(
+                    world, coordinator,
+                    List.of(thirdPartyBinding, adaptingBinding, p2pBinding),
+                    List.of(
+                            new AdaptingStationProcessingController(
+                                    "journey-adapting",
+                                    Set.of(topology.adaptingDestination()),
+                                    allocation.loadPlans, adaptingArea, adaptingAreaController,
+                                    inboundLifecycle, coordinator),
+                            new ThirdPartyStationProcessingController(
+                                    "journey-third-party",
+                                    Set.of(topology.thirdPartyDestination()),
+                                    allocation.loadPlans, thirdPartyAreaController, coordinator)));
+            continuationRuntime = new DspStationRouteContinuationRuntimeFactory().create(
+                    world, coordinator, orderCatalog, allocation.loadPlans,
+                    new DspRouteDeriver(new InMemoryProductMasterRepository(List.of(
+                            new ProductMasterRecord(
+                                    order.items().getFirst().productId(),
+                                    "Journey product",
+                                    adaptingFirst ? Optional.empty() : Optional.of("Y74"),
+                                    Optional.of(PACK_DIMENSIONS))))),
+                    new StationRouteContinuationSelector(),
+                    new OperationalStationRouteContinuationTargetResolver(
+                            adaptingArea, new AdaptingVisitFactory()),
+                    topology.catalog, transportQueue, transportPublisher);
+            composed = true;
+        }
+
+        private void arriveAt(OperationalRouteDestination destination) {
+            RoutedPhysicalTote routed = latestById.get(physicalToteId);
+            if (routed == null) {
+                throw new AssertionError("No latest routed tote for " + physicalToteId);
+            }
+            WarehouseRouteDefinition route = topology.catalog.find(destination).orElseThrow();
+            routed.tote().getRouteFollower().setCurrentSegment(route.terminalSegment());
+            routed.tote().getRouteFollower().setDistanceAlongSegment(route.terminalSegment().length());
+            if (eventContext.getTrackedObjects().stream().noneMatch(object -> object == routed.tote())) {
+                eventContext.addTrackedObject(routed.tote());
+            }
+            eventContext.setSimulationTimeSeconds(simulationTime);
+            arrivalController.handleDetection(
+                    new DetectionEvent(
+                            "journey-terminal", simulationTime,
+                            route.terminalArrivalSensorId(), physicalToteId.value(),
+                            DetectionType.ENTER),
+                    eventContext);
+            arrivalController.update(eventContext, 0d);
+            stationHistory.add(destination);
+        }
+
+        private RoutedPhysicalTote fillContinuationQueue() {
+            RoutedPhysicalTote blocker = blockerTote();
+            transportQueue.enqueue(blocker);
+            inFlightRegistry.register(blocker);
+            return blocker;
+        }
+
+        private void releaseContinuationBlocker(RoutedPhysicalTote blocker) {
+            assertSame(blocker, inFlightRegistry.completeArrival(blocker));
+        }
+
+        private RoutedPhysicalTote blockerTote() {
+            PhysicalToteId id = new PhysicalToteId("journey-blocker");
+            OperationalPhysicalToteIdentity identity = new OperationalPhysicalToteIdentity(
+                    OperationalPhysicalToteSource.OSR,
+                    id,
+                    new OrderSheetKey("journey-blocker", 1),
+                    OrderType.FULL_PACK,
+                    SERVICE_CENTRE_104,
+                    PhysicalToteRole.INBOUND_PACK,
+                    900);
+            OperationalPhysicalToteReleaseRequest release =
+                    new OperationalPhysicalToteReleaseRequest(
+                            identity, List.of("pharmacy-104-a"), Duration.ZERO, Optional.empty());
+            OperationalRouteLaunchRequest request = new OperationalRouteLaunchRequest(
+                    release, topology.p2pBlockerDestination());
+            RenderableObject visual = renderable(id.value());
+            RouteSegment segment = topology.entrySegment();
+            Tote tote = new Tote(id.value(),
+                    new RouteFollower(id.value(), segment, 0f, 1d),
+                    visual, new Vec3(), 0f);
+            tote.closeLids();
+            return new RoutedPhysicalTote(
+                    request, new ToteLoadPlan(id, List.of()), tote, visual);
+        }
+
+        private RoutedPhysicalTote bootstrapTote() {
+            PhysicalToteId id = new PhysicalToteId("journey-bootstrap");
+            ToteLoadPlan plan = new ToteLoadPlan(id, List.of());
+            OperationalPhysicalToteIdentity identity = new OperationalPhysicalToteIdentity(
+                    OperationalPhysicalToteSource.OSR,
+                    id,
+                    new OrderSheetKey("journey-bootstrap", 1),
+                    OrderType.FULL_PACK,
+                    SERVICE_CENTRE_104,
+                    PhysicalToteRole.INBOUND_PACK,
+                    901);
+            OperationalPhysicalToteReleaseRequest release =
+                    new OperationalPhysicalToteReleaseRequest(
+                            identity, List.of("pharmacy-104-a"), Duration.ZERO, Optional.empty());
+            OperationalRouteLaunchRequest request = new OperationalRouteLaunchRequest(
+                    release, topology.p2pDestination());
+            RenderableObject visual = renderable(id.value());
+            Tote tote = new Tote(
+                    id.value(),
+                    new RouteFollower(id.value(), topology.p2pTipper(), 0.25f, 1d),
+                    visual, new Vec3(), 0f);
+            tote.setInteractionMode(Tote.ToteMotionState.HELD);
+            return new RoutedPhysicalTote(request, plan, tote, visual);
+        }
+
+        private Tote wrongTote() {
+            RenderableObject visual = renderable(physicalToteId.value());
+            return new Tote(
+                    physicalToteId.value(),
+                    new RouteFollower(physicalToteId.value(), topology.p2pTipper(), 0f, 1d),
+                    visual, new Vec3(), 0f);
+        }
+
+        private SimulationContext eventContext() {
+            return eventContext;
+        }
+
+        private RoutedIdentityState identityState(RoutedPhysicalTote routed) {
+            return RoutedIdentityState.from(routed);
+        }
+
+        private OperationalEmptyState state() {
+            RoutedPhysicalTote routed = latestById.get(physicalToteId);
+            Map<PhysicalToteId, RoutedIdentityState> identities = new java.util.LinkedHashMap<>();
+            if (routed != null) {
+                identities.put(physicalToteId, identityState(routed));
+            }
+            return new OperationalEmptyState(
+                    allocation.runtimeState.snapshot(),
+                    allocation.supplySnapshot(),
+                    allocation.av02Inventory.snapshot(),
+                    allocation.osrInventory.snapshot(),
+                    allocation.lifecycle.snapshot(),
+                    elasticSnapshot(),
+                    operationalRuntime.controller().snapshot(),
+                    launchQueue.snapshot(),
+                    launchController.snapshot(),
+                    transportQueue.snapshot(),
+                    ingressController.snapshot(),
+                    inFlightRegistry.snapshot(),
+                    arrivalController.snapshot(),
+                    arrivalRegistry.snapshots(),
+                    stationRuntime == null ? List.of() : stationRuntime.claimantSnapshots(),
+                    coordinator.snapshot(),
+                    thirdPartyArea.snapshot(),
+                    adaptingArea.bench(new AdaptingBenchId("adapting-1")).snapshot(),
+                    allocation.adaptedStore.snapshot(),
+                    p2pTarget.snapshot(),
+                    p2pInputQueue.snapshot(),
+                    continuationRuntime == null ? null : continuationRuntime.snapshot(),
+                    identities,
+                    world.trackableCount(physicalToteId.value()),
+                    renderables.size(),
+                    allocation.loadPlans.getLoadPlanFor(physicalToteId),
+                    provenanceRegistry.snapshot(),
+                    outboundAllocator.snapshot(),
+                    List.copyOf(bagReceiver.getReceivedBags()));
+        }
+
+        private DspP2pElasticAllocationRuntimeSnapshot elasticSnapshot() {
+            try {
+                return elasticRuntime.operationalSnapshot();
+            } catch (IllegalArgumentException terminalPlannerAbsence) {
+                // A completed AV02 line can leave its lease visible for one terminal callback
+                // while the planner has no remaining service-centre work to describe.
+                return null;
+            }
+        }
+
+        private void assertStateUnchangedExceptReleaseDiagnostics(
+                OperationalEmptyState before,
+                OperationalEmptyState after) {
+            assertEquals(before.scheduler(), after.scheduler());
+            assertEquals(before.supply(), after.supply());
+            assertEquals(before.av02Inventory(), after.av02Inventory());
+            assertEquals(before.osrInventory(), after.osrInventory());
+            assertEquals(before.lifecycle(), after.lifecycle());
+            assertEquals(before.elastic(), after.elastic());
+            assertEquals(before.launchQueue(), after.launchQueue());
+            assertEquals(before.launchController(), after.launchController());
+            assertEquals(before.transportQueue(), after.transportQueue());
+            assertEquals(before.ingress(), after.ingress());
+            assertEquals(before.inFlight(), after.inFlight());
+            assertEquals(before.arrival(), after.arrival());
+            assertEquals(before.stationArrivals(), after.stationArrivals());
+            assertEquals(before.claimants(), after.claimants());
+            assertEquals(before.coordinator(), after.coordinator());
+            assertEquals(before.thirdParty(), after.thirdParty());
+            assertEquals(before.adaptingBench(), after.adaptingBench());
+            assertEquals(before.adaptedStore(), after.adaptedStore());
+            assertEquals(before.p2pTarget(), after.p2pTarget());
+            assertEquals(before.p2pInput(), after.p2pInput());
+            assertEquals(before.continuation(), after.continuation());
+            assertEquals(before.identities(), after.identities());
+            assertEquals(before.worldTrackableCount(), after.worldTrackableCount());
+            assertEquals(before.renderableCount(), after.renderableCount());
+            assertSame(before.currentPlan(), after.currentPlan());
+            assertEquals(before.provenance(), after.provenance());
+            assertEquals(before.outbound(), after.outbound());
+            assertEquals(before.bags(), after.bags());
+        }
+
+        private void assertTerminalCompletion(RoutedPhysicalTote routed) {
+            assertTrue(coordinator.pendingDispositions().isEmpty());
+            assertTrue(coordinator.snapshot().activeClaims().isEmpty());
+            assertEquals(2, coordinator.snapshot().completedCount());
+            assertEquals(1, coordinator.snapshot().acknowledgedContinuationCount());
+            assertEquals(1, coordinator.snapshot().acknowledgedConsumeCount());
+            assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_P2P,
+                    allocation.lifecycle.tote(physicalToteId).orElseThrow().state());
+            assertEquals(PhysicalToteAssignmentEndReason.CONSUMED_AT_P2P,
+                    allocation.lifecycle.assignmentHistoryFor(order.orderSheetKey()).getLast()
+                            .endReason().orElseThrow());
+            assertFalse(routed.renderable().isVisible());
+            assertFalse(routed.tote().areLidsOpen());
+            assertEquals(Tote.ToteMotionState.HELD, routed.tote().getInteractionMode());
+            assertTrue(thirdPartyQueue.snapshot().entries().isEmpty());
+            assertTrue(adaptingQueue.snapshot().entries().isEmpty());
+            assertTrue(p2pQueue.snapshot().entries().isEmpty());
+            assertTrue(p2pInputQueue.snapshot().toteIds().isEmpty());
+            assertTrue(transportQueue.snapshot().entries().isEmpty());
+            assertTrue(inFlightRegistry.snapshot().entries().isEmpty());
+            assertEquals(1, ingressController.snapshot().initialPublicationCount());
+            assertEquals(1, ingressController.snapshot().exactObjectReentryCount());
+            assertEquals(1, world.trackableCount(physicalToteId.value()));
+            assertEquals(1, renderables.size());
+            assertEquals(0, outboundAllocator.snapshot().allocatedBags().size());
+            assertTrue(bagReceiver.getReceivedBags().isEmpty());
+        }
+
+        private void advanceUntil(
+                BooleanSupplier condition,
+                double stepSeconds,
+                int maximumSteps,
+                String terminalState) {
+            if (condition == null || !Double.isFinite(stepSeconds) || stepSeconds <= 0d
+                    || maximumSteps <= 0 || terminalState == null || terminalState.isBlank()) {
+                throw new IllegalArgumentException("Invalid bounded journey progression request");
+            }
+            for (int index = 0; index < maximumSteps; index++) {
+                if (condition.getAsBoolean()) {
+                    return;
+                }
+                step(stepSeconds);
+            }
+            if (!condition.getAsBoolean()) {
+                throw new AssertionError("Journey did not reach " + terminalState);
+            }
+        }
+
+        private void step(double dtSeconds) {
+            world.update(dtSeconds);
+            simulationTime += dtSeconds;
+            refreshLatestFromInFlight();
+        }
+
+        private void refreshLatestFromInFlight() {
+            inFlightRegistry.find(physicalToteId).ifPresent(
+                    routed -> latestById.put(physicalToteId, routed));
+        }
+
+        private WarehouseSchedulerSnapshot logicalSnapshot() {
+            RouteRequirements requirements = adaptingFirst
+                    ? new RouteRequirements(false, true, false, true, false, StartLocation.AV02)
+                    : new RouteRequirements(true, false, false, true, false, StartLocation.AV02);
+            return new WarehouseSchedulerSnapshot(
+                    List.of(new DspSchedulerOrderState(order, requirements, DspOrderStatus.WAITING)),
+                    Map.of(), allocation.runtimeState.snapshot().preparedLineKeys(), Optional.empty());
+        }
+
+        private DspSupplySnapshot supplySnapshot() {
+            ServiceCentreSupplySnapshot serviceCentre = new ServiceCentreSupplySnapshot(
+                    SERVICE_CENTRE_104,
+                    PRIORITY_104,
+                    ServiceCentreAuthorizationState.AUTHORIZED,
+                    Optional.of(Duration.ZERO),
+                    0,
+                    0,
+                    0,
+                    0,
+                    Set.of(order.orderSheetKey()),
+                    List.of());
+            return new DspSupplySnapshot(
+                    "journey-supply",
+                    0,
+                    1200,
+                    0,
+                    Optional.empty(),
+                    Optional.of(Duration.ZERO),
+                    Set.of(order.orderSheetKey()),
+                    List.of(serviceCentre),
+                    0);
+        }
+
+        @Override
+        public void close() {
+            operationalRuntime.close();
+            elasticRuntime.close();
+            if (continuationRuntime != null) {
+                continuationRuntime.close();
+            }
+            if (stationRuntime != null) {
+                stationRuntime.close();
+            }
+        }
+    }
+
     private static final class ScenarioFixture {
-        private final SimulationWorld world = new SimulationWorld();
+        private final RecordingSimulationWorld world = new RecordingSimulationWorld();
         private final PhysicalToteLifecycleLedger lifecycle = new PhysicalToteLifecycleLedger();
         private final Av02PhysicalToteInventory av02Inventory =
                 new Av02PhysicalToteInventory(new Av02AllocationConfig(1));
@@ -973,6 +1885,217 @@ class DspAv02OperationalAllocationScenarioTest {
         }
     }
 
+    private static final class RecordingSimulationWorld extends SimulationWorld {
+        private final Map<String, Tote> trackablesById = new java.util.LinkedHashMap<>();
+        private final List<Tote> trackables = new ArrayList<>();
+
+        @Override
+        public void addTrackableObject(TrackableObject object) {
+            super.addTrackableObject(object);
+            if (object instanceof Tote tote
+                    && trackablesById.putIfAbsent(tote.getId(), tote) == null) {
+                trackables.add(tote);
+            }
+        }
+
+        private int trackableCount(String toteId) {
+            return (int) trackables.stream()
+                    .filter(tote -> tote.getId().equals(toteId))
+                    .count();
+        }
+    }
+
+    private record JourneyTopology(
+            WarehouseRouteCatalog catalog,
+            RouteSegment entrySegment,
+            RouteSegment thirdPartyTerminal,
+            RouteSegment adaptingTerminal,
+            RouteSegment p2pTerminal,
+            RouteSegment p2pTipper,
+            OperationalRouteDestination thirdPartyDestination,
+            OperationalRouteDestination adaptingDestination,
+            OperationalRouteDestination p2pDestination,
+            OperationalRouteDestination p2pBlockerDestination) {
+
+        private static JourneyTopology create() {
+            RouteSegment entry = segment("journey-common-entry", 0f, 2f);
+            RouteSegment thirdPartyTerminal = segment("journey-third-party-terminal", 0f, 1f);
+            RouteSegment adaptingTerminal = segment("journey-adapting-terminal", 0f, 1f);
+            RouteSegment p2pTerminal = segment("journey-p2p-terminal", 0f, 1f);
+            RouteSegment p2pTipper = segment("journey-p2p-tipper", 1f, 2f);
+            p2pTerminal.connectTo(p2pTipper);
+
+            OperationalRouteDestination thirdParty =
+                    new OperationalRouteDestination(StationType.THIRD_PARTY, "third-party-1");
+            OperationalRouteDestination adapting =
+                    new OperationalRouteDestination(StationType.ADAPTING, "adapting-1");
+            OperationalRouteDestination p2p =
+                    new OperationalRouteDestination(StationType.P2P, "p2p-1");
+            OperationalRouteDestination blocker =
+                    new OperationalRouteDestination(StationType.P2P, "p2p-2");
+
+            List<WarehouseRouteDefinition> definitions = new ArrayList<>();
+            definitions.add(definition(thirdParty, entry, thirdPartyTerminal));
+            definitions.add(definition(adapting, entry, adaptingTerminal));
+            definitions.add(definition(p2p, entry, p2pTerminal));
+            for (int index = 2; index <= 5; index++) {
+                OperationalRouteDestination destination =
+                        new OperationalRouteDestination(StationType.P2P, "p2p-" + index);
+                RouteSegment terminal = index == 2
+                        ? segment("journey-p2p-2-terminal", 0f, 1f)
+                        : segment("journey-p2p-" + index + "-terminal", 0f, 1f);
+                definitions.add(definition(destination, entry, terminal));
+            }
+            return new JourneyTopology(
+                    new WarehouseRouteCatalog(definitions),
+                    entry,
+                    thirdPartyTerminal,
+                    adaptingTerminal,
+                    p2pTerminal,
+                    p2pTipper,
+                    thirdParty,
+                    adapting,
+                    p2p,
+                    blocker);
+        }
+
+        private static WarehouseRouteDefinition definition(
+                OperationalRouteDestination destination,
+                RouteSegment entry,
+                RouteSegment terminal) {
+            return new WarehouseRouteDefinition(
+                    destination,
+                    entry,
+                    0f,
+                    TravelDirection.FORWARD,
+                    "journey-" + destination.targetId() + "-sensor",
+                    terminal);
+        }
+
+        private static RouteSegment segment(String label, float start, float end) {
+            return new RouteSegment(label, new online.davisfamily.threedee.path.LinearSegment3(
+                    new Vec3(start, 0f, 0f),
+                    new Vec3(end, 0f, 0f),
+                    false));
+        }
+    }
+
+    private record ToteState(
+            Tote.ToteMotionState motion,
+            boolean lidsOpen,
+            boolean visible,
+            RouteSegment routeSegment,
+            float distance) {
+    }
+
+    private record RoutedIdentityState(
+            OperationalRouteLaunchRequest launchRequest,
+            OperationalPhysicalToteReleaseRequest releaseRequest,
+            online.davisfamily.warehouse.sim.dsp.osr.release.launch
+                    .OperationalPhysicalToteIdentity identity,
+            OperationalPhysicalToteSource source,
+            PhysicalToteId physicalToteId,
+            OrderSheetKey orderSheetKey,
+            OrderType orderType,
+            PhysicalToteRole role,
+            String serviceCentreId,
+            List<String> pharmacyIds,
+            long sourceSequenceNumber,
+            Duration releaseTime,
+            Optional<P2pPhysicalToteAssignment> p2pAssignment,
+            IdentityRef<ToteLoadPlan> loadPlan,
+            IdentityRef<Tote> tote,
+            IdentityRef<RenderableObject> renderable,
+            IdentityRef<RouteFollower> routeFollower,
+            OperationalRouteDestination destination,
+            ToteState toteState) {
+
+        private static RoutedIdentityState from(RoutedPhysicalTote routed) {
+            OperationalRouteLaunchRequest request = routed.launchRequest();
+            var identity = request.identity();
+            Tote tote = routed.tote();
+            return new RoutedIdentityState(
+                    request,
+                    request.releaseRequest(),
+                    identity,
+                    request.source(),
+                    routed.physicalToteId(),
+                    request.orderSheetKey(),
+                    request.orderType(),
+                    identity.physicalToteRole(),
+                    request.serviceCentreId(),
+                    request.pharmacyIds(),
+                    identity.sourceSequenceNumber(),
+                    request.releaseTime(),
+                    request.p2pAssignment(),
+                    IdentityRef.of(routed.loadPlan()),
+                    IdentityRef.of(tote),
+                    IdentityRef.of(routed.renderable()),
+                    IdentityRef.of(tote.getRouteFollower()),
+                    routed.destination(),
+                    new ToteState(
+                            tote.getInteractionMode(),
+                            tote.areLidsOpen(),
+                            routed.renderable().isVisible(),
+                            tote.getRouteFollower().getCurrentSegment(),
+                            (float) tote.getRouteFollower().getDistanceAlongSegment()));
+        }
+    }
+
+    private record OperationalEmptyState(
+            WarehouseSchedulerSnapshot scheduler,
+            DspSupplySnapshot supply,
+            Av02InventorySnapshot av02Inventory,
+            OsrInventorySnapshot osrInventory,
+            PhysicalToteLifecycleSnapshot lifecycle,
+            DspP2pElasticAllocationRuntimeSnapshot elastic,
+            DspOperationalReleaseControllerSnapshot operational,
+            OsrOutboundRouteLaunchQueueSnapshot launchQueue,
+            OsrOutboundRouteLaunchControllerSnapshot launchController,
+            OsrOutboundTransportQueueSnapshot transportQueue,
+            WarehouseTransportIngressControllerSnapshot ingress,
+            WarehouseTransportInFlightSnapshot inFlight,
+            WarehouseTransportArrivalControllerSnapshot arrival,
+            List<StationRoutedToteArrivalQueueSnapshot> stationArrivals,
+            List<StationArrivalClaimControllerSnapshot> claimants,
+            StationProcessingSnapshot coordinator,
+            ThirdPartyAreaSnapshot thirdParty,
+            AdaptingBenchSnapshot adaptingBench,
+            AdaptedLineStoreSnapshot adaptedStore,
+            P2pTipperArrivalTargetSnapshot p2pTarget,
+            MachineWaitQueueSnapshot p2pInput,
+            StationRouteContinuationControllerSnapshot continuation,
+            Map<PhysicalToteId, RoutedIdentityState> identities,
+            int worldTrackableCount,
+            int renderableCount,
+            ToteLoadPlan currentPlan,
+            PackProvenanceSnapshot provenance,
+            OutboundAllocationSnapshot outbound,
+            List<Bag> bags) {
+    }
+
+    private static final class IdentityRef<T> {
+        private final T reference;
+
+        private IdentityRef(T reference) {
+            this.reference = reference;
+        }
+
+        private static <T> IdentityRef<T> of(T reference) {
+            return new IdentityRef<>(reference);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof IdentityRef<?> value && value.reference == reference;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(reference);
+        }
+    }
+
     private record MixedRuntimeState(
             Av02InventorySnapshot av02Inventory,
             OsrInventorySnapshot osrInventory,
@@ -999,6 +2122,39 @@ class DspAv02OperationalAllocationScenarioTest {
                 },
                 new int[][] { {0, 1, 2} },
                 "anchor");
+    }
+
+    private static RenderableObject renderable(String id) {
+        return RenderableObject.create(
+                id,
+                null,
+                anchorMesh(),
+                new Mat4.ObjectTransformation(
+                        0f, 0f, 0f, 0f, 0f, 0f, new Mat4()),
+                triangleIndex -> 0,
+                false);
+    }
+
+    private static TipperDownstreamFlow acceptingDownstreamFlow() {
+        return new TipperDownstreamFlow() {
+            @Override
+            public boolean canAcceptDischargedPack(Pack pack) {
+                return true;
+            }
+
+            @Override
+            public void acceptDischargedPack(Pack pack) {
+            }
+
+            @Override
+            public void update(double dtSeconds) {
+            }
+
+            @Override
+            public boolean keepsTipperOccupied() {
+                return false;
+            }
+        };
     }
 
     private record AllocationState(
