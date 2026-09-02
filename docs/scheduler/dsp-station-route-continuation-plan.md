@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-station-route-continuation`
 
-Status: complete and verified; pending merge to `master`.
+Status: complete, verified, and merged to `master` at `fd671f0`.
 
 ## Purpose
 
@@ -1081,8 +1081,10 @@ by the user, and the end-of-feature architecture review reported `PASS` for ever
 
 ## Post-feature Direction
 
-- The next separately planned branch is the deferred operational EMPTY end-to-end proof using the
-  completed AV02 allocation and station route-continuation boundaries.
+- The operational EMPTY end-to-end proof is active planned work on
+  `feature/dsp-operational-empty-end-to-end-proof`, using the completed AV02 allocation and station
+  route-continuation boundaries. Its decision-complete plan is
+  `docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`.
 - Full-day execution and metrics follow that proof, using loaded 12N volumes and the explicitly
   uncalibrated profile.
 - Station-to-station visual topology, outbound dispatch/32R, Exception handling, and MANUAL/

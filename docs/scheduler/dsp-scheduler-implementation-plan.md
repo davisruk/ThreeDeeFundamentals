@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, and deadline-aware elastic line allocation are complete, verified, and merged. AV02 operational allocation and generic station processing are complete, verified, and merged to `master`. Generic station route continuation is complete and verified on `feature/dsp-station-route-continuation`, pending merge to `master`; the next separately planned branch is the deferred operational EMPTY end-to-end proof, followed by full-day execution and metrics.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, deadline-aware elastic line allocation, AV02 operational allocation, generic station processing, and generic station route continuation are complete, verified, and merged to `master`. The operational EMPTY end-to-end proof is active planned work on `feature/dsp-operational-empty-end-to-end-proof`; full-day execution and metrics follow it.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -913,9 +913,9 @@ Verified implementation boundary:
 
 Follow-on status:
 
-- `feature/dsp-station-route-continuation` is complete and verified, pending merge to `master`;
-- the deferred operational EMPTY end-to-end proof is the next separately planned branch after the
-  continuation boundary is merged;
+- `feature/dsp-station-route-continuation` is complete, verified, and merged to `master`;
+- the operational EMPTY end-to-end proof is active planned work on
+  `feature/dsp-operational-empty-end-to-end-proof`;
 - full-day execution and metrics only after that proof, using loaded 12N volumes and the explicitly
   uncalibrated profile.
 
@@ -953,15 +953,15 @@ Verified implementation boundary:
 
 Follow-on status:
 
-- `feature/dsp-station-route-continuation` is complete and verified, pending merge to `master`;
-- the deferred operational EMPTY end-to-end proof is the next separately planned branch after
-  processing and continuation are complete;
+- `feature/dsp-station-route-continuation` is complete, verified, and merged to `master`;
+- the operational EMPTY end-to-end proof is active planned work on
+  `feature/dsp-operational-empty-end-to-end-proof`;
 - full-day execution and metrics only after that proof, using loaded 12N volumes and the explicitly
   uncalibrated profile.
 
 ### `feature/dsp-station-route-continuation`
 
-Status: complete and verified; pending merge to `master`.
+Status: complete, verified, and merged to `master`.
 
 Detailed implementation doc:
 
@@ -993,10 +993,38 @@ Verified implementation boundary:
 
 Explicit deferrals and follow-on:
 
-- The deferred operational EMPTY end-to-end proof is the next separately planned branch.
+- The operational EMPTY end-to-end proof is active planned work on
+  `feature/dsp-operational-empty-end-to-end-proof`.
 - Full-day execution and metrics follow that proof.
 - Station-to-station visual topology, outbound dispatch/32R, Exception handling, and MANUAL/
   MANUAL_MERGE handling remain deferred.
+
+### `feature/dsp-operational-empty-end-to-end-proof`
+
+Status: active planned work; implementation has not started.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`
+
+Purpose:
+
+- Prove real authorized/dependency-ready EMPTY allocation through bounded AV02 inventory.
+- Prove OSR and AV02 share one operational ranking/release boundary with at most one command per
+  evaluation and exact sticky assignment before AV02 departure.
+- Drive AV02 EMPTY through real launch hydration, warehouse transport, Third Party/Adapting
+  processing, station continuation, P2P arrival, and actual tipper completion.
+- Prove that the consumed inbound AV02 tote and the P2P-created outbound tote are independent
+  physical lifecycles joined only by immutable bag/pack provenance and output-sheet allocation.
+
+Locked implementation boundary:
+
+- create only
+  `app/src/test/java/online/davisfamily/warehouse/sim/dsp/av02/DspAv02OperationalAllocationScenarioTest.java`;
+- make no production-code, existing-test, debug-scene, build, or dataset changes;
+- stop and report if the proof exposes a missing production boundary or defect;
+- keep full-day execution/metrics, calibrated timing, station visual topology, outbound dispatch/
+  32R, Exception, and MANUAL/MANUAL_MERGE behavior deferred.
 
 ## Current Assumptions
 

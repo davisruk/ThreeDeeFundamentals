@@ -1,10 +1,9 @@
 # Phase 1 Station Roadmap
 
 Status: active reference. Adapting and Third Party Phase 1 are complete and merged. Generic
-production station processing is complete, verified, and merged to `master`. Generic station route
-continuation is complete and verified on `feature/dsp-station-route-continuation`, pending merge to
-`master`; the deferred operational EMPTY end-to-end proof is next before Exception Station Phase 1
-resumes.
+production station processing and generic station route continuation are complete, verified, and
+merged to `master`. The operational EMPTY end-to-end proof is active planned work on
+`feature/dsp-operational-empty-end-to-end-proof` before Exception Station Phase 1 resumes.
 
 ## Summary
 
@@ -13,10 +12,10 @@ This roadmap pauses deeper scheduler behavior work so the remaining warehouse st
 Phase 1 station work should be state-complete and visually cheap. The goal is to prove tote routing, station queues, processing state, scheduler decisions, and logical pack/tote effects across a whole warehouse layout. Detailed meshes, realistic pack transfer animation, bins/racks, polished station visuals, and operator controls are deferred to Phase 2 visualisation work.
 
 The generic transfer-machine work, Adapting Station Phase 1, Third Party Area Phase 1, simulation
-reset, generic station processing, and generic station route continuation are complete and verified
-within their documented boundaries. Production operational routing now supports the implemented
-same-tote continuation boundary; the deferred operational EMPTY end-to-end proof remains the next
-separately planned branch. Exception Station Phase 1 remains later work.
+reset, generic station processing, and generic station route continuation are complete, verified,
+and merged within their documented boundaries. Production operational routing now supports the
+implemented same-tote continuation boundary. The active operational EMPTY proof is a test-only
+integration feature; Exception Station Phase 1 remains later work.
 
 Phase 1 stations may use placeholder renderables, simple inspection overlays, and "magical" pack appearance/disappearance where needed. That is acceptable as long as domain state, machine state, and scheduler-facing state are coherent and testable.
 
@@ -144,9 +143,7 @@ Implemented notes:
 
 ### Runtime Interlude: Production Station Processing And Continuation
 
-Status: processing and continuation boundaries are complete and verified. Processing is merged to
-`master`; continuation is complete on `feature/dsp-station-route-continuation` and pending merge to
-`master`.
+Status: processing and continuation boundaries are complete, verified, and merged to `master`.
 
 Purpose:
 
@@ -183,9 +180,10 @@ Implemented notes:
   while conflicting same-id physical objects fail without mutation. Scheduler worker state, P2P
   leases, lifecycle mutation, station domain ownership, and outbound allocation remain unchanged.
 
-Next separately planned branch:
+Active planned branch:
 
-- Deferred operational EMPTY end-to-end proof after the continuation boundary is merged.
+- `feature/dsp-operational-empty-end-to-end-proof`, creating one production-boundary integration
+  scenario class and no production code.
 - Full-day execution and metrics follow that proof. Station-to-station visual topology, outbound
   dispatch/32R, Exception handling, and MANUAL/MANUAL_MERGE handling remain deferred.
 
