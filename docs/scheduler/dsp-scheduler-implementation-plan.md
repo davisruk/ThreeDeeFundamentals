@@ -4,7 +4,7 @@
 
 This document is the scheduler programme roadmap. Detailed, step-by-step implementation instructions live in one plan document per feature branch so a weaker model can execute each branch without needing to reason across the whole scheduler programme.
 
-Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, deadline-aware elastic line allocation, AV02 operational allocation, generic station processing, and generic station route continuation are complete, verified, and merged to `master`. The operational EMPTY end-to-end proof is complete and verified on `feature/dsp-operational-empty-end-to-end-proof` and is pending merge to `master`; the next programme work is a separately planned full-day execution, metrics, and inspection branch.
+Current note: generic transfer-machine support, adapting station Phase 1, Third Party Area Phase 1, simulation reset, and the scheduler worker-thread boundary are complete and merged. Logical/physical identity, inbound tote lifecycle, bag planning/provenance, outbound physical tote allocation, OSR physical inventory, the operational simulation clock, rate-limited service-centre supply, physical OSR processing release, dependency-ready operational release, operational route-target integration, OSR outbound route launch, physical warehouse transport routing, P2P-local arrival consumption, sticky P2P service-centre leases, deadline-aware elastic line allocation, AV02 operational allocation, generic station processing, generic station route continuation, and the operational EMPTY end-to-end proof are complete, verified, and merged to `master`; the proof merged at `afe40f5`. Full-day execution, metrics, and inspection using the explicitly uncalibrated elastic profile are active planned work on `feature/dsp-full-day-analysis-metrics-inspection`.
 
 The scheduler architecture remains snapshot/command based:
 
@@ -914,10 +914,11 @@ Verified implementation boundary:
 Follow-on status:
 
 - `feature/dsp-station-route-continuation` is complete, verified, and merged to `master`;
-- the operational EMPTY end-to-end proof is complete and verified on
-  `feature/dsp-operational-empty-end-to-end-proof`, pending merge to `master`;
-- full-day execution, metrics, and inspection follow that proof after merge, using loaded 12N
-  volumes and the explicitly uncalibrated profile.
+- the operational EMPTY end-to-end proof is complete, verified, and merged to `master` at
+  `afe40f5`;
+- full-day execution, metrics, and inspection are active planned work on
+  `feature/dsp-full-day-analysis-metrics-inspection`, using loaded 12N volumes and the explicitly
+  uncalibrated profile.
 
 ### `feature/dsp-station-processing-boundary`
 
@@ -954,10 +955,11 @@ Verified implementation boundary:
 Follow-on status:
 
 - `feature/dsp-station-route-continuation` is complete, verified, and merged to `master`;
-- the operational EMPTY end-to-end proof is complete and verified on
-  `feature/dsp-operational-empty-end-to-end-proof`, pending merge to `master`;
-- full-day execution, metrics, and inspection follow that proof after merge, using loaded 12N
-  volumes and the explicitly uncalibrated profile.
+- the operational EMPTY end-to-end proof is complete, verified, and merged to `master` at
+  `afe40f5`;
+- full-day execution, metrics, and inspection are active planned work on
+  `feature/dsp-full-day-analysis-metrics-inspection`, using loaded 12N volumes and the explicitly
+  uncalibrated profile.
 
 ### `feature/dsp-station-route-continuation`
 
@@ -993,15 +995,16 @@ Verified implementation boundary:
 
 Explicit deferrals and follow-on:
 
-- The operational EMPTY end-to-end proof is complete and verified on
-  `feature/dsp-operational-empty-end-to-end-proof`, pending merge to `master`.
-- Full-day execution, metrics, and inspection follow that proof after merge.
+- The operational EMPTY end-to-end proof is complete, verified, and merged to `master` at
+  `afe40f5`.
+- Full-day execution, metrics, and inspection are active planned work on
+  `feature/dsp-full-day-analysis-metrics-inspection`.
 - Station-to-station visual topology, outbound dispatch/32R, Exception handling, and MANUAL/
   MANUAL_MERGE handling remain deferred.
 
 ### `feature/dsp-operational-empty-end-to-end-proof`
 
-Status: complete and verified; pending merge to `master`.
+Status: complete, verified, and merged to `master` at `afe40f5`.
 
 Detailed implementation doc:
 
@@ -1028,10 +1031,40 @@ Verification and follow-on:
 
 - Step 5 focused regression and complete-suite verification are green by user report, and the
   architecture review passed all contract items.
-- Full-day execution, metrics, and inspection are the next separately planned branch after this
-  feature is merged.
+- Full-day execution, metrics, and inspection are active planned work on
+  `feature/dsp-full-day-analysis-metrics-inspection`.
 - Station-to-station visual topology, renderer integration, calibrated timing, outbound dispatch/
   32R, Exception, and MANUAL/MANUAL_MERGE behavior remain explicit deferrals.
+
+### `feature/dsp-full-day-analysis-metrics-inspection`
+
+Status: planned and active; no implementation has started.
+
+Detailed implementation doc:
+
+`docs/scheduler/dsp-full-day-analysis-metrics-inspection-plan.md`
+
+Planned contract:
+
+- Load complete caller-supplied product-master and 12N datasets without eagerly creating physical
+  or renderable objects.
+- Execute bounded headless fixed steps from day 0 `06:00` to supported provisional completion or
+  day +1 midnight through the existing supply, OSR/AV02 release, transport, station, P2P, and
+  outbound owners.
+- Preserve one planned bag correlation on one exact P2P line while allowing five long-lived lines
+  to discover dynamically assigned work.
+- Collect deterministic deadline, occupancy/net-flow, inbound/outbound rate, blocked-time,
+  throughput, utilization, unfinished-work, and provisional completion metrics.
+- Emit immutable JSON reports and text inspection that prominently identify
+  `DEADLINE_AWARE_ELASTIC_STICKY_LEASES`, `UNCALIBRATED`, and the temporary
+  `P2P_OUTPUT_CLOSED` completion milestone.
+
+Explicit boundaries:
+
+- Completion is analytical P2P output closure, not dispatch, 32R, stacking, loading, or a calibrated
+  production prediction.
+- Exception/NS behavior, MANUAL/MANUAL_MERGE, calibrated timing, renderer integration, visual
+  station topology, event-driven fast-forward, and outbound dispatch remain deferred.
 
 ## Current Assumptions
 

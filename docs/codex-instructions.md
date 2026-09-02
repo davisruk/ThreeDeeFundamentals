@@ -18,6 +18,8 @@ Always read these documents before starting:
 3. The completed route-continuation plan for `feature/dsp-station-route-continuation`
 4. The completed operational EMPTY proof plan,
    `docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`
+5. The active full-day analysis plan,
+   `docs/scheduler/dsp-full-day-analysis-metrics-inspection-plan.md`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 
@@ -188,7 +190,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete, verified, and merged to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Generic station processing and generic station route continuation are complete, verified, and merged to `master`. The operational EMPTY end-to-end proof is complete and verified on `feature/dsp-operational-empty-end-to-end-proof`, with no production-code changes; the branch is pending merge to `master`. A separately planned full-day execution, metrics, and inspection branch follows it. Station-to-station visual topology, renderer integration, calibrated timing, outbound dispatch/32R, Exception Station behavior, and MANUAL/MANUAL_MERGE handling remain deferred.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete, verified, and merged to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Generic station processing and generic station route continuation are complete, verified, and merged to `master`. The operational EMPTY end-to-end proof is complete, verified, and merged to `master` at `afe40f5`, with no production-code changes. Full-day execution, metrics, and inspection using the explicitly uncalibrated elastic profile are now active planned work on `feature/dsp-full-day-analysis-metrics-inspection`. Station-to-station visual topology, renderer integration, calibrated timing, outbound dispatch/32R, Exception Station behavior, and MANUAL/MANUAL_MERGE handling remain deferred.
 
 Completed bag-planning behavior:
 
@@ -290,9 +292,11 @@ Completed scheduler work:
 
 Current feature branch:
 
-- `feature/dsp-operational-empty-end-to-end-proof`: complete and verified; pending merge to
-  `master`
-- detailed plan: `docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`
+- `feature/dsp-full-day-analysis-metrics-inspection`: active planned work; no implementation has
+  started
+- detailed plan: `docs/scheduler/dsp-full-day-analysis-metrics-inspection-plan.md`
+- prerequisite `feature/dsp-operational-empty-end-to-end-proof`: complete, verified, and merged to
+  `master` at `afe40f5`
 
 Current scheduler decisions:
 
@@ -365,11 +369,12 @@ Known Phase 1 machine/station work:
 - AV02 operational allocation: complete, verified, and merged to `master`
 - station processing boundary: complete, verified, and merged to `master`
 - station route continuation: complete, verified, and merged to `master`
-- operational EMPTY end-to-end proof: complete and verified on
-  `feature/dsp-operational-empty-end-to-end-proof`; pending merge to `master`; test-only
-  production-boundary integration proof with no production-code changes
-- full-day execution, metrics, and inspection: next separately planned programme branch after this
-  proof is merged
+- operational EMPTY end-to-end proof: complete, verified, and merged to `master` at `afe40f5`;
+  test-only production-boundary integration proof with no production-code changes
+- full-day execution, metrics, and inspection: active planned work on
+  `feature/dsp-full-day-analysis-metrics-inspection`, using loaded 12N volumes, headless fixed-step
+  execution, the explicitly uncalibrated elastic profile, and provisional P2P-output-closed
+  outcomes
 - Exception Area: foundation complete; resume through a separate detailed plan
 - lid opening machine
 - lid closing machine

@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-operational-empty-end-to-end-proof`
 
-Status: complete and verified; pending merge to `master`.
+Status: complete, verified, and merged to `master` at `afe40f5`.
 
 Verified closure:
 
@@ -12,7 +12,7 @@ Verified closure:
 - the implementation adds only
   `app/src/test/java/online/davisfamily/warehouse/sim/dsp/av02/DspAv02OperationalAllocationScenarioTest.java`;
   no production source changes were made;
-- the feature branch is complete and verified but is not yet merged to `master`.
+- the feature branch is complete, verified, and merged to `master` at `afe40f5`.
 
 ## Purpose
 
@@ -685,8 +685,8 @@ Proposed commit message: `Complete operational EMPTY proof`
 - Step 5 focused regression and complete-suite verification were reported green by the user.
 - Architecture review passed all fifteen contract items; no unnecessary production changes or
   unresolved architectural concerns were found.
-- At closure, `feature/dsp-operational-empty-end-to-end-proof` tracks the corresponding origin
-  branch and remains pending merge to `master`.
+- After closure, `feature/dsp-operational-empty-end-to-end-proof` was merged to `master` at
+  `afe40f5` before `feature/dsp-full-day-analysis-metrics-inspection` was created.
 
 ## Implemented Final Contract (Verified)
 
