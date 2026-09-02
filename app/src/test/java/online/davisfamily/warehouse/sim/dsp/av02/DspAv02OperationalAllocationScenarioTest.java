@@ -52,9 +52,14 @@ import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegist
 import online.davisfamily.warehouse.sim.dsp.adapting.MutableToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingController;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingTarget;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceSnapshot;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
@@ -182,10 +187,15 @@ import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
 import online.davisfamily.warehouse.sim.dsp.outbound.DeterministicOutboundToteIdSource;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocationController;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocator;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteConfig;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteClosureReason;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocator;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
+import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
+import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
+import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 
 /** Real allocation-boundary scenario for operational EMPTY work. */
 class DspAv02OperationalAllocationScenarioTest {
@@ -379,6 +389,163 @@ class DspAv02OperationalAllocationScenarioTest {
     void shouldPreserveAv02IdentityThroughThirdPartyAndAdaptingToP2pCompletion() {
         assertThirdPartyJourneyWithContinuationBackpressure();
         assertAdaptingJourneyToP2pCompletion();
+    }
+
+    @Test
+    void shouldConsumeAv02InboundAndAllocateIndependentOutboundTote() {
+        try (JourneyFixture fixture = JourneyFixture.createDirectP2p()) {
+            RoutedPhysicalTote inbound = fixture.releaseAndHydrate();
+            assertEquals(OperationalPhysicalToteSource.AV02, inbound.launchRequest().source());
+            assertEquals(EMPTY_DIRECT_104, inbound.launchRequest().orderSheetKey());
+            assertEquals(StationType.P2P, inbound.destination().stationType());
+            assertEquals(fixture.p2pLine.lineId(),
+                    inbound.launchRequest().p2pAssignment().orElseThrow().lineId());
+
+            fixture.arriveAt(fixture.topology.p2pDestination());
+            fixture.step(0d);
+            assertSame(inbound,
+                    fixture.coordinator.requireActiveClaim(fixture.physicalToteId).routedTote());
+            assertTrue(fixture.p2pInputQueue.snapshot().toteIds()
+                    .contains(fixture.physicalToteId.value()));
+            assertTrue(fixture.bagReceiver.getReceivedBags().isEmpty());
+            assertTrue(fixture.outboundAllocator.snapshot().allocatedBags().isEmpty());
+            OperationalEmptyState beforeTipperCompletion = fixture.state();
+
+            fixture.advanceUntil(
+                    () -> fixture.allocation.lifecycle.tote(fixture.physicalToteId)
+                            .orElseThrow().state() == PhysicalToteLifecycleState.CONSUMED_AT_P2P,
+                    0.25d, 80, "direct EMPTY P2P completion");
+            fixture.assertDirectP2pTerminalCompletion(inbound);
+            assertEquals(PhysicalToteLifecycleState.ACTIVE_PRE_P2P,
+                    beforeTipperCompletion.lifecycle().totes()
+                            .get(fixture.physicalToteId).state());
+            assertTrue(beforeTipperCompletion.outbound().allocatedBags().isEmpty());
+            assertTrue(beforeTipperCompletion.bags().isEmpty());
+
+            OperationalEmptyState beforeBagReceiver = fixture.state();
+            PlannedBag plannedBag = directEmptyPlannedBag(fixture.order);
+            String physicalPackId = plannedBag.physicalPackIds().getFirst();
+            PlannedPackTrace packTrace = new PlannedPackTrace(
+                    physicalPackId,
+                    new PackSourceProvenance(
+                            EMPTY_DIRECT_104,
+                            fixture.order.items().getFirst().lineReference(),
+                            fixture.order.items().getFirst().productId(),
+                            SERVICE_CENTRE_104,
+                            fixture.order.items().getFirst().pharmacyId(),
+                            fixture.order.items().getFirst().patientId(),
+                            fixture.order.items().getFirst().prescriptionId()),
+                    fixture.physicalToteId,
+                    EMPTY_DIRECT_104,
+                    plannedBag.bagKey());
+            BagPlanningResult planningResult = new BagPlanningResult(
+                    List.of(plannedBag), List.of(), List.of(packTrace));
+            Bag runtimeBag = runtimeBag(plannedBag);
+            BagReservation reservation = fixture.bagReceiver.reserveIncomingBag(runtimeBag);
+            fixture.bagReceiver.beginReceiving(reservation);
+            fixture.bagReceiver.completeReceiving(reservation);
+            fixture.assertStateUnchangedExceptBags(beforeBagReceiver, fixture.state());
+
+            OutboundToteAllocationController outboundController =
+                    new OutboundToteAllocationController(
+                            fixture.p2pLine.lineId(), fixture.bagReceiver,
+                            planningResult, fixture.outboundAllocator);
+            SimulationContext outboundContext = new SimulationContext();
+            outboundContext.setSimulationTimeSeconds(fixture.simulationTime + 1d);
+            outboundController.update(outboundContext, 0.1d);
+
+            assertTrue(fixture.bagReceiver.getReceivedBags().isEmpty());
+            OutboundAllocationSnapshot allocatedSnapshot = fixture.outboundAllocator.snapshot();
+            assertEquals(1, allocatedSnapshot.allocatedBags().size());
+            var allocatedBag = allocatedSnapshot.allocatedBags().getFirst();
+            assertSame(plannedBag, allocatedBag.plannedBag());
+            assertEquals(fixture.p2pLine.lineId(),
+                    allocatedSnapshot.openToteFor(fixture.p2pLine.lineId())
+                            .orElseThrow().p2pLineId());
+            assertEquals("outbound-" + fixture.p2pLine.lineId().value() + "-1",
+                    allocatedBag.outboundPhysicalToteId().value());
+            assertEquals(List.of(EMPTY_DIRECT_104), plannedBag.owningOrderSheetKeys());
+            assertEquals(EMPTY_DIRECT_104, packTrace.sourceProvenance().sourceOrderSheetKey());
+            assertEquals(fixture.physicalToteId, packTrace.inputPhysicalToteId());
+            assertEquals(EMPTY_DIRECT_104, packTrace.fulfilmentOrderSheetKey());
+            assertEquals(plannedBag.bagKey(), packTrace.bagKey());
+
+            var outputSheet = allocatedBag.outputSheetAllocations().getFirst();
+            assertEquals(EMPTY_DIRECT_104, outputSheet.sourceOwningSheetKey());
+            assertEquals(EMPTY_DIRECT_104, outputSheet.outputSheetKey());
+            assertFalse(outputSheet.generated());
+            var outboundTote = allocatedSnapshot.openToteFor(fixture.p2pLine.lineId())
+                    .orElseThrow();
+            assertEquals(1, outboundTote.bagCount());
+            assertEquals(SERVICE_CENTRE_104, outboundTote.serviceCentreId().orElseThrow());
+            assertEquals("pharmacy-104-a", outboundTote.pharmacyId().orElseThrow());
+            assertEquals(PhysicalToteLifecycleState.OUTBOUND_BAG_TOTE,
+                    fixture.allocation.lifecycle.tote(outboundTote.physicalToteId())
+                            .orElseThrow().state());
+            assertEquals(PhysicalToteRole.OUTBOUND_BAG,
+                    fixture.allocation.lifecycle.tote(outboundTote.physicalToteId())
+                            .orElseThrow().role());
+            assertEquals(PhysicalToteAssignmentStage.OUTBOUND_BAG,
+                    fixture.allocation.lifecycle.activeAssignmentFor(EMPTY_DIRECT_104)
+                            .orElseThrow().stage());
+            assertEquals(fixture.physicalToteId,
+                    fixture.allocation.lifecycle.assignmentHistoryFor(EMPTY_DIRECT_104)
+                            .getFirst().physicalToteId());
+            assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_P2P,
+                    fixture.allocation.lifecycle.tote(fixture.physicalToteId)
+                            .orElseThrow().state());
+            assertTrue(fixture.allocation.av02Inventory.snapshot().departedTotes().stream()
+                    .noneMatch(tote -> tote.physicalToteId().equals(outboundTote.physicalToteId())));
+            assertTrue(fixture.allocation.osrInventory.snapshot().storedTotes().stream()
+                    .noneMatch(tote -> tote.physicalToteId().equals(outboundTote.physicalToteId())));
+            assertTrue(fixture.allocation.osrInventory.snapshot().departedTotes().stream()
+                    .noneMatch(tote -> tote.physicalToteId().equals(outboundTote.physicalToteId())));
+            assertTrue(fixture.allocation.manifestCatalog
+                    .findByPhysicalToteId(outboundTote.physicalToteId()).isEmpty());
+
+            OperationalEmptyState afterAllocation = fixture.state();
+            outboundController.update(outboundContext, 0.1d);
+            fixture.assertStateUnchangedExceptReleaseDiagnostics(
+                    afterAllocation, fixture.state());
+
+            var closedTote = fixture.outboundAllocator
+                    .closeForApplicableWorkCompletion(
+                            fixture.p2pLine.lineId(),
+                            Duration.ofNanos(Math.round((fixture.simulationTime + 2d)
+                                    * 1_000_000_000d)))
+                    .orElseThrow();
+            OperationalEmptyState afterOutboundClose = fixture.state();
+            assertEquals(OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE,
+                    closedTote.closureReason().orElseThrow());
+            assertEquals(1, closedTote.bagCount());
+            assertEquals(SERVICE_CENTRE_104, closedTote.serviceCentreId().orElseThrow());
+            assertEquals("pharmacy-104-a", closedTote.pharmacyId().orElseThrow());
+            assertEquals(PhysicalToteLifecycleState.OUTBOUND,
+                    fixture.allocation.lifecycle.tote(closedTote.physicalToteId())
+                            .orElseThrow().state());
+            assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
+                    fixture.allocation.lifecycle.activeAssignmentFor(EMPTY_DIRECT_104)
+                            .orElseThrow().stage());
+            assertEquals(PhysicalToteAssignmentEndReason.OUTBOUND_TOTE_CLOSED,
+                    fixture.allocation.lifecycle.assignmentHistoryFor(EMPTY_DIRECT_104)
+                            .get(1).endReason().orElseThrow());
+            assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_P2P,
+                    fixture.allocation.lifecycle.tote(fixture.physicalToteId)
+                            .orElseThrow().state());
+            assertTrue(afterOutboundClose.outbound().closedTotes().stream()
+                    .anyMatch(tote -> tote.physicalToteId().equals(closedTote.physicalToteId())));
+            assertTrue(fixture.allocation.av02Inventory.snapshot().departedTotes().stream()
+                    .noneMatch(tote -> tote.physicalToteId().equals(closedTote.physicalToteId())));
+            assertTrue(fixture.allocation.osrInventory.snapshot().storedTotes().stream()
+                    .noneMatch(tote -> tote.physicalToteId().equals(closedTote.physicalToteId())));
+            assertTrue(fixture.allocation.osrInventory.snapshot().departedTotes().stream()
+                    .noneMatch(tote -> tote.physicalToteId().equals(closedTote.physicalToteId())));
+            assertTrue(fixture.allocation.manifestCatalog
+                    .findByPhysicalToteId(closedTote.physicalToteId()).isEmpty());
+            assertEquals(physicalPackId,
+                    allocatedBag.plannedBag().physicalPackIds().getFirst());
+            assertEquals(fixture.physicalToteId, packTrace.inputPhysicalToteId());
+        }
     }
 
     private void assertThirdPartyJourneyWithContinuationBackpressure() {
@@ -735,6 +902,39 @@ class DspAv02OperationalAllocationScenarioTest {
                 0);
     }
 
+    private static PlannedBag directEmptyPlannedBag(NotionalToteOrder order) {
+        DspOrderItem item = order.items().getFirst();
+        String packId = "pack-" + order.orderId() + "-1";
+        return new PlannedBag(
+                new BagKey(item.prescriptionId(), 1),
+                order.serviceCentreId(),
+                item.pharmacyId(),
+                item.patientId(),
+                item.prescriptionId(),
+                List.of(packId),
+                List.of(order.orderSheetKey()));
+    }
+
+    private static Bag runtimeBag(PlannedBag plannedBag) {
+        String correlationId = plannedBag.bagKey().correlationId();
+        return new Bag(
+                "runtime-" + correlationId,
+                correlationId,
+                plannedBag.physicalPackIds().stream()
+                        .map(packId -> new PackPlan(
+                                packId,
+                                correlationId,
+                                new PackDimensions(0.20f, 0.10f, 0.08f)))
+                        .toList(),
+                new BagSpec(0.34f, 0.28f, 0.22f));
+    }
+
+    private enum JourneyStart {
+        THIRD_PARTY,
+        ADAPTING,
+        P2P
+    }
+
     private static final class JourneyFixture implements AutoCloseable {
         private static final PackDimensions PACK_DIMENSIONS =
                 new PackDimensions(0.20f, 0.10f, 0.08f);
@@ -742,7 +942,9 @@ class DspAv02OperationalAllocationScenarioTest {
         private final ScenarioFixture allocation;
         private final RecordingSimulationWorld world;
         private final NotionalToteOrder order;
+        private final JourneyStart firstStation;
         private final boolean adaptingFirst;
+        private final boolean directP2p;
         private final PhysicalToteId physicalToteId = new PhysicalToteId("av02-000001");
         private final ElasticRuntimeTestFixture elasticFixture =
                 new ElasticRuntimeTestFixture();
@@ -803,13 +1005,24 @@ class DspAv02OperationalAllocationScenarioTest {
         private double simulationTime;
 
         private JourneyFixture(boolean adaptingFirst) {
-            this.adaptingFirst = adaptingFirst;
-            OrderSheetKey sheet = adaptingFirst ? EMPTY_ADAPTED_104 : EMPTY_THIRD_PARTY_104;
+            this(adaptingFirst ? JourneyStart.ADAPTING : JourneyStart.THIRD_PARTY);
+        }
+
+        private JourneyFixture(JourneyStart firstStation) {
+            if (firstStation == null) {
+                throw new IllegalArgumentException("firstStation must not be null");
+            }
+            this.firstStation = firstStation;
+            this.adaptingFirst = firstStation == JourneyStart.ADAPTING;
+            this.directP2p = firstStation == JourneyStart.P2P;
+            OrderSheetKey sheet = adaptingFirst
+                    ? EMPTY_ADAPTED_104
+                    : directP2p ? EMPTY_DIRECT_104 : EMPTY_THIRD_PARTY_104;
             String pharmacy = adaptingFirst ? "pharmacy-104-b" : "pharmacy-104-a";
             DspOrderLineType lineType = adaptingFirst
                     ? DspOrderLineType.ADAPTED : DspOrderLineType.FULL_PACK;
             order = emptyOrder(sheet.orderId(), SERVICE_CENTRE_104, PRIORITY_104,
-                    adaptingFirst ? 3 : 2, pharmacy, lineType);
+                    adaptingFirst ? 3 : directP2p ? 1 : 2, pharmacy, lineType);
             allocation = new ScenarioFixture(List.of(order));
             world = allocation.world;
             allocation.authorizeAllEmptySheets();
@@ -955,13 +1168,16 @@ class DspAv02OperationalAllocationScenarioTest {
             return new JourneyFixture(adaptingFirst);
         }
 
+        private static JourneyFixture createDirectP2p() {
+            return new JourneyFixture(JourneyStart.P2P);
+        }
+
         private RoutedPhysicalTote releaseAndHydrate() {
             world.update(0.1d);
             simulationTime += 0.1d;
             OperationalRouteLaunchRequest request = launchQueue.peek().orElseThrow();
             assertEquals(physicalToteId, request.physicalToteId());
-            assertEquals(adaptingFirst ? StationType.ADAPTING : StationType.THIRD_PARTY,
-                    request.destination().stationType());
+            assertEquals(initialDestination().stationType(), request.destination().stationType());
             composeControllers();
             world.update(0d);
             refreshLatestFromInFlight();
@@ -972,6 +1188,14 @@ class DspAv02OperationalAllocationScenarioTest {
             assertSame(request, routed.launchRequest());
             assertSame(allocation.loadPlans.getLoadPlanFor(physicalToteId), routed.loadPlan());
             return routed;
+        }
+
+        private OperationalRouteDestination initialDestination() {
+            return switch (firstStation) {
+                case THIRD_PARTY -> topology.thirdPartyDestination();
+                case ADAPTING -> topology.adaptingDestination();
+                case P2P -> topology.p2pDestination();
+            };
         }
 
         private void composeControllers() {
@@ -1167,9 +1391,11 @@ class DspAv02OperationalAllocationScenarioTest {
         private DspP2pElasticAllocationRuntimeSnapshot elasticSnapshot() {
             try {
                 return elasticRuntime.operationalSnapshot();
-            } catch (IllegalArgumentException terminalPlannerAbsence) {
+            } catch (IllegalArgumentException | IllegalStateException terminalPlannerAbsence) {
                 // A completed AV02 line can leave its lease visible for one terminal callback
-                // while the planner has no remaining service-centre work to describe.
+                // while the planner has no remaining service-centre work to describe. Once the
+                // source sheet is reused for an independent outbound assignment, the same
+                // planner has no AV02 allocation state to describe.
                 return null;
             }
         }
@@ -1205,6 +1431,73 @@ class DspAv02OperationalAllocationScenarioTest {
             assertEquals(before.provenance(), after.provenance());
             assertEquals(before.outbound(), after.outbound());
             assertEquals(before.bags(), after.bags());
+        }
+
+        private void assertStateUnchangedExceptBags(
+                OperationalEmptyState before,
+                OperationalEmptyState after) {
+            assertEquals(before.scheduler(), after.scheduler());
+            assertEquals(before.supply(), after.supply());
+            assertEquals(before.av02Inventory(), after.av02Inventory());
+            assertEquals(before.osrInventory(), after.osrInventory());
+            assertEquals(before.lifecycle(), after.lifecycle());
+            assertEquals(before.elastic(), after.elastic());
+            assertEquals(before.operational(), after.operational());
+            assertEquals(before.launchQueue(), after.launchQueue());
+            assertEquals(before.launchController(), after.launchController());
+            assertEquals(before.transportQueue(), after.transportQueue());
+            assertEquals(before.ingress(), after.ingress());
+            assertEquals(before.inFlight(), after.inFlight());
+            assertEquals(before.arrival(), after.arrival());
+            assertEquals(before.stationArrivals(), after.stationArrivals());
+            assertEquals(before.claimants(), after.claimants());
+            assertEquals(before.coordinator(), after.coordinator());
+            assertEquals(before.thirdParty(), after.thirdParty());
+            assertEquals(before.adaptingBench(), after.adaptingBench());
+            assertEquals(before.adaptedStore(), after.adaptedStore());
+            assertEquals(before.p2pTarget(), after.p2pTarget());
+            assertEquals(before.p2pInput(), after.p2pInput());
+            assertEquals(before.continuation(), after.continuation());
+            assertEquals(before.identities(), after.identities());
+            assertEquals(before.worldTrackableCount(), after.worldTrackableCount());
+            assertEquals(before.renderableCount(), after.renderableCount());
+            assertSame(before.currentPlan(), after.currentPlan());
+            assertEquals(before.provenance(), after.provenance());
+            assertEquals(before.outbound(), after.outbound());
+        }
+
+        private void assertDirectP2pTerminalCompletion(RoutedPhysicalTote routed) {
+            assertTrue(coordinator.pendingDispositions().isEmpty());
+            assertTrue(coordinator.snapshot().activeClaims().isEmpty());
+            assertEquals(1, coordinator.snapshot().completedCount());
+            assertEquals(0, coordinator.snapshot().acknowledgedContinuationCount());
+            assertEquals(1, coordinator.snapshot().acknowledgedConsumeCount());
+            assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_P2P,
+                    allocation.lifecycle.tote(physicalToteId).orElseThrow().state());
+            assertEquals(PhysicalToteAssignmentEndReason.CONSUMED_AT_P2P,
+                    allocation.lifecycle.assignmentHistoryFor(order.orderSheetKey()).getLast()
+                            .endReason().orElseThrow());
+            assertFalse(routed.renderable().isVisible());
+            assertFalse(routed.tote().areLidsOpen());
+            assertEquals(Tote.ToteMotionState.HELD, routed.tote().getInteractionMode());
+            assertTrue(thirdPartyQueue.snapshot().entries().isEmpty());
+            assertTrue(adaptingQueue.snapshot().entries().isEmpty());
+            assertTrue(p2pQueue.snapshot().entries().isEmpty());
+            assertTrue(p2pInputQueue.snapshot().toteIds().isEmpty());
+            assertTrue(transportQueue.snapshot().entries().isEmpty());
+            assertTrue(inFlightRegistry.snapshot().entries().isEmpty());
+            assertEquals(1, ingressController.snapshot().initialPublicationCount());
+            assertEquals(0, ingressController.snapshot().exactObjectReentryCount());
+            assertEquals(1, world.trackableCount(physicalToteId.value()));
+            assertEquals(1, renderables.size());
+            assertEquals(0, outboundAllocator.snapshot().allocatedBags().size());
+            assertTrue(bagReceiver.getReceivedBags().isEmpty());
+            assertTrue(allocation.av02Inventory.findWaiting(physicalToteId).isEmpty());
+            assertTrue(allocation.av02Inventory.snapshot().departedTotes().stream()
+                    .anyMatch(tote -> tote.physicalToteId().equals(physicalToteId)));
+            assertTrue(allocation.osrInventory.snapshot().storedTotes().isEmpty());
+            assertTrue(allocation.osrInventory.snapshot().departedTotes().isEmpty());
+            assertTrue(manifestCatalog.findByPhysicalToteId(physicalToteId).isEmpty());
         }
 
         private void assertTerminalCompletion(RoutedPhysicalTote routed) {
@@ -1267,9 +1560,14 @@ class DspAv02OperationalAllocationScenarioTest {
         }
 
         private WarehouseSchedulerSnapshot logicalSnapshot() {
-            RouteRequirements requirements = adaptingFirst
-                    ? new RouteRequirements(false, true, false, true, false, StartLocation.AV02)
-                    : new RouteRequirements(true, false, false, true, false, StartLocation.AV02);
+            RouteRequirements requirements = switch (firstStation) {
+                case THIRD_PARTY ->
+                        new RouteRequirements(true, false, false, true, false, StartLocation.AV02);
+                case ADAPTING ->
+                        new RouteRequirements(false, true, false, true, false, StartLocation.AV02);
+                case P2P ->
+                        new RouteRequirements(false, false, false, true, false, StartLocation.AV02);
+            };
             return new WarehouseSchedulerSnapshot(
                     List.of(new DspSchedulerOrderState(order, requirements, DspOrderStatus.WAITING)),
                     Map.of(), allocation.runtimeState.snapshot().preparedLineKeys(), Optional.empty());
