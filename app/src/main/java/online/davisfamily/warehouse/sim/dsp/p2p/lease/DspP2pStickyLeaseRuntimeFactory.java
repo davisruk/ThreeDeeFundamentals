@@ -140,6 +140,76 @@ public final class DspP2pStickyLeaseRuntimeFactory {
             P2pLeaseRetentionPolicy retentionPolicy,
             P2pBagCorrelationRequirementCatalog requirementCatalog,
             P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
+        return create(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                authorizedEmptyOrderSheetKeysSupplier,
+                outboundToteAllocator,
+                arrivalBindings,
+                retentionPolicy,
+                requirementCatalog,
+                correlationAssignmentRegistry,
+                true);
+    }
+
+    /**
+     * Creates the lease and release runtime without registering P2P arrival consumers.
+     *
+     * <p>The full-day composition uses this seam because the shared station-processing runtime
+     * owns all station arrival claims, including the five P2P lines. Existing callers should use
+     * one of the {@code create} overloads, which retain their historical arrival-consumer
+     * registration behavior.</p>
+     */
+    public DspP2pStickyLeaseRuntime createWithoutArrivalConsumers(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<Set<OrderSheetKey>> authorizedEmptyOrderSheetKeysSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            P2pLeaseRetentionPolicy retentionPolicy,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
+        return create(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                authorizedEmptyOrderSheetKeysSupplier,
+                outboundToteAllocator,
+                List.of(),
+                retentionPolicy,
+                requirementCatalog,
+                correlationAssignmentRegistry,
+                false);
+    }
+
+    private DspP2pStickyLeaseRuntime create(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<Set<OrderSheetKey>> authorizedEmptyOrderSheetKeysSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            List<P2pStickyArrivalBinding> arrivalBindings,
+            P2pLeaseRetentionPolicy retentionPolicy,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry,
+            boolean registerArrivalConsumers) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
         requireNonNull(activityProbes, "activityProbes");
@@ -166,8 +236,9 @@ public final class DspP2pStickyLeaseRuntimeFactory {
         P2pLineLeaseRegistry registry = new P2pLineLeaseRegistry(definitions);
         Map<P2pLineId, P2pLineActivityProbe> probes = validateProbes(
                 definitions, activityProbes);
-        List<P2pStickyArrivalBinding> stickyBindings = validateArrivalBindings(
-                definitions, arrivalBindings);
+        List<P2pStickyArrivalBinding> stickyBindings = registerArrivalConsumers
+                ? validateArrivalBindings(definitions, arrivalBindings)
+                : List.of();
 
         Supplier<P2pLineLeaseCatalogSnapshot> leaseSnapshotSupplier = () ->
                 registry.snapshot(activitySnapshots(definitions, probes));
@@ -183,22 +254,26 @@ public final class DspP2pStickyLeaseRuntimeFactory {
                         committer,
                         requirementCatalog,
                         correlationAssignmentRegistry);
-        List<P2pArrivalConsumerBinding> consumerBindings = new ArrayList<>();
-        Map<P2pLineId, P2pLineDefinition> definitionsById = indexDefinitions(definitions);
-        for (P2pStickyArrivalBinding binding : stickyBindings) {
-            P2pLineDefinition definition = definitionsById.get(binding.lineId());
-            consumerBindings.add(new P2pArrivalConsumerBinding(
-                    binding.sourceQueue(),
-                    new StickyP2pArrivalAdmissionPolicy(
-                            definition, leaseSnapshotSupplier),
-                    binding.routeBinding(),
-                    binding.payloadFactory(),
-                    binding.target()));
+        DspP2pArrivalConsumerRuntime arrivalRuntime;
+        if (registerArrivalConsumers) {
+            List<P2pArrivalConsumerBinding> consumerBindings = new ArrayList<>();
+            Map<P2pLineId, P2pLineDefinition> definitionsById = indexDefinitions(definitions);
+            for (P2pStickyArrivalBinding binding : stickyBindings) {
+                P2pLineDefinition definition = definitionsById.get(binding.lineId());
+                consumerBindings.add(new P2pArrivalConsumerBinding(
+                        binding.sourceQueue(),
+                        new StickyP2pArrivalAdmissionPolicy(
+                                definition, leaseSnapshotSupplier),
+                        binding.routeBinding(),
+                        binding.payloadFactory(),
+                        binding.target()));
+            }
+            arrivalRuntime = new DspP2pArrivalConsumerRuntimeFactory().create(
+                    simulationWorld, consumerBindings);
+        } else {
+            arrivalRuntime = new DspP2pArrivalConsumerRuntimeFactory().create(
+                    simulationWorld, List.of());
         }
-
-        DspP2pArrivalConsumerRuntime arrivalRuntime =
-                new DspP2pArrivalConsumerRuntimeFactory().create(
-                simulationWorld, consumerBindings);
         P2pServiceCentreWorkSnapshotFactory workSnapshotFactory =
                 new P2pServiceCentreWorkSnapshotFactory();
         P2pLeaseReleaseController releaseController = new P2pLeaseReleaseController(

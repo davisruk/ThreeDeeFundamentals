@@ -5,6 +5,7 @@ import java.util.List;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchController;
 import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueue;
 import online.davisfamily.warehouse.sim.dsp.transport.OsrOutboundTransportQueueSnapshot;
+import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 
 public final class DspWarehouseTransportRuntime implements AutoCloseable {
     private final OsrOutboundRouteLaunchController routeLaunchController;
@@ -62,8 +63,17 @@ public final class DspWarehouseTransportRuntime implements AutoCloseable {
         return transportQueue.snapshot();
     }
 
+    /** Returns the shared outbound transport queue owned by this runtime. */
+    public OsrOutboundTransportQueue outboundTransportQueue() {
+        return transportQueue;
+    }
+
     public WarehouseTransportInFlightSnapshot inFlightSnapshot() {
         return inFlightRegistry.snapshot();
+    }
+
+    public List<RoutedPhysicalTote> activeRoutedTotes() {
+        return inFlightRegistry.activeRoutedTotes();
     }
 
     public List<StationRoutedToteArrivalQueueSnapshot> stationArrivalSnapshots() {

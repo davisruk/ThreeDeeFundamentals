@@ -84,6 +84,81 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             P2pElasticAllocationConfig config,
             P2pBagCorrelationRequirementCatalog requirementCatalog,
             P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
+        return createInternal(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                clockSnapshotSupplier,
+                supplySnapshotSupplier,
+                timetable,
+                bagPlanningResultSupplier,
+                outboundToteAllocator,
+                arrivalBindings,
+                config,
+                requirementCatalog,
+                correlationAssignmentRegistry,
+                true);
+    }
+
+    /** Creates the elastic runtime while leaving station-arrival ownership to the caller. */
+    public DspP2pElasticAllocationRuntime createWithoutArrivalConsumers(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            DspServiceCentreTimetable timetable,
+            Supplier<BagPlanningResult> bagPlanningResultSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            P2pElasticAllocationConfig config,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
+        return createInternal(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                clockSnapshotSupplier,
+                supplySnapshotSupplier,
+                timetable,
+                bagPlanningResultSupplier,
+                outboundToteAllocator,
+                List.of(),
+                config,
+                requirementCatalog,
+                correlationAssignmentRegistry,
+                false);
+    }
+
+    private DspP2pElasticAllocationRuntime createInternal(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            DspServiceCentreTimetable timetable,
+            Supplier<BagPlanningResult> bagPlanningResultSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            List<P2pStickyArrivalBinding> arrivalBindings,
+            P2pElasticAllocationConfig config,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry,
+            boolean registerArrivalConsumers) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
         requireNonNull(activityProbes, "activityProbes");
@@ -169,7 +244,8 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             throw new IllegalStateException("elastic runtime prevalidation returned null");
         }
 
-        DspP2pStickyLeaseRuntime leaseRuntime = new DspP2pStickyLeaseRuntimeFactory().create(
+        DspP2pStickyLeaseRuntime leaseRuntime = registerArrivalConsumers
+                ? new DspP2pStickyLeaseRuntimeFactory().create(
                 simulationWorld,
                 lineDefinitions,
                 activityProbes,
@@ -182,6 +258,21 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                         "supplySnapshotSupplier").authorizedEmptyOrderSheetKeys(),
                 outboundToteAllocator,
                 arrivalBindings,
+                new ElasticP2pLeaseRetentionPolicy(allocationFactory),
+                requirementCatalog,
+                correlationAssignmentRegistry)
+                : new DspP2pStickyLeaseRuntimeFactory().createWithoutArrivalConsumers(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                () -> requireSupplied(
+                        supplySnapshotSupplier,
+                        "supplySnapshotSupplier").authorizedEmptyOrderSheetKeys(),
+                outboundToteAllocator,
                 new ElasticP2pLeaseRetentionPolicy(allocationFactory),
                 requirementCatalog,
                 correlationAssignmentRegistry);

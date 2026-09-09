@@ -47,6 +47,13 @@ public final class WarehouseTransportInFlightRegistry {
         return entry == null ? Optional.empty() : Optional.of(entry.routedTote);
     }
 
+    /** Returns the active routed totes in their deterministic ingress order. */
+    public List<RoutedPhysicalTote> activeRoutedTotes() {
+        return entriesByPhysicalToteId.values().stream()
+                .map(entry -> entry.routedTote)
+                .toList();
+    }
+
     public void markArrivalPending(RoutedPhysicalTote routedTote) {
         activeEntryForExactPayload(routedTote).arrivalPending = true;
     }

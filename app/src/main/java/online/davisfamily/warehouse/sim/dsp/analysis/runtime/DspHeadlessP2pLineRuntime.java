@@ -247,6 +247,11 @@ public final class DspHeadlessP2pLineRuntime implements AutoCloseable {
                 lineDefinition().lineId(), time);
     }
 
+    public Optional<OutboundToteSnapshot> closeOutboundToteForHardCutoff(Duration time) {
+        return outboundToteAllocator().closeForHardCutoff(
+                lineDefinition().lineId(), time);
+    }
+
     public DspHeadlessP2pLineRuntimeSnapshot snapshot() {
         P2pLineActivitySnapshotWithOutbound activityAndOutbound = snapshotActivity();
         Map<String, PrlState> prlStates = new LinkedHashMap<>();

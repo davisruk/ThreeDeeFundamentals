@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import online.davisfamily.warehouse.sim.dsp.av02.ReleasePhysicalToteFromAv02Command;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
@@ -15,6 +16,8 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationRequest;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pLineAllocationPolicy;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog;
 
 public final class DspOperationalReleaseScheduler {
     private final OperationalDependencyReadinessPolicy dependencyReadinessPolicy;
@@ -22,13 +25,18 @@ public final class DspOperationalReleaseScheduler {
     private final OperationalCandidateRankingPolicy candidateRankingPolicy;
     private final P2pLineAllocationPolicy p2pLineAllocationPolicy;
     private final OperationalRouteEntrySelector routeEntrySelector;
+    private final P2pBagCorrelationRequirementCatalog correlationRequirementCatalog;
+    private final Supplier<P2pBagCorrelationAssignmentSnapshot>
+            correlationAssignmentSnapshotSupplier;
 
     public DspOperationalReleaseScheduler() {
         this(
                 new OperationalDependencyReadinessPolicy(),
                 new OperationalRouteEntryAdmissionPolicy(),
                 new PharmacyGroupedSourceSequenceRankingPolicy(),
-                new StickyP2pLineAllocationPolicy());
+                new StickyP2pLineAllocationPolicy(),
+                P2pBagCorrelationRequirementCatalog.empty(),
+                P2pBagCorrelationAssignmentSnapshot::empty);
     }
 
     public DspOperationalReleaseScheduler(
@@ -39,7 +47,9 @@ public final class DspOperationalReleaseScheduler {
                 dependencyReadinessPolicy,
                 routeEntryAdmissionPolicy,
                 candidateRankingPolicy,
-                new StickyP2pLineAllocationPolicy());
+                new StickyP2pLineAllocationPolicy(),
+                P2pBagCorrelationRequirementCatalog.empty(),
+                P2pBagCorrelationAssignmentSnapshot::empty);
     }
 
     public DspOperationalReleaseScheduler(
@@ -47,6 +57,23 @@ public final class DspOperationalReleaseScheduler {
             OperationalRouteEntryAdmissionPolicy routeEntryAdmissionPolicy,
             OperationalCandidateRankingPolicy candidateRankingPolicy,
             P2pLineAllocationPolicy p2pLineAllocationPolicy) {
+        this(
+                dependencyReadinessPolicy,
+                routeEntryAdmissionPolicy,
+                candidateRankingPolicy,
+                p2pLineAllocationPolicy,
+                P2pBagCorrelationRequirementCatalog.empty(),
+                P2pBagCorrelationAssignmentSnapshot::empty);
+    }
+
+    public DspOperationalReleaseScheduler(
+            OperationalDependencyReadinessPolicy dependencyReadinessPolicy,
+            OperationalRouteEntryAdmissionPolicy routeEntryAdmissionPolicy,
+            OperationalCandidateRankingPolicy candidateRankingPolicy,
+            P2pLineAllocationPolicy p2pLineAllocationPolicy,
+            P2pBagCorrelationRequirementCatalog correlationRequirementCatalog,
+            Supplier<P2pBagCorrelationAssignmentSnapshot>
+                    correlationAssignmentSnapshotSupplier) {
         if (dependencyReadinessPolicy == null) {
             throw new IllegalArgumentException("dependencyReadinessPolicy must not be null");
         }
@@ -59,11 +86,20 @@ public final class DspOperationalReleaseScheduler {
         if (p2pLineAllocationPolicy == null) {
             throw new IllegalArgumentException("p2pLineAllocationPolicy must not be null");
         }
+        if (correlationRequirementCatalog == null) {
+            throw new IllegalArgumentException("correlationRequirementCatalog must not be null");
+        }
+        if (correlationAssignmentSnapshotSupplier == null) {
+            throw new IllegalArgumentException(
+                    "correlationAssignmentSnapshotSupplier must not be null");
+        }
         this.dependencyReadinessPolicy = dependencyReadinessPolicy;
         this.routeEntryAdmissionPolicy = routeEntryAdmissionPolicy;
         this.candidateRankingPolicy = candidateRankingPolicy;
         this.p2pLineAllocationPolicy = p2pLineAllocationPolicy;
         this.routeEntrySelector = new OperationalRouteEntrySelector();
+        this.correlationRequirementCatalog = correlationRequirementCatalog;
+        this.correlationAssignmentSnapshotSupplier = correlationAssignmentSnapshotSupplier;
     }
 
     public DspOperationalReleaseEvaluation evaluate(
@@ -107,6 +143,12 @@ public final class DspOperationalReleaseScheduler {
             Optional<P2pPhysicalToteAssignment> assignment = Optional.empty();
             boolean activePharmacyAffinity = false;
             if (stickyP2pCandidate) {
+                P2pBagCorrelationAssignmentSnapshot correlationAssignments =
+                        correlationAssignmentSnapshotSupplier.get();
+                if (correlationAssignments == null) {
+                    throw new IllegalStateException(
+                            "correlationAssignmentSnapshotSupplier returned null");
+                }
                 P2pLineAllocationDecision allocation = p2pLineAllocationPolicy.allocate(
                         new P2pLineAllocationRequest(
                                 candidate.physicalCandidate().physicalToteId(),
@@ -115,7 +157,12 @@ public final class DspOperationalReleaseScheduler {
                                 directP2p,
                                 snapshot.p2pLineLeases(),
                                 snapshot.p2pRouteAdmissions(),
-                                snapshot.elasticP2pAllocation()));
+                                snapshot.elasticP2pAllocation(),
+                                correlationRequirementCatalog.requirementsFor(
+                                        candidate.physicalCandidate().source(),
+                                        candidate.physicalCandidate().physicalToteId(),
+                                        candidate.physicalCandidate().orderSheetKey()),
+                                correlationAssignments));
                 if (allocation == null) {
                     throw new IllegalStateException("P2P line allocation policy returned null");
                 }

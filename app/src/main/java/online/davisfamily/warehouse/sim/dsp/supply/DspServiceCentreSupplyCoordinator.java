@@ -279,7 +279,7 @@ public final class DspServiceCentreSupplyCoordinator {
             ServiceCentreSupplySnapshot serviceCentreSnapshot = new ServiceCentreSupplySnapshot(
                     batch.serviceCentreId(),
                     batch.priority(),
-                    authorizationStates.get(batch.serviceCentreId()),
+                    effectiveAuthorizationState(batch, physicalToteSnapshots),
                     authorizationElapsedTimes.get(batch.serviceCentreId()),
                     physicalToteSnapshots.size(),
                     preloadedCount,
@@ -305,6 +305,18 @@ public final class DspServiceCentreSupplyCoordinator {
                 admittedAfterStartupCount);
     }
 
+    private ServiceCentreAuthorizationState effectiveAuthorizationState(
+            ServiceCentreSupplyBatch batch,
+            List<PhysicalToteSupplySnapshot> physicalToteSnapshots) {
+        ServiceCentreAuthorizationState state = authorizationStates.get(batch.serviceCentreId());
+        if (state == ServiceCentreAuthorizationState.PRELOADED
+                && physicalToteSnapshots.stream()
+                        .allMatch(tote -> tote.state() == PhysicalToteSupplyState.DEPARTED_FROM_OSR)) {
+            return ServiceCentreAuthorizationState.SUPPLY_COMPLETE;
+        }
+        return state;
+    }
+
     private void initializeFromBootstrap() {
         OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
         Set<PhysicalToteId> expectedPreloadedPhysicalToteIds = new LinkedHashSet<>();
@@ -316,7 +328,11 @@ public final class DspServiceCentreSupplyCoordinator {
                     batch.preloadedAtStart()
                             ? ServiceCentreAuthorizationState.PRELOADED
                             : ServiceCentreAuthorizationState.HELD_UPSTREAM);
-            authorizationElapsedTimes.put(batch.serviceCentreId(), Optional.empty());
+            authorizationElapsedTimes.put(
+                    batch.serviceCentreId(),
+                    batch.preloadedAtStart()
+                            ? Optional.of(Duration.ZERO)
+                            : Optional.empty());
             if (batch.preloadedAtStart()) {
                 expectedAuthorizedEmptyKeys.addAll(batch.emptyOrderSheetKeys());
                 for (InboundToteManifest manifest : batch.physicalManifests()) {
