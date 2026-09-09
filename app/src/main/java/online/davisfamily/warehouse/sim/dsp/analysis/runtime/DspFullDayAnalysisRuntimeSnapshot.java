@@ -5,6 +5,7 @@ import java.util.List;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCutoffSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.av02.DspAv02AllocationRuntimeSnapshot;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
@@ -48,6 +49,7 @@ public record DspFullDayAnalysisRuntimeSnapshot(
         StationRouteContinuationControllerSnapshot continuation,
         List<DspServiceCentreCompletionSnapshot> completions,
         DspFullDayCutoffSnapshot cutoff,
+        DspFullDayMetricsSnapshot metrics,
         boolean closed) {
 
     public DspFullDayAnalysisRuntimeSnapshot {
@@ -58,7 +60,7 @@ public record DspFullDayAnalysisRuntimeSnapshot(
                 || outboundTransport == null || transportInFlight == null
                 || transportIngress == null || transportArrival == null
                 || stationArrivals == null || continuation == null || completions == null
-                || cutoff == null) {
+                || cutoff == null || metrics == null) {
             throw new IllegalArgumentException("full-day runtime snapshot values must not be null");
         }
         if (p2pLines.stream().anyMatch(value -> value == null)

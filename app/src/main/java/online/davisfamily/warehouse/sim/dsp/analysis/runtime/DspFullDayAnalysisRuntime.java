@@ -10,6 +10,8 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCompletionEvaluat
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCutoffController;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsCollector;
+import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.av02.Av02PhysicalToteInventory;
 import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.av02.DspAv02AllocationRuntimeController;
@@ -54,6 +56,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
     private final DspFullDayCutoffController cutoffController;
     private final DspFullDayCompletionEvaluator completionEvaluator;
     private final Supplier<List<DspServiceCentreCompletionSnapshot>> completionSnapshotSupplier;
+    private final DspFullDayMetricsCollector metricsCollector;
     private final java.util.concurrent.atomic.AtomicReference<DspFullDayRuntimeState> state;
     private boolean closed;
 
@@ -81,6 +84,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
             DspFullDayCutoffController cutoffController,
             DspFullDayCompletionEvaluator completionEvaluator,
             Supplier<List<DspServiceCentreCompletionSnapshot>> completionSnapshotSupplier,
+            DspFullDayMetricsCollector metricsCollector,
             java.util.concurrent.atomic.AtomicReference<DspFullDayRuntimeState> state) {
         this.simulationWorld = Objects.requireNonNull(simulationWorld);
         this.clockController = Objects.requireNonNull(clockController);
@@ -105,6 +109,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
         this.cutoffController = Objects.requireNonNull(cutoffController);
         this.completionEvaluator = Objects.requireNonNull(completionEvaluator);
         this.completionSnapshotSupplier = Objects.requireNonNull(completionSnapshotSupplier);
+        this.metricsCollector = Objects.requireNonNull(metricsCollector);
         this.state = Objects.requireNonNull(state);
     }
 
@@ -204,6 +209,14 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
         return List.copyOf(completionSnapshotSupplier.get());
     }
 
+    public DspFullDayMetricsCollector metricsCollector() {
+        return metricsCollector;
+    }
+
+    public DspFullDayMetricsSnapshot metricsSnapshot() {
+        return metricsCollector.snapshot();
+    }
+
     public void update(double dtSeconds) {
         if (!Double.isFinite(dtSeconds) || dtSeconds < 0d) {
             throw new IllegalArgumentException("dtSeconds must be finite and >= 0");
@@ -282,6 +295,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
                 runtime.continuationRuntime.snapshot(),
                 runtime.completionSnapshots(),
                 runtime.cutoffController.snapshot(),
+                runtime.metricsCollector.snapshot(),
                 runtime.closed);
     }
 }

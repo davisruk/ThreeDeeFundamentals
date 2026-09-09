@@ -29,6 +29,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfi
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.AdaptingBenchDefinition;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.QueueCapacities;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
+import online.davisfamily.warehouse.sim.dsp.analysis.metrics.*;
 import online.davisfamily.warehouse.sim.dsp.av02.*;
 import online.davisfamily.warehouse.sim.dsp.bagging.*;
 import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
@@ -444,6 +445,43 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     runtimeState::set);
             simulationWorld.addController(cutoffController);
 
+            DspFullDayMetricsCollector metricsCollector = new DspFullDayMetricsCollector(
+                    profile.profileId(),
+                    profile.serviceCentreSupplyPolicyId(),
+                    profile.orderEligibilityPolicyId(),
+                    profile.candidateRankingPolicyId(),
+                    profile.p2pLineAllocationPolicyId(),
+                    profile.outboundAllocationPolicyId(),
+                    profile.calibrationStatus(),
+                    profile.completionMilestone(),
+                    profile.inboundToteArrivalPolicy().interval(),
+                    profile.metricSampleInterval(),
+                    profile.serviceCentreSupplyConfig().lowWaterMark(),
+                    input.report(),
+                    new DspFullDayMetricsCollector.SnapshotSuppliers(
+                            clockController::snapshot,
+                            supplyController::snapshot,
+                            osrInventory::snapshot,
+                            av02Inventory::snapshot,
+                            lifecycleLedger::snapshot,
+                            elasticRuntime::operationalSnapshot,
+                            () -> lineRuntimes.stream()
+                                    .map(DspHeadlessP2pLineRuntime::snapshot)
+                                    .toList(),
+                            operationalRuntime.controller()::snapshot,
+                            transportRuntime::inFlightSnapshot,
+                            () -> transportRuntime.ingressController().snapshot(),
+                            () -> transportRuntime.arrivalController().snapshot(),
+                            transportRuntime::outboundTransportSnapshot,
+                            transportRuntime::stationArrivalSnapshots,
+                            stationRuntime::coordinatorSnapshot,
+                            stationRuntime::claimantSnapshots,
+                            outboundAllocator::snapshot,
+                            schedulerState::snapshot,
+                            completionSource::get,
+                            runtimeState::get));
+            simulationWorld.addController(metricsCollector);
+
             return new DspFullDayAnalysisRuntime(
                     simulationWorld,
                     clockController,
@@ -468,6 +506,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     cutoffController,
                     completionEvaluator,
                     completionSource,
+                    metricsCollector,
                     runtimeState);
         } catch (RuntimeException exception) {
             closeReverse(closeables, exception);
