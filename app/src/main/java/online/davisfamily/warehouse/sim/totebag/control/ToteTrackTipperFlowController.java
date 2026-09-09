@@ -87,6 +87,36 @@ public class ToteTrackTipperFlowController implements SimulationController {
                 TipperToteCompletedListener.NO_OP);
     }
 
+    /**
+     * Creates a tipper flow with no tote loaded initially.
+     *
+     * <p>The input boundary must call {@link #acceptNextTote(Tote)} when the
+     * tipper is clear. This is the canonical constructor for live-input lines;
+     * the constructors that receive an initial tote remain compatibility
+     * entry points for existing fixed-feed simulations.</p>
+     */
+    public ToteTrackTipperFlowController(
+            ToteLoadPlanProvider toteLoadPlanProvider,
+            RouteSegment tipperSegment,
+            float tipperStopDistance,
+            float tipperTippedAngleRadians,
+            TippingMachine tippingMachine,
+            TipperDownstreamFlow downstreamFlow,
+            double dischargeDurationSeconds,
+            TipperToteCompletedListener toteCompletedListener) {
+        this(
+                null,
+                toteLoadPlanProvider,
+                tipperSegment,
+                tipperStopDistance,
+                tipperTippedAngleRadians,
+                tippingMachine,
+                downstreamFlow,
+                dischargeDurationSeconds,
+                toteCompletedListener,
+                true);
+    }
+
     public ToteTrackTipperFlowController(
             Tote tote,
             ToteLoadPlanProvider toteLoadPlanProvider,
@@ -140,7 +170,31 @@ public class ToteTrackTipperFlowController implements SimulationController {
             TipperDownstreamFlow downstreamFlow,
             double dischargeDurationSeconds,
             TipperToteCompletedListener toteCompletedListener) {
-        if (tote == null
+        this(
+                tote,
+                toteLoadPlanProvider,
+                tipperSegment,
+                tipperStopDistance,
+                tipperTippedAngleRadians,
+                tippingMachine,
+                downstreamFlow,
+                dischargeDurationSeconds,
+                toteCompletedListener,
+                false);
+    }
+
+    private ToteTrackTipperFlowController(
+            Tote tote,
+            ToteLoadPlanProvider toteLoadPlanProvider,
+            RouteSegment tipperSegment,
+            float tipperStopDistance,
+            float tipperTippedAngleRadians,
+            TippingMachine tippingMachine,
+            TipperDownstreamFlow downstreamFlow,
+            double dischargeDurationSeconds,
+            TipperToteCompletedListener toteCompletedListener,
+            boolean allowEmptyStart) {
+        if ((!allowEmptyStart && tote == null)
                 || toteLoadPlanProvider == null
                 || tipperSegment == null
                 || tippingMachine == null

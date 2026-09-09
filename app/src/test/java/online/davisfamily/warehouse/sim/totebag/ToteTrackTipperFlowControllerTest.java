@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.totebag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -22,14 +23,70 @@ import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.control.SorterTipperDownstreamFlow;
+import online.davisfamily.warehouse.sim.totebag.control.TipperToteCompletedListener;
+import online.davisfamily.warehouse.sim.totebag.control.TipperDownstreamFlow;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.TippingMachine;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
+import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 
 class ToteTrackTipperFlowControllerTest {
+
+    @Test
+    void shouldStartEmptyForLiveInput() {
+        RouteSegment tipperSegment = new RouteSegment(
+                "tipper", new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(1.25f, 0f, 0f), false));
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.1d, 0.1d, 0.1d);
+        ToteTrackTipperFlowController controller = new ToteTrackTipperFlowController(
+                ignored -> null,
+                tipperSegment,
+                0.625f,
+                -1.02f,
+                tippingMachine,
+                acceptingDownstreamFlow(),
+                0.1d,
+                TipperToteCompletedListener.NO_OP);
+
+        assertFalse(controller.hasActiveTote());
+        assertFalse(controller.isToteCaptured());
+        assertTrue(controller.canAcceptNextTote());
+    }
+
+    @Test
+    void shouldAcceptLiveInputOnlyWhenTheTipperIsClear() {
+        RouteSegment infeedSegment = new RouteSegment(
+                "infeed",
+                new LinearSegment3(new Vec3(0f, 0f, 0f), new Vec3(2f, 0f, 0f), false));
+        RouteSegment tipperSegment = new RouteSegment(
+                "tipper",
+                new LinearSegment3(new Vec3(2f, 0f, 0f), new Vec3(3.25f, 0f, 0f), false));
+        infeedSegment.connectTo(tipperSegment);
+        Tote tote = createTote("live-tote", infeedSegment);
+        TippingMachine tippingMachine = new TippingMachine("tipper", 0.1d, 0.1d, 0.1d);
+        ToteTrackTipperFlowController controller = new ToteTrackTipperFlowController(
+                toteId -> new ToteLoadPlan(
+                        toteId,
+                        List.of(new PackPlan(
+                                "pack-" + toteId,
+                                "bag-" + toteId,
+                                new PackDimensions(0.2f, 0.1f, 0.08f)))),
+                tipperSegment,
+                0.625f,
+                -1.02f,
+                tippingMachine,
+                acceptingDownstreamFlow(),
+                0.1d,
+                TipperToteCompletedListener.NO_OP);
+
+        controller.acceptNextTote(tote);
+
+        assertTrue(controller.hasActiveTote());
+        assertFalse(controller.canAcceptNextTote());
+        assertThrows(IllegalStateException.class, () -> controller.acceptNextTote(tote));
+    }
 
     @Test
     void shouldNotifyCompletionExactlyOnceWhenReleased() {
@@ -250,5 +307,27 @@ class ToteTrackTipperFlowControllerTest {
                 },
                 new int[][] { {0, 1, 2} },
                 "anchor");
+    }
+
+    private static TipperDownstreamFlow acceptingDownstreamFlow() {
+        return new TipperDownstreamFlow() {
+            @Override
+            public boolean canAcceptDischargedPack(Pack pack) {
+                return pack != null;
+            }
+
+            @Override
+            public void acceptDischargedPack(Pack pack) {
+            }
+
+            @Override
+            public void update(double dtSeconds) {
+            }
+
+            @Override
+            public boolean keepsTipperOccupied() {
+                return false;
+            }
+        };
     }
 }
