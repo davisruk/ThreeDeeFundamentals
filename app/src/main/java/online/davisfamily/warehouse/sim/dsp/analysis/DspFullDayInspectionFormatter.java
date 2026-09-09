@@ -20,6 +20,11 @@ public final class DspFullDayInspectionFormatter {
         return delegate.describe(report);
     }
 
+    public List<String> describe(
+            online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionSnapshot snapshot) {
+        return delegate.describe(snapshot);
+    }
+
     public List<String> format(DspFullDayInspectionSnapshot snapshot) {
         return describe(snapshot);
     }

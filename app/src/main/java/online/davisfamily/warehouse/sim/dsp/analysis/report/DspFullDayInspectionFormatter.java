@@ -20,46 +20,52 @@ public final class DspFullDayInspectionFormatter {
         if (snapshot == null) {
             throw new IllegalArgumentException("snapshot must not be null");
         }
-        DspFullDayAnalysisReport report = snapshot.report();
+        var runtime = snapshot.runtime();
+        var metrics = runtime.metrics();
+        String termination = snapshot.finalReport()
+                .map(value -> value.terminationReason().name())
+                .orElse(runtime.state().name());
         List<String> lines = new ArrayList<>();
-        lines.add("Run: state=" + report.state()
-                + " termination=" + report.terminationReason()
-                + " profile=" + report.profileId()
-                + " calibration=" + report.calibrationStatus()
-                + " milestone=" + report.completionMilestone());
-        lines.add("Clock: business=" + report.metrics().clock().businessDateTime()
-                + " elapsed=" + report.metrics().clock().elapsedSimulationTime()
-                + " phase=" + report.metrics().clock().phase());
-        lines.add("Speed: requested=" + decimal(report.metrics().requestedExecutionSpeed())
-                + " achieved=" + decimal(report.metrics().achievedExecutionSpeed()));
-        var currentSample = report.occupancySamples().isEmpty()
+        lines.add("Run: state=" + runtime.state()
+                + " termination=" + termination
+                + " profile=" + snapshot.profileId()
+                + " calibration=" + snapshot.calibrationStatus()
+                + " milestone=" + snapshot.completionMilestone());
+        lines.add("Clock: business=" + metrics.clock().businessDateTime()
+                + " elapsed=" + metrics.clock().elapsedSimulationTime()
+                + " phase=" + metrics.clock().phase());
+        lines.add("Speed: requested=" + decimal(metrics.requestedExecutionSpeed())
+                + " achieved=" + decimal(metrics.achievedExecutionSpeed()));
+        var currentSample = snapshot.runtime().metrics().occupancySamples().isEmpty()
                 ? null
-                : report.occupancySamples().getLast();
+                : snapshot.runtime().metrics().occupancySamples().getLast();
         int osrOccupancy = currentSample == null
-                ? report.runtimeSnapshot().osr().occupancy()
+                ? runtime.osr().occupancy()
                 : currentSample.osrOccupancy();
         int osrCapacity = currentSample == null
-                ? report.runtimeSnapshot().osr().capacity()
+                ? runtime.osr().capacity()
                 : currentSample.osrCapacity();
         int osrLowWater = currentSample == null
-                ? report.runtimeSnapshot().supply().lowWaterMark()
+                ? runtime.supply().lowWaterMark()
                 : currentSample.osrLowWaterMark();
         lines.add("OSR: occupancy=" + osrOccupancy
                 + "/" + osrCapacity
                 + " lowWater=" + osrLowWater
-                + " netFlow=" + report.metrics().osrNetFlow()
-                + " inboundRate=" + decimal(report.metrics().actualInboundTotesPerSecond())
-                + " outboundToteRate=" + decimal(report.metrics().closedOutboundTotesPerSecond())
-                + " bagRate=" + decimal(report.metrics().allocatedBagsPerSecond()));
+                + " netFlow=" + metrics.osrNetFlow()
+                + " inboundRate=" + decimal(metrics.actualInboundTotesPerSecond())
+                + " outboundToteRate=" + decimal(metrics.closedOutboundTotesPerSecond())
+                + " bagRate=" + decimal(metrics.allocatedBagsPerSecond()));
 
-        for (DspServiceCentreAnalysisResult result : report.serviceCentres()) {
+        for (DspServiceCentreAnalysisResult result : snapshot.serviceCentres()) {
             lines.add(serviceCentreLine(result));
         }
-        for (DspP2pLineMetricsSnapshot line : report.p2pLines()) {
+        List<DspP2pLineMetricsSnapshot> p2pLines = snapshot.finalReport()
+                .map(DspFullDayAnalysisReport::p2pLines)
+                .orElse(metrics.p2pLines());
+        for (DspP2pLineMetricsSnapshot line : p2pLines) {
             lines.add(lineLine(line));
         }
 
-        var runtime = report.runtimeSnapshot();
         var release = runtime.operationalRelease();
         String releaseDecision = release.lastEvaluation()
                 .flatMap(value -> value.releaseDecision())
@@ -91,12 +97,12 @@ public final class DspFullDayInspectionFormatter {
                 + " consumed=" + runtime.continuation().consumedAcknowledgementCount()
                 + " blocked=" + valueOrNone(runtime.continuation().blockedReason()));
 
-        lines.add("Load: manualMessages=" + report.loadReport().ignoredManualMessageCount()
-                + " manualLines=" + report.loadReport().ignoredManualLineCount()
-                + " omittedOrders=" + report.loadReport().omittedOrderCount()
-                + " unresolvedProducts=" + report.loadReport().unresolvedProductLines().size());
-        lines.add("Unsupported: " + joinOrNone(report.unsupportedWork()));
-        lines.add("Unfinished: " + joinOrNone(report.unfinishedIdentities()));
+        lines.add("Load: manualMessages=" + snapshot.loadReport().ignoredManualMessageCount()
+                + " manualLines=" + snapshot.loadReport().ignoredManualLineCount()
+                + " omittedOrders=" + snapshot.loadReport().omittedOrderCount()
+                + " unresolvedProducts=" + snapshot.loadReport().unresolvedProductLines().size());
+        lines.add("Unsupported: " + joinOrNone(snapshot.unsupportedWork()));
+        lines.add("Unfinished: " + joinOrNone(snapshot.unfinishedIdentities()));
         return List.copyOf(lines);
     }
 

@@ -1,0 +1,262 @@
+package online.davisfamily.warehouse.sim.dsp.analysis;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+/** Package-private parser for the exact full-day command-line contract. */
+final class DspFullDayAnalysisCommandParser {
+    private static final String PRODUCT_MASTER = "product-master";
+    private static final String ORDERS = "orders";
+    private static final String OUTPUT = "output";
+    private static final String INSPECTION_OUTPUT = "inspection-output";
+    private static final String OPERATING_DATE = "operating-date";
+    private static final String OSR_LOW_WATER_MARK = "osr-low-water-mark";
+    private static final String INBOUND_INTERVAL_SECONDS = "inbound-interval-seconds";
+    private static final String AV02_CAPACITY = "av02-capacity";
+    private static final String OUTBOUND_BAG_CAPACITY = "outbound-bag-capacity";
+    private static final String MAXIMUM_PACKS_PER_BAG = "maximum-packs-per-bag";
+    private static final String FIXED_STEP_MILLIS = "fixed-step-millis";
+    private static final String STEPS_PER_BATCH = "steps-per-batch";
+    private static final String METRIC_SAMPLE_SECONDS = "metric-sample-seconds";
+    private static final String OVERWRITE = "overwrite";
+
+    DspFullDayAnalysisCommand parse(String[] arguments) {
+        if (arguments == null) {
+            throw new IllegalArgumentException("arguments must not be null");
+        }
+
+        Set<String> seenSingletons = new HashSet<>();
+        List<Path> orderPaths = new ArrayList<>();
+        Path productMasterPath = null;
+        Path outputPath = null;
+        Path inspectionOutputPath = null;
+        LocalDate operatingDate = null;
+        int osrLowWaterMark = -1;
+        Duration inboundInterval = null;
+        int av02Capacity = -1;
+        int outboundBagCapacity = -1;
+        int maximumPacksPerBag = -1;
+        Duration fixedStep = Duration.ofMillis(50);
+        int stepsPerBatch = 2_000;
+        Duration metricSampleInterval = Duration.ofSeconds(60);
+        boolean overwrite = false;
+
+        for (String argument : arguments) {
+            if (argument == null || argument.isBlank()) {
+                throw new IllegalArgumentException("arguments must not contain blank values");
+            }
+            if (argument.equals("--overwrite")) {
+                if (!seenSingletons.add(OVERWRITE)) {
+                    throw new IllegalArgumentException("duplicate option: --overwrite");
+                }
+                overwrite = true;
+                continue;
+            }
+            if (!argument.startsWith("--")) {
+                throw new IllegalArgumentException("malformed option: " + argument);
+            }
+            int equals = argument.indexOf('=');
+            if (equals <= 2 || equals == argument.length() - 1) {
+                throw new IllegalArgumentException("malformed option: " + argument);
+            }
+            String name = argument.substring(2, equals);
+            String value = argument.substring(equals + 1);
+            switch (name) {
+                case PRODUCT_MASTER -> {
+                    ensureSingleton(seenSingletons, name);
+                    productMasterPath = parsePath(value, name);
+                }
+                case ORDERS -> orderPaths.add(parsePath(value, name));
+                case OUTPUT -> {
+                    ensureSingleton(seenSingletons, name);
+                    outputPath = parsePath(value, name);
+                }
+                case INSPECTION_OUTPUT -> {
+                    ensureSingleton(seenSingletons, name);
+                    inspectionOutputPath = parsePath(value, name);
+                }
+                case OPERATING_DATE -> {
+                    ensureSingleton(seenSingletons, name);
+                    operatingDate = parseDate(value);
+                }
+                case OSR_LOW_WATER_MARK -> {
+                    ensureSingleton(seenSingletons, name);
+                    osrLowWaterMark = parseNonnegativeInt(value, name);
+                }
+                case INBOUND_INTERVAL_SECONDS -> {
+                    ensureSingleton(seenSingletons, name);
+                    inboundInterval = parseSeconds(value, name);
+                }
+                case AV02_CAPACITY -> {
+                    ensureSingleton(seenSingletons, name);
+                    av02Capacity = parsePositiveInt(value, name);
+                }
+                case OUTBOUND_BAG_CAPACITY -> {
+                    ensureSingleton(seenSingletons, name);
+                    outboundBagCapacity = parsePositiveInt(value, name);
+                }
+                case MAXIMUM_PACKS_PER_BAG -> {
+                    ensureSingleton(seenSingletons, name);
+                    maximumPacksPerBag = parsePositiveInt(value, name);
+                }
+                case FIXED_STEP_MILLIS -> {
+                    ensureSingleton(seenSingletons, name);
+                    fixedStep = Duration.ofMillis(parsePositiveInt(value, name));
+                }
+                case STEPS_PER_BATCH -> {
+                    ensureSingleton(seenSingletons, name);
+                    stepsPerBatch = parsePositiveInt(value, name);
+                }
+                case METRIC_SAMPLE_SECONDS -> {
+                    ensureSingleton(seenSingletons, name);
+                    metricSampleInterval = Duration.ofSeconds(parsePositiveInt(value, name));
+                }
+                default -> throw new IllegalArgumentException("unknown option: --" + name);
+            }
+        }
+
+        require(productMasterPath != null, "missing required option: --product-master=<csv path>");
+        require(!orderPaths.isEmpty(), "missing required option: --orders=<json path>");
+        require(outputPath != null, "missing required option: --output=<json path>");
+        require(operatingDate != null, "missing required option: --operating-date=<YYYY-MM-DD>");
+        require(osrLowWaterMark >= 0, "missing required option: --osr-low-water-mark=<count>");
+        require(inboundInterval != null, "missing required option: --inbound-interval-seconds=<positive decimal>");
+        require(av02Capacity >= 1, "missing required option: --av02-capacity=<count>");
+        require(outboundBagCapacity >= 1, "missing required option: --outbound-bag-capacity=<count>");
+        require(maximumPacksPerBag >= 1, "missing required option: --maximum-packs-per-bag=<count>");
+
+        validateRegularFile(productMasterPath, PRODUCT_MASTER);
+        for (Path orderPath : orderPaths) {
+            validateRegularFile(orderPath, ORDERS);
+        }
+        validateOutputPath(outputPath, OUTPUT);
+        if (inspectionOutputPath != null) {
+            validateOutputPath(inspectionOutputPath, INSPECTION_OUTPUT);
+            if (outputPath.toAbsolutePath().normalize()
+                    .equals(inspectionOutputPath.toAbsolutePath().normalize())) {
+                throw new IllegalArgumentException(
+                        "--output and --inspection-output must name different files");
+            }
+        }
+
+        return new DspFullDayAnalysisCommand(
+                productMasterPath,
+                orderPaths,
+                outputPath,
+                Optional.ofNullable(inspectionOutputPath),
+                operatingDate,
+                osrLowWaterMark,
+                inboundInterval,
+                av02Capacity,
+                outboundBagCapacity,
+                maximumPacksPerBag,
+                fixedStep,
+                stepsPerBatch,
+                metricSampleInterval,
+                overwrite);
+    }
+
+    private static void ensureSingleton(Set<String> seen, String name) {
+        if (!seen.add(name)) {
+            throw new IllegalArgumentException("duplicate option: --" + name);
+        }
+    }
+
+    private static Path parsePath(String value, String name) {
+        try {
+            Path path = Path.of(value);
+            if (path.toString().isBlank()) {
+                throw new IllegalArgumentException("--" + name + " must not be blank");
+            }
+            return path;
+        } catch (InvalidPathException exception) {
+            throw new IllegalArgumentException("invalid path for --" + name, exception);
+        }
+    }
+
+    private static LocalDate parseDate(String value) {
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException exception) {
+            throw new IllegalArgumentException("invalid --operating-date: " + value, exception);
+        }
+    }
+
+    private static int parsePositiveInt(String value, String name) {
+        try {
+            int parsed = Integer.parseInt(value);
+            if (parsed < 1) {
+                throw new IllegalArgumentException("--" + name + " must be positive");
+            }
+            return parsed;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("invalid integer for --" + name + ": " + value, exception);
+        }
+    }
+
+    private static int parseNonnegativeInt(String value, String name) {
+        try {
+            int parsed = Integer.parseInt(value);
+            if (parsed < 0) {
+                throw new IllegalArgumentException("--" + name + " must be nonnegative");
+            }
+            return parsed;
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("invalid integer for --" + name + ": " + value, exception);
+        }
+    }
+
+    private static Duration parseSeconds(String value, String name) {
+        try {
+            BigDecimal seconds = new BigDecimal(value);
+            if (seconds.signum() <= 0) {
+                throw new IllegalArgumentException("--" + name + " must be positive");
+            }
+            long nanos = seconds.movePointRight(9)
+                    .setScale(0, RoundingMode.UNNECESSARY)
+                    .longValueExact();
+            if (nanos < 1) {
+                throw new IllegalArgumentException("--" + name + " is below one nanosecond");
+            }
+            return Duration.ofNanos(nanos);
+        } catch (NumberFormatException | ArithmeticException exception) {
+            throw new IllegalArgumentException("invalid positive decimal for --" + name + ": " + value, exception);
+        }
+    }
+
+    private static void validateRegularFile(Path path, String name) {
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException(
+                    "--" + name + " must be an existing regular file: " + path);
+        }
+    }
+
+    private static void validateOutputPath(Path path, String name) {
+        if (Files.exists(path) && !Files.isRegularFile(path)) {
+            throw new IllegalArgumentException(
+                    "--" + name + " must not name a directory or non-file: " + path);
+        }
+        Path parent = path.toAbsolutePath().getParent();
+        if (parent != null && Files.exists(parent) && !Files.isDirectory(parent)) {
+            throw new IllegalArgumentException(
+                    "parent of --" + name + " is not a directory: " + parent);
+        }
+    }
+
+    private static void require(boolean condition, String message) {
+        if (!condition) {
+            throw new IllegalArgumentException(message);
+        }
+    }
+}

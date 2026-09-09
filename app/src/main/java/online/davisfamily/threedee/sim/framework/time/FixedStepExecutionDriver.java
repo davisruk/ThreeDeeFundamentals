@@ -73,6 +73,20 @@ public final class FixedStepExecutionDriver {
                 renderDue);
     }
 
+    /**
+     * Accounts for real time measured around a headless batch without emitting another
+     * simulation step.  Headless callers use this because the batch's work is measured outside
+     * the generic driver.
+     */
+    public void recordHeadlessRealElapsed(Duration realElapsedTime) {
+        if (config.mode() != SimulationExecutionMode.HEADLESS_ANALYSIS) {
+            throw new IllegalStateException(
+                    "recordHeadlessRealElapsed is valid only in HEADLESS_ANALYSIS mode");
+        }
+        long realElapsedNanos = toNanos(realElapsedTime, "realElapsedTime");
+        totalRealNanos = addExact(totalRealNanos, realElapsedNanos, "total real time");
+    }
+
     public FixedStepExecutionSnapshot snapshot() {
         double achievedTimeScale = totalRealNanos == 0L
                 ? 0d

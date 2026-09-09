@@ -42,7 +42,13 @@ public final class DspFullDayReportTestSupport {
         }
     }
 
-    static DspUncalibratedFullDayProfile profile() {
+    public static DspFullDayLoadedInput input(
+            Path directory,
+            DspUncalibratedFullDayProfile profile) throws IOException {
+        return loadInput(directory, profile);
+    }
+
+    public static DspUncalibratedFullDayProfile profile() {
         return DspUncalibratedFullDayProfile.productionBaseline(
                 OPERATING_DATE, 10, Duration.ofSeconds(1), 2, 4, 4);
     }

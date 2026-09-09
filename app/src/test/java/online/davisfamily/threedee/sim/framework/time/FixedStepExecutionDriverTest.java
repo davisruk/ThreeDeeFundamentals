@@ -129,6 +129,32 @@ class FixedStepExecutionDriverTest {
     }
 
     @Test
+    void shouldRecordMeasuredHeadlessTimeWithoutEmittingAnotherStep() {
+        FixedStepExecutionDriver driver = new FixedStepExecutionDriver(
+                FixedStepExecutionConfig.headless(Duration.ofSeconds(1), 3));
+
+        driver.advance(Duration.ZERO, ignored -> {
+        });
+        driver.recordHeadlessRealElapsed(Duration.ofSeconds(2));
+
+        FixedStepExecutionSnapshot snapshot = driver.snapshot();
+        assertEquals(3L, snapshot.completedStepCount());
+        assertEquals(Duration.ofSeconds(3), snapshot.totalSimulationTime());
+        assertEquals(Duration.ofSeconds(2), snapshot.totalRealTime());
+        assertEquals(1.5d, snapshot.achievedTimeScale());
+    }
+
+    @Test
+    void shouldRejectMeasuredTimeOutsideHeadlessMode() {
+        FixedStepExecutionDriver driver = new FixedStepExecutionDriver(
+                FixedStepExecutionConfig.realtime(Duration.ofSeconds(1), 1));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> driver.recordHeadlessRealElapsed(Duration.ZERO));
+    }
+
+    @Test
     void shouldRejectInvalidElapsedTimeAndOverflow() {
         FixedStepExecutionDriver driver = new FixedStepExecutionDriver(
                 FixedStepExecutionConfig.realtime(Duration.ofSeconds(1), 1));

@@ -44,3 +44,10 @@ tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
 }
+
+tasks.register('dspFullDayAnalysis', JavaExec) {
+    group = 'application'
+    description = 'Run one headless DSP full-day analysis.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisMain'
+}

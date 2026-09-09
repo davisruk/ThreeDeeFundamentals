@@ -240,6 +240,116 @@ public final class DspFullDayReportFactory {
         return create(runtime, input, profile);
     }
 
+    /**
+     * Creates the immutable inspection boundary used while a run is still in progress.  A
+     * terminal runtime is promoted to the final report shape so the same formatter can be used
+     * for the last inspection without reading a mutable runtime.
+     */
+    public DspFullDayInspectionSnapshot createInspectionSnapshot(
+            DspFullDayAnalysisRuntimeSnapshot runtime,
+            DspFullDayLoadedInput input,
+            DspUncalibratedFullDayProfile profile) {
+        requireNonNull(runtime, "runtime");
+        requireNonNull(input, "input");
+        requireNonNull(profile, "profile");
+        if (!profile.profileId().equals(runtime.metrics().profileId())
+                || !profile.calibrationStatus().equals(runtime.metrics().calibrationStatus())
+                || !profile.completionMilestone().equals(runtime.metrics().completionMilestone())) {
+            throw new IllegalArgumentException(
+                    "profile identity must match the runtime metrics");
+        }
+        if (runtime.state() != DspFullDayRuntimeState.RUNNING) {
+            return new DspFullDayInspectionSnapshot(create(runtime, input, profile));
+        }
+
+        List<DspServiceCentreAnalysisResult> serviceCentres = currentServiceCentreResults(
+                runtime,
+                input);
+        List<String> unsupportedWork = stableDistinct(
+                concat(runtime.metrics().unsupportedWork(), serviceCentres.stream()
+                        .flatMap(value -> value.unsupportedWork().stream())
+                        .toList()));
+        List<String> unfinishedIdentities = allUnfinishedIdentities(serviceCentres);
+        return new DspFullDayInspectionSnapshot(
+                runtime,
+                profile.profileId(),
+                profile.calibrationStatus(),
+                DspCompletionMilestone.valueOf(profile.completionMilestone()),
+                input.report(),
+                serviceCentres,
+                unsupportedWork,
+                unfinishedIdentities,
+                java.util.Optional.empty());
+    }
+
+    public DspFullDayInspectionSnapshot createInspectionSnapshot(
+            DspUncalibratedFullDayProfile profile,
+            DspFullDayLoadedInput input,
+            DspFullDayAnalysisRuntimeSnapshot runtime) {
+        return createInspectionSnapshot(runtime, input, profile);
+    }
+
+    private List<DspServiceCentreAnalysisResult> currentServiceCentreResults(
+            DspFullDayAnalysisRuntimeSnapshot runtime,
+            DspFullDayLoadedInput input) {
+        Map<String, DspServiceCentreCompletionSnapshot> completionsById = runtime.completions()
+                .stream()
+                .collect(Collectors.toMap(
+                        DspServiceCentreCompletionSnapshot::serviceCentreId,
+                        Function.identity(),
+                        (first, second) -> {
+                            throw new IllegalArgumentException(
+                                    "duplicate completion snapshot for "
+                                            + first.serviceCentreId());
+                        },
+                        LinkedHashMap::new));
+        Map<String, DspServiceCentreMetricsSnapshot> metricsById = runtime.metrics().serviceCentres()
+                .stream()
+                .collect(Collectors.toMap(
+                        DspServiceCentreMetricsSnapshot::serviceCentreId,
+                        Function.identity(),
+                        (first, second) -> {
+                            throw new IllegalArgumentException(
+                                    "duplicate metric snapshot for " + first.serviceCentreId());
+                        },
+                        LinkedHashMap::new));
+        Map<String, Integer> timetableRank = new LinkedHashMap<>();
+        Map<String, Integer> timetablePriority = new LinkedHashMap<>();
+        List<ServiceCentreSchedule> schedules = new ArrayList<>(input.timetable().serviceCentres());
+        schedules.sort(Comparator.comparingInt(ServiceCentreSchedule::priority)
+                .reversed()
+                .thenComparing(ServiceCentreSchedule::serviceCentreId));
+        for (int index = 0; index < schedules.size(); index++) {
+            ServiceCentreSchedule schedule = schedules.get(index);
+            timetableRank.put(schedule.serviceCentreId(), index);
+            timetablePriority.put(schedule.serviceCentreId(), schedule.priority());
+        }
+
+        List<DspServiceCentreAnalysisResult> result = new ArrayList<>();
+        for (Map.Entry<String, DspServiceCentreMetricsSnapshot> entry : metricsById.entrySet()) {
+            String id = entry.getKey();
+            DspServiceCentreMetricsSnapshot metrics = entry.getValue();
+            DspServiceCentreCompletionSnapshot completion = completionsById.get(id);
+            if (completion == null || !timetableRank.containsKey(id)
+                    || !timetablePriority.get(id).equals(metrics.priority())
+                    || metrics.complete() != completion.complete()
+                    || metrics.completionOutcome() != completion.outcome()) {
+                throw new IllegalArgumentException(
+                        "current service-centre snapshots do not agree for " + id);
+            }
+            result.add(new DspServiceCentreAnalysisResult(
+                    id,
+                    metrics,
+                    completion,
+                    unfinishedIdentitiesFor(id, runtime, input.data(), completion)));
+        }
+        result.sort(Comparator
+                .comparingInt((DspServiceCentreAnalysisResult value)
+                        -> timetableRank.get(value.serviceCentreId()))
+                .thenComparing(DspServiceCentreAnalysisResult::serviceCentreId));
+        return List.copyOf(result);
+    }
+
     private static DspFullDayTerminationReason terminationReason(DspFullDayRuntimeState state) {
         return switch (state) {
             case ALL_SUPPORTED_WORK_COMPLETE -> DspFullDayTerminationReason.ALL_SUPPORTED_WORK_COMPLETE;
