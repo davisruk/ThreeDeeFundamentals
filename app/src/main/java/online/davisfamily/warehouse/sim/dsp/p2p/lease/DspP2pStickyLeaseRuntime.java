@@ -11,6 +11,8 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocator;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntime;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentRegistry;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
 
 public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
     private final List<P2pLineDefinition> definitions;
@@ -36,9 +38,10 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
                 releaseAssignmentCommitter,
                 releaseAssignmentCommitter instanceof OperationalP2pReleaseAssignmentCommitter
                         ? (OperationalP2pReleaseAssignmentCommitter) releaseAssignmentCommitter
-                        : OperationalP2pReleaseAssignmentCommitter.NO_OP,
+                : OperationalP2pReleaseAssignmentCommitter.NO_OP,
                 outboundToteAllocator,
-                arrivalRuntime);
+                arrivalRuntime,
+                new P2pBagCorrelationAssignmentRegistry());
     }
 
     DspP2pStickyLeaseRuntime(
@@ -49,13 +52,34 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
             OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter,
             OutboundToteAllocator outboundToteAllocator,
             DspP2pArrivalConsumerRuntime arrivalRuntime) {
+        this(
+                definitions,
+                activityProbes,
+                leaseRegistry,
+                releaseAssignmentCommitter,
+                operationalReleaseAssignmentCommitter,
+                outboundToteAllocator,
+                arrivalRuntime,
+                new P2pBagCorrelationAssignmentRegistry());
+    }
+
+    DspP2pStickyLeaseRuntime(
+            List<P2pLineDefinition> definitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            P2pLineLeaseRegistry leaseRegistry,
+            P2pReleaseAssignmentCommitter releaseAssignmentCommitter,
+            OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter,
+            OutboundToteAllocator outboundToteAllocator,
+            DspP2pArrivalConsumerRuntime arrivalRuntime,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
         if (definitions == null
                 || activityProbes == null
                 || leaseRegistry == null
                 || releaseAssignmentCommitter == null
                 || operationalReleaseAssignmentCommitter == null
                 || outboundToteAllocator == null
-                || arrivalRuntime == null) {
+                || arrivalRuntime == null
+                || correlationAssignmentRegistry == null) {
             throw new IllegalArgumentException("sticky lease runtime inputs must not be null");
         }
         this.definitions = List.copyOf(definitions);
@@ -65,7 +89,10 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
         this.operationalReleaseAssignmentCommitter = operationalReleaseAssignmentCommitter;
         this.outboundToteAllocator = outboundToteAllocator;
         this.arrivalRuntime = arrivalRuntime;
+        this.correlationAssignmentRegistry = correlationAssignmentRegistry;
     }
+
+    private final P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry;
 
     public List<P2pLineDefinition> lineDefinitions() {
         return definitions;
@@ -77,6 +104,10 @@ public final class DspP2pStickyLeaseRuntime implements AutoCloseable {
 
     public OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter() {
         return operationalReleaseAssignmentCommitter;
+    }
+
+    public P2pBagCorrelationAssignmentSnapshot correlationAssignmentSnapshot() {
+        return correlationAssignmentRegistry.snapshot();
     }
 
     public P2pLineLeaseCatalogSnapshot leaseSnapshot() {

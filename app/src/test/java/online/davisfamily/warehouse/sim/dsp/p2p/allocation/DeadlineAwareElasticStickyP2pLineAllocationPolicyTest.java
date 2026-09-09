@@ -30,6 +30,9 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapsho
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreDeadlineSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirement;
 
 class DeadlineAwareElasticStickyP2pLineAllocationPolicyTest {
 
@@ -142,6 +145,33 @@ class DeadlineAwareElasticStickyP2pLineAllocationPolicyTest {
 
         assertEquals(new P2pLineId("line-2"), decision.assignment().orElseThrow().lineId());
         assertFalse(decision.activePharmacyAffinity());
+    }
+
+    @Test
+    void shouldFilterNormalRankingByThePinnedBagLine() {
+        P2pLineLeaseCatalogSnapshot catalog = catalog(
+                leased("line-1", SERVICE_CENTRE, Optional.of("other")),
+                leased("line-2", SERVICE_CENTRE, Optional.of("pharmacy-1")));
+        P2pElasticAllocationSnapshot allocation = allocation(
+                catalog, 2, List.of("line-1", "line-2"), List.of());
+        P2pBagCorrelationRequirement requirement =
+                new P2pBagCorrelationRequirement("bag-a", 2);
+        P2pLineAllocationRequest request = new P2pLineAllocationRequest(
+                new PhysicalToteId("physical-pinned"),
+                SERVICE_CENTRE,
+                List.of("pharmacy-1"),
+                true,
+                catalog,
+                allAdmissions(catalog, true),
+                Optional.of(allocation),
+                java.util.Set.of(requirement),
+                new P2pBagCorrelationAssignmentSnapshot(List.of(
+                        new P2pBagCorrelationAssignment(
+                                "bag-a", new P2pLineId("line-1")))));
+
+        P2pLineAllocationDecision decision = policy.allocate(request);
+
+        assertEquals(new P2pLineId("line-1"), decision.assignment().orElseThrow().lineId());
     }
 
     @Test

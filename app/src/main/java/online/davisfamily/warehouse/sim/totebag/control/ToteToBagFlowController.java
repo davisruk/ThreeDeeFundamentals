@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Queue;
 import java.util.Set;
 
@@ -28,8 +29,8 @@ import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReceiver;
 import online.davisfamily.warehouse.sim.totebag.handoff.PackGroupReservation;
 
 public class ToteToBagFlowController implements SimulationController {
-    private final ToteLoadPlan toteLoadPlan;
-    private final ToteToBagBatchPlan batchPlan;
+    private final ToteToBagWorkPlanProvider workPlanProvider;
+    private final ToteLoadPlan compatibilityBootstrapToteLoadPlan;
     private final TippingMachine tippingMachine;
     private final SortingMachine sortingMachine;
     private final PdcConveyor pdcConveyor;
@@ -43,6 +44,9 @@ public class ToteToBagFlowController implements SimulationController {
     private final List<PrlToPcrTransfer> activePrlToPcrTransfers = new ArrayList<>();
     private final Queue<ReleasedPackGroup> releasedGroups = new ArrayDeque<>();
     private final Set<String> outstandingExpectedCorrelationIds = new LinkedHashSet<>();
+    private final Set<String> completedCorrelationIds = new LinkedHashSet<>();
+    private final Map<String, Integer> knownExpectedPackCountsByCorrelationId =
+            new LinkedHashMap<>();
     private final PdcTransferDurationProvider pdcTransferDurationProvider;
     private final PdcDiversionDistanceProvider pdcDiversionDistanceProvider;
     private final PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider;
@@ -289,8 +293,75 @@ public class ToteToBagFlowController implements SimulationController {
             PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
             PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
             PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
-        if (toteLoadPlan == null
-                || batchPlan == null
+        this(
+                new FixedToteToBagWorkPlanProvider(batchPlan),
+                requireToteLoadPlan(toteLoadPlan),
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamPackGroupReceiver,
+                assignmentPlanner,
+                prlConveyors,
+                pdcDiversionDevices,
+                pdcTransferDurationProvider,
+                pdcDiversionDistanceProvider,
+                prlToPcrTransferDurationProvider,
+                prlToPcrEntryDistanceProvider);
+    }
+
+    /**
+     * Canonical live-input constructor. The tipper input boundary owns loading
+     * each accepted tote; this controller only observes and drains the shared
+     * tipping/sorting machines.
+     */
+    public ToteToBagFlowController(
+            ToteToBagWorkPlanProvider workPlanProvider,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
+            PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+        this(
+                workPlanProvider,
+                null,
+                tippingMachine,
+                sortingMachine,
+                pdcConveyor,
+                pcrConveyor,
+                downstreamPackGroupReceiver,
+                assignmentPlanner,
+                prlConveyors,
+                pdcDiversionDevices,
+                pdcTransferDurationProvider,
+                pdcDiversionDistanceProvider,
+                prlToPcrTransferDurationProvider,
+                prlToPcrEntryDistanceProvider);
+    }
+
+    private ToteToBagFlowController(
+            ToteToBagWorkPlanProvider workPlanProvider,
+            ToteLoadPlan compatibilityBootstrapToteLoadPlan,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
+            PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+        if (workPlanProvider == null
                 || pdcConveyor == null
                 || pcrConveyor == null
                 || downstreamPackGroupReceiver == null
@@ -308,8 +379,8 @@ public class ToteToBagFlowController implements SimulationController {
         if ((tippingMachine == null) != (sortingMachine == null)) {
             throw new IllegalArgumentException("tippingMachine and sortingMachine must either both be present or both be absent");
         }
-        this.toteLoadPlan = toteLoadPlan;
-        this.batchPlan = batchPlan;
+        this.workPlanProvider = workPlanProvider;
+        this.compatibilityBootstrapToteLoadPlan = compatibilityBootstrapToteLoadPlan;
         this.tippingMachine = tippingMachine;
         this.sortingMachine = sortingMachine;
         this.pdcConveyor = pdcConveyor;
@@ -364,6 +435,7 @@ public class ToteToBagFlowController implements SimulationController {
 
     @Override
     public void update(SimulationContext context, double dtSeconds) {
+        synchronizeExpectedCorrelations();
         initializeIfNeeded();
         loadToteIfNeeded();
         drainTippingMachine();
@@ -416,6 +488,7 @@ public class ToteToBagFlowController implements SimulationController {
         if (candidateToteLoadPlan == null) {
             throw new IllegalArgumentException("candidateToteLoadPlan must not be null");
         }
+        synchronizeExpectedCorrelations();
         if (candidateToteLoadPlan.getPackPlans().isEmpty()) {
             return false;
         }
@@ -430,11 +503,11 @@ public class ToteToBagFlowController implements SimulationController {
                 .filter(prl -> prl.getAssignment().getState() == PrlState.IDLE)
                 .count();
         for (String correlationId : distinctCorrelationIds) {
+            if (expectedPackCountFor(correlationId).isEmpty()) {
+                return false;
+            }
             if (findPrlForCorrelation(correlationId).isPresent()) {
                 continue;
-            }
-            if (batchPlan.expectedPackCountFor(correlationId) <= 0) {
-                return false;
             }
             idlePrlCount--;
             if (idlePrlCount < 0) {
@@ -448,7 +521,14 @@ public class ToteToBagFlowController implements SimulationController {
         if (initialized) {
             return;
         }
-        List<PrlAssignmentPlan> plans = assignmentPlanner.createPlans(batchPlan, prlsById.keySet().stream().toList());
+        if (knownExpectedPackCountsByCorrelationId.isEmpty()) {
+            initialized = true;
+            return;
+        }
+        ToteToBagBatchPlan batchPlan = new ToteToBagBatchPlan(
+                knownExpectedPackCountsByCorrelationId);
+        List<PrlAssignmentPlan> plans = assignmentPlanner.createPlans(
+                batchPlan, prlsById.keySet().stream().toList());
         for (PrlAssignmentPlan plan : plans) {
             prlsById.get(plan.prlId()).assign(plan);
             outstandingExpectedCorrelationIds.add(plan.correlationId());
@@ -457,11 +537,11 @@ public class ToteToBagFlowController implements SimulationController {
     }
 
     private void loadToteIfNeeded() {
-        if (tippingMachine == null) {
+        if (tippingMachine == null || compatibilityBootstrapToteLoadPlan == null) {
             return;
         }
         if (!toteLoaded && tippingMachine.isIdle()) {
-            tippingMachine.loadTote(toteLoadPlan);
+            tippingMachine.loadTote(compatibilityBootstrapToteLoadPlan);
             toteLoaded = true;
         }
     }
@@ -647,6 +727,7 @@ public class ToteToBagFlowController implements SimulationController {
             if (!pcrConveyor.hasWorkInFlight()) {
                 downstreamPackGroupReceiver.completeIncomingTransfer(groupAtOutfeed);
                 outstandingExpectedCorrelationIds.remove(groupAtOutfeed.correlationId());
+                completedCorrelationIds.add(groupAtOutfeed.correlationId());
                 return;
             }
         }
@@ -659,13 +740,11 @@ public class ToteToBagFlowController implements SimulationController {
     }
 
     private PrlConveyor findOrAssignPrlForCorrelation(String correlationId) {
+        int expectedPackCount = expectedPackCountFor(correlationId).orElseThrow(() ->
+                new IllegalStateException("No planned assignment for correlation " + correlationId));
         PrlConveyor assignedPrl = findPrlForCorrelation(correlationId).orElse(null);
         if (assignedPrl != null) {
             return assignedPrl;
-        }
-        int expectedPackCount = batchPlan.expectedPackCountFor(correlationId);
-        if (expectedPackCount <= 0) {
-            throw new IllegalStateException("No batch assignment for correlation " + correlationId);
         }
         PrlConveyor idlePrl = prlsById.values().stream()
                 .sorted(Comparator.comparing(PrlConveyor::getId))
@@ -675,6 +754,56 @@ public class ToteToBagFlowController implements SimulationController {
         idlePrl.assign(new PrlAssignmentPlan(idlePrl.getId(), correlationId, expectedPackCount));
         outstandingExpectedCorrelationIds.add(correlationId);
         return idlePrl;
+    }
+
+    private void synchronizeExpectedCorrelations() {
+        Set<String> expectedCorrelationIds = workPlanProvider.expectedCorrelationIds();
+        if (expectedCorrelationIds == null) {
+            throw new IllegalStateException("workPlanProvider returned null correlation ids");
+        }
+        for (String correlationId : expectedCorrelationIds) {
+            if (correlationId == null || correlationId.isBlank()) {
+                throw new IllegalStateException(
+                        "workPlanProvider returned a blank correlation id");
+            }
+            String normalizedCorrelationId = correlationId.trim();
+            OptionalInt expectedPackCount = workPlanProvider.expectedPackCount(
+                    normalizedCorrelationId);
+            if (expectedPackCount == null || expectedPackCount.isEmpty()
+                    || expectedPackCount.getAsInt() <= 0) {
+                throw new IllegalStateException(
+                        "workPlanProvider returned no positive pack count for correlation "
+                                + normalizedCorrelationId);
+            }
+            Integer previous = knownExpectedPackCountsByCorrelationId.putIfAbsent(
+                    normalizedCorrelationId, expectedPackCount.getAsInt());
+            if (previous != null && previous.intValue() != expectedPackCount.getAsInt()) {
+                throw new IllegalStateException(
+                        "Expected pack count changed for correlation "
+                                + normalizedCorrelationId);
+            }
+            if (!completedCorrelationIds.contains(normalizedCorrelationId)) {
+                outstandingExpectedCorrelationIds.add(normalizedCorrelationId);
+            }
+        }
+    }
+
+    private OptionalInt expectedPackCountFor(String correlationId) {
+        if (correlationId == null || correlationId.isBlank()) {
+            return OptionalInt.empty();
+        }
+        Integer expectedPackCount = knownExpectedPackCountsByCorrelationId.get(
+                correlationId.trim());
+        return expectedPackCount == null
+                ? OptionalInt.empty()
+                : OptionalInt.of(expectedPackCount);
+    }
+
+    private static ToteLoadPlan requireToteLoadPlan(ToteLoadPlan toteLoadPlan) {
+        if (toteLoadPlan == null) {
+            throw new IllegalArgumentException("toteLoadPlan must not be null");
+        }
+        return toteLoadPlan;
     }
 
     private static List<PdcDiversionDevice> createDefaultDiversionDevices(List<PrlConveyor> prlConveyors) {

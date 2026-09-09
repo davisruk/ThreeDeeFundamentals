@@ -12,6 +12,8 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirement;
 
 public record P2pLineAllocationRequest(
         PhysicalToteId physicalToteId,
@@ -20,7 +22,9 @@ public record P2pLineAllocationRequest(
         boolean p2pFirstRouteStation,
         P2pLineLeaseCatalogSnapshot lineCatalog,
         Map<OperationalRouteDestination, Boolean> routeAdmissionByDestination,
-        Optional<P2pElasticAllocationSnapshot> elasticAllocation) {
+        Optional<P2pElasticAllocationSnapshot> elasticAllocation,
+        Set<P2pBagCorrelationRequirement> bagCorrelationRequirements,
+        P2pBagCorrelationAssignmentSnapshot bagCorrelationAssignments) {
 
     public P2pLineAllocationRequest {
         if (physicalToteId == null) {
@@ -48,6 +52,10 @@ public record P2pLineAllocationRequest(
                         "elastic allocation lines must match the request line catalog");
             }
         });
+        bagCorrelationRequirements = copyCorrelationRequirements(bagCorrelationRequirements);
+        if (bagCorrelationAssignments == null) {
+            throw new IllegalArgumentException("bagCorrelationAssignments must not be null");
+        }
     }
 
     public P2pLineAllocationRequest(
@@ -64,7 +72,50 @@ public record P2pLineAllocationRequest(
                 p2pFirstRouteStation,
                 lineCatalog,
                 routeAdmissionByDestination,
-                Optional.empty());
+                Optional.empty(),
+                Set.of(),
+                P2pBagCorrelationAssignmentSnapshot.empty());
+    }
+
+    public P2pLineAllocationRequest(
+            PhysicalToteId physicalToteId,
+            String serviceCentreId,
+            List<String> pharmacyIds,
+            boolean p2pFirstRouteStation,
+            P2pLineLeaseCatalogSnapshot lineCatalog,
+            Map<OperationalRouteDestination, Boolean> routeAdmissionByDestination,
+            Optional<P2pElasticAllocationSnapshot> elasticAllocation) {
+        this(
+                physicalToteId,
+                serviceCentreId,
+                pharmacyIds,
+                p2pFirstRouteStation,
+                lineCatalog,
+                routeAdmissionByDestination,
+                elasticAllocation,
+                Set.of(),
+                P2pBagCorrelationAssignmentSnapshot.empty());
+    }
+
+    public P2pLineAllocationRequest(
+            PhysicalToteId physicalToteId,
+            String serviceCentreId,
+            List<String> pharmacyIds,
+            boolean p2pFirstRouteStation,
+            P2pLineLeaseCatalogSnapshot lineCatalog,
+            Map<OperationalRouteDestination, Boolean> routeAdmissionByDestination,
+            Set<P2pBagCorrelationRequirement> bagCorrelationRequirements,
+            P2pBagCorrelationAssignmentSnapshot bagCorrelationAssignments) {
+        this(
+                physicalToteId,
+                serviceCentreId,
+                pharmacyIds,
+                p2pFirstRouteStation,
+                lineCatalog,
+                routeAdmissionByDestination,
+                Optional.empty(),
+                bagCorrelationRequirements,
+                bagCorrelationAssignments);
     }
 
     public boolean routeAdmissible(OperationalRouteDestination destination) {
@@ -80,6 +131,25 @@ public record P2pLineAllocationRequest(
 
     public boolean includesPharmacy(String pharmacyId) {
         return pharmacyIds.contains(requireValue(pharmacyId, "pharmacyId"));
+    }
+
+    public Set<P2pBagCorrelationRequirement> requiredBagCorrelations() {
+        return bagCorrelationRequirements;
+    }
+
+    public P2pBagCorrelationAssignmentSnapshot correlationAssignmentSnapshot() {
+        return bagCorrelationAssignments;
+    }
+
+    public P2pBagCorrelationAssignmentSnapshot bagCorrelationAssignmentSnapshot() {
+        return bagCorrelationAssignments;
+    }
+
+    public boolean bagCorrelationsCompatibleWith(P2pLineId lineId) {
+        if (lineId == null) {
+            throw new IllegalArgumentException("lineId must not be null");
+        }
+        return bagCorrelationAssignments.compatibleWith(bagCorrelationRequirements, lineId);
     }
 
     private static List<String> copyPharmacyIds(List<String> pharmacyIds) {
@@ -118,6 +188,25 @@ public record P2pLineAllocationRequest(
             }
         }
         return Collections.unmodifiableMap(copy);
+    }
+
+    private static Set<P2pBagCorrelationRequirement> copyCorrelationRequirements(
+            Set<P2pBagCorrelationRequirement> requirements) {
+        if (requirements == null) {
+            throw new IllegalArgumentException("bagCorrelationRequirements must not be null");
+        }
+        Map<String, P2pBagCorrelationRequirement> byCorrelation = new LinkedHashMap<>();
+        for (P2pBagCorrelationRequirement requirement : requirements) {
+            if (requirement == null) {
+                throw new IllegalArgumentException(
+                        "bagCorrelationRequirements must not contain null");
+            }
+            if (byCorrelation.putIfAbsent(requirement.correlationId(), requirement) != null) {
+                throw new IllegalArgumentException(
+                        "bagCorrelationRequirements must contain distinct correlations");
+            }
+        }
+        return Collections.unmodifiableSet(new LinkedHashSet<>(byCorrelation.values()));
     }
 
     private static String requireValue(String value, String fieldName) {

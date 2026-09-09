@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.OptionalInt;
 import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.Test;
@@ -43,6 +46,7 @@ import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagBatchPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagWorkPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.transfer.ReleasedPackGroup;
@@ -858,6 +862,62 @@ class ToteToBagFlowControllerTest {
         assertFalse(fixture.controller().canAdmit(candidateTote));
     }
 
+    @Test
+    void shouldObserveDynamicWorkAfterPriorQuiescenceWithoutReopeningCompletedWork() {
+        MutableWorkPlanProvider workPlanProvider = new MutableWorkPlanProvider();
+        PdcConveyor pdcConveyor = new PdcConveyor(
+                "pdc",
+                new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f),
+                1.0f);
+        PrlConveyor prl = new PrlConveyor(
+                "prl-1",
+                0.0f,
+                new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f));
+        PcrConveyor pcrConveyor = new PcrConveyor(
+                "pcr",
+                new ConveyorOccupancyModel(2.0f, 0.05f, 0.0f),
+                1.0d);
+        AcceptingPackGroupReceiver receiver = new AcceptingPackGroupReceiver();
+        ToteToBagFlowController controller = new ToteToBagFlowController(
+                workPlanProvider,
+                null,
+                null,
+                pdcConveyor,
+                pcrConveyor,
+                receiver,
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl),
+                List.of(new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.01d, 0.01d)),
+                ignored -> 0.0d,
+                (ignored, pack) -> pack.getDimensions().length(),
+                ignored -> 0.0d,
+                (ignored, pack) -> pack.getDimensions().length());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcrConveyor);
+        sim.addController(controller);
+
+        sim.update(0.05d);
+        assertEquals(0, controller.getOutstandingExpectedBagGroupCount());
+
+        workPlanProvider.put("bag-a", 1);
+        pdcConveyor.acceptIncomingPack(new Pack(
+                "pack-a", "bag-a", candidatePackDimensions()));
+        advanceUntil(sim, () -> receiver.completedCorrelationIds().equals(List.of("bag-a")));
+        assertEquals(0, controller.getOutstandingExpectedBagGroupCount());
+
+        workPlanProvider.put("bag-b", 1);
+        sim.update(0.05d);
+        assertEquals(1, controller.getOutstandingExpectedBagGroupCount());
+        pdcConveyor.acceptIncomingPack(new Pack(
+                "pack-b", "bag-b", candidatePackDimensions()));
+        advanceUntil(sim, () -> receiver.completedCorrelationIds().equals(List.of("bag-a", "bag-b")));
+
+        assertEquals(0, controller.getOutstandingExpectedBagGroupCount());
+        sim.update(0.05d);
+        assertEquals(0, controller.getOutstandingExpectedBagGroupCount());
+    }
+
     private static void advanceUntil(SimulationWorld sim, BooleanSupplier condition) {
         for (int i = 0; i < 200 && !condition.getAsBoolean(); i++) {
             sim.update(0.05d);
@@ -894,6 +954,77 @@ class ToteToBagFlowControllerTest {
         @Override
         public void completeIncomingTransfer(ReleasedPackGroup group) {
             throw new IllegalStateException("Receiver is unavailable");
+        }
+    }
+
+    private static final class MutableWorkPlanProvider implements ToteToBagWorkPlanProvider {
+        private final Map<String, Integer> expectedPackCounts = new LinkedHashMap<>();
+
+        private void put(String correlationId, int expectedPackCount) {
+            expectedPackCounts.put(correlationId, expectedPackCount);
+        }
+
+        @Override
+        public OptionalInt expectedPackCount(String correlationId) {
+            Integer expectedPackCount = expectedPackCounts.get(correlationId);
+            return expectedPackCount == null
+                    ? OptionalInt.empty()
+                    : OptionalInt.of(expectedPackCount);
+        }
+
+        @Override
+        public java.util.Set<String> expectedCorrelationIds() {
+            return java.util.Collections.unmodifiableSet(
+                    new java.util.LinkedHashSet<>(expectedPackCounts.keySet()));
+        }
+    }
+
+    private static final class AcceptingPackGroupReceiver implements PackGroupReceiver {
+        private final List<String> completedCorrelationIds = new java.util.ArrayList<>();
+        private PackGroupReservation activeReservation;
+        private ReleasedPackGroup activeGroup;
+
+        private List<String> completedCorrelationIds() {
+            return List.copyOf(completedCorrelationIds);
+        }
+
+        @Override
+        public boolean canReserveIncomingGroup(ReleasedPackGroup group) {
+            return activeReservation == null;
+        }
+
+        @Override
+        public PackGroupReservation reserveIncomingGroup(ReleasedPackGroup group) {
+            activeGroup = group;
+            activeReservation = new PackGroupReservation("receiver", group.correlationId());
+            return activeReservation;
+        }
+
+        @Override
+        public boolean hasReservationFor(ReleasedPackGroup group) {
+            return activeGroup == group;
+        }
+
+        @Override
+        public void beginReceiving(PackGroupReservation reservation) {
+            if (reservation != activeReservation) {
+                throw new IllegalStateException("Unexpected pack-group reservation");
+            }
+        }
+
+        @Override
+        public boolean isReceivingGroup(ReleasedPackGroup group) {
+            return activeGroup == group;
+        }
+
+        @Override
+        public void completeIncomingTransfer(ReleasedPackGroup group) {
+            if (activeGroup != group) {
+                throw new IllegalStateException("Unexpected pack group");
+            }
+            completedCorrelationIds.add(group.correlationId());
+            activeGroup = null;
+            activeReservation = null;
         }
     }
 

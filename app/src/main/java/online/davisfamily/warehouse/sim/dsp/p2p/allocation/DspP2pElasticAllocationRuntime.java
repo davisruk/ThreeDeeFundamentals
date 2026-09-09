@@ -9,6 +9,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.OperationalP2pReleaseAssig
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pReleaseAssignmentCommitter;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
 
 public final class DspP2pElasticAllocationRuntime implements AutoCloseable {
 
@@ -37,6 +38,10 @@ public final class DspP2pElasticAllocationRuntime implements AutoCloseable {
 
     public OperationalP2pReleaseAssignmentCommitter operationalReleaseAssignmentCommitter() {
         return leaseRuntime.operationalReleaseAssignmentCommitter();
+    }
+
+    public P2pBagCorrelationAssignmentSnapshot correlationAssignmentSnapshot() {
+        return leaseRuntime.correlationAssignmentSnapshot();
     }
 
     public P2pLineLeaseCatalogSnapshot leaseSnapshot() {

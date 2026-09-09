@@ -18,6 +18,9 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirement;
 
 class StickyP2pLineAllocationPolicyTest {
     private final StickyP2pLineAllocationPolicy policy = new StickyP2pLineAllocationPolicy();
@@ -71,6 +74,32 @@ class StickyP2pLineAllocationPolicyTest {
 
         assertEquals(fallback.definition().lineId(), decision.assignment().orElseThrow().lineId());
         assertFalse(decision.activePharmacyAffinity());
+    }
+
+    @Test
+    void shouldForceAnExistingBagCorrelationToItsPinnedLine() {
+        P2pLineLeaseSnapshot preferred = leased(
+                "line-1", "SC-104", Optional.of("pharmacy-1"));
+        P2pLineLeaseSnapshot pinnedFallback = leased(
+                "line-2", "SC-104", Optional.empty());
+        P2pLineLeaseCatalogSnapshot catalog = catalog(preferred, pinnedFallback);
+        P2pBagCorrelationRequirement requirement =
+                new P2pBagCorrelationRequirement("bag-a", 2);
+        P2pLineAllocationRequest request = new P2pLineAllocationRequest(
+                new PhysicalToteId("physical-pinned"),
+                "SC-104",
+                List.of("pharmacy-1"),
+                true,
+                catalog,
+                allAdmissions(catalog, true),
+                java.util.Set.of(requirement),
+                new P2pBagCorrelationAssignmentSnapshot(List.of(
+                        new P2pBagCorrelationAssignment(
+                                "bag-a", pinnedFallback.definition().lineId()))));
+
+        P2pLineAllocationDecision decision = policy.allocate(request);
+
+        assertEquals(pinnedFallback.definition().lineId(), decision.assignment().orElseThrow().lineId());
     }
 
     @Test

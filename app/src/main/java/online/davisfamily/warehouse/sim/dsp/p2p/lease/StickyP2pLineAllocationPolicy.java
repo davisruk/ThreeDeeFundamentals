@@ -38,6 +38,9 @@ public final class StickyP2pLineAllocationPolicy implements P2pLineAllocationPol
     private static int compatibilityTier(
             P2pLineLeaseSnapshot line,
             P2pLineAllocationRequest request) {
+        if (!request.bagCorrelationsCompatibleWith(line.definition().lineId())) {
+            return Integer.MAX_VALUE;
+        }
         if (request.p2pFirstRouteStation()
                 && !request.routeAdmissible(line.definition().destination())) {
             return Integer.MAX_VALUE;

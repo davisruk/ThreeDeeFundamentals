@@ -19,6 +19,9 @@ import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.DspP2pArrivalConsumerRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalConsumerBinding;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.BagCoherentOperationalP2pReleaseAssignmentCommitter;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentRegistry;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 
@@ -107,6 +110,36 @@ public final class DspP2pStickyLeaseRuntimeFactory {
             OutboundToteAllocator outboundToteAllocator,
             List<P2pStickyArrivalBinding> arrivalBindings,
             P2pLeaseRetentionPolicy retentionPolicy) {
+        return create(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                authorizedEmptyOrderSheetKeysSupplier,
+                outboundToteAllocator,
+                arrivalBindings,
+                retentionPolicy,
+                P2pBagCorrelationRequirementCatalog.empty(),
+                new P2pBagCorrelationAssignmentRegistry());
+    }
+
+    public DspP2pStickyLeaseRuntime create(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<Set<OrderSheetKey>> authorizedEmptyOrderSheetKeysSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            List<P2pStickyArrivalBinding> arrivalBindings,
+            P2pLeaseRetentionPolicy retentionPolicy,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
         requireNonNull(activityProbes, "activityProbes");
@@ -120,6 +153,8 @@ public final class DspP2pStickyLeaseRuntimeFactory {
         requireNonNull(outboundToteAllocator, "outboundToteAllocator");
         requireNonNull(arrivalBindings, "arrivalBindings");
         requireNonNull(retentionPolicy, "retentionPolicy");
+        requireNonNull(requirementCatalog, "requirementCatalog");
+        requireNonNull(correlationAssignmentRegistry, "correlationAssignmentRegistry");
 
         if (lineDefinitions.stream().anyMatch(definition -> definition == null)) {
             throw new IllegalArgumentException("lineDefinitions must not contain null");
@@ -142,6 +177,12 @@ public final class DspP2pStickyLeaseRuntimeFactory {
                         new WarehouseSnapshotP2pReleaseRequirementResolver(
                                 schedulerSnapshotSupplier),
                         probes);
+        BagCoherentOperationalP2pReleaseAssignmentCommitter coherentCommitter =
+                new BagCoherentOperationalP2pReleaseAssignmentCommitter(
+                        committer,
+                        committer,
+                        requirementCatalog,
+                        correlationAssignmentRegistry);
         List<P2pArrivalConsumerBinding> consumerBindings = new ArrayList<>();
         Map<P2pLineId, P2pLineDefinition> definitionsById = indexDefinitions(definitions);
         for (P2pStickyArrivalBinding binding : stickyBindings) {
@@ -157,7 +198,7 @@ public final class DspP2pStickyLeaseRuntimeFactory {
 
         DspP2pArrivalConsumerRuntime arrivalRuntime =
                 new DspP2pArrivalConsumerRuntimeFactory().create(
-                        simulationWorld, consumerBindings);
+                simulationWorld, consumerBindings);
         P2pServiceCentreWorkSnapshotFactory workSnapshotFactory =
                 new P2pServiceCentreWorkSnapshotFactory();
         P2pLeaseReleaseController releaseController = new P2pLeaseReleaseController(
@@ -202,9 +243,11 @@ public final class DspP2pStickyLeaseRuntimeFactory {
                 definitions,
                 probes,
                 registry,
-                committer,
+                coherentCommitter,
+                coherentCommitter,
                 outboundToteAllocator,
-                arrivalRuntime);
+                arrivalRuntime,
+                correlationAssignmentRegistry);
     }
 
     private static Supplier<Set<OrderSheetKey>> compatibilityAuthorizationSupplier(

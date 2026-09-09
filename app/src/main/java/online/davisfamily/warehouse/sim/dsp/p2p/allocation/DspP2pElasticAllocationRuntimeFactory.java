@@ -24,6 +24,8 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pStickyArrivalBinding;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentRegistry;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
@@ -46,6 +48,42 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             OutboundToteAllocator outboundToteAllocator,
             List<P2pStickyArrivalBinding> arrivalBindings,
             P2pElasticAllocationConfig config) {
+        return create(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                clockSnapshotSupplier,
+                supplySnapshotSupplier,
+                timetable,
+                bagPlanningResultSupplier,
+                outboundToteAllocator,
+                arrivalBindings,
+                config,
+                P2pBagCorrelationRequirementCatalog.empty(),
+                new P2pBagCorrelationAssignmentRegistry());
+    }
+
+    public DspP2pElasticAllocationRuntime create(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            DspServiceCentreTimetable timetable,
+            Supplier<BagPlanningResult> bagPlanningResultSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            List<P2pStickyArrivalBinding> arrivalBindings,
+            P2pElasticAllocationConfig config,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
         requireNonNull(activityProbes, "activityProbes");
@@ -60,6 +98,8 @@ public final class DspP2pElasticAllocationRuntimeFactory {
         requireNonNull(outboundToteAllocator, "outboundToteAllocator");
         requireNonNull(arrivalBindings, "arrivalBindings");
         requireNonNull(config, "config");
+        requireNonNull(requirementCatalog, "requirementCatalog");
+        requireNonNull(correlationAssignmentRegistry, "correlationAssignmentRegistry");
         if (lineDefinitions.size() != DspP2pStickyLeaseRuntimeFactory.DSP_P2P_LINE_COUNT
                 || config.p2pLineCount()
                         != DspP2pStickyLeaseRuntimeFactory.DSP_P2P_LINE_COUNT) {
@@ -142,7 +182,9 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                         "supplySnapshotSupplier").authorizedEmptyOrderSheetKeys(),
                 outboundToteAllocator,
                 arrivalBindings,
-                new ElasticP2pLeaseRetentionPolicy(allocationFactory));
+                new ElasticP2pLeaseRetentionPolicy(allocationFactory),
+                requirementCatalog,
+                correlationAssignmentRegistry);
         return new DspP2pElasticAllocationRuntime(leaseRuntime, allocationFactory);
     }
 

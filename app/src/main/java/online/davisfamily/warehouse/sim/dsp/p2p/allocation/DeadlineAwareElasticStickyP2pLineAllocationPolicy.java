@@ -70,6 +70,9 @@ public final class DeadlineAwareElasticStickyP2pLineAllocationPolicy
             P2pLineAllocationRequest request,
             P2pServiceCentreLineDemandSnapshot demand,
             Set<P2pLineId> feedingLineIds) {
+        if (!request.bagCorrelationsCompatibleWith(line.definition().lineId())) {
+            return Integer.MAX_VALUE;
+        }
         if (request.p2pFirstRouteStation()
                 && !request.routeAdmissible(line.definition().destination())) {
             return Integer.MAX_VALUE;
