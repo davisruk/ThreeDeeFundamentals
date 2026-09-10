@@ -31,7 +31,7 @@ class DspFullDayAnalysisCommandTest {
                                 + fixture.inspection().toString(), "--overwrite"));
 
         assertEquals(fixture.productMaster(), command.productMasterPath());
-        assertEquals(List.of(fixture.firstOrder(), fixture.secondOrder()), command.orderPaths());
+        assertEquals(List.of(fixture.secondOrder(), fixture.firstOrder()), command.orderPaths());
         assertEquals(fixture.output(), command.outputPath());
         assertEquals(fixture.inspection(), command.inspectionOutputPath().orElseThrow());
         assertEquals(LocalDate.of(2026, 9, 2), command.operatingDate());
@@ -44,6 +44,31 @@ class DspFullDayAnalysisCommandTest {
         assertEquals(7, command.stepsPerBatch());
         assertEquals(Duration.ofSeconds(15), command.metricSampleInterval());
         assertTrue(command.overwrite());
+    }
+
+    @Test
+    void shouldExpandOrdersDirectoryInNaturalFilenameOrderAndIgnoreOtherEntries(
+            @TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        Path ordersDirectory = Files.createDirectory(directory.resolve("orders"));
+
+        Files.writeString(ordersDirectory.resolve("a-lower.json"), "a");
+        Files.writeString(ordersDirectory.resolve("2.json"), "2");
+        Files.writeString(ordersDirectory.resolve("A.json"), "A");
+        Files.writeString(ordersDirectory.resolve("10.json"), "10");
+        Files.writeString(ordersDirectory.resolve("ignored.txt"), "ignored");
+        Files.writeString(ordersDirectory.resolve("ignored-uppercase.JSON"), "ignored");
+        Path ignoredDirectory = Files.createDirectory(ordersDirectory.resolve("ignored.json"));
+        Files.writeString(ignoredDirectory.resolve("nested.json"), "ignored");
+
+        DspFullDayAnalysisCommand command = new DspFullDayAnalysisCommandParser().parse(
+                directoryArguments(fixture, ordersDirectory));
+
+        assertEquals(List.of(
+                ordersDirectory.resolve("10.json"),
+                ordersDirectory.resolve("2.json"),
+                ordersDirectory.resolve("A.json"),
+                ordersDirectory.resolve("a-lower.json")), command.orderPaths());
     }
 
     @Test
@@ -88,6 +113,30 @@ class DspFullDayAnalysisCommandTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> parser.parse(new String[] {"--product-master=" + fixture.productMaster()}));
+    }
+
+    @Test
+    void shouldRejectInvalidOrdersDirectoryModes(@TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        DspFullDayAnalysisCommandParser parser = new DspFullDayAnalysisCommandParser();
+        Path validOrdersDirectory = Files.createDirectory(directory.resolve("valid-orders"));
+        Files.writeString(validOrdersDirectory.resolve("valid.json"), "valid");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture,
+                        "--orders-directory=" + validOrdersDirectory)));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(directoryArguments(fixture, validOrdersDirectory,
+                        "--orders-directory=" + validOrdersDirectory)));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(directoryArguments(fixture,
+                        directory.resolve("missing-orders"))));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(directoryArguments(fixture, fixture.firstOrder())));
+
+        Path emptyOrdersDirectory = Files.createDirectory(directory.resolve("empty-orders"));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(directoryArguments(fixture, emptyOrdersDirectory)));
     }
 
     @Test
@@ -146,11 +195,49 @@ class DspFullDayAnalysisCommandTest {
         assertFalse(Files.exists(output));
     }
 
+    @Test
+    void shouldRejectInvalidDirectoryBeforeLoadingAndLeaveNoPartialOutput(@TempDir Path directory)
+            throws Exception {
+        Fixture fixture = fixture(directory);
+        Path emptyOrdersDirectory = Files.createDirectory(directory.resolve("empty-orders"));
+        Path inspection = directory.resolve("invalid-directory-inspection.txt");
+        String[] arguments = directoryArguments(fixture, emptyOrdersDirectory,
+                "--inspection-output=" + inspection);
+
+        ByteArrayOutputStream errorBytes = new ByteArrayOutputStream();
+        int exitCode = DspFullDayAnalysisMain.run(
+                arguments,
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
+                new PrintStream(errorBytes, true, StandardCharsets.UTF_8));
+
+        assertNotEquals(0, exitCode);
+        assertFalse(Files.exists(fixture.output()));
+        assertFalse(Files.exists(inspection));
+    }
+
     private static String[] arguments(Fixture fixture, String... extra) {
         String[] base = {
             "--product-master=" + fixture.productMaster(),
-            "--orders=" + fixture.firstOrder(),
             "--orders=" + fixture.secondOrder(),
+            "--orders=" + fixture.firstOrder(),
+            "--output=" + fixture.output(),
+            "--operating-date=2026-09-02",
+            "--osr-low-water-mark=10",
+            "--inbound-interval-seconds=1.0",
+            "--av02-capacity=2",
+            "--outbound-bag-capacity=4",
+            "--maximum-packs-per-bag=4"
+        };
+        String[] result = Arrays.copyOf(base, base.length + extra.length);
+        System.arraycopy(extra, 0, result, base.length, extra.length);
+        return result;
+    }
+
+    private static String[] directoryArguments(
+            Fixture fixture, Path ordersDirectory, String... extra) {
+        String[] base = {
+            "--product-master=" + fixture.productMaster(),
+            "--orders-directory=" + ordersDirectory,
             "--output=" + fixture.output(),
             "--operating-date=2026-09-02",
             "--osr-low-water-mark=10",

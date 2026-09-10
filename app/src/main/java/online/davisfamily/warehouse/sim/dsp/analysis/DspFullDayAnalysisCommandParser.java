@@ -1,5 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.analysis;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
@@ -9,15 +11,18 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /** Package-private parser for the exact full-day command-line contract. */
 final class DspFullDayAnalysisCommandParser {
     private static final String PRODUCT_MASTER = "product-master";
     private static final String ORDERS = "orders";
+    private static final String ORDERS_DIRECTORY = "orders-directory";
     private static final String OUTPUT = "output";
     private static final String INSPECTION_OUTPUT = "inspection-output";
     private static final String OPERATING_DATE = "operating-date";
@@ -38,6 +43,7 @@ final class DspFullDayAnalysisCommandParser {
 
         Set<String> seenSingletons = new HashSet<>();
         List<Path> orderPaths = new ArrayList<>();
+        Path orderDirectoryPath = null;
         Path productMasterPath = null;
         Path outputPath = null;
         Path inspectionOutputPath = null;
@@ -78,6 +84,10 @@ final class DspFullDayAnalysisCommandParser {
                     productMasterPath = parsePath(value, name);
                 }
                 case ORDERS -> orderPaths.add(parsePath(value, name));
+                case ORDERS_DIRECTORY -> {
+                    ensureSingleton(seenSingletons, name);
+                    orderDirectoryPath = parsePath(value, name);
+                }
                 case OUTPUT -> {
                     ensureSingleton(seenSingletons, name);
                     outputPath = parsePath(value, name);
@@ -127,7 +137,9 @@ final class DspFullDayAnalysisCommandParser {
         }
 
         require(productMasterPath != null, "missing required option: --product-master=<csv path>");
-        require(!orderPaths.isEmpty(), "missing required option: --orders=<json path>");
+        require(orderPaths.isEmpty() != (orderDirectoryPath == null),
+                "exactly one order input mode is required: --orders=<json path> or "
+                        + "--orders-directory=<directory path>");
         require(outputPath != null, "missing required option: --output=<json path>");
         require(operatingDate != null, "missing required option: --operating-date=<YYYY-MM-DD>");
         require(osrLowWaterMark >= 0, "missing required option: --osr-low-water-mark=<count>");
@@ -137,6 +149,9 @@ final class DspFullDayAnalysisCommandParser {
         require(maximumPacksPerBag >= 1, "missing required option: --maximum-packs-per-bag=<count>");
 
         validateRegularFile(productMasterPath, PRODUCT_MASTER);
+        if (orderDirectoryPath != null) {
+            orderPaths = expandOrderDirectory(orderDirectoryPath);
+        }
         for (Path orderPath : orderPaths) {
             validateRegularFile(orderPath, ORDERS);
         }
@@ -165,6 +180,34 @@ final class DspFullDayAnalysisCommandParser {
                 stepsPerBatch,
                 metricSampleInterval,
                 overwrite);
+    }
+
+    private static List<Path> expandOrderDirectory(Path path) {
+        if (!Files.isDirectory(path)) {
+            throw new IllegalArgumentException(
+                    "--" + ORDERS_DIRECTORY + " must be an existing directory: " + path);
+        }
+
+        try (Stream<Path> entries = Files.list(path)) {
+            List<Path> orderPaths = entries
+                    .filter(entry -> Files.isRegularFile(entry)
+                            && entry.getFileName().toString().endsWith(".json"))
+                    .sorted(Comparator.comparing(
+                            (Path entry) -> entry.getFileName().toString()))
+                    .toList();
+            if (orderPaths.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "--" + ORDERS_DIRECTORY
+                                + " must contain at least one direct regular .json file: " + path);
+            }
+            return orderPaths;
+        } catch (IOException | UncheckedIOException exception) {
+            Throwable cause = exception instanceof UncheckedIOException
+                    ? exception.getCause()
+                    : exception;
+            throw new IllegalArgumentException(
+                    "could not enumerate --" + ORDERS_DIRECTORY + ": " + path, cause);
+        }
     }
 
     private static void ensureSingleton(Set<String> seen, String name) {

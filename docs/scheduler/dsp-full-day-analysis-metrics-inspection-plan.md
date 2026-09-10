@@ -2,7 +2,9 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: planned; active programme work. No implementation has started.
+Status: active. Steps 1-8 are implemented, Step 8 is committed, and the focused regression and
+complete Gradle suite were green before the directory-input amendment below. Step 9 adds that
+amendment before the external-data run and closure in Step 10.
 
 ## Purpose
 
@@ -427,7 +429,8 @@ Command-line contract:
 
 ```text
 --product-master=<csv path>                  required once
---orders=<json path>                         required one or more times, retained in argument order
+--orders=<json path>                         repeat one or more times in explicit-file mode
+--orders-directory=<directory path>          required once in directory mode
 --output=<json path>                         required once
 --inspection-output=<text path>              optional
 --operating-date=<YYYY-MM-DD>                required
@@ -442,10 +445,20 @@ Command-line contract:
 --overwrite                                  optional flag
 ```
 
-Unknown, duplicate singleton, malformed, missing, nonexistent, or directory-valued file arguments
-fail before loading. Repeated `--orders` is the only repeated option. Add an `app` Gradle `JavaExec`
-task named `dspFullDayAnalysis` whose main class is `DspFullDayAnalysisMain`; keep the application
-plugin's `SoftwareRenderer` main class unchanged.
+Exactly one order-input mode is required. Explicit-file mode uses one or more repeated `--orders`
+options and retains their argument order. Directory mode uses the singleton `--orders-directory`
+option and expands only its immediate children that satisfy both `Files.isRegularFile(path)` and a
+case-sensitive filename suffix of `.json`. It does not recurse. Sort directory entries by
+`path.getFileName().toString()` using Java `String` natural order before creating the existing
+ordered order-path list. Hidden files are treated like any other entry; symbolic links follow the
+default `Files.isRegularFile` behavior. Ignore nonmatching entries and reject a directory with no
+matching regular JSON files.
+
+Unknown, duplicate singleton, malformed, missing, nonexistent, or wrong-kind path arguments fail
+before loading. Supplying both order-input modes also fails before loading. Repeated `--orders`
+remains the only repeated option. Add an `app` Gradle `JavaExec` task named `dspFullDayAnalysis`
+whose main class is `DspFullDayAnalysisMain`; keep the application plugin's `SoftwareRenderer`
+main class unchanged.
 
 ## Explicit Non-Goals
 
@@ -946,7 +959,94 @@ No additional user verification is required for this step.
 
 Proposed commit message: `Prove full-day DSP analysis`
 
-## Step 9: Regression, External Dataset Run, Review, And Closure
+## Step 9: Add Deterministic Order-Directory Input
+
+This is a formal plan amendment added after Step 8 because a complete external operating day has
+more than 5,000 order files. It changes only command-line input expansion; it does not change the
+loaded-input, runtime, scheduling, metrics, or report contracts.
+
+### Required reading for this step
+
+- the complete command-line contract under Report And Inspection Contract;
+- `DspFullDayAnalysisCommandParser`, `DspFullDayAnalysisCommand`, and
+  `DspFullDayAnalysisCommandTest`.
+
+### Required change surface
+
+Modify only:
+
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayAnalysisCommandParser.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayAnalysisCommandTest.java`.
+
+Do not modify `DspFullDayAnalysisCommand`, `DspFullDayInputPaths`, the input loader, main, runner,
+Gradle task, runtime, metrics, report, or domain code. Directory expansion must end at the existing
+ordered `List<Path>` command boundary.
+
+### Behavioral specification
+
+- Add singleton option `--orders-directory=<directory path>` and require exactly one of the two
+  order-input modes: one or more repeated `--orders`, or one `--orders-directory`.
+- Preserve repeated `--orders` behavior and exact argument order without sorting.
+- Validate `--orders-directory` as an existing directory, then enumerate only immediate children
+  in a closed `Files.list(...)` stream. An enumeration failure is an `IllegalArgumentException`
+  identifying `--orders-directory` and retaining the I/O failure as its cause.
+- Retain only entries for which `Files.isRegularFile(path)` is true and whose filename ends with
+  lowercase `.json` using case-sensitive matching. Do not recurse. Ignore uppercase `.JSON`, other
+  extensions, subdirectory contents, and directories whose own names end in `.json`.
+- Sort retained paths by `path.getFileName().toString()` with `Comparator.naturalOrder()` semantics.
+  Do not use locale-aware, case-insensitive, numeric, creation-time, or filesystem enumeration
+  order.
+- Reject a missing path, a regular file supplied as `--orders-directory`, a directory with no
+  matching regular JSON files, a duplicate `--orders-directory`, or any invocation containing both
+  order-input modes. Every rejection occurs before dataset loading and output creation.
+- Pass the expanded immutable order through the existing `DspFullDayAnalysisCommand` and
+  `DspFullDayInputPaths` boundaries. No directory path is retained in the command, report, or
+  runtime.
+
+Local constant naming, private helper decomposition, and exact error wording remain discretionary
+provided errors identify the offending option and the tests can distinguish each rejected shape.
+
+### Decision-complete test contract
+
+Extend `DspFullDayAnalysisCommandTest` at the package-private parser boundary:
+
+- create direct files named `10.json`, `2.json`, `A.json`, and `a.json` in deliberately different
+  creation order; parse directory mode and assert exact natural-string order
+  `10.json`, `2.json`, `A.json`, `a.json` in `command.orderPaths()`;
+- in that directory also create a lowercase non-JSON file, an uppercase `.JSON` file, a directory
+  ending in `.json`, and a nested lowercase JSON file; assert all are ignored and recursion does
+  not occur;
+- retain the existing explicit repeated-file test and assert its deliberately non-sorted argument
+  order is unchanged;
+- separately reject both modes together, duplicate `--orders-directory`, nonexistent directory,
+  regular-file-as-directory, and a directory with no matching direct regular lowercase `.json`
+  file;
+- for one representative invalid directory-mode invocation through `DspFullDayAnalysisMain.run`,
+  assert a nonzero exit and that neither JSON nor inspection output is created.
+
+These cases must catch an implementation that accepts the happy path but uses filesystem order,
+numeric/case-insensitive ordering, recursion, case-insensitive extension matching, both modes, or
+an empty expanded list.
+
+### Expected output
+
+A complete day can be selected with one directory argument while the loader still receives the
+same deterministic nonempty ordered `List<Path>` contract used by explicit files.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest
+```
+
+### User verification
+
+No additional user verification is required for this step. Step 10 owns post-amendment regression
+and the external-data run.
+
+Proposed commit message: `Accept full-day order directories`
+
+## Step 10: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, or 32R during
 closure.
@@ -970,9 +1070,10 @@ Then run the complete suite:
 ```
 
 An external-data run is required before marking the feature verified. Because production data is
-not stored in the repository, the user supplies the actual CSV/JSON paths and explicit unknown
-configuration values. Run `:app:dspFullDayAnalysis` with the exact command-line contract in this
-plan, inspect the generated JSON and text, and confirm:
+not stored in the repository, the user supplies the actual CSV path, the order directory (or
+explicit JSON paths), and explicit unknown configuration values. For a complete operating day,
+run `:app:dspFullDayAnalysis` with `--orders-directory=<directory path>` and the remaining exact
+command-line contract in this plan, inspect the generated JSON and text, and confirm:
 
 - the entire supplied dataset is represented in load counts/exclusions;
 - the report and inspection say `UNCALIBRATED` and `P2P_OUTPUT_CLOSED` prominently;
