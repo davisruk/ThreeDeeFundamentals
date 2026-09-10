@@ -2,9 +2,10 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: active. Steps 1-8 are implemented, Step 8 is committed, and the focused regression and
-complete Gradle suite were green before the directory-input amendment below. Step 9 adds that
-amendment before the external-data run and closure in Step 10.
+Status: active. Steps 1-9 are implemented and committed through `86fdaed`, and the focused
+regression and complete Gradle suite are green. The first external-data attempt exposed one
+erroneous but deployed optional 12N metadata field. Step 10 adds bounded compatibility for that
+field before the external-data run and closure in Step 11.
 
 ## Purpose
 
@@ -1041,12 +1042,98 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 10 owns post-amendment regression
+No additional user verification is required for this step. Step 11 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
 
-## Step 10: Regression, External Dataset Run, Review, And Closure
+## Step 10: Accept Optional Product-Barcode Length Metadata
+
+This is a formal plan amendment added after the first external-data attempt. Deployed 12N JSON may
+contain erroneous `orderDetail.productBarcodeLength` metadata. The field is not operational input,
+but strict deserialization currently rejects the complete file before normal DSP mapping. The
+producer may remove the field in future, so compatibility must accept both its presence and its
+absence without weakening strict handling for any other unknown property.
+
+### Required reading for this step
+
+- `TwelveNMessageJson`, `TwelveNOrderDetailJson`, and `JsonLoaderSupport`;
+- `TwelveNMessageJsonTest` and the EMPTY/missing-transport cases in `TwelveNOrderMapperTest`;
+- every direct `new TwelveNOrderDetailJson(...)` call reported by repository search.
+
+### Required change surface
+
+Modify production only in:
+
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/io/TwelveNOrderDetailJson.java`.
+
+Modify focused coverage in:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/io/TwelveNMessageJsonTest.java`.
+
+Mechanically update the direct record-constructor fixtures in:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/io/DspDatasetAssemblerTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/lifecycle/InboundPhysicalToteLifecycleScenarioTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/osr/DspOsrPhysicalInventoryScenarioTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/supply/DspRateLimitedServiceCentreSupplyScenarioTest.java`.
+
+Do not modify `JsonLoaderSupport`, `TwelveNDatasetLoader`, `TwelveNOrderMapper`,
+`TwelveNLineMappingSupport`, `DspDatasetAssembler`, the command line, reports, runtime, or domain
+logic. Do not add production data or its path to the repository.
+
+### Behavioral specification
+
+- Add nullable `Integer productBarcodeLength` to `TwelveNOrderDetailJson` immediately before
+  `orderLines`, matching the source JSON property name and the existing nullable integer length
+  metadata pattern.
+- When the property is present with an integral JSON value, deserialize and retain that value.
+  When it is absent or explicitly `null`, deserialize it as `null` without failure.
+- Treat the value as inert protocol metadata. Do not validate it, derive a product barcode from it,
+  expose it through DSP domain objects or reports, or make scheduler/runtime behavior depend on it.
+- Keep Jackson strict for every other unknown property. Do not add `@JsonIgnoreProperties`, disable
+  `FAIL_ON_UNKNOWN_PROPERTIES`, or introduce a generic extension-property map.
+- Pass `null` for the new component in every direct constructor fixture named above. Those are
+  mechanical source-compatibility updates and must not change fixture behavior or assertions.
+- Preserve existing transport-container semantics exactly: an omitted `transportContainer`
+  deserializes as `null`; tote type `03` maps to EMPTY with no inbound manifest; physical inbound
+  order types still reject a missing transport container.
+
+### Decision-complete test contract
+
+Extend `TwelveNMessageJsonTest` to prove all of the following through `JsonLoaderSupport`:
+
+- a representative message containing numeric `orderDetail.productBarcodeLength` deserializes and
+  retains the exact `Integer` value;
+- a representative message omitting `productBarcodeLength` deserializes and exposes `null`;
+- an otherwise representative `orderDetail` containing a different unknown property is still
+  rejected, proving the implementation did not broadly relax strict JSON binding.
+
+Retain the existing `TwelveNOrderMapperTest.shouldMapEmptyWithoutInboundManifest` and
+`shouldRejectMissingTransportContainerForPhysicalInboundOrder` cases unchanged. Running that test
+class must prove the record change does not alter the already-correct EMPTY/physical distinction.
+Compilation must cover all four mechanically updated direct-constructor fixture classes.
+
+### Expected output
+
+Both deployed files containing the erroneous metadata and future corrected files omitting it pass
+strict JSON binding. The metadata has no effect on mapped DSP work, and missing
+`transportContainer` remains valid only for EMPTY input.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.io.TwelveNMessageJsonTest --tests online.davisfamily.warehouse.sim.dsp.io.TwelveNOrderMapperTest
+```
+
+### User verification
+
+No additional user verification is required for this step. Step 11 owns the post-change focused
+regression, complete suite, and external-data run.
+
+Proposed commit message: `Accept optional 12N barcode metadata`
+
+## Step 11: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, or 32R during
 closure.
@@ -1111,6 +1198,9 @@ class/method/control-flow evidence:
   mutation;
 - reports are reproducible for identical input/profile/fake real-time source and output writing is
   safe;
+- optional `productBarcodeLength` metadata is accepted when present or absent without entering the
+  DSP domain, relaxing other unknown-property checks, or changing EMPTY transport-container
+  semantics;
 - no Exception/MANUAL execution, NS bag fabrication, dispatch/32R, calibrated timing, renderer-loop
   integration, new visual topology, event-driven fast-forward, mutable reset, or source-data
   mutation was added;
@@ -1150,3 +1240,5 @@ Proposed commit message: `Complete full-day DSP analysis`
   workload, block time, line utilization/throughput, outcomes, exclusions, and unfinished work.
 - Every output states that timing is `UNCALIBRATED` and completion means
   `P2P_OUTPUT_CLOSED`, not real dispatch or trunker loading.
+- 12N binding tolerates optional `productBarcodeLength` metadata while remaining strict for other
+  unknown fields and preserving manifest-free EMPTY input.

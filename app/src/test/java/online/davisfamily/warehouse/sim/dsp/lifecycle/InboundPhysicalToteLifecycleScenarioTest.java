@@ -279,6 +279,7 @@ class InboundPhysicalToteLifecycleScenarioTest {
                         null,
                         null,
                         null,
+                        null,
                         List.of(lines)));
     }
 

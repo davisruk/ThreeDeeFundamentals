@@ -15,5 +15,6 @@ public record TwelveNOrderDetailJson(
         Integer refOrderIdLength,
         Integer refSheetNumLength,
         Integer packsPickedLength,
+        Integer productBarcodeLength,
         List<TwelveNOrderLineJson> orderLines) {
 }

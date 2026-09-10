@@ -274,6 +274,7 @@ class DspRateLimitedServiceCentreSupplyScenarioTest {
                         null,
                         null,
                         null,
+                        null,
                         List.of(line)));
     }
 

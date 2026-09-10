@@ -221,6 +221,7 @@ class DspOsrPhysicalInventoryScenarioTest {
                         null,
                         null,
                         null,
+                        null,
                         List.of(line)));
     }
 

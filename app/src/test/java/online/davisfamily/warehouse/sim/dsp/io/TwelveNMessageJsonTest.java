@@ -1,6 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
@@ -54,6 +56,7 @@ class TwelveNMessageJsonTest {
                     "refOrderIdLength": 14,
                     "refSheetNumLength": 3,
                     "packsPickedLength": 4,
+                    "productBarcodeLength": 13,
                     "orderLines": [
                       {
                         "orderLineNumber": "000243548241",
@@ -91,9 +94,35 @@ class TwelveNMessageJsonTest {
         assertEquals("05", message.toteIdentifier().payload());
         assertEquals("104", message.serviceCentre().payload());
         assertEquals(2, message.orderDetail().numberOfOrderLines());
+        assertEquals(13, message.orderDetail().productBarcodeLength());
         assertEquals(2, message.orderDetail().orderLines().size());
         assertEquals("000243548241", message.orderDetail().orderLines().getFirst().orderLineNumber());
         assertEquals("05", message.orderDetail().orderLines().getFirst().orderLineType());
         assertEquals("TOTE0007170720", message.orderDetail().orderLines().getFirst().referenceOrderId());
+    }
+
+    @Test
+    void shouldAllowMissingProductBarcodeLength() {
+        TwelveNMessageJson message = JsonLoaderSupport.readString("""
+                {
+                  "orderDetail": {
+                    "orderLines": []
+                  }
+                }
+                """, TwelveNMessageJson.class);
+
+        assertNull(message.orderDetail().productBarcodeLength());
+    }
+
+    @Test
+    void shouldRemainStrictForOtherUnknownOrderDetailProperties() {
+        assertThrows(IllegalArgumentException.class, () -> JsonLoaderSupport.readString("""
+                {
+                  "orderDetail": {
+                    "unexpectedLength": 13,
+                    "orderLines": []
+                  }
+                }
+                """, TwelveNMessageJson.class));
     }
 }
