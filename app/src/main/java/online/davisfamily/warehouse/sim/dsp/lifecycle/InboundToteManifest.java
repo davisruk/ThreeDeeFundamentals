@@ -63,4 +63,14 @@ public record InboundToteManifest(
                 retainedItems,
                 sourceSequenceNumber);
     }
+
+    public InboundToteManifest withPhysicalToteId(PhysicalToteId replacement) {
+        return new InboundToteManifest(
+                replacement,
+                orderSheetKey,
+                orderType,
+                serviceCentreId,
+                items,
+                sourceSequenceNumber);
+    }
 }

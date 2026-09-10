@@ -418,6 +418,9 @@ public final class DspFullDayReportFactory {
         if (loadReport.omittedOrderCount() > 0) {
             values.add("One or more input orders were omitted from the supported runtime");
         }
+        if (!loadReport.inboundToteIdSubstitutions().isEmpty()) {
+            values.add("Reused inbound carrier barcodes were assigned distinct DSP journey IDs");
+        }
         for (UnresolvedProductLine issue : loadReport.unresolvedProductLines()) {
             values.add("Unresolved product " + issue.productId()
                     + " for " + issue.orderId() + "/" + issue.lineReference());

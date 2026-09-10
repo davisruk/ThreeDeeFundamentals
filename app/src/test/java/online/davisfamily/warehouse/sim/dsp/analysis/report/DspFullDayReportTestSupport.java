@@ -42,6 +42,18 @@ public final class DspFullDayReportTestSupport {
         }
     }
 
+    public static DspFullDayAnalysisReport reusedCarrierReport(Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadInputWithReusedCarrier(directory, profile);
+        try (DspFullDayAnalysisRuntime runtime = new DspFullDayAnalysisRuntimeFactory()
+                .create(input, profile)) {
+            for (int step = 0; step < 300 && runtime.state().name().equals("RUNNING"); step++) {
+                runtime.update(1d);
+            }
+            return new DspFullDayReportFactory().create(runtime.snapshot(), input, profile);
+        }
+    }
+
     public static DspFullDayLoadedInput input(
             Path directory,
             DspUncalibratedFullDayProfile profile) throws IOException {
@@ -66,6 +78,23 @@ public final class DspFullDayReportTestSupport {
         Path secondOrder = Files.writeString(
                 directory.resolve("order-108.json"),
                 message("order-108", "tote-108", "108", "998"));
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, List.of(firstOrder, secondOrder)), profile);
+    }
+
+    private static DspFullDayLoadedInput loadInputWithReusedCarrier(
+            Path directory,
+            DspUncalibratedFullDayProfile profile) throws IOException {
+        Path productMaster = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        Path firstOrder = Files.writeString(
+                directory.resolve("01-order-104.json"),
+                message("reused-order-104", "shared-carrier", "104", "999"));
+        Path secondOrder = Files.writeString(
+                directory.resolve("02-order-108.json"),
+                message("reused-order-108", "shared-carrier", "108", "998"));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(productMaster, List.of(firstOrder, secondOrder)), profile);
     }

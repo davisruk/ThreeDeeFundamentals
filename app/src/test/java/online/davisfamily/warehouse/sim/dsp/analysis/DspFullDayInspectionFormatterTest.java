@@ -36,10 +36,20 @@ class DspFullDayInspectionFormatterTest {
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Transport: ")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Station: ")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Load: ")));
+        assertTrue(first.stream().anyMatch(value -> value.contains("reusedInboundToteIds=0")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Unsupported: ")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Unfinished: ")));
         String text = String.join("\n", first).toLowerCase(java.util.Locale.ROOT);
         assertFalse(text.contains("trunk-loaded"));
         assertFalse(text.contains("dispatch complete"));
+    }
+
+    @Test
+    void shouldExposeReusedInboundToteCount(@TempDir Path directory) throws Exception {
+        var report = DspFullDayReportTestSupport.reusedCarrierReport(directory);
+        List<String> lines = new DspFullDayInspectionFormatter()
+                .describe(new DspFullDayInspectionSnapshot(report));
+
+        assertTrue(lines.stream().anyMatch(value -> value.contains("reusedInboundToteIds=1")));
     }
 }

@@ -2,12 +2,13 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: active. Steps 1-10 are implemented and committed through `9f87884`, and the focused
-regression and complete Gradle suite are green. External-data runs then exposed deployed 12N
-line-type code `03` and showed that unresolved Third Party products currently reach fail-fast route
-derivation despite already being reported as deferred unsupported work. Step 11 adds the bounded
-source mapping and full-day-only executable-data projection required to continue the external run;
-Step 12 owns final regression, external verification, review, and closure.
+Status: active. Steps 1-11 are implemented and committed through `b1136c4`, and the focused
+regression and complete Gradle suite are green. Step 11 added the deployed 12N line-type code `03`
+mapping and full-day-only unresolved Third Party product projection required by the preceding
+external-data run. The next external-data attempt exposed production reuse of inbound carrier
+barcodes across distinct DSP journeys. Step 12 deterministically substitutes a unique simulation ID
+for each later occurrence while preserving the original barcode in the load report. Step 13 owns
+final regression, external verification, review, and closure.
 
 ## Purpose
 
@@ -1044,7 +1045,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 12 owns post-amendment regression
+No additional user verification is required for this step. Step 13 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1130,7 +1131,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 12 owns the post-change focused
+No additional user verification is required for this step. Step 13 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1289,12 +1290,208 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 12 owns the post-change focused
+No additional user verification is required for this step. Step 13 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
 
-## Step 12: Regression, External Dataset Run, Review, And Closure
+## Step 12: Normalize Reused Inbound Carrier Barcodes
+
+This is a formal plan amendment added after the next external-data attempt. The inspected production
+day contains a small number of transport-container barcodes that occur in more than one retained
+12N message. These represent separate DSP tote journeys even when the same real carrier was
+returned and reused. The simulation intentionally keeps its established invariant that one
+`PhysicalToteId` identifies exactly one DSP journey: the first retained occurrence keeps the source
+barcode and every later occurrence receives a deterministic synthetic ID during dataset assembly.
+
+This is an input-normalization accommodation for production run data, not physical-carrier reuse
+modeling. The simulation does not add carrier availability, lifecycle reactivation, or a dependency
+between occurrences. It accepts the small possibility that two normalized journeys derived from
+one real carrier could be live simultaneously. Synthetic datasets created for tests or analysis
+must continue to use unique source transport-container barcodes except for the focused fixtures
+that prove this normalization boundary.
+
+### Required reading for this step
+
+- `DspDatasetAssembler`, `MappedTwelveNOrder`, `TwelveNMessageJson`, and
+  `DspDatasetAssemblerTest`;
+- `InboundToteManifest`, `InboundToteManifestCatalog`, `PhysicalToteId`, and
+  `PhysicalToteLifecycleLedger`;
+- `DspDatasetLoadReport`, `UnresolvedProductLine`, and their existing construction/test sites;
+- `DspFullDayInputLoader`, `DspFullDayLoadedInput`, and `DspFullDayInputLoaderTest`;
+- `DspFullDayReportFactory`, `DspFullDayReportJsonWriter`,
+  `DspFullDayInspectionFormatter`, `DspFullDayReportTestSupport`, and their focused tests;
+- the full-day runtime construction path in `DspFullDayAnalysisRuntimeFactory` and the bounded
+  scenario fixtures in `DspFullDayAnalysisScenarioTest`.
+
+### Required change surface
+
+Create:
+
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/io/InboundToteIdSubstitution.java`.
+
+Modify production in:
+
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/io/DspDatasetAssembler.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/io/DspDatasetLoadReport.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/lifecycle/InboundToteManifest.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/analysis/report/DspFullDayReportFactory.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/analysis/report/DspFullDayReportJsonWriter.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/analysis/report/DspFullDayInspectionFormatter.java`.
+
+Modify focused coverage in:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/io/DspDatasetAssemblerTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayInputLoaderTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayAnalysisScenarioTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/report/DspFullDayReportTestSupport.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/report/DspFullDayReportJsonWriterTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/report/DspFullDayReportFactoryTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayInspectionFormatterTest.java`.
+
+Do not modify `PhysicalToteId`; relax uniqueness in `InboundToteManifestCatalog`, lifecycle,
+supply, OSR, AV02, transport, station, P2P, or outbound components; add carrier reuse/admission
+state; change source JSON records; write normalized source files; derive behavior from production
+file paths; or alter order, sheet, line, product, pack, bag, service-centre, source-sequence, or
+prepared-line identity.
+
+### Behavioral specification
+
+#### Deterministic substitution
+
+- `DspDatasetAssembler` remains the sole normalization boundary. Apply substitution after a
+  non-MANUAL message has been mapped and its retained lines are known, but before its inbound
+  manifest is added to `inboundToteManifests`. Messages with no inbound manifest, including EMPTY,
+  do not participate. A MANUAL message remains excluded and does not reserve or consume an inbound
+  identity occurrence.
+- Compare source transport-container identities through the mapped manifest's normalized
+  `PhysicalToteId`; therefore existing trimming semantics apply. Preserve input iteration order,
+  which the directory loader already establishes from ascending JSON filename order.
+- The first retained manifest for a source `PhysicalToteId` keeps that exact ID. For the second and
+  each later retained manifest, replace only the manifest's `PhysicalToteId` with a generated ID
+  using base form `dsp-reused-<source-id>-<one-based-occurrence>`, where the occurrence is `2`, `3`,
+  and so on for that source ID.
+- Before mapping messages, collect every nonblank transport-container payload present in the input
+  message list into a reserved source-ID set. A generated candidate must not equal any reserved
+  source ID, any retained first-occurrence ID, or any earlier generated ID. If the base candidate
+  collides, append `-<one-based-collision-attempt>` beginning with `-1` until an unused candidate is
+  found. Candidate generation and collision resolution must be deterministic for identical ordered
+  input.
+- Add `InboundToteManifest.withPhysicalToteId(PhysicalToteId)` returning a manifest with only that
+  component replaced. Use it for substitution after any retained-line `withItems(...)` projection;
+  do not mutate a mapped/source JSON object.
+- Construct all later bag plans, load plans, lifecycle records, supply entries, route identities,
+  metrics, and outcomes from the normalized manifests through existing production paths. No
+  downstream component receives two equal inbound `PhysicalToteId` values, and all existing
+  duplicate guards remain unchanged.
+
+#### Audit reporting
+
+- Add immutable record `InboundToteIdSubstitution` with required fields:
+  `PhysicalToteId sourcePhysicalToteId`, `PhysicalToteId substitutedPhysicalToteId`, positive
+  `int occurrenceNumber` greater than one, and nonnegative `long sourceSequenceNumber`. Reject null
+  IDs, equal source/substituted IDs, occurrence values below two, and negative source sequences.
+- Extend `DspDatasetLoadReport` with an ordered
+  `List<InboundToteIdSubstitution> inboundToteIdSubstitutions`. Defensively copy and reject null
+  lists/elements. Preserve source
+  processing order. Keep a delegating constructor with the existing four-argument signature that
+  supplies an empty substitution list, and update `empty()` accordingly, so unrelated fixtures and
+  callers remain source-compatible.
+- Record exactly one substitution entry for each later retained occurrence, using the mapped
+  manifest's unchanged `sourceSequenceNumber`. Do not count a first occurrence, excluded MANUAL
+  input, EMPTY input, or a message omitted because no non-MANUAL lines remain.
+- Preserve the complete load report through the Step 11 executable-data projection. Substitution
+  is informational: it is not unsupported work, does not increment omission/MANUAL/unresolved
+  counts, and does not prevent a service centre from completing.
+- In JSON, add ordered `load.inboundToteIdSubstitutions` objects containing
+  `sourcePhysicalToteId`, `substitutedPhysicalToteId`, `occurrenceNumber`, and
+  `sourceSequenceNumber`. Do not add the substitution list to metrics or duplicate it elsewhere in
+  the JSON contract.
+- Add `reusedInboundToteIds=<count>` to the compact text `Load:` line. Add one report warning when
+  the list is nonempty, stating that reused inbound carrier barcodes were assigned distinct DSP
+  journey IDs; do not emit one warning per occurrence. Exact mappings remain available in JSON.
+
+### Mutation sequence
+
+For each retained mapped message:
+
+1. map and filter the message exactly as before;
+2. create the retained manifest, including any `withItems(...)` projection;
+3. determine that source ID's next occurrence without changing any downstream collection;
+4. for a later occurrence, generate and reserve a collision-free ID, create the replacement
+   manifest, and append its audit entry;
+5. add the final manifest and existing logical/prepared-line data in their current deterministic
+   order;
+6. after all messages are processed, construct `InboundToteManifestCatalog` unchanged so it remains
+   the final assertion that every simulation journey ID is unique.
+
+Validation or generation failure must occur before the affected manifest is published. Assembly is
+already an all-or-nothing return operation, so no rollback API is required.
+
+### Decision-complete test contract
+
+Replace the existing `DspDatasetAssemblerTest` expectation that duplicate physical IDs are rejected
+with focused coverage proving:
+
+- two retained manifests with one source barcode produce the unchanged first ID and
+  `dsp-reused-<source-id>-2` for the second, while retaining their exact input order, distinct sheet
+  identities, service centres, items, and source sequence numbers;
+- a third occurrence receives suffix `-3`, and the report contains exactly two ordered audit
+  entries with source ID, replacement ID, occurrence, and sequence matching those manifests;
+- a source input already equal to a would-be generated base forces deterministic `-1` collision
+  resolution without changing which occurrence keeps each source ID;
+- MANUAL, EMPTY, and omitted-after-line-filter messages do not consume occurrences or create audit
+  entries;
+- unique retained source IDs are unchanged and produce an empty substitution list;
+- the existing manifest catalog still rejects duplicate IDs when constructed directly, proving
+  uniqueness was normalized at assembly rather than weakened downstream.
+
+Extend `DspFullDayInputLoaderTest` through the public ordered-directory loading boundary with two
+retained JSON files sharing a transport-container barcode. Assert ascending filename order chooses
+the unchanged first occurrence, executable `LoadedDspData` preserves both distinct normalized
+manifests, bag planning/load plans use the corresponding distinct IDs, and the load report survives
+the unresolved-product projection unchanged.
+
+Extend `DspFullDayAnalysisScenarioTest` with a bounded supported fixture containing two otherwise
+independent inbound journeys that share a source barcode and use distinct order sheets. Prove public
+runtime construction no longer throws a duplicate-ID error, both normalized journeys pass through
+existing lifecycle/runtime ownership, neither is collapsed, and the run reaches its expected
+supported terminal result. Assert the substitution is informational rather than unsupported work.
+
+Extend `DspFullDayReportTestSupport` with one reusable report fixture whose loaded input contains a
+substitution. Use it in `DspFullDayReportJsonWriterTest` to prove the JSON load array preserves the
+exact ordered mapping, in `DspFullDayReportFactoryTest` to prove one summary warning is present only
+when substitutions exist, and in `DspFullDayInspectionFormatterTest` to prove the text load line
+exposes the count. The existing unique-input report proves the empty-array/no-warning/zero-count
+behavior. Existing tests using the four-argument `DspDatasetLoadReport` constructor must continue to
+compile without broad fixture rewrites.
+
+The tests must catch an implementation that silently drops a later manifest, renames the first
+occurrence, depends on unordered-map iteration, generates an ID colliding with a later source ID,
+normalizes only the report but not downstream load plans, treats reuse as unsupported work, or
+weakens a downstream duplicate guard.
+
+### Expected output
+
+Production input may reuse a transport-container barcode across separate retained 12N messages.
+Every retained message still becomes a uniquely identified DSP journey, existing runtime
+uniqueness contracts remain intact, and reports retain a deterministic mapping back to the source
+carrier barcode without modeling physical-carrier reuse.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.io.DspDatasetAssemblerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInputLoaderTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisScenarioTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.*
+```
+
+### User verification
+
+No additional user verification is required for this step. Step 13 owns the post-change focused
+regression, complete suite, and repeated external-data run.
+
+Proposed commit message: `Normalize reused inbound tote identifiers`
+
+## Step 13: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, or 32R during
 closure.
@@ -1367,6 +1564,10 @@ class/method/control-flow evidence:
 - unresolved products are preserved as service-centre-specific unsupported load issues, excluded
   only from the full-day executable projection, and never fabricate picks, packs, bags, or
   completion;
+- later retained occurrences of a reused inbound carrier barcode receive deterministic,
+  collision-free DSP journey IDs during assembly; the first occurrence remains unchanged, exact
+  substitutions remain ordered and auditable in the load report, and every downstream uniqueness
+  guard remains intact;
 - no Exception/MANUAL execution, NS bag fabrication, dispatch/32R, calibrated timing, renderer-loop
   integration, new visual topology, event-driven fast-forward, mutable reset, or source-data
   mutation was added;
@@ -1412,3 +1613,6 @@ Proposed commit message: `Complete full-day DSP analysis`
   domain intent, while later code-`02` ASSOCIATED lines retain prepared-line collection semantics.
 - Product-master misses remain attributed unsupported short picks and are excluded from full-day
   execution without being represented as successful work until Exception Station behavior exists.
+- Reused production transport-container barcodes are normalized into distinct deterministic DSP
+  journey IDs after their first retained occurrence, with exact substitutions reported and no
+  carrier-reuse state added to the lifecycle or runtime.

@@ -100,7 +100,9 @@ public final class DspFullDayInspectionFormatter {
         lines.add("Load: manualMessages=" + snapshot.loadReport().ignoredManualMessageCount()
                 + " manualLines=" + snapshot.loadReport().ignoredManualLineCount()
                 + " omittedOrders=" + snapshot.loadReport().omittedOrderCount()
-                + " unresolvedProducts=" + snapshot.loadReport().unresolvedProductLines().size());
+                + " unresolvedProducts=" + snapshot.loadReport().unresolvedProductLines().size()
+                + " reusedInboundToteIds="
+                + snapshot.loadReport().inboundToteIdSubstitutions().size());
         lines.add("Unsupported: " + joinOrNone(snapshot.unsupportedWork()));
         lines.add("Unfinished: " + joinOrNone(snapshot.unfinishedIdentities()));
         return List.copyOf(lines);

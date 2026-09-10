@@ -15,6 +15,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderValidator;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
@@ -65,6 +66,11 @@ public class DspDatasetAssembler {
         List<DspOrderItem> preparedLines = new ArrayList<>();
         Set<PreparedLineKey> loadedPreparedLineKeys = new LinkedHashSet<>();
         List<UnresolvedProductLine> unresolvedProductLines = new ArrayList<>();
+        List<InboundToteIdSubstitution> inboundToteIdSubstitutions = new ArrayList<>();
+        Set<String> reservedSourcePhysicalToteIds = sourcePhysicalToteIds(messages);
+        Map<String, Integer> sourcePhysicalToteOccurrences = new LinkedHashMap<>();
+        Set<String> reservedSimulationPhysicalToteIds = new LinkedHashSet<>(
+                reservedSourcePhysicalToteIds);
         int ignoredManualMessageCount = 0;
         int ignoredManualLineCount = 0;
         int omittedOrderCount = 0;
@@ -100,7 +106,27 @@ public class DspDatasetAssembler {
                     .map(manifest -> retainedLines.size() == mappedOrder.items().size()
                             ? manifest
                             : manifest.withItems(retainedLines))
-                    .ifPresent(inboundToteManifests::add);
+                    .ifPresent(manifest -> {
+                        String sourcePhysicalToteId = manifest.physicalToteId().value();
+                        int occurrenceNumber = sourcePhysicalToteOccurrences.merge(
+                                sourcePhysicalToteId, 1, Integer::sum);
+                        if (occurrenceNumber == 1) {
+                            inboundToteManifests.add(manifest);
+                            return;
+                        }
+
+                        String substitutedValue = nextSubstitutedPhysicalToteId(
+                                sourcePhysicalToteId,
+                                occurrenceNumber,
+                                reservedSimulationPhysicalToteIds);
+                        PhysicalToteId substitutedPhysicalToteId = new PhysicalToteId(substitutedValue);
+                        inboundToteManifests.add(manifest.withPhysicalToteId(substitutedPhysicalToteId));
+                        inboundToteIdSubstitutions.add(new InboundToteIdSubstitution(
+                                manifest.physicalToteId(),
+                                substitutedPhysicalToteId,
+                                occurrenceNumber,
+                                manifest.sourceSequenceNumber()));
+                    });
             orderGroups.computeIfAbsent(
                     retainedOrder.orderSheetKey(),
                     ignored -> new LogicalOrderGroup(retainedOrder))
@@ -135,7 +161,8 @@ public class DspDatasetAssembler {
                 ignoredManualMessageCount,
                 ignoredManualLineCount,
                 omittedOrderCount,
-                unresolvedProductLines);
+                unresolvedProductLines,
+                inboundToteIdSubstitutions);
         return new LoadedDspData(
                 retainedProducts,
                 orders,
@@ -156,6 +183,34 @@ public class DspDatasetAssembler {
                 items,
                 order.orderPriority(),
                 order.sequenceNumber());
+    }
+
+    private static Set<String> sourcePhysicalToteIds(List<TwelveNMessageJson> messages) {
+        Set<String> values = new LinkedHashSet<>();
+        for (TwelveNMessageJson message : messages) {
+            if (message == null || message.transportContainer() == null) {
+                continue;
+            }
+            String value = message.transportContainer().payload();
+            if (value != null && !value.isBlank()) {
+                values.add(value.trim());
+            }
+        }
+        return values;
+    }
+
+    private static String nextSubstitutedPhysicalToteId(
+            String sourcePhysicalToteId,
+            int occurrenceNumber,
+            Set<String> reservedSimulationPhysicalToteIds) {
+        String base = "dsp-reused-" + sourcePhysicalToteId + "-" + occurrenceNumber;
+        String candidate = base;
+        int collisionAttempt = 0;
+        while (!reservedSimulationPhysicalToteIds.add(candidate)) {
+            collisionAttempt++;
+            candidate = base + "-" + collisionAttempt;
+        }
+        return candidate;
     }
 
     private static final class LogicalOrderGroup {

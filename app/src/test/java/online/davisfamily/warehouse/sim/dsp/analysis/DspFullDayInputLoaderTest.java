@@ -132,6 +132,40 @@ class DspFullDayInputLoaderTest {
     }
 
     @Test
+    void shouldNormalizeRepeatedCarrierBarcodeThroughOrderedInput(@TempDir Path directory)
+            throws IOException {
+        Path productMaster = write(directory, "products.csv", """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        Path first = write(directory, "01-first.json", message(
+                "first-order", "001", "05", "shared-carrier", "104", "999",
+                "first-line", "05", "product-a", "pharmacy-first", "patient-first",
+                "prescription-first", "0001", "0001"));
+        Path second = write(directory, "02-second.json", message(
+                "second-order", "001", "05", "shared-carrier", "108", "998",
+                "second-line", "05", "product-a", "pharmacy-second", "patient-second",
+                "prescription-second", "0001", "0001"));
+
+        DspFullDayLoadedInput loaded = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, List.of(first, second)),
+                DspUncalibratedFullDayProfile.productionBaseline(
+                        OPERATING_DATE, 10, Duration.ofSeconds(3), 1, 4, 4));
+
+        assertEquals(List.of("shared-carrier", "dsp-reused-shared-carrier-2"),
+                loaded.loadedData().inboundToteManifests().stream()
+                        .map(manifest -> manifest.physicalToteId().value())
+                        .toList());
+        assertEquals(List.of("shared-carrier", "dsp-reused-shared-carrier-2"),
+                loaded.bagPlanningResult().p2pToteLoadPlans().stream()
+                        .map(loadPlan -> loadPlan.physicalToteId().value())
+                        .toList());
+        assertEquals(1, loaded.loadReport().inboundToteIdSubstitutions().size());
+        assertTrue(loaded.loadReport().unresolvedProductLines().isEmpty());
+        assertEquals(loaded.loadReport(), loaded.loadedData().report());
+    }
+
+    @Test
     void shouldRejectInvalidPathsBeforeAnyDatasetLoad(@TempDir Path directory) throws IOException {
         Path productMaster = write(directory, "products.csv", """
                 dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height

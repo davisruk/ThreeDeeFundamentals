@@ -204,6 +204,14 @@ public final class DspFullDayReportJsonWriter {
         node.put("ignoredManualMessageCount", report.ignoredManualMessageCount());
         node.put("ignoredManualLineCount", report.ignoredManualLineCount());
         node.put("omittedOrderCount", report.omittedOrderCount());
+        ArrayNode substitutions = node.putArray("inboundToteIdSubstitutions");
+        for (var value : report.inboundToteIdSubstitutions()) {
+            substitutions.addObject()
+                    .put("sourcePhysicalToteId", value.sourcePhysicalToteId().value())
+                    .put("substitutedPhysicalToteId", value.substitutedPhysicalToteId().value())
+                    .put("occurrenceNumber", value.occurrenceNumber())
+                    .put("sourceSequenceNumber", value.sourceSequenceNumber());
+        }
         ArrayNode unresolved = node.putArray("unresolvedProductLines");
         for (UnresolvedProductLine value : report.unresolvedProductLines()) {
             unresolved.addObject()

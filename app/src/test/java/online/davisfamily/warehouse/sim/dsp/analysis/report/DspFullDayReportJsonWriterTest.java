@@ -33,6 +33,8 @@ class DspFullDayReportJsonWriterTest {
         assertEquals("P2P_OUTPUT_CLOSED", root.at("/profile/completionMilestone").textValue());
         assertNotNull(root.get("configuration"));
         assertNotNull(root.get("load"));
+        assertTrue(root.at("/load/inboundToteIdSubstitutions").isArray());
+        assertEquals(0, root.at("/load/inboundToteIdSubstitutions").size());
         assertNotNull(root.get("metrics"));
         assertNotNull(root.get("current"));
         assertTrue(root.get("serviceCentres").isArray());
@@ -64,6 +66,21 @@ class DspFullDayReportJsonWriterTest {
 
         writer.write(report, output, true);
         assertArrayEquals(original, Files.readAllBytes(output));
+    }
+
+    @Test
+    void shouldEmitOrderedInboundToteIdSubstitutions(@TempDir Path directory) throws Exception {
+        DspFullDayAnalysisReport report =
+                DspFullDayReportTestSupport.reusedCarrierReport(directory);
+        JsonNode root = new ObjectMapper().readTree(new DspFullDayReportJsonWriter().serialize(report));
+
+        JsonNode substitutions = root.at("/load/inboundToteIdSubstitutions");
+        assertEquals(1, substitutions.size());
+        assertEquals("shared-carrier", substitutions.get(0).get("sourcePhysicalToteId").textValue());
+        assertEquals("dsp-reused-shared-carrier-2",
+                substitutions.get(0).get("substitutedPhysicalToteId").textValue());
+        assertEquals(2, substitutions.get(0).get("occurrenceNumber").intValue());
+        assertEquals(1L, substitutions.get(0).get("sourceSequenceNumber").longValue());
     }
 
     @Test

@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderValidator;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
@@ -65,6 +66,7 @@ class DspDatasetAssemblerTest {
         assertEquals("tote-full-pack", data.inboundToteManifests().getFirst().physicalToteId().value());
         assertEquals(data.orders().getFirst().orderSheetKey(),
                 data.inboundToteManifests().getFirst().orderSheetKey());
+        assertTrue(data.report().inboundToteIdSubstitutions().isEmpty());
     }
 
     @Test
@@ -215,22 +217,76 @@ class DspDatasetAssemblerTest {
     }
 
     @Test
-    void shouldRejectDuplicatePhysicalToteIds() {
+    void shouldNormalizeRepeatedPhysicalToteIdsAndReportOrderedSubstitutions() {
         List<TwelveNMessageJson> messages = List.of(
                 physicalMessage(
                         "order-1", "001", "05", "tote-1", "104",
                         line("line-1", "05", "pharmacy-1", "product-1")),
                 physicalMessage(
-                        "order-2", "001", "05", "tote-1", "104",
-                        line("line-2", "05", "pharmacy-1", "product-2")));
+                        "order-2", "001", "05", "dsp-reused-tote-1-2", "104",
+                        line("line-2", "05", "pharmacy-1", "product-2")),
+                physicalMessage(
+                        "order-3", "001", "05", "tote-1", "104",
+                        line("line-3", "05", "pharmacy-1", "product-1")),
+                physicalMessage(
+                        "order-4", "001", "05", "tote-1", "104",
+                        line("line-4", "05", "pharmacy-1", "product-2")));
 
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> assembler.assemble(
-                        List.of(product("product-1"), product("product-2")),
-                        messages));
+        LoadedDspData data = assembler.assemble(
+                List.of(product("product-1"), product("product-2")),
+                messages);
 
-        assertTrue(exception.getMessage().contains("Duplicate physical tote ID"));
+        assertEquals(
+                List.of("tote-1", "dsp-reused-tote-1-2", "dsp-reused-tote-1-2-1", "dsp-reused-tote-1-3"),
+                data.inboundToteManifests().stream()
+                        .map(manifest -> manifest.physicalToteId().value())
+                        .toList());
+        assertEquals(List.of(0L, 1L, 2L, 3L), data.inboundToteManifests().stream()
+                .map(manifest -> manifest.sourceSequenceNumber())
+                .toList());
+        assertEquals(2, data.report().inboundToteIdSubstitutions().size());
+        assertEquals("tote-1", data.report().inboundToteIdSubstitutions().get(0)
+                .sourcePhysicalToteId().value());
+        assertEquals("dsp-reused-tote-1-2-1", data.report().inboundToteIdSubstitutions().get(0)
+                .substitutedPhysicalToteId().value());
+        assertEquals(2, data.report().inboundToteIdSubstitutions().get(0).occurrenceNumber());
+        assertEquals(2L, data.report().inboundToteIdSubstitutions().get(0).sourceSequenceNumber());
+        assertEquals("dsp-reused-tote-1-3", data.report().inboundToteIdSubstitutions().get(1)
+                .substitutedPhysicalToteId().value());
+        assertEquals(3, data.report().inboundToteIdSubstitutions().get(1).occurrenceNumber());
+        assertEquals(3L, data.report().inboundToteIdSubstitutions().get(1).sourceSequenceNumber());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new InboundToteManifestCatalog(List.of(
+                        data.inboundToteManifests().getFirst(),
+                        data.inboundToteManifests().getFirst())));
+    }
+
+    @Test
+    void shouldNotConsumePhysicalToteOccurrenceForManualOrEmptyInput() {
+        LoadedDspData data = assembler.assemble(
+                List.of(product("product-1")),
+                List.of(
+                        physicalMessage(
+                                "manual-order", "001", "01", "tote-1", "104",
+                                line("manual-line", "01", "pharmacy-1", "product-1")),
+                        physicalMessage(
+                                "empty-order", "001", "03", "tote-1", "104",
+                                line("empty-line", "05", "pharmacy-1", "product-1")),
+                        physicalMessage(
+                                "omitted-order", "001", "05", "tote-1", "104",
+                                line("omitted-line", "01", "pharmacy-1", "product-1")),
+                        physicalMessage(
+                                "retained-order", "001", "05", "tote-1", "104",
+                                line("retained-line", "05", "pharmacy-1", "product-1"))));
+
+        assertEquals(List.of("tote-1"), data.inboundToteManifests().stream()
+                .map(manifest -> manifest.physicalToteId().value())
+                .toList());
+        assertTrue(data.report().inboundToteIdSubstitutions().isEmpty());
+        assertEquals(1, data.report().ignoredManualMessageCount());
+        assertEquals(2, data.report().ignoredManualLineCount());
+        assertEquals(1, data.report().omittedOrderCount());
     }
 
     @Test

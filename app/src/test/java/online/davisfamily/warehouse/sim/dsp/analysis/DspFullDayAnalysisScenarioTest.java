@@ -216,6 +216,45 @@ class DspFullDayAnalysisScenarioTest {
         assertEquals(DspServiceCentreCompletionOutcome.UNFINISHED_AT_HARD_CUTOFF, outcomes.get("109"));
     }
 
+    @Test
+    void shouldExecuteRepeatedCarrierAsDistinctDspJourneys(@TempDir Path directory) throws Exception {
+        Files.createDirectories(directory);
+        DspUncalibratedFullDayProfile profile = profile();
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        Path first = writeMessage(directory, "01-first.json", message(
+                "reused-first", "001", "05", "shared-carrier", "104", "999",
+                List.of(line("first-line", "05", "product-a", "pharmacy-first",
+                        "patient-first", "rx-first", 1, 1))));
+        Path second = writeMessage(directory, "02-second.json", message(
+                "reused-second", "001", "05", "shared-carrier", "108", "998",
+                List.of(line("second-line", "05", "product-a", "pharmacy-second",
+                        "patient-second", "rx-second", 1, 1))));
+        DspFullDayLoadedInput input = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, List.of(first, second)), profile);
+
+        assertEquals(List.of("shared-carrier", "dsp-reused-shared-carrier-2"),
+                input.data().inboundToteManifests().stream()
+                        .map(manifest -> manifest.physicalToteId().value())
+                        .toList());
+        assertEquals(1, input.report().inboundToteIdSubstitutions().size());
+
+        AtomicLong monotonicClock = new AtomicLong();
+        DspFullDayAnalysisReport report = new DspFullDayAnalysisRunner(
+                () -> monotonicClock.addAndGet(1_000_000L),
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))
+                .run(input, profile, directory.resolve("report.json"), Optional.empty(), false);
+
+        assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, report.state());
+        assertTrue(report.unsupportedWork().isEmpty());
+        assertTrue(report.runtimeSnapshot().lifecycle().totes().keySet().stream()
+                .map(id -> id.value())
+                .collect(Collectors.toSet())
+                .containsAll(Set.of("shared-carrier", "dsp-reused-shared-carrier-2")));
+    }
+
     private static ScenarioRun runScenario(Path directory) throws IOException {
         Files.createDirectories(directory);
         DspUncalibratedFullDayProfile profile = profile();

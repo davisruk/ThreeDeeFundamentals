@@ -27,6 +27,9 @@ class DspFullDayReportFactoryTest {
                 report.terminationReason());
         assertEquals("UNCALIBRATED", report.calibrationStatus());
         assertEquals("P2P_OUTPUT_CLOSED", report.completionMilestone().name());
+        assertTrue(report.loadReport().inboundToteIdSubstitutions().isEmpty());
+        assertTrue(report.warnings().stream()
+                .noneMatch(value -> value.contains("Reused inbound carrier barcodes")));
         assertEquals(List.of("104", "108"), report.serviceCentres().stream()
                 .map(DspServiceCentreAnalysisResult::serviceCentreId).toList());
         assertEquals(
@@ -64,5 +67,16 @@ class DspFullDayReportFactoryTest {
         assertTrue(report.unfinishedIdentities().stream()
                 .anyMatch(value -> value.contains("order-104") || value.contains("order-108")
                         || value.contains("tote-104") || value.contains("tote-108")));
+    }
+
+    @Test
+    void shouldReportReusedCarrierNormalizationOnce(@TempDir Path directory) throws Exception {
+        DspFullDayAnalysisReport report =
+                DspFullDayReportTestSupport.reusedCarrierReport(directory);
+
+        assertEquals(1, report.loadReport().inboundToteIdSubstitutions().size());
+        assertEquals(1, report.warnings().stream()
+                .filter(value -> value.contains("Reused inbound carrier barcodes"))
+                .count());
     }
 }
