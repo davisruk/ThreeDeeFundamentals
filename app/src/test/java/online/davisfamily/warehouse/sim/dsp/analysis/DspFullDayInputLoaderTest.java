@@ -19,6 +19,8 @@ import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
 import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
 import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 
 class DspFullDayInputLoaderTest {
@@ -38,7 +40,7 @@ class DspFullDayInputLoaderTest {
                 "adapted-prescription", "0001", "0001"));
         Path full = write(directory, "02-full.json", message(
                 "full-order", "001", "05", "full-tote", "108", "998",
-                "full-line", "05", "product-b", "full-pharmacy", "full-patient",
+                "full-line", "03", "product-b", "full-pharmacy", "full-patient",
                 "full-prescription", "0001", "0001"));
         Path associated = write(directory, "03-associated.json", message(
                 "associated-order", "001", "04", "associated-tote", "104", "999",
@@ -54,35 +56,49 @@ class DspFullDayInputLoaderTest {
                 "manual-prescription", "0001", "0001"));
         Path unresolved = write(directory, "06-unresolved.json", message(
                 "unresolved-order", "001", "05", "unresolved-tote", "104", "999",
-                "unresolved-line", "05", "missing-product", "unresolved-pharmacy", "unresolved-patient",
+                "unresolved-line", "03", "missing-product", "unresolved-pharmacy", "unresolved-patient",
                 "unresolved-prescription", "0001", "0001"));
+        Path partialKnown = write(directory, "07-partial-known.json", message(
+                "partial-order", "001", "05", "partial-known-tote", "104", "999",
+                "partial-known-line", "05", "product-a", "partial-pharmacy", "partial-patient",
+                "partial-prescription", "0001", "0001"));
+        Path partialUnresolved = write(directory, "08-partial-unresolved.json", message(
+                "partial-order", "001", "05", "partial-unresolved-tote", "104", "999",
+                "partial-unresolved-line", "03", "missing-partial-product", "partial-pharmacy", "partial-patient",
+                "partial-prescription", "0001", "0000"));
 
         DspFullDayLoadedInput loaded = new DspFullDayInputLoader().load(
-                new DspFullDayInputPaths(productMaster, List.of(adapted, full, associated, empty, manual, unresolved)),
+                new DspFullDayInputPaths(productMaster,
+                        List.of(adapted, full, associated, empty, manual, unresolved, partialKnown, partialUnresolved)),
                 DspUncalibratedFullDayProfile.productionBaseline(
                         OPERATING_DATE, 10, Duration.ofSeconds(3), 2, 4, 2));
 
         LoadedDspData data = loaded.loadedData();
-        assertEquals(List.of("adapted-order", "full-order", "associated-order", "empty-order", "unresolved-order"),
+        assertEquals(List.of("adapted-order", "full-order", "associated-order", "empty-order", "partial-order"),
                 data.orders().stream().map(order -> order.orderId()).toList());
         assertEquals(List.of(OrderType.ADAPTED, OrderType.FULL_PACK, OrderType.ASSOCIATED, OrderType.EMPTY, OrderType.FULL_PACK),
                 data.orders().stream().map(order -> order.orderType()).toList());
-        assertEquals(List.of("adapted-tote", "full-tote", "associated-tote", "unresolved-tote"),
+        assertEquals(List.of("adapted-tote", "full-tote", "associated-tote", "partial-known-tote"),
                 data.inboundToteManifests().stream().map(manifest -> manifest.physicalToteId().value()).toList());
+        assertEquals(DspOrderLineType.FULL_PACK, data.orders().get(1).items().getFirst().lineType());
+        assertEquals(List.of("partial-known-line"), data.orders().get(4).items().stream()
+                .map(DspOrderItem::lineReference).toList());
         assertEquals(1, data.report().ignoredManualMessageCount());
         assertEquals(1, data.report().ignoredManualLineCount());
-        assertEquals(List.of("missing-product"),
+        assertEquals(List.of("missing-product", "missing-partial-product"),
                 data.report().unresolvedProductLines().stream().map(issue -> issue.productId()).toList());
+        assertEquals(List.of("104", "104"),
+                data.report().unresolvedProductLines().stream().map(issue -> issue.serviceCentreId()).toList());
 
         BagPlanningResult plan = loaded.bagPlanningResult();
-        assertEquals(3, plan.packTraces().size());
-        assertEquals(3, plan.plannedBags().size());
+        assertEquals(4, plan.packTraces().size());
+        assertEquals(4, plan.plannedBags().size());
         for (PlannedPackTrace trace : plan.packTraces()) {
             assertTrue(trace.physicalPackId().startsWith("pack-"));
             assertFalse(trace.sourceProvenance().sourceOrderSheetKey().orderId().isBlank());
             assertEquals(trace.sourceProvenance().prescriptionId(), trace.bagKey().prescriptionId());
         }
-        assertEquals(List.of("adapted-tote", "full-tote", "associated-tote", "unresolved-tote"),
+        assertEquals(List.of("adapted-tote", "full-tote", "associated-tote", "partial-known-tote"),
                 plan.p2pToteLoadPlans().stream().map(loadPlan -> loadPlan.physicalToteId().value()).toList());
         assertEquals(loaded.loadReport(), loaded.loadedData().report());
     }

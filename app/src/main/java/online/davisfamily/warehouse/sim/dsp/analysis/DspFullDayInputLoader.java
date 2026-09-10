@@ -27,9 +27,11 @@ import online.davisfamily.warehouse.sim.dsp.io.TwelveNOrderMapper;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderValidator;
+import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
 import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreSchedule;
+import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
@@ -86,7 +88,7 @@ public final class DspFullDayInputLoader {
         List<ProductMasterRecord> products = productMasterLoader.load(inputPaths.productMasterCsvPath());
         List<online.davisfamily.warehouse.sim.dsp.io.TwelveNMessageJson> messages =
                 twelveNDatasetLoader.load(inputPaths.twelveNJsonPaths());
-        LoadedDspData loadedData = datasetAssembler.assemble(products, messages);
+        LoadedDspData loadedData = executableData(datasetAssembler.assemble(products, messages));
         validateLoadedData(loadedData, profile.timetable());
         BagPlanningResult bagPlanningResult = createBagPlan(loadedData, profile.maximumPacksPerBag());
         DspDatasetLoadReport report = loadedData.report();
@@ -95,6 +97,81 @@ public final class DspFullDayInputLoader {
                 bagPlanningResult,
                 report,
                 profile.timetable());
+    }
+
+    private static LoadedDspData executableData(LoadedDspData assembledData) {
+        if (assembledData == null) {
+            throw new IllegalArgumentException("assembledData must not be null");
+        }
+
+        Set<String> knownProductIds = new LinkedHashSet<>();
+        for (ProductMasterRecord product : assembledData.products()) {
+            knownProductIds.add(product.productId());
+        }
+
+        List<NotionalToteOrder> executableOrders = new ArrayList<>();
+        for (NotionalToteOrder order : assembledData.orders()) {
+            List<DspOrderItem> retainedItems = knownItems(order.items(), knownProductIds);
+            if (!retainedItems.isEmpty()) {
+                executableOrders.add(retainedItems.size() == order.items().size()
+                        ? order
+                        : withItems(order, retainedItems));
+            }
+        }
+
+        List<DspOrderItem> executablePreparedLines = knownItems(
+                assembledData.preparedLines(), knownProductIds);
+        Set<PreparedLineKey> executablePreparedLineKeys = new LinkedHashSet<>();
+        for (DspOrderItem preparedLine : executablePreparedLines) {
+            executablePreparedLineKeys.add(PreparedLineKey.forPreparedLine(preparedLine));
+        }
+        Set<PreparedLineKey> executableStartupReadyKeys = new LinkedHashSet<>();
+        for (PreparedLineKey startupReadyKey : assembledData.startupReadyPreparedLineKeys()) {
+            if (executablePreparedLineKeys.contains(startupReadyKey)) {
+                executableStartupReadyKeys.add(startupReadyKey);
+            }
+        }
+
+        List<InboundToteManifest> executableManifests = new ArrayList<>();
+        for (InboundToteManifest manifest : assembledData.inboundToteManifests()) {
+            List<DspOrderItem> retainedItems = knownItems(manifest.items(), knownProductIds);
+            if (!retainedItems.isEmpty()) {
+                executableManifests.add(retainedItems.size() == manifest.items().size()
+                        ? manifest
+                        : manifest.withItems(retainedItems));
+            }
+        }
+
+        return new LoadedDspData(
+                assembledData.products(),
+                executableOrders,
+                executablePreparedLines,
+                executablePreparedLineKeys,
+                executableStartupReadyKeys,
+                executableManifests,
+                assembledData.report());
+    }
+
+    private static List<DspOrderItem> knownItems(
+            List<DspOrderItem> items,
+            Set<String> knownProductIds) {
+        return items.stream()
+                .filter(item -> knownProductIds.contains(item.productId()))
+                .toList();
+    }
+
+    private static NotionalToteOrder withItems(
+            NotionalToteOrder order,
+            List<DspOrderItem> items) {
+        return new NotionalToteOrder(
+                order.orderId(),
+                order.notionalToteId(),
+                order.serviceCentreId(),
+                order.sheetNumber(),
+                order.orderType(),
+                items,
+                order.orderPriority(),
+                order.sequenceNumber());
     }
 
     public DspFullDayLoadedInput load(

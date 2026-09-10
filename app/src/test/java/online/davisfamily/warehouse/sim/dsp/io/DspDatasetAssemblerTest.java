@@ -512,8 +512,11 @@ class DspDatasetAssemblerTest {
 
         assertEquals(1, data.orders().size());
         assertEquals(
-                List.of(new UnresolvedProductLine("order-missing", "line-missing", "missing-product")),
+                List.of(new UnresolvedProductLine(
+                        "order-missing", "line-missing", "missing-product", "104")),
                 data.report().unresolvedProductLines());
+        assertEquals("missing-product", data.orders().getFirst().items().getFirst().productId());
+        assertEquals("tote-full-pack", data.inboundToteManifests().getFirst().physicalToteId().value());
     }
 
     private static TwelveNMessageJson message(String json) {

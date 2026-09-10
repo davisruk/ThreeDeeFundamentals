@@ -112,7 +112,8 @@ public class DspDatasetAssembler {
                     unresolvedProductLines.add(new UnresolvedProductLine(
                             retainedOrder.orderId(),
                             line.lineReference(),
-                            line.productId()));
+                            line.productId(),
+                            retainedOrder.serviceCentreId()));
                 }
             }
 

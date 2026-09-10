@@ -15,6 +15,7 @@ class DspOrderModelTest {
     void shouldParseKnownDspOrderLineTypeCodes() {
         assertEquals(DspOrderLineType.MANUAL, DspOrderLineType.fromCode("01"));
         assertEquals(DspOrderLineType.ADAPTED, DspOrderLineType.fromCode("02"));
+        assertEquals(DspOrderLineType.FULL_PACK, DspOrderLineType.fromCode(" 03 "));
         assertEquals(DspOrderLineType.FULL_PACK, DspOrderLineType.fromCode("05"));
         assertEquals("01", DspOrderLineType.MANUAL.code());
         assertEquals("02", DspOrderLineType.ADAPTED.code());

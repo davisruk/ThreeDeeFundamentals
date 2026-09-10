@@ -1138,9 +1138,11 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
         private List<String> unsupportedFor(String serviceCentreId) {
             List<String> values = new ArrayList<>();
-            input.report().unresolvedProductLines().forEach(issue -> values.add(
-                    "Unresolved product " + issue.productId() + " for " + issue.orderId()
-                            + "/" + issue.lineReference()));
+            input.report().unresolvedProductLines().stream()
+                    .filter(issue -> issue.serviceCentreId().equals(serviceCentreId))
+                    .forEach(issue -> values.add(
+                            "Unresolved product " + issue.productId() + " for " + issue.orderId()
+                                    + "/" + issue.lineReference()));
             if (input.report().ignoredManualMessageCount() > 0
                     || input.report().ignoredManualLineCount() > 0) {
                 values.add("MANUAL work is outside the supported full-day runtime");

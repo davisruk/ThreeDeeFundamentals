@@ -1,10 +1,15 @@
 package online.davisfamily.warehouse.sim.dsp.io;
 
-public record UnresolvedProductLine(String orderId, String lineReference, String productId) {
+public record UnresolvedProductLine(
+        String orderId,
+        String lineReference,
+        String productId,
+        String serviceCentreId) {
     public UnresolvedProductLine {
         orderId = requireValue(orderId, "orderId");
         lineReference = requireValue(lineReference, "lineReference");
         productId = requireValue(productId, "productId");
+        serviceCentreId = requireValue(serviceCentreId, "serviceCentreId");
     }
 
     private static String requireValue(String value, String fieldName) {

@@ -2,10 +2,12 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: active. Steps 1-9 are implemented and committed through `86fdaed`, and the focused
-regression and complete Gradle suite are green. The first external-data attempt exposed one
-erroneous but deployed optional 12N metadata field. Step 10 adds bounded compatibility for that
-field before the external-data run and closure in Step 11.
+Status: active. Steps 1-10 are implemented and committed through `9f87884`, and the focused
+regression and complete Gradle suite are green. External-data runs then exposed deployed 12N
+line-type code `03` and showed that unresolved Third Party products currently reach fail-fast route
+derivation despite already being reported as deferred unsupported work. Step 11 adds the bounded
+source mapping and full-day-only executable-data projection required to continue the external run;
+Step 12 owns final regression, external verification, review, and closure.
 
 ## Purpose
 
@@ -1042,7 +1044,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 11 owns post-amendment regression
+No additional user verification is required for this step. Step 12 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1128,12 +1130,171 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 11 owns the post-change focused
+No additional user verification is required for this step. Step 12 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
 
-## Step 11: Regression, External Dataset Run, Review, And Closure
+## Step 11: Accept Third Party 12N Lines And Defer Unresolved Short Picks
+
+This is a formal plan amendment added after the next external-data attempt. Production 12N data
+uses order-line type code `03` for Third Party lines. The later ASSOCIATED representation of a
+Third Party line that was prepared through an ADAPTED order uses code `02`, so the associated order
+retains the existing prepared-line dependency and collection semantics. Of the code-`03` lines in
+the inspected day, every line whose product exists in the supplied product master has a Third Party
+location. A smaller set refers to products absent from the product master; operationally those are
+short picks whose totes would visit the not-yet-implemented Exception Station.
+
+### Required reading for this step
+
+- `DspOrderLineType`, `DspOrderItem`, `NotionalToteOrder`, and `DspOrderModelTest`;
+- `TwelveNLineMappingSupport`, `TwelveNOrderMapper`, and `TwelveNOrderMapperTest`;
+- `DspDatasetAssembler`, `LoadedDspData`, `UnresolvedProductLine`, and
+  `DspDatasetAssemblerTest`;
+- `DspFullDayInputLoader`, `DspFullDayLoadedInput`, `DspFullDayInputLoaderTest`, and
+  `DspFullDayAnalysisScenarioTest`;
+- `InboundToteManifest`, `PreparedLineKey`, `DspRouteDeriver`, and `ThirdPartyVisitFactory`;
+- the unresolved-product unsupported-work handling in `DspFullDayAnalysisRuntimeFactory`.
+
+### Required change surface
+
+Modify production in:
+
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/model/DspOrderLineType.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/io/UnresolvedProductLine.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/io/DspDatasetAssembler.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayInputLoader.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/analysis/runtime/DspFullDayAnalysisRuntimeFactory.java`.
+
+Modify focused coverage in:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/model/DspOrderModelTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/io/TwelveNOrderMapperTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/io/DspDatasetAssemblerTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayInputLoaderTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayAnalysisScenarioTest.java`.
+
+Do not add a `THIRD_PARTY` member to `DspOrderLineType`; change `ThirdPartyVisitFactory`,
+`DspRouteDeriver`, `LoadedDspSchedulerRuntimeFactory`, generic scheduler/runtime behavior, station
+processing, or Exception Station behavior; fabricate a product, pack, bag, pick, completion, or
+physical tote; mutate source JSON/CSV; or add production data or production paths to the repository.
+
+### Behavioral specification
+
+#### Source code `03`
+
+- Extend `DspOrderLineType.fromCode` so trimmed source code `03` returns the existing
+  `DspOrderLineType.FULL_PACK` value. This is an input normalization alias, not a fourth domain line
+  type. Keep `DspOrderLineType.FULL_PACK.code()` equal to canonical code `05`.
+- Keep code `01` as `MANUAL`, code `02` as `ADAPTED`, code `05` as `FULL_PACK`, and reject every
+  other unknown code exactly as before.
+- Continue to use the product master as the source of Third Party location and physical dimensions.
+  A normalized code-`03` line receives Third Party routing only when its product-master record has a
+  Third Party location.
+- For an ADAPTED order containing source code `03`, the enclosing `OrderType.ADAPTED` continues to
+  make Third Party work `ADAPTED_PREPARATION`; the pack then follows the established Adapting STORE
+  lifecycle. Do not infer the later associated dependency from this source code.
+- The corresponding line in a later ASSOCIATED order is source code `02`, maps to
+  `DspOrderLineType.ADAPTED`, blocks on its `PreparedLineKey`, and is collected through the existing
+  Adapting path. The alias must not cause a duplicate Third Party pick for that associated line.
+
+#### Temporary unresolved-product deferral
+
+- Extend `UnresolvedProductLine` with a required, trimmed `serviceCentreId`. Populate it in
+  `DspDatasetAssembler` from the retained order so unsupported work can be attributed only to its
+  owning service centre. Preserve `orderId`, `lineReference`, and `productId` unchanged.
+- Keep `DspDatasetAssembler`'s generic output semantics otherwise unchanged: it reports unresolved
+  lines and retains them in assembled orders, prepared lines, prepared-line keys, and manifests.
+  Generic callers therefore retain their current fail-fast behavior.
+- In `DspFullDayInputLoader`, add a private static
+  `LoadedDspData executableData(LoadedDspData assembledData)` helper and call it immediately after
+  assembly and before loaded-data validation and bag planning. This helper is only for data produced
+  by `DspDatasetAssembler`. Determine known products from `LoadedDspData.products()` and remove
+  every line whose product ID is unknown from executable orders, prepared lines, prepared-line key
+  sets, and inbound manifests.
+- Rebuild a partially retained `NotionalToteOrder` with all original identity, service-centre,
+  sheet, order-type, priority, and source-sequence values and the remaining lines in their original
+  order. Omit an order when no executable lines remain.
+- Rebuild a partially retained `InboundToteManifest` with `withItems`, retaining its physical tote
+  ID, order sheet, order type, service centre, and source sequence. Omit a manifest when no
+  executable lines remain; never construct an empty manifest.
+- Retain only prepared lines whose products are known. Recompute `loadedPreparedLineKeys` from those
+  retained prepared lines using `PreparedLineKey.forPreparedLine`. Intersect
+  `startupReadyPreparedLineKeys` with the recomputed loaded keys so an excluded line cannot remain
+  ready at startup.
+- Preserve products and the original `DspDatasetLoadReport` exactly in the executable projection.
+  In particular, do not increment `omittedOrderCount`: unresolved lines and all-unresolved orders
+  remain represented by `unresolvedProductLines`, not by the existing MANUAL/empty-after-filter
+  omission metric.
+- Keep the existing requirement that a full-day input contain at least one executable supported
+  order. Do not weaken `DspFullDayInputLoader.validateLoadedData` for an all-unresolved dataset.
+- Change `DspFullDayAnalysisRuntimeFactory.unsupportedFor(serviceCentreId)` to include only
+  unresolved-product issues whose new `serviceCentreId` equals the requested service centre. Keep
+  each issue in the report and unsupported-work output. The affected service centre cannot claim
+  supported completion and reaches the hard cutoff until Exception Station behavior exists; other
+  service centres are not blocked by that issue.
+- Treat this projection as a temporary Exception Station deferral. Valid sibling lines may execute,
+  but no behavior may imply that an unresolved line was picked, packed, bagged, or completed.
+
+### Decision-complete test contract
+
+Extend `DspOrderModelTest` to prove source code `03` maps to `DspOrderLineType.FULL_PACK`, canonical
+`FULL_PACK.code()` remains `05`, whitespace trimming still applies, and a representative unknown
+code is rejected.
+
+Extend `TwelveNOrderMapperTest` with representative mapping coverage proving:
+
+- a code-`03` line in an ADAPTED message is retained as a `FULL_PACK` domain line while the order
+  remains `OrderType.ADAPTED`;
+- a code-`02` line in an ASSOCIATED message remains `ADAPTED`, preserving prepared-line collection
+  semantics;
+- existing `01`, `02`, and `05` mapping behavior remains unchanged.
+
+Update `DspDatasetAssemblerTest` for the added `serviceCentreId` component and assert that an
+unresolved issue carries the exact owning service centre while the generic assembled order and
+manifest still retain the unresolved line.
+
+Extend `DspFullDayInputLoaderTest` with a deterministic mixed fixture containing:
+
+- a known code-`03` Third Party line;
+- a known sibling line;
+- an unresolved code-`03` line in a partially supported order/manifest;
+- an order/manifest containing only an unresolved line.
+
+Through the public loader, assert that code `03` is normalized, known lines remain in source order,
+the unresolved sibling is absent from executable order/manifest/prepared state, the all-unresolved
+order and manifest are absent, no empty manifest is constructed, and every unresolved issue remains
+in the unchanged report with its owning service centre. Assert that bag planning creates no pack or
+bag provenance for an unresolved line.
+
+Extend `DspFullDayAnalysisScenarioTest` with a bounded end-to-end run containing supported work in
+two service centres and an additional unresolved product in one of them. Prove runtime construction
+and execution do not throw, the unresolved line creates no Third Party/P2P pack or completion, the
+issue appears as unsupported work only for its owning service centre, the unaffected service centre
+may reach supported completion, and the overall run reaches the exact hard cutoff without
+fabricated completion for the affected service centre.
+
+### Expected output
+
+Production 12N code-`03` Third Party lines enter the established Third Party flow without adding a
+new domain line type. Their later code-`02` ASSOCIATED lines retain normal prepared-line collection.
+Products absent from the product master remain explicit, service-centre-specific unsupported short
+picks but do not abort a full-day run before the deferred Exception Station is implemented.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.model.DspOrderModelTest --tests online.davisfamily.warehouse.sim.dsp.io.TwelveNOrderMapperTest --tests online.davisfamily.warehouse.sim.dsp.io.DspDatasetAssemblerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInputLoaderTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisScenarioTest
+```
+
+### User verification
+
+No additional user verification is required for this step. Step 12 owns the post-change focused
+regression, complete suite, and repeated external-data run.
+
+Proposed commit message: `Accept third party 12N lines`
+
+## Step 12: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, or 32R during
 closure.
@@ -1201,6 +1362,11 @@ class/method/control-flow evidence:
 - optional `productBarcodeLength` metadata is accepted when present or absent without entering the
   DSP domain, relaxing other unknown-property checks, or changing EMPTY transport-container
   semantics;
+- source line code `03` is normalized to the existing FULL_PACK domain intent while code `02`
+  continues to own later ASSOCIATED prepared-line dependency and collection;
+- unresolved products are preserved as service-centre-specific unsupported load issues, excluded
+  only from the full-day executable projection, and never fabricate picks, packs, bags, or
+  completion;
 - no Exception/MANUAL execution, NS bag fabrication, dispatch/32R, calibrated timing, renderer-loop
   integration, new visual topology, event-driven fast-forward, mutable reset, or source-data
   mutation was added;
@@ -1242,3 +1408,7 @@ Proposed commit message: `Complete full-day DSP analysis`
   `P2P_OUTPUT_CLOSED`, not real dispatch or trunker loading.
 - 12N binding tolerates optional `productBarcodeLength` metadata while remaining strict for other
   unknown fields and preserving manifest-free EMPTY input.
+- 12N order-line code `03` enters the established Third Party flow through the existing FULL_PACK
+  domain intent, while later code-`02` ASSOCIATED lines retain prepared-line collection semantics.
+- Product-master misses remain attributed unsupported short picks and are excluded from full-day
+  execution without being represented as successful work until Exception Station behavior exists.

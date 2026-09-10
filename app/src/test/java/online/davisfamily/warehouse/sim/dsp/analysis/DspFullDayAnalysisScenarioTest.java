@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -193,6 +194,28 @@ class DspFullDayAnalysisScenarioTest {
                 .terminalElapsedTime().orElseThrow());
     }
 
+    @Test
+    void shouldDeferUnresolvedProductByServiceCentreAtHardCutoff(@TempDir Path directory) throws Exception {
+        ScenarioRun run = runUnresolvedProductScenario(directory.resolve("unresolved-product"));
+
+        assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, run.report().state());
+        assertEquals(DspFullDayTerminationReason.HARD_CUTOFF_REACHED,
+                run.report().terminationReason());
+        assertEquals(1, run.report().loadReport().unresolvedProductLines().size());
+        assertEquals("109", run.report().loadReport().unresolvedProductLines().getFirst().serviceCentreId());
+        assertTrue(run.input().data().orders().stream()
+                .noneMatch(order -> order.orderId().equals("unresolved-order")));
+        assertTrue(run.input().bagPlan().packTraces().stream()
+                .noneMatch(trace -> trace.sourceProvenance().productId().equals("missing-product")));
+        assertTrue(run.report().unsupportedWork().stream()
+                .anyMatch(value -> value.contains("missing-product") && value.contains("unresolved-order")));
+
+        Map<String, DspServiceCentreCompletionOutcome> outcomes = run.report().serviceCentres().stream()
+                .collect(Collectors.toMap(result -> result.serviceCentreId(), result -> result.outcome()));
+        assertNotEquals(DspServiceCentreCompletionOutcome.UNFINISHED_AT_HARD_CUTOFF, outcomes.get("104"));
+        assertEquals(DspServiceCentreCompletionOutcome.UNFINISHED_AT_HARD_CUTOFF, outcomes.get("109"));
+    }
+
     private static ScenarioRun runScenario(Path directory) throws IOException {
         Files.createDirectories(directory);
         DspUncalibratedFullDayProfile profile = profile();
@@ -258,6 +281,40 @@ class DspFullDayAnalysisScenarioTest {
                         "patient-104", "rx-supported", 1, 1))));
         DspFullDayLoadedInput input = new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, List.of(manual, supported)), profile);
+        ByteArrayOutputStream inspectionBytes = new ByteArrayOutputStream();
+        AtomicLong monotonicClock = new AtomicLong();
+        DspFullDayAnalysisReport report = new DspFullDayAnalysisRunner(
+                () -> monotonicClock.addAndGet(1_000_000L),
+                new PrintStream(inspectionBytes, true, StandardCharsets.UTF_8))
+                .run(input, profile, directory.resolve("report.json"), Optional.empty(), false);
+        return new ScenarioRun(
+                input,
+                report,
+                new DspFullDayReportJsonWriter().serializeToString(report),
+                inspectionBytes.toString(StandardCharsets.UTF_8));
+    }
+
+    private static ScenarioRun runUnresolvedProductScenario(Path directory) throws IOException {
+        Files.createDirectories(directory);
+        DspUncalibratedFullDayProfile profile = unresolvedProductProfile();
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        Path supported104 = writeMessage(directory, "01-supported-104.json", message(
+                "supported-104-order", "001", "05", "supported-104-tote", "104", "999",
+                List.of(line("supported-104-line", "05", "product-a", "pharmacy-104",
+                        "patient-104", "rx-supported-104", 1, 1))));
+        Path supported109 = writeMessage(directory, "02-supported-109.json", message(
+                "supported-109-order", "001", "05", "supported-109-tote", "109", "990",
+                List.of(line("supported-109-line", "05", "product-a", "pharmacy-109",
+                        "patient-109", "rx-supported-109", 1, 1))));
+        Path unresolved = writeMessage(directory, "03-unresolved-109.json", message(
+                "unresolved-order", "001", "05", "unresolved-tote", "109", "990",
+                List.of(line("unresolved-line", "03", "missing-product", "pharmacy-109",
+                        "patient-109", "rx-unresolved", 1, 0))));
+        DspFullDayLoadedInput input = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, List.of(supported104, supported109, unresolved)), profile);
         ByteArrayOutputStream inspectionBytes = new ByteArrayOutputStream();
         AtomicLong monotonicClock = new AtomicLong();
         DspFullDayAnalysisReport report = new DspFullDayAnalysisRunner(
@@ -354,6 +411,34 @@ class DspFullDayAnalysisScenarioTest {
                 baseline.timetable());
     }
 
+    private static DspUncalibratedFullDayProfile unresolvedProductProfile() {
+        DspUncalibratedFullDayProfile baseline =
+                DspUncalibratedFullDayProfile.productionBaseline(
+                        OPERATING_DATE, 1, Duration.ofSeconds(1), 1, 1, 2);
+        return new DspUncalibratedFullDayProfile(
+                baseline.operatingDate(),
+                new online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig(
+                        1200, List.of("104", "109")),
+                baseline.serviceCentreSupplyConfig(),
+                baseline.inboundToteArrivalPolicy(),
+                baseline.av02AllocationConfig(),
+                baseline.p2pElasticAllocationConfig(),
+                baseline.outboundToteConfig(),
+                baseline.maximumPacksPerBag(),
+                Duration.ofHours(1),
+                3,
+                baseline.metricSampleInterval(),
+                baseline.routeSpeedUnitsPerSecond(),
+                baseline.queueCapacities(),
+                baseline.thirdPartyAreaConfig(),
+                baseline.adaptingStorageConfig(),
+                baseline.adaptingBenchDefinitions(),
+                baseline.p2pPlaceholderDurations(),
+                baseline.p2pLineDefinitions(),
+                baseline.prlCountPerLine(),
+                baseline.timetable());
+    }
+
     private static DspFullDayLoadedInput loadMixedInput(
             Path directory,
             DspUncalibratedFullDayProfile profile) throws IOException {
@@ -394,7 +479,7 @@ class DspFullDayAnalysisScenarioTest {
                         "patient-109", "rx-empty-109", 1, 0)))));
         messages.add(writeMessage(directory, "09-full-109-third-party.json", message(
                 "full-109-third-party", "001", "05", "full-109-third-party-tote", "109", "990",
-                List.of(line("full-109-third-party-line", "05", "product-b", "pharmacy-109",
+                List.of(line("full-109-third-party-line", "03", "product-b", "pharmacy-109",
                         "patient-109", "rx-109-third-party", 2, 1)))));
         for (int index = 1; index <= 8; index++) {
             messages.add(writeMessage(directory, "10-full-109-" + index + ".json", message(

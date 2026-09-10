@@ -21,6 +21,9 @@ public enum DspOrderLineType {
         }
 
         String trimmedCode = code.trim();
+        if ("03".equals(trimmedCode)) {
+            return FULL_PACK;
+        }
         for (DspOrderLineType lineType : values()) {
             if (lineType.code.equals(trimmedCode)) {
                 return lineType;

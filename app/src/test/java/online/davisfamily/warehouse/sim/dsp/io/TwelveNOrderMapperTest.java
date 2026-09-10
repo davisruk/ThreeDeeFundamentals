@@ -100,6 +100,40 @@ class TwelveNOrderMapperTest {
     }
 
     @Test
+    void shouldNormalizeThirdPartyLineCodeForAdaptedOrder() {
+        MappedTwelveNOrder mappedOrder = orderMapper.map(message("""
+                {
+                  "header": {"orderId":"TOTE0007170721","sheetNumber":"001"},
+                  "toteIdentifier": {"payload":"02"},
+                  "orderPriority": {"payload":"999"},
+                  "transportContainer": {"payload":"90864873"},
+                  "serviceCentre": {"payload":"104"},
+                  "orderDetail": {
+                    "numberOfOrderLines": 1,
+                    "orderLines": [
+                      {
+                        "orderLineNumber":"000243548242",
+                        "orderLineType":"03",
+                        "pharmacyId":"0006461",
+                        "patientId":"fixture-patient",
+                        "prescriptionId":"fixture-prescription",
+                        "productId":"9114",
+                        "numberOfPacks":"0001",
+                        "referenceSheetNumber":"001",
+                        "numberOfPacksPicked":"0000",
+                        "referenceOrderId":"TOTE0007170722"
+                      }
+                    ]
+                  }
+                }
+                """), 8L);
+
+        assertEquals(OrderType.ADAPTED, mappedOrder.order().orderType());
+        assertEquals(DspOrderLineType.FULL_PACK, mappedOrder.order().items().getFirst().lineType());
+        assertEquals(8L, mappedOrder.order().sequenceNumber());
+    }
+
+    @Test
     void shouldRejectMissingBlankZeroAndNonnumericOrderPriority() {
         TwelveNMessageJson base = message(singleLineMessage("patient-1", "prescription-1"));
 
