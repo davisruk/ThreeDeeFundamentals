@@ -21,19 +21,23 @@ record DspFullDayAnalysisCommand(
         Duration fixedStep,
         int stepsPerBatch,
         Duration metricSampleInterval,
-        boolean overwrite) {
+        boolean overwrite,
+        Optional<Path> progressLogPath,
+        Duration progressInterval) {
 
     DspFullDayAnalysisCommand {
         if (productMasterPath == null || orderPaths == null || orderPaths.isEmpty()
                 || outputPath == null || inspectionOutputPath == null || operatingDate == null
-                || inboundInterval == null || fixedStep == null || metricSampleInterval == null) {
+                || inboundInterval == null || fixedStep == null || metricSampleInterval == null
+                || progressLogPath == null || progressInterval == null) {
             throw new IllegalArgumentException("command values must not be null or empty");
         }
         if (osrLowWaterMark < 0 || av02Capacity < 1 || outboundBagCapacity < 1
                 || maximumPacksPerBag < 1 || stepsPerBatch < 1
                 || inboundInterval.isZero() || inboundInterval.isNegative()
                 || fixedStep.isZero() || fixedStep.isNegative()
-                || metricSampleInterval.isZero() || metricSampleInterval.isNegative()) {
+                || metricSampleInterval.isZero() || metricSampleInterval.isNegative()
+                || progressInterval.isZero() || progressInterval.isNegative()) {
             throw new IllegalArgumentException("command numeric values must be positive or nonnegative");
         }
         orderPaths = List.copyOf(orderPaths);

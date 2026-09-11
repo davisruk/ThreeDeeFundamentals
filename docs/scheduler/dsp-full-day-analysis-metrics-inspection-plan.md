@@ -12,8 +12,10 @@ deterministic preload whose overflow enters through normal rate-limited supply. 
 external-data run then exposed two analysis-entry-point observability defects: maintaining the long
 command line is unnecessarily fragile, and routine console inspection constructs and prints every
 unfinished identity as one enormous line without preserving progress across a stall. Step 14 adds
-strict JSON-backed invocation, Step 15 adds compact persistent progress logging, and Step 16 owns
-final regression, external verification, review, and closure.
+strict JSON-backed invocation, Step 15 adds compact persistent progress logging, Step 16 removes
+the proven full-day correlation-set allocation hot path, and Step 17 owns final regression,
+external verification, review, and closure. A broader engine/simulation allocation review remains
+deferred until the functional full-day path is working end to end.
 
 ## Purpose
 
@@ -1104,7 +1106,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 16 owns post-amendment regression
+No additional user verification is required for this step. Step 17 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1190,7 +1192,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 16 owns the post-change focused
+No additional user verification is required for this step. Step 17 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1349,7 +1351,7 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 16 owns the post-change focused
+No additional user verification is required for this step. Step 17 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
@@ -1545,7 +1547,7 @@ carrier barcode without modeling physical-carrier reuse.
 
 ### User verification
 
-No additional user verification is required for this step. Step 16 owns the post-change focused
+No additional user verification is required for this step. Step 17 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Normalize reused inbound tote identifiers`
@@ -1776,7 +1778,7 @@ configured capacity.
 
 ### User verification
 
-No additional user verification is required for this step. Step 16 owns the post-change focused
+No additional user verification is required for this step. Step 17 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Rate limit startup OSR overflow`
@@ -1887,7 +1889,7 @@ argument, while existing CLI automation and deterministic input ordering remain 
 
 ### User verification
 
-No additional user verification is required for this step. Step 16 owns regression and the
+No additional user verification is required for this step. Step 17 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Accept full-day analysis configuration`
@@ -2065,15 +2067,163 @@ block available, while final report and inspection retain exact diagnostic ident
 
 ### User verification
 
-No additional user verification is required for this step. Step 16 owns regression and the
+No additional user verification is required for this step. Step 17 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Persist compact full-day progress`
 
-## Step 16: Regression, External Dataset Run, Review, And Closure
+## Step 16: Reuse Full-Day P2P Admission Correlation Snapshots
 
-Do not begin Exception Station, calibration, renderer integration, outbound dispatch, or 32R during
-closure.
+This formal amendment follows the first config-driven external run. The process remained responsive
+and continuously CPU-bound, but did not reach the first 300-second simulated-time progress
+milestone. A live thread dump placed the main thread in
+`DspFullDayAnalysisRuntimeFactory.stationAdmissionResolver(...)`, rebuilding a `LinkedHashSet` from
+all known bag-correlation requirements for one candidate admission. The observed day contains
+35,318 planned bags and starts with 1,200 OSR-resident candidates, so reconstructing and defensively
+copying the same large correlation sets per candidate creates an accidental multiplicative
+allocation path.
+
+This step removes only that evidenced hotspot. It does not claim that the simulation or 3D engine
+is generally optimized. After the functional full-day path is complete, a separate broad
+allocation/performance review will inspect constructor frequency, temporary collections, snapshot
+cost, controller update frequency, rendering integration, and other hot paths using measured
+evidence.
+
+### Required reading for this step
+
+- `DspFullDayAnalysisRuntimeFactory.stationAdmissionResolver(...)`;
+- `P2pBagCorrelationRequirementCatalog`, `P2pBagCorrelationAssignmentRegistry`,
+  `P2pBagCorrelationAssignmentSnapshot`, and `P2pAdmissionSnapshot`;
+- `P2pStationAdmissionResolver`, `P2pCapacityStationAdapter`, and
+  `OperationalCandidateRouteAdmissionFactory`;
+- `P2pBagCorrelationRequirementCatalogFactoryTest`,
+  `P2pBagCorrelationAssignmentRegistryTest`, `P2pStationAdmissionResolverTest`,
+  `OperationalCandidateRouteAdmissionFactoryTest`, and `DspFullDayAnalysisRuntimeFactoryTest`.
+
+### Required change surface
+
+Create production type:
+
+- package-private
+  `online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayP2pAdmissionSnapshotSource`.
+
+Create focused tests:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/p2p/bag/P2pBagCorrelationRequirementCatalogTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/runtime/DspFullDayP2pAdmissionSnapshotSourceTest.java`.
+
+Modify production only in:
+
+- `P2pBagCorrelationRequirementCatalog`;
+- `P2pBagCorrelationAssignmentRegistry`;
+- `DspFullDayAnalysisRuntimeFactory`.
+
+Modify focused coverage only in `P2pBagCorrelationAssignmentRegistryTest` and, only if an existing
+integration assertion needs strengthening, `DspFullDayAnalysisRuntimeFactoryTest`.
+
+Do not modify `P2pAdmissionSnapshot`, `P2pStationAdmissionResolver`,
+`P2pCapacityStationAdapter`, `OperationalCandidateRouteAdmissionFactory`, scheduler selection,
+release ordering, assignment compatibility, fixed-step duration/count, progress interval/output,
+metrics/report schemas, lifecycle, station/P2P machine behavior, renderer/3D-engine code, or domain
+results. Do not introduce object pools, mutable published snapshots, global caches, asynchronous
+evaluation, event-driven fast-forward, or a general optimization framework.
+
+### Behavioral specification
+
+- Extend `P2pBagCorrelationRequirementCatalog` with one final immutable correlation-ID set built
+  from its already validated unique requirement map during catalog construction. Add
+  `public Set<String> correlationIds()`. Repeated calls return the same immutable set instance and
+  never traverse `allRequirements` or allocate another collection. Empty catalogs return the same
+  stable empty value. Set iteration order is not a behavioral contract; admission uses membership.
+- Extend `P2pBagCorrelationAssignmentRegistry` with
+  `public Set<String> correlationIdsSnapshot()`. It initially returns one stable immutable empty
+  set. Only when a commit contains genuinely new correlations, the returned simulation-thread
+  action first performs the existing stale-state revalidation, then constructs the prospective
+  immutable ID set from the current assignments plus all additions, then appends all additions,
+  and finally publishes the precomputed set. Collection construction therefore occurs before the
+  mutation boundary and cannot leave the map changed with a stale cache. Rejected, failed, and
+  no-addition commits leave both assignment state and the cached set identity unchanged. Repeated
+  reads between successful additions return the same immutable instance without rebuilding the
+  full `P2pBagCorrelationAssignmentSnapshot` or map.
+- Add package-private `DspFullDayP2pAdmissionSnapshotSource` with constructor
+  `(int idlePrlCount, P2pBagCorrelationRequirementCatalog requirementCatalog,
+  P2pBagCorrelationAssignmentRegistry assignmentRegistry)` and method
+  `P2pAdmissionSnapshot snapshot()`. Validate non-null dependencies and a nonnegative PRL count.
+  Preserve the existing full-day values `p2pCellId="dsp-p2p"` and
+  `pcrAvailableForNewRelease=true`.
+- The source captures `requirementCatalog.correlationIds()` once. On `snapshot()`, obtain the
+  registry's cached correlation-ID set. Return the same cached `P2pAdmissionSnapshot` instance
+  while that set identity is unchanged; construct exactly one replacement after a successful
+  registry addition publishes a new set. This source is simulation-thread-owned and performs no
+  synchronization.
+- In `DspFullDayAnalysisRuntimeFactory.stationAdmissionResolver(...)`, construct one source for the
+  runtime and pass `source::snapshot` to `P2pStationAdmissionResolver`. Remove the supplier body
+  that calls `correlationAssignments.snapshot().correlationAssignments().keySet()` and streams
+  `requirementCatalog.allRequirements()` for each candidate.
+- Preserve candidate-specific admission outcomes and supplier freshness after every committed
+  correlation assignment. The optimization changes allocation frequency only; it must not cache
+  station occupancy, route-target admission, line activity, scheduler candidates, or any mutable
+  machine state.
+
+### Decision-complete test contract
+
+`P2pBagCorrelationRequirementCatalogTest` constructs requirements shared across physical-tote and
+logical-sheet indexes and proves `correlationIds()` contains every distinct correlation exactly
+once, is immutable, is empty for an empty catalog, and returns the identical object on repeated
+calls.
+
+Extend `P2pBagCorrelationAssignmentRegistryTest` to prove the initial cached set is stable and
+immutable; one successful addition publishes one new exact set; repeated reads and a same-line
+commit containing no new correlation retain object identity; a rejected mixed-line commit leaves
+the assignments and cached set value/identity unchanged; and a later genuine addition publishes a
+new set containing old and new IDs.
+
+`DspFullDayP2pAdmissionSnapshotSourceTest` uses a catalog with 5,000 distinct known correlations
+and proves repeated `snapshot()` calls return the identical snapshot and set
+objects; one successful registry addition causes exactly one replacement containing the current
+active ID; subsequent reads and a no-addition commit reuse it; and a rejected commit cannot replace
+it. Assert the cell ID, PRL count, PCR flag, and correlation membership remain identical to the
+pre-optimization contract. This test must catch an implementation that merely moves the
+`allRequirements` stream or assignment-snapshot/map reconstruction into another per-call helper.
+
+Retain the existing resolver, operational route-admission, and runtime-factory tests to prove that
+P2P/non-P2P delegation, candidate-specific outcomes, latest committed assignment visibility, five
+line composition, completion, and cutoff behavior are unchanged. Do not add wall-clock timing
+assertions or allocation-count thresholds to unit tests.
+
+### Expected output
+
+Full-day P2P candidate evaluation reuses immutable known/active correlation sets and one admission
+snapshot between real assignment changes. The previously observed `allRequirements().stream()` /
+`LinkedHashSet` construction no longer occurs per OSR candidate. Simulation decisions and reports
+remain unchanged. Broader optimization remains explicitly deferred.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalogTest --tests online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentRegistryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayP2pAdmissionSnapshotSourceTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.p2p.P2pStationAdmissionResolverTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalCandidateRouteAdmissionFactoryTest
+```
+
+### User verification
+
+Stop the current CPU-bound process and rebuild the installed distribution. Use a fresh progress-log
+path because `overwrite=false`. Temporarily set `progressIntervalSeconds` to `60`, start the same
+external dataset, and measure from the completed `start` block to `progress=PT1M`. The PT1M block
+must appear within five wall-clock minutes and a second interval block must follow without the
+process becoming unresponsive or memory growing without bound. Exact throughput is evidence for
+the later broad optimization review, not a calibrated performance promise.
+
+If PT1M does not appear within five minutes, capture a fresh `jcmd <pid> Thread.print -l`, stop the
+run, and do not broaden this implementation step speculatively. Amend the plan around the newly
+measured hotspot. Step 17 still owns the complete-day external run, focused regression, full suite,
+review, and closure.
+
+Proposed commit message: `Reuse full-day P2P admission snapshots`
+
+## Step 17: Regression, External Dataset Run, Review, And Closure
+
+Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the
+deferred broad engine/simulation optimization review during closure.
 
 ### Implementation verification
 
@@ -2127,6 +2277,9 @@ class/method/control-flow evidence:
 - loaded logical data creates no eager physical/renderable population;
 - one planned bag correlation can never be owned by two P2P lines;
 - correlation and tote assignment commit only after downstream release acceptance and never move;
+- immutable known-correlation IDs are constructed once per requirement catalog, active-correlation
+  IDs only after genuine assignment additions, and full-day P2P admission snapshots are reused
+  between those additions rather than rebuilt per release candidate;
 - long-lived P2P lines discover dynamic expected work and retain all established machine behavior;
 - five isolated lines use real tipper/sorter/PDC/PRL/PCR/bagger and independent outbound owners;
 - one OSR/AV02 release boundary, real routing/stations/continuation, and actual P2P completion own all
@@ -2190,6 +2343,9 @@ After focused/full tests, the external-data run, and architecture review are gre
   completed full-day plan, record the capacity-bounded prefix/overflow contract, and do not rewrite
   unrelated completed-plan history;
 - record full-day analysis as explicitly uncalibrated and based on provisional P2P output closure;
+- record the narrow measured P2P admission allocation correction without claiming general
+  optimization, and retain a broader engine/simulation allocation and performance review as
+  explicitly deferred work after functional full-day completion;
 - make the next programme feature an explicit user decision between Exception Station Phase 1,
   timing calibration, outbound dispatch/32R prerequisites, or renderer integration; do not select
   one during closure;
@@ -2216,6 +2372,9 @@ Proposed commit message: `Complete full-day DSP analysis`
 - Compact progress is emitted at bounded simulated-time and completion milestones and may be
   mirrored to an immediately flushed persistent log; detailed unfinished identities remain in final
   JSON/text rather than routine output.
+- Immutable known and active bag-correlation ID snapshots are reused by full-day P2P candidate
+  admission between genuine assignment changes; the complete engine/simulation allocation profile
+  remains deferred to a separate measured optimization effort.
 - Every output states that timing is `UNCALIBRATED` and completion means
   `P2P_OUTPUT_CLOSED`, not real dispatch or trunker loading.
 - 12N binding tolerates optional `productBarcodeLength` metadata while remaining strict for other

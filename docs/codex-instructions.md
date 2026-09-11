@@ -74,6 +74,16 @@ Plans should:
 
 `Implementation verification` must contain the focused Gradle compile/test command that the implementation model is authorized to run, or explicitly state that there is no model-run command for the step. `User verification` must contain any broader regression, full-suite, visual, or deliberately user-reserved check, or explicitly state that no additional user verification is required for the step. Do not leave verification ownership implicit.
 
+### Runtime efficiency working rule
+
+Runtime efficiency is a design constraint for both the simulation and the 3D engine. Prefer reusing existing objects, immutable snapshots, collections, indexes, and other derived structures when their underlying inputs have not changed and their ownership and lifetime are clear. Precompute stable data outside hot paths where practical. Avoid repeatedly constructing equivalent structures inside render loops, fixed simulation steps, per-candidate scans, or other high-frequency or high-cardinality paths.
+
+When planning or implementing work on a potentially hot path, inspect both how often the path runs and how many items it traverses. Make repeated work proportional to genuine state changes rather than polling frequency wherever possible. Tests for this behavior should favour deterministic evidence such as stable object identity, construction counters, or state-transition assertions over brittle wall-clock thresholds.
+
+Reuse must preserve correctness, deterministic behavior, thread ownership, and safe immutable publication. Do not introduce shared mutable caches, global state, or object pooling merely to avoid allocation; use those mechanisms only when a decision-complete plan establishes their ownership, invalidation, and lifecycle semantics. Creating a new object remains appropriate when the represented value has genuinely changed or when isolation or ownership requires it.
+
+Apply this rule prospectively to new and modified code. Optimizing equivalent inefficiencies across the existing codebase requires a separately authorized, measurement-led revision; this rule does not implicitly broaden the scope of the current task.
+
 ### Planning model / step execution owner / implementation subagent contract
 
 For every implementation-significant choice that can be resolved by inspecting the repository, the planning model should resolve it in the plan rather than delegate it to the implementation model. Where applicable, make explicit:

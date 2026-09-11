@@ -44,6 +44,51 @@ class DspFullDayAnalysisCommandTest {
         assertEquals(7, command.stepsPerBatch());
         assertEquals(Duration.ofSeconds(15), command.metricSampleInterval());
         assertTrue(command.overwrite());
+        assertTrue(command.progressLogPath().isEmpty());
+        assertEquals(Duration.ofSeconds(300), command.progressInterval());
+    }
+
+    @Test
+    void shouldParseCliAndConfigProgressSettingsWithCliPrecedence(@TempDir Path directory)
+            throws Exception {
+        Fixture fixture = fixture(directory);
+        Path cliLog = directory.resolve("cli").resolve("progress.log");
+        DspFullDayAnalysisCommand cli = new DspFullDayAnalysisCommandParser().parse(
+                arguments(fixture,
+                        "--progress-log=" + cliLog,
+                        "--progress-interval-seconds=17"));
+        assertEquals(cliLog, cli.progressLogPath().orElseThrow());
+        assertEquals(Duration.ofSeconds(17), cli.progressInterval());
+
+        Path configDirectory = Files.createDirectory(directory.resolve("config"));
+        Path ordersDirectory = Files.createDirectory(configDirectory.resolve("orders"));
+        Files.copy(fixture.firstOrder(), ordersDirectory.resolve("first.json"));
+        Path configPath = configDirectory.resolve("full-day.json");
+        Files.writeString(configPath, configJson(
+                "../products.csv",
+                "orders",
+                "report.json",
+                null,
+                false).replace(
+                        "\"operatingDate\":",
+                        "\"progressLog\": \"progress.log\",\n"
+                                + "  \"progressIntervalSeconds\": 11,\n"
+                                + "  \"operatingDate\":"));
+
+        DspFullDayAnalysisCommand configured = new DspFullDayAnalysisCommandParser().parse(
+                new String[] {"--config=" + configPath});
+        assertEquals(configDirectory.resolve("progress.log").normalize(),
+                configured.progressLogPath().orElseThrow());
+        assertEquals(Duration.ofSeconds(11), configured.progressInterval());
+
+        DspFullDayAnalysisCommand overridden = new DspFullDayAnalysisCommandParser().parse(
+                new String[] {
+                    "--config=" + configPath,
+                    "--progress-log=" + directory.resolve("override.log"),
+                    "--progress-interval-seconds=19"
+                });
+        assertEquals(directory.resolve("override.log"), overridden.progressLogPath().orElseThrow());
+        assertEquals(Duration.ofSeconds(19), overridden.progressInterval());
     }
 
     @Test
@@ -267,9 +312,44 @@ class DspFullDayAnalysisCommandTest {
         assertThrows(IllegalArgumentException.class,
                 () -> parser.parse(arguments(fixture, "--inbound-interval-seconds=0")));
         assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture, "--progress-interval-seconds=0")));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture,
+                        "--progress-log=" + directory.resolve("one.log"),
+                        "--progress-log=" + directory.resolve("two.log"))));
+        assertThrows(IllegalArgumentException.class,
                 () -> parser.parse(arguments(fixture, "--operating-date=not-a-date")));
         assertThrows(IllegalArgumentException.class,
                 () -> parser.parse(arguments(fixture, "plain-argument")));
+
+        String progressConfig = configJson(
+                jsonPath(fixture.productMaster()),
+                jsonPath(directory),
+                "report.json",
+                null,
+                false).replace(
+                        "\"operatingDate\":",
+                        "\"progressLog\": \"progress.log\",\n"
+                                + "  \"operatingDate\":");
+        Path progressConfigPath = directory.resolve("progress-config.json");
+        Files.writeString(progressConfigPath, progressConfig.replace(
+                "\"progressLog\": \"progress.log\"",
+                "\"progressLog\": \"progress.log\",\n"
+                        + "  \"progressLog\": \"other.log\""));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(new String[] {"--config=" + progressConfigPath}));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture,
+                        "--inspection-output=" + fixture.output())));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture,
+                        "--progress-log=" + fixture.output())));
+        Path inspection = directory.resolve("same-inspection.txt");
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture,
+                        "--inspection-output=" + inspection,
+                        "--progress-log=" + inspection)));
     }
 
     @Test
@@ -353,6 +433,25 @@ class DspFullDayAnalysisCommandTest {
                 new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8));
         assertNotEquals(0, refused);
         assertArrayEquals(original, Files.readAllBytes(fixture.output()));
+    }
+
+    @Test
+    void shouldRefuseExistingProgressLogBeforeCreatingFinalOutputs(@TempDir Path directory)
+            throws Exception {
+        Fixture fixture = fixture(directory);
+        Path progressLog = directory.resolve("existing-progress.log");
+        Files.writeString(progressLog, "keep-this-content", StandardCharsets.UTF_8);
+
+        ByteArrayOutputStream errorBytes = new ByteArrayOutputStream();
+        int exitCode = DspFullDayAnalysisMain.run(
+                arguments(fixture, "--progress-log=" + progressLog),
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
+                new PrintStream(errorBytes, true, StandardCharsets.UTF_8));
+
+        assertNotEquals(0, exitCode);
+        assertEquals("keep-this-content", Files.readString(progressLog));
+        assertFalse(Files.exists(fixture.output()));
+        assertFalse(Files.exists(fixture.inspection()));
     }
 
     @Test

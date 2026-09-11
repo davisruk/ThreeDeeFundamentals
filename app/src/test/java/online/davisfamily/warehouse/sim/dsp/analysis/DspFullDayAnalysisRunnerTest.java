@@ -71,6 +71,68 @@ class DspFullDayAnalysisRunnerTest {
     }
 
     @Test
+    void shouldEmitCompactProgressAtFixedStepThresholdsInsideEachBatch(@TempDir Path directory)
+            throws Exception {
+        DspUncalibratedFullDayProfile profile = slowProfile(directory, Duration.ofHours(1), 3);
+        DspFullDayLoadedInput input = DspFullDayReportTestSupport.input(directory, profile);
+        Path output = directory.resolve("threshold-report.json");
+        Path progressLog = directory.resolve("progress").resolve("full-day.log");
+        ByteArrayOutputStream consoleBytes = new ByteArrayOutputStream();
+
+        DspFullDayAnalysisReport report = new DspFullDayAnalysisRunner(
+                () -> 1_000_000L,
+                new PrintStream(consoleBytes, true, StandardCharsets.UTF_8))
+                .run(
+                        input,
+                        profile,
+                        output,
+                        Optional.empty(),
+                        Optional.of(progressLog),
+                        Duration.ofHours(2),
+                        false);
+
+        String progress = Files.readString(progressLog);
+        assertEquals(1, occurrences(progress, "[dsp-full-day:progress=PT2H]"));
+        assertEquals(1, occurrences(progress, "[dsp-full-day:progress=PT4H]"));
+        assertEquals(1, occurrences(progress, "[dsp-full-day:progress=PT18H]"));
+        assertTrue(progress.indexOf("[dsp-full-day:start]")
+                < progress.indexOf("[dsp-full-day:progress=PT2H]"));
+        assertTrue(progress.lastIndexOf("[dsp-full-day:final]")
+                > progress.lastIndexOf("[dsp-full-day:progress=PT18H]"));
+        assertFalse(progress.contains("unfinishedIdentities"));
+        assertEquals(
+                progress,
+                consoleBytes.toString(StandardCharsets.UTF_8));
+        assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, report.state());
+    }
+
+    @Test
+    void shouldLeaveFlushedProgressAndFailureBlockWhenFinalReportWriteFails(@TempDir Path directory)
+            throws Exception {
+        DspUncalibratedFullDayProfile profile = profile(directory, Duration.ofSeconds(1), 20);
+        DspFullDayLoadedInput input = DspFullDayReportTestSupport.input(directory, profile);
+        Path progressLog = directory.resolve("failed-run.log");
+
+        Exception failure = assertThrows(Exception.class, () -> new DspFullDayAnalysisRunner(
+                () -> 1_000_000L,
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))
+                .run(
+                        input,
+                        profile,
+                        directory,
+                        Optional.empty(),
+                        Optional.of(progressLog),
+                        Duration.ofSeconds(5),
+                        false));
+
+        String progress = Files.readString(progressLog);
+        assertTrue(progress.contains("[dsp-full-day:start]"));
+        assertTrue(progress.contains("[dsp-full-day:final]"));
+        assertTrue(progress.contains("[dsp-full-day:failure]"));
+        assertTrue(progress.contains(failure.getClass().getName()));
+    }
+
+    @Test
     void shouldRecordMeasuredRealTimeAndProduceByteIdenticalRepeats(@TempDir Path directory)
             throws Exception {
         Path firstDirectory = Files.createDirectory(directory.resolve("first"));
@@ -137,7 +199,9 @@ class DspFullDayAnalysisRunnerTest {
                 fixedStep,
                 stepsPerBatch,
                 Duration.ofSeconds(60),
-                false);
+                false,
+                Optional.empty(),
+                Duration.ofSeconds(300));
         return DspFullDayAnalysisMain.profile(command);
     }
 
@@ -168,5 +232,15 @@ class DspFullDayAnalysisRunnerTest {
                 baseline.p2pLineDefinitions(),
                 baseline.prlCountPerLine(),
                 baseline.timetable());
+    }
+
+    private static int occurrences(String value, String searched) {
+        int count = 0;
+        int position = 0;
+        while ((position = value.indexOf(searched, position)) >= 0) {
+            count++;
+            position += searched.length();
+        }
+        return count;
     }
 }

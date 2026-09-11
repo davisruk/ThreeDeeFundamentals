@@ -26,6 +26,8 @@ final class DspFullDayAnalysisCommandParser {
     private static final String ORDERS_DIRECTORY = "orders-directory";
     private static final String OUTPUT = "output";
     private static final String INSPECTION_OUTPUT = "inspection-output";
+    private static final String PROGRESS_LOG = "progress-log";
+    private static final String PROGRESS_INTERVAL_SECONDS = "progress-interval-seconds";
     private static final String OPERATING_DATE = "operating-date";
     private static final String OSR_LOW_WATER_MARK = "osr-low-water-mark";
     private static final String INBOUND_INTERVAL_SECONDS = "inbound-interval-seconds";
@@ -56,6 +58,7 @@ final class DspFullDayAnalysisCommandParser {
         Path productMasterPath = null;
         Path outputPath = null;
         Path inspectionOutputPath = null;
+        Path progressLogPath = null;
         LocalDate operatingDate = null;
         int osrLowWaterMark = -1;
         Duration inboundInterval = null;
@@ -65,6 +68,7 @@ final class DspFullDayAnalysisCommandParser {
         Duration fixedStep = Duration.ofMillis(50);
         int stepsPerBatch = 2_000;
         Duration metricSampleInterval = Duration.ofSeconds(60);
+        Duration progressInterval = Duration.ofSeconds(300);
         boolean overwrite = false;
 
         if (config != null) {
@@ -80,6 +84,8 @@ final class DspFullDayAnalysisCommandParser {
             outputPath = configuredPath(config.output(), configBaseDirectory, OUTPUT);
             inspectionOutputPath = configuredPath(
                     config.inspectionOutput(), configBaseDirectory, INSPECTION_OUTPUT);
+            progressLogPath = configuredPath(
+                    config.progressLog(), configBaseDirectory, PROGRESS_LOG);
             if (config.operatingDate() != null) {
                 operatingDate = parseDate(config.operatingDate());
             }
@@ -114,6 +120,11 @@ final class DspFullDayAnalysisCommandParser {
             if (config.metricSampleSeconds() != null) {
                 metricSampleInterval = Duration.ofSeconds(parsePositiveInt(
                         Integer.toString(config.metricSampleSeconds()), METRIC_SAMPLE_SECONDS));
+            }
+            if (config.progressIntervalSeconds() != null) {
+                progressInterval = Duration.ofSeconds(parsePositiveInt(
+                        Integer.toString(config.progressIntervalSeconds()),
+                        PROGRESS_INTERVAL_SECONDS));
             }
             if (config.overwrite() != null) {
                 overwrite = config.overwrite();
@@ -172,6 +183,10 @@ final class DspFullDayAnalysisCommandParser {
                     ensureSingleton(seenSingletons, name);
                     inspectionOutputPath = parsePath(value, name);
                 }
+                case PROGRESS_LOG -> {
+                    ensureSingleton(seenSingletons, name);
+                    progressLogPath = parsePath(value, name);
+                }
                 case OPERATING_DATE -> {
                     ensureSingleton(seenSingletons, name);
                     operatingDate = parseDate(value);
@@ -208,6 +223,10 @@ final class DspFullDayAnalysisCommandParser {
                     ensureSingleton(seenSingletons, name);
                     metricSampleInterval = Duration.ofSeconds(parsePositiveInt(value, name));
                 }
+                case PROGRESS_INTERVAL_SECONDS -> {
+                    ensureSingleton(seenSingletons, name);
+                    progressInterval = Duration.ofSeconds(parsePositiveInt(value, name));
+                }
                 default -> throw new IllegalArgumentException("unknown option: --" + name);
             }
         }
@@ -234,12 +253,11 @@ final class DspFullDayAnalysisCommandParser {
         validateOutputPath(outputPath, OUTPUT);
         if (inspectionOutputPath != null) {
             validateOutputPath(inspectionOutputPath, INSPECTION_OUTPUT);
-            if (outputPath.toAbsolutePath().normalize()
-                    .equals(inspectionOutputPath.toAbsolutePath().normalize())) {
-                throw new IllegalArgumentException(
-                        "--output and --inspection-output must name different files");
-            }
         }
+        if (progressLogPath != null) {
+            validateOutputPath(progressLogPath, PROGRESS_LOG);
+        }
+        validateDistinctOutputPaths(outputPath, inspectionOutputPath, progressLogPath);
 
         return new DspFullDayAnalysisCommand(
                 productMasterPath,
@@ -255,7 +273,9 @@ final class DspFullDayAnalysisCommandParser {
                 fixedStep,
                 stepsPerBatch,
                 metricSampleInterval,
-                overwrite);
+                overwrite,
+                Optional.ofNullable(progressLogPath),
+                progressInterval);
     }
 
     private static Path findConfigPath(String[] arguments) {
@@ -400,6 +420,29 @@ final class DspFullDayAnalysisCommandParser {
         if (parent != null && Files.exists(parent) && !Files.isDirectory(parent)) {
             throw new IllegalArgumentException(
                     "parent of --" + name + " is not a directory: " + parent);
+        }
+    }
+
+    private static void validateDistinctOutputPaths(
+            Path outputPath,
+            Path inspectionOutputPath,
+            Path progressLogPath) {
+        Path normalizedOutput = outputPath.toAbsolutePath().normalize();
+        if (inspectionOutputPath != null
+                && normalizedOutput.equals(inspectionOutputPath.toAbsolutePath().normalize())) {
+            throw new IllegalArgumentException(
+                    "--output and --inspection-output must name different files");
+        }
+        if (progressLogPath != null
+                && normalizedOutput.equals(progressLogPath.toAbsolutePath().normalize())) {
+            throw new IllegalArgumentException(
+                    "--output and --progress-log must name different files");
+        }
+        if (inspectionOutputPath != null && progressLogPath != null
+                && inspectionOutputPath.toAbsolutePath().normalize()
+                        .equals(progressLogPath.toAbsolutePath().normalize())) {
+            throw new IllegalArgumentException(
+                    "--inspection-output and --progress-log must name different files");
         }
     }
 

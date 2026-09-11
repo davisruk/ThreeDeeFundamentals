@@ -19,7 +19,9 @@ record DspFullDayAnalysisConfigJson(
         Integer fixedStepMillis,
         Integer stepsPerBatch,
         Integer metricSampleSeconds,
-        Boolean overwrite) {
+        Boolean overwrite,
+        String progressLog,
+        Integer progressIntervalSeconds) {
 
     DspFullDayAnalysisConfigJson {
         if (orders != null) {

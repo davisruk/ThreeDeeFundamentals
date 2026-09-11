@@ -30,7 +30,9 @@ final class DspFullDayAnalysisConfigLoader {
             "fixedStepMillis",
             "stepsPerBatch",
             "metricSampleSeconds",
-            "overwrite");
+            "overwrite",
+            "progressLog",
+            "progressIntervalSeconds");
 
     private final ObjectMapper objectMapper;
 
@@ -85,7 +87,8 @@ final class DspFullDayAnalysisConfigLoader {
 
     private static void validateProperty(String name, JsonNode value) {
         switch (name) {
-            case "productMaster", "ordersDirectory", "output", "inspectionOutput", "operatingDate" -> {
+            case "productMaster", "ordersDirectory", "output", "inspectionOutput", "operatingDate",
+                    "progressLog" -> {
                 requireText(name, value);
             }
             case "orders" -> {
@@ -104,7 +107,8 @@ final class DspFullDayAnalysisConfigLoader {
                 }
             }
             case "osrLowWaterMark", "av02Capacity", "outboundBagCapacity",
-                    "maximumPacksPerBag", "fixedStepMillis", "stepsPerBatch", "metricSampleSeconds" -> {
+                    "maximumPacksPerBag", "fixedStepMillis", "stepsPerBatch", "metricSampleSeconds",
+                    "progressIntervalSeconds" -> {
                 if (!value.isIntegralNumber()) {
                     throw new IllegalArgumentException(
                             "--config property " + name + " must be a JSON integer");

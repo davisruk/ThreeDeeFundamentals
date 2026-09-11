@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
@@ -18,6 +19,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 public final class P2pBagCorrelationAssignmentRegistry {
     private final Map<String, P2pBagCorrelationAssignment> assignmentsByCorrelation =
             new LinkedHashMap<>();
+    private Set<String> correlationIdsSnapshot = Set.of();
 
     public Optional<P2pBagCorrelationAssignment> find(String correlationId) {
         if (correlationId == null || correlationId.isBlank()) {
@@ -37,6 +39,10 @@ public final class P2pBagCorrelationAssignmentRegistry {
 
     public P2pBagCorrelationAssignmentSnapshot assignmentSnapshot() {
         return snapshot();
+    }
+
+    public Set<String> correlationIdsSnapshot() {
+        return correlationIdsSnapshot;
     }
 
     public void validateCanCommit(
@@ -90,9 +96,21 @@ public final class P2pBagCorrelationAssignmentRegistry {
                                     + addition.correlationId());
                 }
             }
+            if (additions.isEmpty()) {
+                return;
+            }
+
+            LinkedHashSet<String> prospectiveCorrelationIds =
+                    new LinkedHashSet<>(assignmentsByCorrelation.keySet());
+            for (P2pBagCorrelationAssignment addition : additions) {
+                prospectiveCorrelationIds.add(addition.correlationId());
+            }
+            Set<String> publishedCorrelationIds = Set.copyOf(prospectiveCorrelationIds);
+
             for (P2pBagCorrelationAssignment addition : additions) {
                 assignmentsByCorrelation.put(addition.correlationId(), addition);
             }
+            correlationIdsSnapshot = publishedCorrelationIds;
         };
     }
 

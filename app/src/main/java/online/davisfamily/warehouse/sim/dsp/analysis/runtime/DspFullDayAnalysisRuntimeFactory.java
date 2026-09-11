@@ -707,17 +707,15 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 thirdPartyVisitFactory,
                 thirdPartyAreaController::areaSnapshot,
                 THIRD_PARTY_DESTINATION.targetId());
+        DspFullDayP2pAdmissionSnapshotSource p2pAdmissionSnapshotSource =
+                new DspFullDayP2pAdmissionSnapshotSource(
+                        lineRuntimes.size() * DspHeadlessP2pLineRuntimeFactory.PRL_COUNT_PER_LINE,
+                        requirementCatalog,
+                        correlationAssignments);
         return new P2pStationAdmissionResolver(
                 thirdParty,
                 new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
-                () -> new P2pAdmissionSnapshot(
-                        "dsp-p2p",
-                        lineRuntimes.size() * DspHeadlessP2pLineRuntimeFactory.PRL_COUNT_PER_LINE,
-                        correlationAssignments.snapshot().correlationAssignments().keySet(),
-                        requirementCatalog.allRequirements().stream()
-                                .map(P2pBagCorrelationRequirement::correlationId)
-                                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)),
-                        true),
+                p2pAdmissionSnapshotSource::snapshot,
                 new StationCapacity(
                         profile.p2pLineDefinitions().size(),
                         Math.multiplyExact(

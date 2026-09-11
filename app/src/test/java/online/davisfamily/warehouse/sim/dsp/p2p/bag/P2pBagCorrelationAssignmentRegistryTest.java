@@ -2,11 +2,13 @@ package online.davisfamily.warehouse.sim.dsp.p2p.bag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +23,30 @@ class P2pBagCorrelationAssignmentRegistryTest {
             new P2pBagCorrelationRequirement("bag-a", 2);
     private static final P2pBagCorrelationRequirement BAG_B =
             new P2pBagCorrelationRequirement("bag-b", 1);
+
+    @Test
+    void shouldPublishStableImmutableCorrelationIdsOnlyForGenuineAdditions() {
+        P2pBagCorrelationAssignmentRegistry registry =
+                new P2pBagCorrelationAssignmentRegistry();
+        Set<String> initial = registry.correlationIdsSnapshot();
+
+        assertSame(initial, registry.correlationIdsSnapshot());
+        assertThrows(UnsupportedOperationException.class, () -> initial.clear());
+
+        registry.commit(List.of(BAG_A), assignment("tote-1", "line-1"));
+        Set<String> afterFirstAddition = registry.correlationIdsSnapshot();
+        assertNotSame(initial, afterFirstAddition);
+        assertEquals(Set.of("bag-a"), afterFirstAddition);
+        assertSame(afterFirstAddition, registry.correlationIdsSnapshot());
+
+        registry.commit(List.of(BAG_A), assignment("tote-2", "line-1"));
+        assertSame(afterFirstAddition, registry.correlationIdsSnapshot());
+
+        registry.commit(List.of(BAG_B), assignment("tote-3", "line-1"));
+        Set<String> afterSecondAddition = registry.correlationIdsSnapshot();
+        assertNotSame(afterFirstAddition, afterSecondAddition);
+        assertEquals(Set.of("bag-a", "bag-b"), afterSecondAddition);
+    }
 
     @Test
     void shouldAppendExactFirstPinAndKeepItWhenTheSameBagArrivesInAnotherTote() {
@@ -47,6 +73,7 @@ class P2pBagCorrelationAssignmentRegistryTest {
         registry.commit(List.of(BAG_A), assignment("tote-a", "line-1"));
         registry.commit(List.of(BAG_B), assignment("tote-b", "line-2"));
         P2pBagCorrelationAssignmentSnapshot before = registry.snapshot();
+        Set<String> correlationIdsBefore = registry.correlationIdsSnapshot();
 
         assertThrows(
                 IllegalStateException.class,
@@ -54,6 +81,7 @@ class P2pBagCorrelationAssignmentRegistryTest {
                         List.of(BAG_A, BAG_B), assignment("tote-c", "line-1")));
 
         assertEquals(before, registry.snapshot());
+        assertSame(correlationIdsBefore, registry.correlationIdsSnapshot());
         assertFalse(registry.compatibleWith(
                 List.of(BAG_A), registry.snapshot(), new P2pLineId("line-2")));
         assertTrue(registry.compatibleWith(

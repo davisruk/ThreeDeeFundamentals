@@ -3,6 +3,8 @@
   "ordersDirectory": "input/orders",
   "output": "output/report.json",
   "inspectionOutput": "output/inspection.txt",
+  "progressLog": "output/progress.log",
+  "progressIntervalSeconds": 300,
   "operatingDate": "2025-06-27",
   "osrLowWaterMark": 100,
   "inboundIntervalSeconds": 2.0,

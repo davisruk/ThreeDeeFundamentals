@@ -21,10 +21,13 @@ import online.davisfamily.threedee.sim.framework.time.FixedStepExecutionDriver;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionFormatter;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatter;
+import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportFactory;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriter;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntime;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
 
 /** Executes one loaded full-day DSP analysis through bounded headless fixed steps. */
 public final class DspFullDayAnalysisRunner {
@@ -34,6 +37,7 @@ public final class DspFullDayAnalysisRunner {
     private final DspFullDayReportFactory reportFactory;
     private final DspFullDayReportJsonWriter reportWriter;
     private final DspFullDayInspectionFormatter inspectionFormatter;
+    private final DspFullDayProgressFormatter progressFormatter;
 
     public DspFullDayAnalysisRunner() {
         this(System::nanoTime, System.out);
@@ -68,6 +72,7 @@ public final class DspFullDayAnalysisRunner {
         this.reportFactory = reportFactory;
         this.reportWriter = reportWriter;
         this.inspectionFormatter = inspectionFormatter;
+        this.progressFormatter = new DspFullDayProgressFormatter();
     }
 
     public DspFullDayAnalysisReport run(
@@ -76,14 +81,64 @@ public final class DspFullDayAnalysisRunner {
             Path outputPath,
             Optional<Path> inspectionPath,
             boolean overwrite) throws IOException {
+        return run(
+                input,
+                profile,
+                outputPath,
+                inspectionPath,
+                Optional.empty(),
+                Duration.ofSeconds(300),
+                overwrite);
+    }
+
+    public DspFullDayAnalysisReport run(
+            DspFullDayLoadedInput input,
+            DspUncalibratedFullDayProfile profile,
+            Path outputPath,
+            Optional<Path> inspectionPath,
+            Optional<Path> progressLogPath,
+            Duration progressInterval,
+            boolean overwrite) throws IOException {
         if (input == null || profile == null || outputPath == null || inspectionPath == null) {
             throw new IllegalArgumentException("runner inputs must not be null");
         }
-        DspFullDayAnalysisRuntime runtime = runtimeFactory.create(input, profile);
-        try {
-            return execute(runtime, input, profile, outputPath, inspectionPath, overwrite);
-        } finally {
-            runtime.close();
+        if (progressLogPath == null || progressInterval == null) {
+            throw new IllegalArgumentException("runner progress values must not be null");
+        }
+        if (progressInterval.isZero() || progressInterval.isNegative()) {
+            throw new IllegalArgumentException("progressInterval must be positive");
+        }
+
+        try (DspFullDayProgressOutput progressOutput = DspFullDayProgressOutput.open(
+                inspectionOutput,
+                progressLogPath,
+                overwrite)) {
+            DspFullDayAnalysisRuntime runtime = null;
+            try {
+                runtime = runtimeFactory.create(input, profile);
+                try {
+                    return execute(
+                            runtime,
+                            input,
+                            profile,
+                            outputPath,
+                            inspectionPath,
+                            progressOutput,
+                            progressInterval,
+                            overwrite);
+                } finally {
+                    runtime.close();
+                }
+            } catch (Throwable failure) {
+                Throwable original = unwrapProgressFailure(failure);
+                try {
+                    progressOutput.print("failure", failureLines(original));
+                } catch (IOException loggingFailure) {
+                    original.addSuppressed(loggingFailure);
+                }
+                rethrow(original);
+                throw new AssertionError("unreachable");
+            }
         }
     }
 
@@ -101,17 +156,29 @@ public final class DspFullDayAnalysisRunner {
             DspUncalibratedFullDayProfile profile,
             Path outputPath,
             Optional<Path> inspectionPath,
+            DspFullDayProgressOutput progressOutput,
+            Duration progressInterval,
             boolean overwrite) throws IOException {
         FixedStepExecutionDriver driver = new FixedStepExecutionDriver(
                 FixedStepExecutionConfig.headless(
                         profile.fixedStep(),
                         profile.maximumStepsPerAdvance()));
         Set<String> completedServiceCentres = new HashSet<>();
-        Duration nextHourlyInspection = Duration.ofHours(1);
+        ProgressSchedule progressSchedule = new ProgressSchedule(progressInterval);
+        var startRuntime = runtime.snapshot();
 
-        printInspection(
+        printProgress(
+                progressOutput,
                 "start",
-                reportFactory.createInspectionSnapshot(runtime.snapshot(), input, profile));
+                startRuntime,
+                input,
+                profile);
+        printNewCompletions(
+                progressOutput,
+                startRuntime,
+                completedServiceCentres,
+                input,
+                profile);
 
         long batchCount = 0L;
         long maximumBatchCount = maximumBatchCount(profile);
@@ -128,6 +195,16 @@ public final class DspFullDayAnalysisRunner {
                         throw TerminalReached.INSTANCE;
                     }
                     runtime.update(stepSeconds);
+                    Duration elapsed = runtime.metricsSnapshot().clock().elapsedSimulationTime();
+                    if (progressSchedule.reached(elapsed)) {
+                        progressSchedule.advancePast(elapsed);
+                        printProgress(
+                                progressOutput,
+                                "progress=" + elapsed,
+                                runtime.snapshot(),
+                                input,
+                                profile);
+                    }
                 });
             } catch (TerminalReached reached) {
                 // The terminal step has already returned to the driver and was counted. The
@@ -140,33 +217,21 @@ public final class DspFullDayAnalysisRunner {
             driver.recordHeadlessRealElapsed(Duration.ofNanos(endNanos - startNanos));
 
             var currentRuntime = runtime.snapshot();
-            while (!currentRuntime.clock().elapsedSimulationTime().minus(nextHourlyInspection).isNegative()) {
-                printInspection(
-                        "hour=" + nextHourlyInspection,
-                        reportFactory.createInspectionSnapshot(
-                                currentRuntime,
-                                input,
-                                profile));
-                nextHourlyInspection = nextHourlyInspection.plus(Duration.ofHours(1));
-            }
-            for (var completion : currentRuntime.completions()) {
-                if (completion.complete() && completedServiceCentres.add(completion.serviceCentreId())) {
-                    printInspection(
-                            "completion=" + completion.serviceCentreId(),
-                            reportFactory.createInspectionSnapshot(
-                                    currentRuntime,
-                                    input,
-                                    profile));
-                }
-            }
+            printNewCompletions(
+                    progressOutput,
+                    currentRuntime,
+                    completedServiceCentres,
+                    input,
+                    profile);
         }
 
         var executionSnapshot = driver.snapshot();
         runtime.metricsCollector().recordExecutionSpeed(
                 executionSnapshot.requestedTimeScale(),
                 executionSnapshot.achievedTimeScale());
-        DspFullDayAnalysisReport report = reportFactory.create(runtime.snapshot(), input, profile);
-        printInspection("final", DspFullDayInspectionSnapshot.from(report));
+        var finalRuntime = runtime.snapshot();
+        printProgress(progressOutput, "final", finalRuntime, input, profile);
+        DspFullDayAnalysisReport report = reportFactory.create(finalRuntime, input, profile);
         reportWriter.write(report, outputPath, overwrite);
         if (inspectionPath.isPresent()) {
             writeInspectionFile(
@@ -177,13 +242,66 @@ public final class DspFullDayAnalysisRunner {
         return report;
     }
 
-    private void printInspection(
+    private void printProgress(
+            DspFullDayProgressOutput progressOutput,
             String milestone,
-            DspFullDayInspectionSnapshot snapshot) {
-        inspectionOutput.println("[dsp-full-day:" + milestone + "]");
-        for (String line : inspectionFormatter.describe(snapshot)) {
-            inspectionOutput.println(line);
+            DspFullDayAnalysisRuntimeSnapshot runtime,
+            DspFullDayLoadedInput input,
+            DspUncalibratedFullDayProfile profile) {
+        try {
+            progressOutput.print(
+                    milestone,
+                    progressFormatter.describe(DspFullDayProgressSnapshot.from(runtime, input, profile)));
+        } catch (IOException exception) {
+            throw new ProgressOutputFailure(exception);
         }
+    }
+
+    private void printNewCompletions(
+            DspFullDayProgressOutput progressOutput,
+            DspFullDayAnalysisRuntimeSnapshot runtime,
+            Set<String> completedServiceCentres,
+            DspFullDayLoadedInput input,
+            DspUncalibratedFullDayProfile profile) {
+        for (var completion : runtime.completions()) {
+            if (completion.complete() && completedServiceCentres.add(completion.serviceCentreId())) {
+                printProgress(
+                        progressOutput,
+                        "completion=" + completion.serviceCentreId(),
+                        runtime,
+                        input,
+                        profile);
+            }
+        }
+    }
+
+    private static List<String> failureLines(Throwable failure) {
+        String message = failure.getMessage();
+        String sanitized = message == null || message.isBlank()
+                ? "none"
+                : message.replaceAll("[\\r\\n]+", " ").trim();
+        return List.of(
+                "Exception: " + failure.getClass().getName(),
+                "Message: " + sanitized);
+    }
+
+    private static Throwable unwrapProgressFailure(Throwable failure) {
+        return failure instanceof ProgressOutputFailure progressFailure
+                ? progressFailure.cause
+                : failure;
+    }
+
+    private static void rethrow(Throwable failure) throws IOException {
+        if (failure instanceof IOException exception) {
+            throw exception;
+        }
+        if (failure instanceof RuntimeException exception) {
+            throw exception;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        throw new IllegalStateException(failure);
     }
 
     private static long maximumBatchCount(DspUncalibratedFullDayProfile profile) {
@@ -250,6 +368,35 @@ public final class DspFullDayAnalysisRunner {
 
         private TerminalReached() {
             super(null, null, false, false);
+        }
+    }
+
+    private static final class ProgressOutputFailure extends RuntimeException {
+        private final IOException cause;
+
+        private ProgressOutputFailure(IOException cause) {
+            super(cause);
+            this.cause = cause;
+        }
+    }
+
+    private static final class ProgressSchedule {
+        private final Duration interval;
+        private Duration nextThreshold;
+
+        private ProgressSchedule(Duration interval) {
+            this.interval = interval;
+            this.nextThreshold = interval;
+        }
+
+        private boolean reached(Duration elapsed) {
+            return !elapsed.minus(nextThreshold).isNegative();
+        }
+
+        private void advancePast(Duration elapsed) {
+            while (!elapsed.minus(nextThreshold).isNegative()) {
+                nextThreshold = nextThreshold.plus(interval);
+            }
         }
     }
 }

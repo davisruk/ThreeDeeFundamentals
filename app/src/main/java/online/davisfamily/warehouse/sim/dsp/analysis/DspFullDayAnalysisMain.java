@@ -32,6 +32,8 @@ public final class DspFullDayAnalysisMain {
                     profile,
                     command.outputPath(),
                     command.inspectionOutputPath(),
+                    command.progressLogPath(),
+                    command.progressInterval(),
                     command.overwrite());
             return 0;
         } catch (Exception exception) {

@@ -21,6 +21,7 @@ public final class P2pBagCorrelationRequirementCatalog {
     private final Map<PhysicalToteId, Set<P2pBagCorrelationRequirement>> byPhysicalToteId;
     private final Map<OrderSheetKey, Set<P2pBagCorrelationRequirement>> byOrderSheetKey;
     private final List<P2pBagCorrelationRequirement> allRequirements;
+    private final Set<String> correlationIds;
 
     public P2pBagCorrelationRequirementCatalog(
             Map<PhysicalToteId, ? extends Collection<P2pBagCorrelationRequirement>>
@@ -43,6 +44,7 @@ public final class P2pBagCorrelationRequirementCatalog {
                 .flatMap(Collection::stream)
                 .forEach(requirement -> putUnique(unique, requirement));
         this.allRequirements = List.copyOf(unique.values());
+        this.correlationIds = Set.copyOf(unique.keySet());
     }
 
     public static P2pBagCorrelationRequirementCatalog empty() {
@@ -95,6 +97,10 @@ public final class P2pBagCorrelationRequirementCatalog {
 
     public List<P2pBagCorrelationRequirement> allRequirements() {
         return allRequirements;
+    }
+
+    public Set<String> correlationIds() {
+        return correlationIds;
     }
 
     public Map<PhysicalToteId, Set<P2pBagCorrelationRequirement>> requirementsByPhysicalToteId() {
