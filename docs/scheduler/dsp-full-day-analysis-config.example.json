@@ -1,0 +1,16 @@
+{
+  "productMaster": "input/product_automation.csv",
+  "ordersDirectory": "input/orders",
+  "output": "output/report.json",
+  "inspectionOutput": "output/inspection.txt",
+  "operatingDate": "2025-06-27",
+  "osrLowWaterMark": 100,
+  "inboundIntervalSeconds": 2.0,
+  "av02Capacity": 50,
+  "outboundBagCapacity": 20,
+  "maximumPacksPerBag": 10,
+  "fixedStepMillis": 50,
+  "stepsPerBatch": 20000,
+  "metricSampleSeconds": 60,
+  "overwrite": false
+}

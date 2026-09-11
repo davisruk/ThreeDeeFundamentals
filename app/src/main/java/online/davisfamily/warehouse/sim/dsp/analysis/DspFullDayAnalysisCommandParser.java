@@ -20,6 +20,7 @@ import java.util.stream.Stream;
 
 /** Package-private parser for the exact full-day command-line contract. */
 final class DspFullDayAnalysisCommandParser {
+    private static final String CONFIG = "config";
     private static final String PRODUCT_MASTER = "product-master";
     private static final String ORDERS = "orders";
     private static final String ORDERS_DIRECTORY = "orders-directory";
@@ -41,6 +42,14 @@ final class DspFullDayAnalysisCommandParser {
             throw new IllegalArgumentException("arguments must not be null");
         }
 
+        Path configPath = findConfigPath(arguments);
+        DspFullDayAnalysisConfigJson config = configPath == null
+                ? null
+                : new DspFullDayAnalysisConfigLoader().load(configPath);
+        Path configBaseDirectory = configPath == null
+                ? null
+                : configPath.toAbsolutePath().normalize().getParent();
+
         Set<String> seenSingletons = new HashSet<>();
         List<Path> orderPaths = new ArrayList<>();
         Path orderDirectoryPath = null;
@@ -58,6 +67,60 @@ final class DspFullDayAnalysisCommandParser {
         Duration metricSampleInterval = Duration.ofSeconds(60);
         boolean overwrite = false;
 
+        if (config != null) {
+            productMasterPath = configuredPath(
+                    config.productMaster(), configBaseDirectory, PRODUCT_MASTER);
+            if (config.orders() != null) {
+                for (String order : config.orders()) {
+                    orderPaths.add(configuredPath(order, configBaseDirectory, ORDERS));
+                }
+            }
+            orderDirectoryPath = configuredPath(
+                    config.ordersDirectory(), configBaseDirectory, ORDERS_DIRECTORY);
+            outputPath = configuredPath(config.output(), configBaseDirectory, OUTPUT);
+            inspectionOutputPath = configuredPath(
+                    config.inspectionOutput(), configBaseDirectory, INSPECTION_OUTPUT);
+            if (config.operatingDate() != null) {
+                operatingDate = parseDate(config.operatingDate());
+            }
+            if (config.osrLowWaterMark() != null) {
+                osrLowWaterMark = parseNonnegativeInt(
+                        Integer.toString(config.osrLowWaterMark()), OSR_LOW_WATER_MARK);
+            }
+            if (config.inboundIntervalSeconds() != null) {
+                inboundInterval = parseSeconds(
+                        config.inboundIntervalSeconds().toPlainString(), INBOUND_INTERVAL_SECONDS);
+            }
+            if (config.av02Capacity() != null) {
+                av02Capacity = parsePositiveInt(
+                        Integer.toString(config.av02Capacity()), AV02_CAPACITY);
+            }
+            if (config.outboundBagCapacity() != null) {
+                outboundBagCapacity = parsePositiveInt(
+                        Integer.toString(config.outboundBagCapacity()), OUTBOUND_BAG_CAPACITY);
+            }
+            if (config.maximumPacksPerBag() != null) {
+                maximumPacksPerBag = parsePositiveInt(
+                        Integer.toString(config.maximumPacksPerBag()), MAXIMUM_PACKS_PER_BAG);
+            }
+            if (config.fixedStepMillis() != null) {
+                fixedStep = Duration.ofMillis(parsePositiveInt(
+                        Integer.toString(config.fixedStepMillis()), FIXED_STEP_MILLIS));
+            }
+            if (config.stepsPerBatch() != null) {
+                stepsPerBatch = parsePositiveInt(
+                        Integer.toString(config.stepsPerBatch()), STEPS_PER_BATCH);
+            }
+            if (config.metricSampleSeconds() != null) {
+                metricSampleInterval = Duration.ofSeconds(parsePositiveInt(
+                        Integer.toString(config.metricSampleSeconds()), METRIC_SAMPLE_SECONDS));
+            }
+            if (config.overwrite() != null) {
+                overwrite = config.overwrite();
+            }
+        }
+
+        boolean commandLineOrderModeSeen = false;
         for (String argument : arguments) {
             if (argument == null || argument.isBlank()) {
                 throw new IllegalArgumentException("arguments must not contain blank values");
@@ -79,13 +142,26 @@ final class DspFullDayAnalysisCommandParser {
             String name = argument.substring(2, equals);
             String value = argument.substring(equals + 1);
             switch (name) {
+                case CONFIG -> ensureSingleton(seenSingletons, name);
                 case PRODUCT_MASTER -> {
                     ensureSingleton(seenSingletons, name);
                     productMasterPath = parsePath(value, name);
                 }
-                case ORDERS -> orderPaths.add(parsePath(value, name));
+                case ORDERS -> {
+                    if (!commandLineOrderModeSeen) {
+                        orderPaths.clear();
+                        orderDirectoryPath = null;
+                        commandLineOrderModeSeen = true;
+                    }
+                    orderPaths.add(parsePath(value, name));
+                }
                 case ORDERS_DIRECTORY -> {
                     ensureSingleton(seenSingletons, name);
+                    if (!commandLineOrderModeSeen) {
+                        orderPaths.clear();
+                        orderDirectoryPath = null;
+                        commandLineOrderModeSeen = true;
+                    }
                     orderDirectoryPath = parsePath(value, name);
                 }
                 case OUTPUT -> {
@@ -180,6 +256,36 @@ final class DspFullDayAnalysisCommandParser {
                 stepsPerBatch,
                 metricSampleInterval,
                 overwrite);
+    }
+
+    private static Path findConfigPath(String[] arguments) {
+        Path configPath = null;
+        for (String argument : arguments) {
+            if (argument == null
+                    || (!argument.equals("--config") && !argument.startsWith("--config="))) {
+                continue;
+            }
+            if (!argument.startsWith("--config=") || argument.length() == "--config=".length()) {
+                throw new IllegalArgumentException("malformed option: " + argument);
+            }
+            if (configPath != null) {
+                throw new IllegalArgumentException("duplicate option: --config");
+            }
+            configPath = parsePath(argument.substring("--config=".length()), CONFIG);
+            validateRegularFile(configPath, CONFIG);
+        }
+        return configPath;
+    }
+
+    private static Path configuredPath(String value, Path configBaseDirectory, String name) {
+        if (value == null) {
+            return null;
+        }
+        Path parsed = parsePath(value, name);
+        if (parsed.isAbsolute()) {
+            return parsed.normalize();
+        }
+        return configBaseDirectory.resolve(parsed).normalize();
     }
 
     private static List<Path> expandOrderDirectory(Path path) {

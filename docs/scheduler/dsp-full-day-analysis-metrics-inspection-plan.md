@@ -8,8 +8,12 @@ Step 12 deterministically substitutes a unique simulation ID for each later occu
 inbound carrier barcode while preserving the original barcode in the load report. The next
 external-data attempt exposed 1,315 startup-eligible physical manifests against the configured
 1,200-slot OSR. Step 13 replaces the invalid all-or-fail preload assumption with a capacity-bounded
-deterministic preload whose overflow enters through normal rate-limited supply. Step 14 owns final
-regression, external verification, review, and closure.
+deterministic preload whose overflow enters through normal rate-limited supply. The Step 13
+external-data run then exposed two analysis-entry-point observability defects: maintaining the long
+command line is unnecessarily fragile, and routine console inspection constructs and prints every
+unfinished identity as one enormous line without preserving progress across a stall. Step 14 adds
+strict JSON-backed invocation, Step 15 adds compact persistent progress logging, and Step 16 owns
+final regression, external verification, review, and closure.
 
 ## Purpose
 
@@ -27,9 +31,9 @@ timingCalibrationStatus: UNCALIBRATED
 ```
 
 The feature adds a deterministic headless composition root, full-day execution lifecycle,
-immutable metrics, provisional service-centre outcomes, machine-readable reports, and compact text
-inspection. It consumes real product-master and 12N input paths but does not add a dataset to the
-repository.
+immutable metrics, provisional service-centre outcomes, machine-readable reports, strict
+JSON-backed invocation, compact persistent progress logging, and detailed final text inspection. It
+consumes real product-master and 12N input paths but does not add a dataset to the repository.
 
 This is analysis infrastructure, not a calibrated production forecast. Every snapshot, inspection
 view, and report must name profile `DEADLINE_AWARE_ELASTIC_STICKY_LEASES`, calibration status
@@ -141,8 +145,9 @@ and latest deadline separately. Do not infer a real truck result.
 
 - The runtime uses an explicit `DspUncalibratedFullDayProfile`. Every placeholder duration and
   capacity is a constructor field and is serialized into the report.
-- The command line requires an OSR low-water mark, inbound interval, outbound tote bag capacity,
-  and maximum packs per bag. There is no invented production default for those unknown values.
+- The effective command configuration requires an OSR low-water mark, inbound interval, outbound
+  tote bag capacity, and maximum packs per bag. Values may come from the command line or the strict
+  JSON invocation file. There is no invented production default for those unknown values.
 - The profile fixes five P2P lines and 31 PRLs per line, uses the existing production timetable and
   one-hour downstream duration, and defaults headless execution to a 50 ms fixed step, 2,000 steps
   per driver advance, and 60-second metric samples. These are simulation/execution defaults, not
@@ -420,8 +425,12 @@ report unless the command includes `--overwrite`.
 - current operational release decision/block and transport/station ownership;
 - load exclusions and unsupported work.
 
-The formatter is pure and has no renderer or `SelectionInspectionRegistry` dependency. The runner
-prints inspection at start, each simulated hour, each service-centre completion, and final state.
+The formatter is pure and has no renderer or `SelectionInspectionRegistry` dependency. It remains
+the detailed final formatter and may include exact unfinished identities. Routine progress must not
+construct or format those identity lists. `DspFullDayProgressSnapshot` and
+`DspFullDayProgressFormatter` own the separate lightweight progress projection described in Step
+15. The runner prints and persistently mirrors progress at start, each configured simulated
+interval, each service-centre completion, and final state.
 
 `DspFullDayAnalysisRunner` constructs `FixedStepExecutionDriver` with
 `FixedStepExecutionConfig.headless(...)`. Add
@@ -436,11 +445,13 @@ It closes the runtime in a `finally` block and returns the immutable report.
 Command-line contract:
 
 ```text
+--config=<json path>                         optional once
 --product-master=<csv path>                  required once
 --orders=<json path>                         repeat one or more times in explicit-file mode
 --orders-directory=<directory path>          required once in directory mode
 --output=<json path>                         required once
 --inspection-output=<text path>              optional
+--progress-log=<text path>                   optional
 --operating-date=<YYYY-MM-DD>                required
 --osr-low-water-mark=<count>                 required
 --inbound-interval-seconds=<positive decimal> required
@@ -450,8 +461,47 @@ Command-line contract:
 --fixed-step-millis=<positive integer>       optional, default 50
 --steps-per-batch=<positive integer>         optional, default 2000
 --metric-sample-seconds=<positive integer>   optional, default 60
+--progress-interval-seconds=<positive integer> optional, default 300
 --overwrite                                  optional flag
 ```
+
+"Required" above means required in the effective merged invocation. A caller may provide the
+required value in the JSON configuration, on the command line, or both. A command-line value wins
+over the configured value. `--overwrite` forces the effective value to true; omitting it retains the
+configured value or false when no configured value exists.
+
+The JSON configuration uses these exact camel-case properties and JSON value types:
+
+```json
+{
+  "productMaster": "path string",
+  "ordersDirectory": "path string",
+  "output": "path string",
+  "inspectionOutput": "path string",
+  "progressLog": "path string",
+  "operatingDate": "YYYY-MM-DD",
+  "osrLowWaterMark": 0,
+  "inboundIntervalSeconds": 2.0,
+  "av02Capacity": 1,
+  "outboundBagCapacity": 1,
+  "maximumPacksPerBag": 1,
+  "fixedStepMillis": 50,
+  "stepsPerBatch": 2000,
+  "metricSampleSeconds": 60,
+  "progressIntervalSeconds": 300,
+  "overwrite": false
+}
+```
+
+An explicit-file configuration replaces `ordersDirectory` with
+`"orders": ["first path", "second path"]`. `orders` and `ordersDirectory` are alternatives and
+must not both occur in one JSON object. Null
+values, duplicate JSON properties, unknown properties, blank paths, wrong JSON types, and invalid
+numeric/date values are rejected. Relative paths in the JSON resolve against the normalized parent
+of the configuration file; relative command-line paths retain their existing process-working-
+directory meaning. There is no environment-variable, home-directory, comment, include, or secret
+substitution. The configuration file does not configure the production service-centre timetable or
+priorities; that remains a separately deferred scheduling-configuration change.
 
 Exactly one order-input mode is required. Explicit-file mode uses one or more repeated `--orders`
 options and retains their argument order. Directory mode uses the singleton `--orders-directory`
@@ -462,11 +512,16 @@ ordered order-path list. Hidden files are treated like any other entry; symbolic
 default `Files.isRegularFile` behavior. Ignore nonmatching entries and reject a directory with no
 matching regular JSON files.
 
-Unknown, duplicate singleton, malformed, missing, nonexistent, or wrong-kind path arguments fail
-before loading. Supplying both order-input modes also fails before loading. Repeated `--orders`
-remains the only repeated option. Add an `app` Gradle `JavaExec` task named `dspFullDayAnalysis`
-whose main class is `DspFullDayAnalysisMain`; keep the application plugin's `SoftwareRenderer`
-main class unchanged.
+At most one `--config` is accepted and it may occur anywhere in the argument list. Duplicate
+singleton detection applies within the command-line source; an explicit command-line override of a
+configured singleton is valid. If either order-input option occurs on the command line, that source
+replaces the complete configured order-input mode: repeated `--orders` preserve command-line order,
+while one `--orders-directory` selects directory mode. Unknown, duplicate singleton, malformed,
+missing, nonexistent, or wrong-kind paths fail before loading. Supplying both order-input modes in
+the effective invocation also fails before loading. Repeated `--orders` remains the only repeated
+option. The normalized report, inspection, and progress-log output paths must be pairwise distinct.
+The existing `app` Gradle `JavaExec` task named `dspFullDayAnalysis` and application plugin
+`SoftwareRenderer` main class remain unchanged.
 
 ## Explicit Non-Goals
 
@@ -478,8 +533,8 @@ main class unchanged.
 - Exception Station, incomplete prepared-line resolution, NS bag creation, MANUAL, or
   MANUAL_MERGE execution;
 - outbound dispatch transport, 32R, downstairs stacking, or trunker loading;
-- event-driven fast-forward, checkpointing, persistence/database storage, render-thread split, or
-  distributed/parallel simulation;
+- event-driven fast-forward, checkpointing, database state, application-wide logging, log rotation,
+  render-thread split, or distributed/parallel simulation;
 - mutating source data, writing reports without an explicit output path, or bundling production
   datasets in the repository.
 
@@ -1049,7 +1104,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 14 owns post-amendment regression
+No additional user verification is required for this step. Step 16 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1135,7 +1190,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 14 owns the post-change focused
+No additional user verification is required for this step. Step 16 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1294,7 +1349,7 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 14 owns the post-change focused
+No additional user verification is required for this step. Step 16 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
@@ -1490,7 +1545,7 @@ carrier barcode without modeling physical-carrier reuse.
 
 ### User verification
 
-No additional user verification is required for this step. Step 14 owns the post-change focused
+No additional user verification is required for this step. Step 16 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Normalize reused inbound tote identifiers`
@@ -1721,12 +1776,301 @@ configured capacity.
 
 ### User verification
 
-No additional user verification is required for this step. Step 14 owns the post-change focused
+No additional user verification is required for this step. Step 16 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Rate limit startup OSR overflow`
 
-## Step 14: Regression, External Dataset Run, Review, And Closure
+## Step 14: Add Strict JSON-Backed Full-Day Invocation
+
+This formal amendment was added after the first Step 13 external-data run. It makes a complete
+full-day invocation maintainable without removing or weakening the existing command-line contract.
+It is command configuration only: it does not move profile ownership, configure service-centre
+priorities, or change input ordering, runtime behavior, metrics, reporting, or simulation state.
+
+### Required reading for this step
+
+- the complete effective command and JSON contracts under Report And Inspection Contract;
+- `DspFullDayAnalysisCommandParser`, `DspFullDayAnalysisCommand`,
+  `DspFullDayAnalysisMain`, and `DspFullDayAnalysisCommandTest`;
+- `JsonLoaderSupport` only as the existing strict-Jackson analogue. Reuse its simple Jackson
+  binding approach, but do not reuse the 12N model or loader because full-day configuration has
+  different path resolution and merge semantics.
+
+### Required change surface
+
+Create package-private production types in `online.davisfamily.warehouse.sim.dsp.analysis`:
+
+- `DspFullDayAnalysisConfigJson`, the nullable raw Jackson binding record using `String`,
+  `List<String>`, boxed numeric/boolean values, and `BigDecimal inboundIntervalSeconds` so absence
+  remains distinguishable from zero or false;
+- `DspFullDayAnalysisConfigLoader`, the sole JSON read/bind boundary.
+
+Modify only:
+
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayAnalysisCommandParser.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayAnalysisCommandTest.java`.
+
+Create `docs/scheduler/dsp-full-day-analysis-config.example.json` as one valid directory-mode
+configuration with non-sensitive placeholder paths and every Step 14-supported property other than
+the mutually exclusive `orders` alternative. Do not modify `DspFullDayAnalysisCommand`, main,
+input loader, profile, runner, report/inspection types, Gradle task, runtime, scheduler, or domain
+code. Step 15 owns the `progressLog` and `progressIntervalSeconds` properties shown in the final
+contract; the Step 14 binding and example omit those two properties until Step 15 implements them.
+
+### Behavioral specification
+
+- Add singleton `--config=<json path>`. First scan the command line only far enough to validate and
+  locate that option; reject a duplicate, malformed, blank, nonexistent, or non-regular config path.
+  Its position must not affect the merged result.
+- `DspFullDayAnalysisConfigLoader` uses a private Jackson `ObjectMapper` configured to reject unknown
+  properties and duplicate JSON keys. It reads the complete UTF-8 regular file and returns only the
+  raw immutable binding record. A syntax, binding, duplicate-key, or I/O failure becomes an
+  `IllegalArgumentException` that identifies `--config` and retains the original cause.
+- Reject explicit JSON null for every present property, blank path/date strings, null/blank `orders`
+  entries, an empty `orders` array, both JSON order-input modes, and wrong JSON scalar/array types.
+  Use the existing parser's integer, decimal-seconds, date, path-kind, output-kind, and directory
+  expansion semantics after merging; do not create a second weaker validation path in the loader.
+- Resolve every configured path against the normalized absolute parent directory of the config file
+  when it is relative. Preserve an absolute configured path unchanged apart from normal
+  normalization. Do not apply config-relative resolution to command-line overrides.
+- Parse the remaining command-line options with the existing duplicate and repeated-option rules.
+  Merge by property: a command-line singleton replaces its configured value. `--overwrite` forces
+  true. When any command-line order-input option is present, discard both configured order fields
+  before applying the command-line order mode; reject command-line use of both modes as today.
+- Apply the existing defaults for fixed step, steps per batch, metric sample interval, and overwrite
+  only after merging. Then perform the existing required-field, exactly-one-order-mode, file,
+  directory, output, and numeric validation once and construct the unchanged
+  `DspFullDayAnalysisCommand`.
+- Preserve byte-for-byte-equivalent effective command values between a CLI-only invocation, a
+  config-only invocation, and a mixed invocation that supplies the same values. Configuration
+  source/path metadata does not enter the command, profile, runtime, metrics, or final report.
+
+Private raw-option representation, helper decomposition, and exact error wording remain
+discretionary provided each failure identifies whether it came from `--config` or a named effective
+option and no partially validated command is returned.
+
+### Decision-complete test contract
+
+Extend `DspFullDayAnalysisCommandTest` at the parser boundary to prove:
+
+- config-only input produces the same `DspFullDayAnalysisCommand` as the equivalent CLI-only input,
+  including directory expansion order and existing defaults;
+- a config path may occur first, middle, or last without changing the result;
+- relative product, order-directory, output, and inspection paths resolve from the config parent,
+  while a relative CLI output override remains relative to the process working directory;
+- CLI singleton overrides win, `--overwrite` forces a configured false value to true, and repeated
+  CLI `--orders` replaces rather than appends to configured directory or explicit-file input;
+- configured explicit `orders` retain exact array order and command-line directory mode can replace
+  them; one representative configured directory is expanded with the exact Step 9 rules;
+- separately reject duplicate/malformed/missing/non-file config paths, malformed JSON, duplicate
+  JSON keys, unknown properties, explicit null, wrong types, blank/empty values, both configured
+  order modes, absent effective required values, and invalid effective numeric/date/path values;
+- one representative invalid config invocation through `DspFullDayAnalysisMain.run` exits nonzero
+  without creating JSON or inspection output, proving main continues to enforce parser failure even
+  though main itself is unchanged.
+
+The tests must catch an implementation that silently ignores misspelled properties, accepts JSON
+duplicate keys, resolves paths from the process directory, appends two order sources, applies a
+default before an override, weakens current validation, or makes `--config` position-sensitive.
+
+### Expected output
+
+A complete full-day run can be maintained as one strict JSON document and invoked with one config
+argument, while existing CLI automation and deterministic input ordering remain compatible.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest
+```
+
+### User verification
+
+No additional user verification is required for this step. Step 16 owns regression and the
+config-driven external-data run.
+
+Proposed commit message: `Accept full-day analysis configuration`
+
+## Step 15: Add Compact Persistent Full-Day Progress Logging
+
+This formal amendment addresses the same external run's observability failure. Routine inspection
+currently builds and emits every unfinished logical and physical identity as one very long line;
+terminal scrollback retained only the tail of that line, which looked like service-centre progress
+but represented no processing event. This step adds a lightweight progress projection and a
+durable, flushed log without weakening the detailed final JSON/text evidence.
+
+### Required reading for this step
+
+- the complete Report And Inspection Contract and Step 14 effective configuration rules;
+- `DspFullDayAnalysisRunner`, `DspFullDayAnalysisMain`, `DspFullDayAnalysisCommandParser`,
+  `DspFullDayAnalysisCommand`, `DspFullDayReportFactory`, `DspFullDayInspectionSnapshot`, and
+  `DspFullDayInspectionFormatter`;
+- `DspFullDayAnalysisRunnerTest`, `DspFullDayAnalysisCommandTest`,
+  `DspFullDayInspectionFormatterTest`, and `DspFullDayReportJsonWriterTest`.
+
+### Required change surface
+
+Create production types:
+
+- `online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressSnapshot`;
+- `online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatter`;
+- package-private `online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayProgressOutput`.
+
+Create focused tests:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/report/DspFullDayProgressFormatterTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayProgressOutputTest.java`.
+
+Modify production only in:
+
+- `DspFullDayAnalysisConfigJson` and `DspFullDayAnalysisConfigLoader`;
+- `DspFullDayAnalysisCommandParser` and `DspFullDayAnalysisCommand`;
+- `DspFullDayAnalysisMain` and `DspFullDayAnalysisRunner`.
+
+Modify focused coverage only in `DspFullDayAnalysisRunnerTest`,
+`DspFullDayAnalysisCommandTest`, and, only where an assertion currently assumes routine full-detail
+console output, `DspFullDayInspectionFormatterTest`. Update the Step 14 example JSON with
+`progressLog` and `progressIntervalSeconds`.
+
+Do not modify `DspFullDayReportFactory`, `DspFullDayInspectionSnapshot`, the detailed inspection
+formatter's public/default output, final report schemas/writer, metrics collection, fixed-step
+driver, Gradle task, runtime/controllers, scheduler, lifecycle, routing, stations, P2P, or domain
+behavior. Do not add SLF4J/Log4j, an asynchronous logger, a background heartbeat thread, rotation,
+retention, renderer logging, or per-tote event logging.
+
+### Behavioral specification
+
+#### Command and configuration
+
+- Append `Optional<Path> progressLogPath` and `Duration progressInterval` to
+  `DspFullDayAnalysisCommand`. Keep the existing canonical validation style; both values are
+  required non-null, and the interval must be positive. Add no compatibility constructor because
+  this package-private record's callers are owned by the command tests and main path.
+- Add CLI options `--progress-log=<text path>` and
+  `--progress-interval-seconds=<positive integer>`. Extend strict JSON binding with optional
+  `progressLog` string and boxed integer `progressIntervalSeconds`. Apply the same source precedence,
+  path resolution, validation, and default-after-merge rules from Step 14. Default the interval to
+  300 simulated seconds and the log path to empty.
+- Require normalized report, inspection, and progress-log paths to be pairwise distinct. A progress
+  path must pass the existing output-kind/parent validation. Existing-file handling remains the
+  single `--overwrite` policy shared by all three outputs.
+
+#### Lightweight progress projection
+
+- `DspFullDayProgressSnapshot` is an immutable record containing exactly
+  `DspFullDayAnalysisRuntimeSnapshot runtime`, `String profileId`,
+  `String calibrationStatus`, `DspCompletionMilestone completionMilestone`, and
+  `DspDatasetLoadReport loadReport`. Its constructor validates non-null values and profile identity
+  equality with runtime metrics and defensively relies only on those immutable snapshots.
+- Add a static `from(DspFullDayAnalysisRuntimeSnapshot, DspFullDayLoadedInput,
+  DspUncalibratedFullDayProfile)` factory on that record. It must not call
+  `DspFullDayReportFactory.createInspectionSnapshot(...)`, scan scheduler order states or lifecycle
+  tote records, derive unfinished identity strings, or retain the loaded dataset/bag plan.
+- `DspFullDayProgressFormatter.describe(DspFullDayProgressSnapshot)` returns deterministic lines in
+  this exact section order: run/profile/calibration/milestone and state; clock and speed; OSR
+  occupancy/capacity/low-water/net flow and aggregate rates; one service-centre line in priority-
+  descending then ID order; one P2P line in configured metrics order; release; transport; station;
+  load counts; unsupported-work count; and total remaining sheet/tote/pack/bag counts.
+- Each service-centre line contains ID, priority, supply state, unfinished sheet/tote/pack/bag
+  counts, required/desired/owned/unmet line counts, completion time/outcome, and every block
+  category's blocked-unit count plus latest reason. It must not contain service-centre or global
+  unfinished identity strings. Routine formatting cost is bounded by service-centre/P2P/block
+  category counts rather than order/tote count.
+- Preserve `DspFullDayInspectionFormatter.describe(...)` as the detailed final formatter. Final JSON
+  and optional `--inspection-output` continue to contain exact unfinished identities. The runner no
+  longer uses the detailed formatter for routine console/progress milestones.
+
+#### Persistent output and runner lifecycle
+
+- `DspFullDayProgressOutput.open(PrintStream console, Optional<Path> progressLogPath,
+  boolean overwrite)` validates non-null arguments, creates only the configured parent directory,
+  and opens an optional UTF-8 file with `CREATE_NEW` when overwrite is false or
+  `CREATE`/`TRUNCATE_EXISTING` when true. Opening failure occurs before runtime construction. It
+  never closes the caller-owned console stream. Provide one package-private constructor accepting
+  the console and an owned optional `Writer` solely so focused tests can inject deterministic
+  write/flush/close failures; production construction must use `open(...)`.
+- `print(String milestone, List<String> lines)` writes the same header
+  `[dsp-full-day:<milestone>]` and lines to the console and optional file in that order, then flushes
+  both before returning. It rejects blank milestones/null lines and surfaces file write/flush
+  failures; it does not suppress them through `PrintWriter.checkError()` semantics. `close()` is
+  idempotent, flushes and closes only the optional file, and preserves already-written content after
+  normal failure or external process termination.
+- Extend the runner's primary `run(...)` with progress-log path and interval. Preserve existing
+  overloads by delegating with no log and the 300-second default. Open
+  `DspFullDayProgressOutput` before `runtimeFactory.create(...)`, and close it after runtime closure
+  in one outer `finally`/try-with-resources boundary. If runtime construction or execution throws
+  after the output opens, write one `[dsp-full-day:failure]` block containing exception class and
+  sanitized message, flush it, then rethrow the original failure; attach a logging failure as
+  suppressed rather than replacing the simulation failure.
+- Emit a start block after runtime construction. During fixed-step callbacks, emit one progress
+  block on the first completed fixed step at or beyond each configured simulated-time threshold;
+  advance the threshold before continuing so a step cannot duplicate a boundary. Continue emitting
+  one completion block when each centre first becomes complete. Emit one final compact block after
+  terminal metrics are finalized and before detailed JSON/text writing. A completion and interval
+  boundary on the same step may produce both differently labelled blocks.
+- Progress milestones use `progress=<ISO-8601 elapsed duration>` and
+  `completion=<service-centre-id>`. All progress generation and I/O stays on the calling simulation
+  thread. It must not alter fixed-step size/count, simulation time, controller ordering, scheduler
+  decisions, cutoff behavior, deterministic report values, or terminal detection. Logging wall time
+  remains part of achieved execution-speed measurement because it is real run cost.
+- A final JSON or detailed-inspection write refusal/failure is logged as failure and leaves the
+  flushed progress log available. With no configured progress path, console behavior remains the
+  same compact milestone stream and no file is created.
+
+Local buffering classes, private helper decomposition, and exact compact decimal formatting remain
+discretionary provided each block is deterministic, line-oriented, immediately flushed, and
+contains the specified facts without per-order/per-tote expansion.
+
+### Decision-complete test contract
+
+`DspFullDayProgressFormatterTest` constructs an immutable snapshot with two centres and two lines
+and asserts exact section order, priority ordering, required fields, deterministic repeated output,
+and aggregate remaining counts. Give each centre multiple fake unfinished identities in the loaded
+runtime fixtures and assert no order ID, physical tote ID, `unfinishedIdentities`, or pipe-delimited
+identity expansion enters progress output. Retain the detailed formatter test proving those exact
+identities remain in final inspection.
+
+`DspFullDayProgressOutputTest` proves console-only mirroring, byte-identical console/file blocks,
+UTF-8, immediate visibility before close, parent creation, default existing-file refusal, explicit
+overwrite/truncation, idempotent close, caller console remaining usable after close, and preserved
+already-flushed content when a later write/close fails. Representative invalid milestone and path
+collisions are covered at their owning output/parser boundaries rather than duplicated here.
+
+Extend `DspFullDayAnalysisCommandTest` to cover CLI-only, config-only, and mixed progress settings;
+the 300-second/no-file defaults; positive interval validation; progress path config-relative
+resolution; CLI override; duplicate option/property rejection; all three pairwise output-path
+collisions; and one existing-log/no-overwrite command run that exits nonzero without altering the
+file or creating final outputs.
+
+Extend `DspFullDayAnalysisRunnerTest` to prove start, configured interval, completion, final, and
+failure milestone order; first-step-at-or-after interval behavior across a batch containing several
+thresholds; no duplicate threshold; no post-terminal progress; flushed log evidence after an
+injected mid-run failure; runtime and output closure on every path; compact console output; and
+unchanged final report/detailed inspection values. The test must catch an implementation that logs
+only at batch boundaries, builds detailed identity inspection for progress, buffers until normal
+completion, replaces the original exception, or advances simulation to produce a log entry.
+
+### Expected output
+
+A long-running full-day process emits bounded, interpretable progress to the terminal and an
+optional durable UTF-8 log. A forced stop or runtime failure leaves the last completed progress
+block available, while final report and inspection retain exact diagnostic identities.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisRunnerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayProgressOutputTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionFormatterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriterTest
+```
+
+### User verification
+
+No additional user verification is required for this step. Step 16 owns regression and the
+config-driven external-data run.
+
+Proposed commit message: `Persist compact full-day progress`
+
+## Step 16: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, or 32R during
 closure.
@@ -1752,14 +2096,21 @@ Then run the complete suite:
 An external-data run is required before marking the feature verified. Because production data is
 not stored in the repository, the user supplies the actual CSV path, the order directory (or
 explicit JSON paths), and explicit unknown configuration values. For a complete operating day,
-run `:app:dspFullDayAnalysis` with `--orders-directory=<directory path>` and the remaining exact
-command-line contract in this plan, inspect the generated JSON and text, and confirm:
+create an external JSON configuration from the checked-in example, include a progress-log path and
+an appropriate progress interval, and invoke the installed application with only
+`--config=<json path>`. Do not commit the populated external configuration. Inspect the live
+terminal, durable progress log, generated JSON, and detailed text and confirm:
 
 - the entire supplied dataset is represented in load counts/exclusions;
 - initial OSR occupancy is at most the configured capacity; for the observed 1,315 startup-eligible
   manifests and 1,200-slot configuration, the first 1,200 are initially resident and all remaining
   115 are represented as admitted-after-startup or upstream waiting rather than omitted;
 - the report and inspection say `UNCALIBRATED` and `P2P_OUTPUT_CLOSED` prominently;
+- the initial progress block appears in both terminal and log, later blocks remain compact and
+  readable, simulated time and remaining counts advance, and no individual unfinished identity is
+  expanded in routine progress;
+- while the process is running, the progress file contains the latest flushed complete block; the
+  final compact block and detailed JSON/text appear on normal termination;
 - the run terminates cleanly at supported completion or exact hard cutoff;
 - OSR, inbound/outbound rates, centre outcomes, unfinished identities, line utilization, and block
   reasons are present and internally consistent;
@@ -1790,6 +2141,12 @@ class/method/control-flow evidence:
   occupancy history, and deterministic order;
 - JSON/text contain profile, calibration, milestone, config, load issues, outcomes, unfinished work,
   rates, occupancy, utilization, and blockers;
+- strict JSON invocation rejects unknown/duplicate properties, preserves CLI compatibility and
+  deterministic order input, resolves configured relative paths from the config file, and does not
+  move effective values or config-source metadata into runtime/domain ownership;
+- routine progress uses only the lightweight immutable progress projection, never constructs
+  detailed unfinished identities, is flushed to console/file at the specified milestones, and
+  cannot alter fixed-step execution or replace an original runtime failure;
 - synchronous headless evaluation does not change the threaded compatibility path or allow worker
   mutation;
 - reports are reproducible for identical input/profile/fake real-time source and output writing is
@@ -1820,8 +2177,9 @@ class/method/control-flow evidence:
 
 After focused/full tests, the external-data run, and architecture review are green:
 
-- mark this plan complete and verified and record actual external-run configuration separately from
-  the source dataset; never commit sensitive data paths or data;
+- mark this plan complete and verified and record the non-sensitive effective external-run
+  configuration separately from the source dataset; never commit sensitive paths, populated local
+  configuration, progress logs, or data;
 - update current programme state in `docs/scheduler/dsp-scheduler-implementation-plan.md`;
 - update `docs/codex-context.md` and only stale current-position/reading-order text in
   `docs/codex-instructions.md`;
@@ -1852,6 +2210,12 @@ Proposed commit message: `Complete full-day DSP analysis`
   without inventing completion for unfinished or deferred-domain work.
 - Immutable metrics and reports explain deadlines, occupancy/net flow, inbound/outbound rates,
   workload, block time, line utilization/throughput, outcomes, exclusions, and unfinished work.
+- A strict JSON file can provide the complete full-day invocation, with explicit command-line
+  overrides and deterministic config-relative path handling, while timetable/priority configuration
+  remains deferred.
+- Compact progress is emitted at bounded simulated-time and completion milestones and may be
+  mirrored to an immediately flushed persistent log; detailed unfinished identities remain in final
+  JSON/text rather than routine output.
 - Every output states that timing is `UNCALIBRATED` and completion means
   `P2P_OUTPUT_CLOSED`, not real dispatch or trunker loading.
 - 12N binding tolerates optional `productBarcodeLength` metadata while remaining strict for other
