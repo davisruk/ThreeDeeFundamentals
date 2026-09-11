@@ -99,17 +99,26 @@ class OsrInventoryBootstrapFactoryTest {
     }
 
     @Test
-    void shouldFailClearlyWhenInitialPreloadExceedsCapacity() {
+    void shouldBoundInitialPreloadAndReturnOrderedOverflow() {
         InboundToteManifest first = manifest("tote-1", "order-1", OrderType.FULL_PACK, "104", 1);
         InboundToteManifest second = manifest("tote-2", "order-2", OrderType.FULL_PACK, "108", 2);
-        LoadedDspData data = data(List.of(), List.of(first, second));
+        InboundToteManifest third = manifest("tote-3", "order-3", OrderType.FULL_PACK, "104", 3);
+        NotionalToteOrder firstEmpty = order("empty-104", OrderType.EMPTY, "104", 4);
+        NotionalToteOrder secondEmpty = order("empty-108", OrderType.EMPTY, "108", 5);
+        LoadedDspData data = data(List.of(firstEmpty, secondEmpty), List.of(first, second, third));
 
-        IllegalStateException failure = assertThrows(
-                IllegalStateException.class,
-                () -> factory.create(data, new OsrInventoryConfig(1, List.of("104", "108"))));
+        OsrBootstrapState state = factory.create(
+                data,
+                new OsrInventoryConfig(2, List.of("104", "108")));
 
-        assertTrue(failure.getMessage().contains("selected=2"));
-        assertTrue(failure.getMessage().contains("capacity=1"));
+        assertEquals(List.of(first, second), state.inventorySnapshot().storedTotes());
+        assertEquals(List.of(third.physicalToteId()), state.startupOverflowPhysicalToteIds());
+        assertEquals(2, state.inventorySnapshot().occupancy());
+        assertTrue(state.inventorySnapshot().full());
+        assertTrue(state.inventorySnapshot().departedTotes().isEmpty());
+        assertEquals(
+                List.of(firstEmpty.orderSheetKey(), secondEmpty.orderSheetKey()),
+                List.copyOf(state.authorizedEmptyOrderSheetKeys()));
         assertThrows(IllegalArgumentException.class,
                 () -> factory.create(null, OsrInventoryConfig.productionBaseline()));
         assertThrows(IllegalArgumentException.class, () -> factory.create(data, null));

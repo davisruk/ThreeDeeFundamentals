@@ -130,6 +130,92 @@ class DspServiceCentreSupplyFlowTest {
                 <= fixture.bootstrapState().inventorySnapshot().capacity());
     }
 
+    @Test
+    void shouldDrainStartupOverflowBeforeAuthorizingLaterCentres() {
+        InboundToteManifest startupAInitial = manifest(
+                "startup-a-initial", "sc-startup-a", OrderType.FULL_PACK, 0);
+        InboundToteManifest startupAOverflow = manifest(
+                "startup-a-overflow", "sc-startup-a", OrderType.ADAPTED, 1);
+        InboundToteManifest startupBInitial = manifest(
+                "startup-b-initial", "sc-startup-b", OrderType.FULL_PACK, 2);
+        InboundToteManifest startupBOverflow = manifest(
+                "startup-b-overflow", "sc-startup-b", OrderType.ADAPTED, 3);
+        InboundToteManifest later = manifest(
+                "later", "sc-later", OrderType.FULL_PACK, 4);
+        OrderSheetKey startupAEmpty = new OrderSheetKey("startup-a-empty", 1);
+        OrderSheetKey startupBEmpty = new OrderSheetKey("startup-b-empty", 1);
+        OrderSheetKey laterEmpty = new OrderSheetKey("later-empty", 1);
+        DspServiceCentreSupplyPlan plan = new DspServiceCentreSupplyPlan(
+                List.of(
+                        batch("sc-startup-a", 999, true,
+                                List.of(startupAOverflow, startupAInitial),
+                                Set.of(startupAEmpty)),
+                        batch("sc-startup-b", 998, true,
+                                List.of(startupBOverflow, startupBInitial),
+                                Set.of(startupBEmpty)),
+                        batch("sc-later", 997, false, List.of(later), Set.of(laterEmpty))),
+                List.of());
+        OsrInventoryConfig inventoryConfig = new OsrInventoryConfig(
+                2, List.of("sc-startup-a", "sc-startup-b"));
+        OsrPhysicalInventory inventory = new OsrPhysicalInventory(inventoryConfig);
+        inventory.storeAll(List.of(startupAInitial, startupBInitial));
+        OsrBootstrapState bootstrapState = new OsrBootstrapState(
+                inventory,
+                Set.of(startupAEmpty, startupBEmpty),
+                List.of(startupAOverflow.physicalToteId(), startupBOverflow.physicalToteId()));
+        DspServiceCentreSupplyCoordinator coordinator = new DspServiceCentreSupplyCoordinator(
+                plan,
+                new ServiceCentreSupplyConfig(0),
+                FixedIntervalInboundToteArrivalPolicy.peak(),
+                bootstrapState);
+
+        coordinator.advance(clockAtSeconds(0));
+        DspSupplySnapshot initial = coordinator.snapshot();
+        assertEquals("sc-startup-a", initial.activeInboundServiceCentreId().orElseThrow());
+        assertEquals(ServiceCentreAuthorizationState.AUTHORIZED,
+                serviceCentre(initial, "sc-startup-b").authorizationState());
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(initial, "startup-b-overflow").state());
+
+        coordinator.advance(clockAtSeconds(3));
+        DspSupplySnapshot blockedA = coordinator.snapshot();
+        assertEquals(PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY,
+                physicalTote(blockedA, "startup-a-overflow").state());
+        inventory.recordDeparture(startupAInitial.physicalToteId());
+        coordinator.advance(clockAtSeconds(3));
+        DspSupplySnapshot activeB = coordinator.snapshot();
+        assertStored(bootstrapState, "startup-a-overflow");
+        assertEquals("sc-startup-b", activeB.activeInboundServiceCentreId().orElseThrow());
+        assertEquals(Optional.of(Duration.ofSeconds(6)),
+                activeB.nextPhysicalAdmissionElapsedTime());
+        assertEquals(1, activeB.admittedAfterStartupCount());
+        assertEquals(PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(activeB, "startup-b-overflow").state());
+
+        coordinator.advance(clockAtSeconds(5));
+        assertEquals(PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(coordinator.snapshot(), "startup-b-overflow").state());
+        inventory.recordDeparture(startupAOverflow.physicalToteId());
+        coordinator.advance(clockAtSeconds(6));
+        DspSupplySnapshot laterHeld = coordinator.snapshot();
+        assertStored(bootstrapState, "startup-b-overflow");
+        assertTrue(laterHeld.activeInboundServiceCentreId().isEmpty());
+        assertEquals(ServiceCentreAuthorizationState.HELD_UPSTREAM,
+                serviceCentre(laterHeld, "sc-later").authorizationState());
+        assertEquals(2, laterHeld.admittedAfterStartupCount());
+
+        inventory.recordDeparture(startupBInitial.physicalToteId());
+        inventory.recordDeparture(startupBOverflow.physicalToteId());
+        coordinator.advance(clockAtSeconds(7));
+        DspSupplySnapshot laterAuthorized = coordinator.snapshot();
+        assertEquals("sc-later", laterAuthorized.activeInboundServiceCentreId().orElseThrow());
+        assertEquals(ServiceCentreAuthorizationState.AUTHORIZED,
+                serviceCentre(laterAuthorized, "sc-later").authorizationState());
+        assertEquals(Optional.of(Duration.ofSeconds(10)),
+                laterAuthorized.nextPhysicalAdmissionElapsedTime());
+    }
+
     private static Fixture fixture() {
         InboundToteManifest preA1 = manifest(
                 "pre-a-1", "sc-preloaded-a", OrderType.FULL_PACK, 0);
@@ -232,7 +318,13 @@ class DspServiceCentreSupplyFlowTest {
     }
 
     private static void assertStored(Fixture fixture, String physicalToteId) {
-        assertTrue(fixture.bootstrapState().inventorySnapshot()
+        assertStored(fixture.bootstrapState(), physicalToteId);
+    }
+
+    private static void assertStored(
+            OsrBootstrapState bootstrapState,
+            String physicalToteId) {
+        assertTrue(bootstrapState.inventorySnapshot()
                 .contains(new PhysicalToteId(physicalToteId)));
     }
 

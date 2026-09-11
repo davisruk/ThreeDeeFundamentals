@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -118,6 +120,164 @@ class DspServiceCentreSupplyCoordinatorBootstrapTest {
                 () -> snapshot.serviceCentres().getFirst().authorizedEmptyOrderSheetKeys().clear());
     }
 
+    @Test
+    void shouldRepresentPartialStartupResidenceAndAuthorizeAllStartupOverflow() {
+        PartialFixture fixture = partialFixture();
+        DspSupplySnapshot snapshot = fixture.coordinator().snapshot();
+        ServiceCentreSupplySnapshot startupA = serviceCentre(snapshot, "sc-startup-a");
+        ServiceCentreSupplySnapshot startupB = serviceCentre(snapshot, "sc-startup-b");
+
+        assertEquals("sc-startup-a", snapshot.activeInboundServiceCentreId().orElseThrow());
+        assertEquals(Optional.of(Duration.ZERO), startupA.authorizationElapsedTime());
+        assertEquals(Optional.of(Duration.ZERO), startupB.authorizationElapsedTime());
+        assertEquals(ServiceCentreAuthorizationState.AUTHORIZED, startupA.authorizationState());
+        assertEquals(ServiceCentreAuthorizationState.AUTHORIZED, startupB.authorizationState());
+        assertEquals(1, startupA.preloadedCount());
+        assertEquals(0, startupA.admittedAfterStartupCount());
+        assertEquals(1, startupA.upstreamWaitingCount());
+        assertEquals(0, startupB.preloadedCount());
+        assertEquals(0, startupB.admittedAfterStartupCount());
+        assertEquals(2, startupB.upstreamWaitingCount());
+        assertEquals(1, snapshot.osrOccupancy());
+        assertEquals(
+                PhysicalToteSupplyState.PRELOADED_IN_OSR,
+                physicalTote(snapshot, "startup-a-1").state());
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(snapshot, "startup-a-2").state());
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(snapshot, "startup-b-1").state());
+        assertEquals(
+                Set.of(fixture.startupAEmpty(), fixture.startupBEmpty()),
+                snapshot.authorizedEmptyOrderSheetKeys());
+        assertEquals(Optional.of(Duration.ofSeconds(3)),
+                snapshot.nextPhysicalAdmissionElapsedTime());
+    }
+
+    @Test
+    void shouldRejectInvalidStartupOverflowPartitions() {
+        PartialFixture fixture = partialFixture();
+
+        OsrBootstrapState unknownOverflow = bootstrapState(
+                fixture.inventoryConfig(),
+                List.of(fixture.startupAOne()),
+                Set.of(fixture.startupAEmpty(), fixture.startupBEmpty()),
+                List.of(fixture.startupATwo(), fixture.startupBOne(), fixture.startupBTwo(),
+                        manifest("unknown", "sc-startup-a", OrderType.FULL_PACK, 4)));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DspServiceCentreSupplyCoordinator(
+                        fixture.plan(),
+                        new ServiceCentreSupplyConfig(0),
+                        FixedIntervalInboundToteArrivalPolicy.peak(),
+                        unknownOverflow));
+
+        InboundToteManifest later = manifest("later-overflow", "sc-later", OrderType.FULL_PACK, 4);
+        DspServiceCentreSupplyPlan planWithLater = new DspServiceCentreSupplyPlan(
+                List.of(fixture.plan().batches().get(0), fixture.plan().batches().get(1),
+                        new ServiceCentreSupplyBatch(
+                                "sc-later", 1, 4, false, List.of(later), Set.of())),
+                List.of());
+        OsrBootstrapState nonStartupOverflow = bootstrapState(
+                fixture.inventoryConfig(),
+                List.of(fixture.startupAOne()),
+                Set.of(fixture.startupAEmpty(), fixture.startupBEmpty()),
+                List.of(fixture.startupATwo(), fixture.startupBOne(), fixture.startupBTwo(), later));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DspServiceCentreSupplyCoordinator(
+                        planWithLater,
+                        new ServiceCentreSupplyConfig(0),
+                        FixedIntervalInboundToteArrivalPolicy.peak(),
+                        nonStartupOverflow));
+
+        OsrBootstrapState omittedStartupManifest = bootstrapState(
+                fixture.inventoryConfig(),
+                List.of(fixture.startupAOne()),
+                Set.of(fixture.startupAEmpty(), fixture.startupBEmpty()),
+                List.of(fixture.startupATwo(), fixture.startupBOne()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new DspServiceCentreSupplyCoordinator(
+                        fixture.plan(),
+                        new ServiceCentreSupplyConfig(0),
+                        FixedIntervalInboundToteArrivalPolicy.peak(),
+                        omittedStartupManifest));
+    }
+
+    private static PartialFixture partialFixture() {
+        InboundToteManifest startupAOne = manifest(
+                "startup-a-1", "sc-startup-a", OrderType.FULL_PACK, 0);
+        InboundToteManifest startupATwo = manifest(
+                "startup-a-2", "sc-startup-a", OrderType.ADAPTED, 1);
+        InboundToteManifest startupBOne = manifest(
+                "startup-b-1", "sc-startup-b", OrderType.FULL_PACK, 2);
+        InboundToteManifest startupBTwo = manifest(
+                "startup-b-2", "sc-startup-b", OrderType.ASSOCIATED, 3);
+        OrderSheetKey startupAEmpty = new OrderSheetKey("startup-a-empty", 1);
+        OrderSheetKey startupBEmpty = new OrderSheetKey("startup-b-empty", 1);
+        OsrInventoryConfig inventoryConfig = new OsrInventoryConfig(
+                1, List.of("sc-startup-a", "sc-startup-b"));
+        DspServiceCentreSupplyPlan plan = new DspServiceCentreSupplyPlan(
+                List.of(
+                        new ServiceCentreSupplyBatch(
+                                "sc-startup-a", 2, 0, true,
+                                List.of(startupAOne, startupATwo), Set.of(startupAEmpty)),
+                        new ServiceCentreSupplyBatch(
+                                "sc-startup-b", 1, 2, true,
+                                List.of(startupBOne, startupBTwo), Set.of(startupBEmpty))),
+                List.of());
+        OsrBootstrapState bootstrapState = bootstrapState(
+                inventoryConfig,
+                List.of(startupAOne),
+                Set.of(startupAEmpty, startupBEmpty),
+                List.of(startupATwo, startupBOne, startupBTwo));
+        return new PartialFixture(
+                plan,
+                inventoryConfig,
+                new DspServiceCentreSupplyCoordinator(
+                        plan,
+                        new ServiceCentreSupplyConfig(0),
+                        FixedIntervalInboundToteArrivalPolicy.peak(),
+                        bootstrapState),
+                startupAOne,
+                startupATwo,
+                startupBOne,
+                startupBTwo,
+                startupAEmpty,
+                startupBEmpty);
+    }
+
+    private static OsrBootstrapState bootstrapState(
+            OsrInventoryConfig inventoryConfig,
+            List<InboundToteManifest> stored,
+            Set<OrderSheetKey> emptyKeys,
+            List<InboundToteManifest> overflow) {
+        OsrPhysicalInventory inventory = new OsrPhysicalInventory(inventoryConfig);
+        inventory.storeAll(stored);
+        return new OsrBootstrapState(
+                inventory,
+                emptyKeys,
+                overflow.stream().map(InboundToteManifest::physicalToteId).toList());
+    }
+
+    private static ServiceCentreSupplySnapshot serviceCentre(
+            DspSupplySnapshot snapshot,
+            String serviceCentreId) {
+        return snapshot.serviceCentres().stream()
+                .filter(candidate -> candidate.serviceCentreId().equals(serviceCentreId))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static PhysicalToteSupplySnapshot physicalTote(
+            DspSupplySnapshot snapshot,
+            String physicalToteId) {
+        return snapshot.serviceCentres().stream()
+                .flatMap(serviceCentre -> serviceCentre.physicalTotes().stream())
+                .filter(tote -> tote.physicalToteId().value().equals(physicalToteId))
+                .findFirst()
+                .orElseThrow();
+    }
+
     private static Fixture fixture() {
         NotionalToteOrder preloadedFull = order(
                 "preloaded-full", "sc-preloaded", OrderType.FULL_PACK, 999, 0);
@@ -202,6 +362,23 @@ class DspServiceCentreSupplyCoordinatorBootstrapTest {
 
     private static InboundToteManifest manifest(
             String physicalToteId,
+            String serviceCentreId,
+            OrderType orderType,
+            long sourceSequenceNumber) {
+        return manifest(
+                physicalToteId,
+                order(
+                        "order-" + physicalToteId,
+                        serviceCentreId,
+                        orderType,
+                        1,
+                        sourceSequenceNumber),
+                orderType,
+                sourceSequenceNumber);
+    }
+
+    private static InboundToteManifest manifest(
+            String physicalToteId,
             NotionalToteOrder order,
             OrderType orderType,
             long sourceSequenceNumber) {
@@ -234,5 +411,17 @@ class DspServiceCentreSupplyCoordinatorBootstrapTest {
             DspServiceCentreSupplyCoordinator coordinator,
             InboundToteManifest preloadedFull,
             NotionalToteOrder preloadedEmpty) {
+    }
+
+    private record PartialFixture(
+            DspServiceCentreSupplyPlan plan,
+            OsrInventoryConfig inventoryConfig,
+            DspServiceCentreSupplyCoordinator coordinator,
+            InboundToteManifest startupAOne,
+            InboundToteManifest startupATwo,
+            InboundToteManifest startupBOne,
+            InboundToteManifest startupBTwo,
+            OrderSheetKey startupAEmpty,
+            OrderSheetKey startupBEmpty) {
     }
 }

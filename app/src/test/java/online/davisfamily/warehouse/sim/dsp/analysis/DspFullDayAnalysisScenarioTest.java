@@ -28,12 +28,16 @@ import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriter;
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleState;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteConfig;
+import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
+import online.davisfamily.warehouse.sim.dsp.supply.PhysicalToteSupplyState;
+import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaConfig;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 
@@ -255,6 +259,67 @@ class DspFullDayAnalysisScenarioTest {
                 .containsAll(Set.of("shared-carrier", "dsp-reused-shared-carrier-2")));
     }
 
+    @Test
+    void shouldExecuteCapacityBoundedStartupOverflowThroughPublicRuntime(
+            @TempDir Path directory) throws Exception {
+        Files.createDirectories(directory);
+        DspUncalibratedFullDayProfile profile = boundedStartupOverflowProfile();
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        List<Path> messages = List.of(
+                writeMessage(directory, "01-first-104.json", message(
+                        "startup-first-104", "001", "05", "startup-first-104-tote", "104", "999",
+                        List.of(line("first-line", "05", "product-a", "pharmacy-104",
+                                "patient-104", "rx-startup-1", 1, 1)))),
+                writeMessage(directory, "02-first-108.json", message(
+                        "startup-first-108", "001", "05", "startup-first-108-tote", "108", "998",
+                        List.of(line("second-line", "05", "product-a", "pharmacy-108",
+                                "patient-108", "rx-startup-2", 1, 1)))),
+                writeMessage(directory, "03-overflow-104.json", message(
+                        "startup-overflow-104", "001", "05", "startup-overflow-104-tote", "104", "999",
+                        List.of(line("third-line", "05", "product-a", "pharmacy-104",
+                                "patient-104-overflow", "rx-startup-3", 1, 1)))));
+        DspFullDayLoadedInput input = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, messages), profile);
+
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var initial = runtime.snapshot();
+            assertEquals(2, initial.osr().occupancy());
+            assertEquals(2, initial.osr().capacity());
+            assertEquals(0, initial.supply().admittedAfterStartupCount());
+            assertEquals(1, initial.supply().serviceCentres().stream()
+                    .mapToInt(ServiceCentreSupplySnapshot::upstreamWaitingCount)
+                    .sum());
+            assertEquals(3, initial.supply().serviceCentres().stream()
+                    .mapToInt(ServiceCentreSupplySnapshot::physicalManifestCount)
+                    .sum());
+            assertEquals(
+                    PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                    initial.supply().serviceCentres().stream()
+                            .flatMap(serviceCentre -> serviceCentre.physicalTotes().stream())
+                            .filter(tote -> tote.physicalToteId().value()
+                                    .equals("startup-overflow-104-tote"))
+                            .findFirst()
+                            .orElseThrow()
+                            .state());
+        }
+
+        DspFullDayAnalysisReport report = new DspFullDayAnalysisRunner(
+                () -> 1_000_000L,
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))
+                .run(input, profile, directory.resolve("report.json"), Optional.empty(), false);
+        assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, report.state());
+        assertEquals(DspFullDayTerminationReason.ALL_SUPPORTED_WORK_COMPLETE,
+                report.terminationReason());
+        assertEquals(3, report.runtimeSnapshot().supply().serviceCentres().stream()
+                .mapToInt(ServiceCentreSupplySnapshot::physicalManifestCount)
+                .sum());
+        assertTrue(report.runtimeSnapshot().supply().osrOccupancy()
+                <= report.runtimeSnapshot().supply().osrCapacity());
+    }
+
     private static ScenarioRun runScenario(Path directory) throws IOException {
         Files.createDirectories(directory);
         DspUncalibratedFullDayProfile profile = profile();
@@ -438,6 +503,31 @@ class DspFullDayAnalysisScenarioTest {
                 baseline.maximumPacksPerBag(),
                 Duration.ofHours(1),
                 3,
+                baseline.metricSampleInterval(),
+                baseline.routeSpeedUnitsPerSecond(),
+                baseline.queueCapacities(),
+                baseline.thirdPartyAreaConfig(),
+                baseline.adaptingStorageConfig(),
+                baseline.adaptingBenchDefinitions(),
+                baseline.p2pPlaceholderDurations(),
+                baseline.p2pLineDefinitions(),
+                baseline.prlCountPerLine(),
+                baseline.timetable());
+    }
+
+    private static DspUncalibratedFullDayProfile boundedStartupOverflowProfile() {
+        DspUncalibratedFullDayProfile baseline = profile();
+        return new DspUncalibratedFullDayProfile(
+                baseline.operatingDate(),
+                new OsrInventoryConfig(2, List.of("104", "108")),
+                baseline.serviceCentreSupplyConfig(),
+                baseline.inboundToteArrivalPolicy(),
+                baseline.av02AllocationConfig(),
+                baseline.p2pElasticAllocationConfig(),
+                baseline.outboundToteConfig(),
+                baseline.maximumPacksPerBag(),
+                baseline.fixedStep(),
+                baseline.maximumStepsPerAdvance(),
                 baseline.metricSampleInterval(),
                 baseline.routeSpeedUnitsPerSecond(),
                 baseline.queueCapacities(),

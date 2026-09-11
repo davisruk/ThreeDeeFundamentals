@@ -62,6 +62,38 @@ class OsrBootstrapStateTest {
         assertEquals(Set.of(emptySheet), state.authorizedEmptyOrderSheetKeys());
     }
 
+    @Test
+    void shouldExposeImmutableOrderedStartupOverflowIds() {
+        OsrPhysicalInventory inventory = inventory();
+        List<PhysicalToteId> overflowIds = new java.util.ArrayList<>(List.of(
+                new PhysicalToteId("overflow-2"),
+                new PhysicalToteId("overflow-3")));
+
+        OsrBootstrapState state = new OsrBootstrapState(inventory, Set.of(), overflowIds);
+        overflowIds.clear();
+
+        assertEquals(
+                List.of(new PhysicalToteId("overflow-2"), new PhysicalToteId("overflow-3")),
+                state.startupOverflowPhysicalToteIds());
+        assertThrows(UnsupportedOperationException.class,
+                () -> state.startupOverflowPhysicalToteIds().clear());
+        assertEquals(List.of(), new OsrBootstrapState(inventory, Set.of())
+                .startupOverflowPhysicalToteIds());
+        assertThrows(IllegalArgumentException.class,
+                () -> new OsrBootstrapState(inventory, Set.of(), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new OsrBootstrapState(
+                        inventory,
+                        Set.of(),
+                        java.util.Arrays.asList(new PhysicalToteId("duplicate"),
+                                new PhysicalToteId("duplicate"))));
+        assertThrows(IllegalArgumentException.class,
+                () -> new OsrBootstrapState(
+                        inventory,
+                        Set.of(),
+                        java.util.Arrays.asList((PhysicalToteId) null)));
+    }
+
     private static OsrPhysicalInventory inventory() {
         return new OsrPhysicalInventory(new OsrInventoryConfig(3, List.of("104", "108")));
     }

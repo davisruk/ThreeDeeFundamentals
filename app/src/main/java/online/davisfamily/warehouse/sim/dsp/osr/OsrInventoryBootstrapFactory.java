@@ -1,5 +1,6 @@
 package online.davisfamily.warehouse.sim.dsp.osr;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -8,6 +9,7 @@ import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
 public final class OsrInventoryBootstrapFactory {
 
@@ -24,11 +26,26 @@ public final class OsrInventoryBootstrapFactory {
         List<InboundToteManifest> preloadManifests = data.inboundToteManifests().stream()
                 .filter(manifest -> preloadServiceCentreIds.contains(manifest.serviceCentreId()))
                 .toList();
-        if (preloadManifests.size() > config.capacity()) {
-            throw new IllegalStateException(
-                    "OSR initial preload exceeds capacity: selected=" + preloadManifests.size()
-                            + ", capacity=" + config.capacity());
+
+        Set<PhysicalToteId> selectedPhysicalToteIds = new LinkedHashSet<>();
+        for (InboundToteManifest manifest : preloadManifests) {
+            if (manifest == null) {
+                throw new IllegalArgumentException("preload manifests must not contain null");
+            }
+            if (!selectedPhysicalToteIds.add(manifest.physicalToteId())) {
+                throw new IllegalArgumentException(
+                        "Duplicate startup preload physical tote ID: "
+                                + manifest.physicalToteId().value());
+            }
         }
+
+        int initialCount = Math.min(preloadManifests.size(), config.capacity());
+        List<InboundToteManifest> initialManifests = new ArrayList<>(
+                preloadManifests.subList(0, initialCount));
+        List<PhysicalToteId> overflowPhysicalToteIds =
+                preloadManifests.subList(initialCount, preloadManifests.size()).stream()
+                        .map(InboundToteManifest::physicalToteId)
+                        .toList();
 
         Set<OrderSheetKey> authorizedEmptyOrderSheetKeys = new LinkedHashSet<>();
         data.orders().stream()
@@ -38,7 +55,10 @@ public final class OsrInventoryBootstrapFactory {
                 .forEach(authorizedEmptyOrderSheetKeys::add);
 
         OsrPhysicalInventory inventory = new OsrPhysicalInventory(config);
-        inventory.storeAll(preloadManifests);
-        return new OsrBootstrapState(inventory, authorizedEmptyOrderSheetKeys);
+        inventory.storeAll(initialManifests);
+        return new OsrBootstrapState(
+                inventory,
+                authorizedEmptyOrderSheetKeys,
+                overflowPhysicalToteIds);
     }
 }

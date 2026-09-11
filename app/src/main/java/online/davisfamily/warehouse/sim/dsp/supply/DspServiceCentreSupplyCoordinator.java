@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.supply;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,6 +29,8 @@ public final class DspServiceCentreSupplyCoordinator {
     private final Map<PhysicalToteId, PhysicalToteSupplyState> physicalToteStates =
             new LinkedHashMap<>();
     private final Set<OrderSheetKey> authorizedEmptyOrderSheetKeys = new LinkedHashSet<>();
+    private Set<PhysicalToteId> initiallyPreloadedPhysicalToteIds = Set.of();
+    private Set<PhysicalToteId> startupOverflowPhysicalToteIds = Set.of();
 
     private long admittedAfterStartupCount;
     private String activeInboundServiceCentreId;
@@ -139,7 +142,7 @@ public final class DspServiceCentreSupplyCoordinator {
         OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
         InboundToteManifest nextManifest = nextPendingManifest(activeBatch, inventorySnapshot);
         if (nextManifest == null) {
-            completeActiveBatch(activeBatch);
+            completeActiveBatch(activeBatch, elapsedSimulationTime);
             return;
         }
         if (nextPhysicalAdmissionElapsedTime == null) {
@@ -165,7 +168,7 @@ public final class DspServiceCentreSupplyCoordinator {
             inventorySnapshot = bootstrapState.inventorySnapshot();
             nextManifest = nextPendingManifest(activeBatch, inventorySnapshot);
             if (nextManifest == null) {
-                completeActiveBatch(activeBatch);
+                completeActiveBatch(activeBatch, elapsedSimulationTime);
                 return;
             }
             Duration scheduledDueTime = nextPhysicalAdmissionElapsedTime;
@@ -185,7 +188,7 @@ public final class DspServiceCentreSupplyCoordinator {
                     activeBatch,
                     inventorySnapshot);
             if (followingManifest == null) {
-                completeActiveBatch(activeBatch);
+                completeActiveBatch(activeBatch, elapsedSimulationTime);
                 return;
             }
             nextPhysicalAdmissionElapsedTime = scheduledDueTime.plus(
@@ -200,7 +203,7 @@ public final class DspServiceCentreSupplyCoordinator {
                 activeBatch,
                 bootstrapState.inventorySnapshot());
         if (followingManifest == null) {
-            completeActiveBatch(activeBatch);
+            completeActiveBatch(activeBatch, elapsedSimulationTime);
             return;
         }
         nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(
@@ -237,12 +240,42 @@ public final class DspServiceCentreSupplyCoordinator {
                 .orElse(null);
     }
 
-    private void completeActiveBatch(ServiceCentreSupplyBatch batch) {
-        authorizationStates.put(
-                batch.serviceCentreId(),
-                ServiceCentreAuthorizationState.SUPPLY_COMPLETE);
+    private void completeActiveBatch(
+            ServiceCentreSupplyBatch batch,
+            Duration elapsedSimulationTime) {
+        if (batch.preloadedAtStart()) {
+            authorizationStates.put(
+                    batch.serviceCentreId(),
+                    ServiceCentreAuthorizationState.PRELOADED);
+        } else {
+            authorizationStates.put(
+                    batch.serviceCentreId(),
+                    ServiceCentreAuthorizationState.SUPPLY_COMPLETE);
+        }
         activeInboundServiceCentreId = null;
         nextPhysicalAdmissionElapsedTime = null;
+        if (batch.preloadedAtStart()) {
+            activateNextStartupOverflowBatch(elapsedSimulationTime);
+        }
+    }
+
+    private void activateNextStartupOverflowBatch(Duration elapsedSimulationTime) {
+        OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
+        for (ServiceCentreSupplyBatch candidate : plan.batches()) {
+            if (!candidate.preloadedAtStart()
+                    || authorizationStates.get(candidate.serviceCentreId())
+                            != ServiceCentreAuthorizationState.AUTHORIZED) {
+                continue;
+            }
+            InboundToteManifest nextManifest = nextPendingManifest(candidate, inventorySnapshot);
+            if (nextManifest == null) {
+                continue;
+            }
+            activeInboundServiceCentreId = candidate.serviceCentreId();
+            nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(
+                    positiveArrivalInterval(nextManifest));
+            return;
+        }
     }
 
     private Duration positiveArrivalInterval(InboundToteManifest nextManifest) {
@@ -266,12 +299,15 @@ public final class DspServiceCentreSupplyCoordinator {
             List<PhysicalToteSupplySnapshot> physicalToteSnapshots = batch.physicalManifests().stream()
                     .map(manifest -> physicalToteSnapshot(batch, manifest, inventorySnapshot))
                     .toList();
-            int preloadedCount = batch.preloadedAtStart() ? physicalToteSnapshots.size() : 0;
-            int admittedCount = batch.preloadedAtStart()
-                    ? 0
-                    : (int) physicalToteSnapshots.stream()
-                            .filter(this::isAdmittedAfterStartup)
-                            .count();
+            int preloadedCount = (int) physicalToteSnapshots.stream()
+                    .filter(tote -> initiallyPreloadedPhysicalToteIds.contains(
+                            tote.physicalToteId()))
+                    .count();
+            int admittedCount = (int) physicalToteSnapshots.stream()
+                    .filter(tote -> !initiallyPreloadedPhysicalToteIds.contains(
+                            tote.physicalToteId()))
+                    .filter(this::isAdmittedAfterStartup)
+                    .count();
             int upstreamWaitingCount = (int) physicalToteSnapshots.stream()
                     .filter(this::isUpstreamWaiting)
                     .count();
@@ -319,59 +355,72 @@ public final class DspServiceCentreSupplyCoordinator {
 
     private void initializeFromBootstrap() {
         OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
-        Set<PhysicalToteId> expectedPreloadedPhysicalToteIds = new LinkedHashSet<>();
+        Set<PhysicalToteId> planPhysicalToteIds = new LinkedHashSet<>();
+        Map<PhysicalToteId, InboundToteManifest> manifestsByPhysicalToteId =
+                new LinkedHashMap<>();
+        Map<PhysicalToteId, Boolean> startupMembershipByPhysicalToteId = new LinkedHashMap<>();
+        Set<PhysicalToteId> expectedInitialPhysicalToteIds = new LinkedHashSet<>();
+        Set<PhysicalToteId> expectedOverflowPhysicalToteIds = new LinkedHashSet<>(
+                bootstrapState.startupOverflowPhysicalToteIds());
         Set<OrderSheetKey> expectedAuthorizedEmptyKeys = new LinkedHashSet<>();
 
         for (ServiceCentreSupplyBatch batch : plan.batches()) {
-            authorizationStates.put(
-                    batch.serviceCentreId(),
-                    batch.preloadedAtStart()
-                            ? ServiceCentreAuthorizationState.PRELOADED
-                            : ServiceCentreAuthorizationState.HELD_UPSTREAM);
-            authorizationElapsedTimes.put(
-                    batch.serviceCentreId(),
-                    batch.preloadedAtStart()
-                            ? Optional.of(Duration.ZERO)
-                            : Optional.empty());
             if (batch.preloadedAtStart()) {
                 expectedAuthorizedEmptyKeys.addAll(batch.emptyOrderSheetKeys());
-                for (InboundToteManifest manifest : batch.physicalManifests()) {
-                    if (!expectedPreloadedPhysicalToteIds.add(manifest.physicalToteId())) {
-                        throw new IllegalArgumentException(
-                                "Duplicate preloaded physical tote ID: "
-                                        + manifest.physicalToteId().value());
-                    }
-                    if (inventorySnapshot.hasDeparted(manifest.physicalToteId())
-                            || !inventorySnapshot.contains(manifest.physicalToteId())) {
-                        throw new IllegalArgumentException(
-                                "Preloaded physical tote is not currently stored in OSR: "
-                                        + manifest.physicalToteId().value());
-                    }
-                    physicalToteStates.put(
-                            manifest.physicalToteId(),
-                            PhysicalToteSupplyState.PRELOADED_IN_OSR);
+            }
+            for (InboundToteManifest manifest : batch.physicalManifests()) {
+                PhysicalToteId physicalToteId = manifest.physicalToteId();
+                if (!planPhysicalToteIds.add(physicalToteId)) {
+                    throw new IllegalArgumentException(
+                            "Duplicate physical tote ID in supply plan: "
+                                    + physicalToteId.value());
                 }
-            } else {
-                for (InboundToteManifest manifest : batch.physicalManifests()) {
-                    if (inventorySnapshot.contains(manifest.physicalToteId())
-                            || inventorySnapshot.hasDeparted(manifest.physicalToteId())) {
-                        throw new IllegalArgumentException(
-                                "Post-start physical tote is already in OSR history: "
-                                        + manifest.physicalToteId().value());
+                manifestsByPhysicalToteId.put(physicalToteId, manifest);
+                startupMembershipByPhysicalToteId.put(
+                        physicalToteId,
+                        batch.preloadedAtStart());
+
+                boolean stored = inventorySnapshot.contains(physicalToteId);
+                boolean departed = inventorySnapshot.hasDeparted(physicalToteId);
+                if (batch.preloadedAtStart()) {
+                    if (expectedOverflowPhysicalToteIds.contains(physicalToteId)) {
+                        if (stored || departed) {
+                            throw new IllegalArgumentException(
+                                    "Startup overflow physical tote is already in OSR history: "
+                                            + physicalToteId.value());
+                        }
+                    } else {
+                        if (departed || !stored) {
+                            throw new IllegalArgumentException(
+                                    "Preloaded physical tote is not currently stored in OSR: "
+                                            + physicalToteId.value());
+                        }
+                        expectedInitialPhysicalToteIds.add(physicalToteId);
                     }
-                    if (physicalToteStates.put(
-                            manifest.physicalToteId(),
-                            PhysicalToteSupplyState.HELD_UPSTREAM) != null) {
-                        throw new IllegalArgumentException(
-                                "Duplicate physical tote ID in supply plan: "
-                                        + manifest.physicalToteId().value());
-                    }
+                } else if (stored || departed) {
+                    throw new IllegalArgumentException(
+                            "Post-start physical tote is already in OSR history: "
+                                    + physicalToteId.value());
                 }
             }
         }
 
+        for (PhysicalToteId overflowPhysicalToteId : expectedOverflowPhysicalToteIds) {
+            InboundToteManifest manifest = manifestsByPhysicalToteId.get(overflowPhysicalToteId);
+            if (manifest == null) {
+                throw new IllegalArgumentException(
+                        "Startup overflow physical tote is not in the supply plan: "
+                                + overflowPhysicalToteId.value());
+            }
+            if (!startupMembershipByPhysicalToteId.get(overflowPhysicalToteId)) {
+                throw new IllegalArgumentException(
+                        "Startup overflow physical tote belongs to a non-startup batch: "
+                                + overflowPhysicalToteId.value());
+            }
+        }
+
         for (InboundToteManifest storedManifest : inventorySnapshot.storedTotes()) {
-            if (!expectedPreloadedPhysicalToteIds.contains(storedManifest.physicalToteId())) {
+            if (!expectedInitialPhysicalToteIds.contains(storedManifest.physicalToteId())) {
                 throw new IllegalArgumentException(
                         "Bootstrap OSR inventory contains a manifest outside the preload plan: "
                                 + storedManifest.physicalToteId().value());
@@ -385,7 +434,43 @@ public final class DspServiceCentreSupplyCoordinator {
             throw new IllegalArgumentException(
                     "Bootstrap EMPTY authorization does not match preloaded supply batches");
         }
+
+        initiallyPreloadedPhysicalToteIds = Collections.unmodifiableSet(
+                new LinkedHashSet<>(expectedInitialPhysicalToteIds));
+        startupOverflowPhysicalToteIds = Collections.unmodifiableSet(
+                new LinkedHashSet<>(expectedOverflowPhysicalToteIds));
+        for (ServiceCentreSupplyBatch batch : plan.batches()) {
+            boolean hasOverflow = batch.physicalManifests().stream()
+                    .map(InboundToteManifest::physicalToteId)
+                    .anyMatch(startupOverflowPhysicalToteIds::contains);
+            authorizationStates.put(
+                    batch.serviceCentreId(),
+                    batch.preloadedAtStart()
+                            ? (hasOverflow
+                                    ? ServiceCentreAuthorizationState.AUTHORIZED
+                                    : ServiceCentreAuthorizationState.PRELOADED)
+                            : ServiceCentreAuthorizationState.HELD_UPSTREAM);
+            authorizationElapsedTimes.put(
+                    batch.serviceCentreId(),
+                    batch.preloadedAtStart()
+                            ? Optional.of(Duration.ZERO)
+                            : Optional.empty());
+            for (InboundToteManifest manifest : batch.physicalManifests()) {
+                PhysicalToteId physicalToteId = manifest.physicalToteId();
+                PhysicalToteSupplyState state;
+                if (initiallyPreloadedPhysicalToteIds.contains(physicalToteId)) {
+                    state = PhysicalToteSupplyState.PRELOADED_IN_OSR;
+                } else if (startupOverflowPhysicalToteIds.contains(physicalToteId)) {
+                    state = PhysicalToteSupplyState.AUTHORIZED_WAITING;
+                } else {
+                    state = PhysicalToteSupplyState.HELD_UPSTREAM;
+                }
+                physicalToteStates.put(physicalToteId, state);
+            }
+        }
         authorizedEmptyOrderSheetKeys.addAll(bootstrapState.authorizedEmptyOrderSheetKeys());
+
+        activateNextStartupOverflowBatch(Duration.ZERO);
     }
 
     private PhysicalToteSupplySnapshot physicalToteSnapshot(
@@ -396,7 +481,7 @@ public final class DspServiceCentreSupplyCoordinator {
         if (inventorySnapshot.hasDeparted(manifest.physicalToteId())) {
             state = PhysicalToteSupplyState.DEPARTED_FROM_OSR;
         } else if (inventorySnapshot.contains(manifest.physicalToteId())) {
-            state = batch.preloadedAtStart()
+            state = initiallyPreloadedPhysicalToteIds.contains(manifest.physicalToteId())
                     ? PhysicalToteSupplyState.PRELOADED_IN_OSR
                     : PhysicalToteSupplyState.STORED_IN_OSR;
         }

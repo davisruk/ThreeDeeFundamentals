@@ -184,6 +184,64 @@ class DspRateLimitedInboundSupplyTest {
                 physicalTote(fixture.coordinator().snapshot(), "adapted-2").state());
     }
 
+    @Test
+    void shouldRateLimitAndBlockStartupOverflowWithoutReclassifyingIt() {
+        StartupFixture fixture = startupOverflowFixture();
+
+        DspSupplySnapshot initial = fixture.coordinator().snapshot();
+        assertEquals("sc-startup", initial.activeInboundServiceCentreId().orElseThrow());
+        assertEquals(Optional.of(Duration.ofSeconds(3)),
+                initial.nextPhysicalAdmissionElapsedTime());
+        assertEquals(2, serviceCentre(initial, "sc-startup").preloadedCount());
+        assertEquals(2, serviceCentre(initial, "sc-startup").upstreamWaitingCount());
+
+        fixture.coordinator().advance(clockAtSeconds(0));
+        fixture.coordinator().advance(clockAtSeconds(2));
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(fixture.coordinator().snapshot(), "startup-3").state());
+
+        fixture.coordinator().advance(clockAtSeconds(3));
+        DspSupplySnapshot blocked = fixture.coordinator().snapshot();
+        assertEquals(
+                PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY,
+                physicalTote(blocked, "startup-3").state());
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(blocked, "startup-4").state());
+        assertEquals(0, blocked.admittedAfterStartupCount());
+
+        fixture.bootstrapState().inventory().recordDeparture(new PhysicalToteId("startup-1"));
+        fixture.coordinator().advance(clockAtSeconds(3));
+        DspSupplySnapshot resumed = fixture.coordinator().snapshot();
+        assertEquals(
+                PhysicalToteSupplyState.STORED_IN_OSR,
+                physicalTote(resumed, "startup-3").state());
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(resumed, "startup-4").state());
+        assertEquals(1, resumed.admittedAfterStartupCount());
+        assertEquals(Optional.of(Duration.ofSeconds(6)),
+                resumed.nextPhysicalAdmissionElapsedTime());
+
+        fixture.coordinator().advance(clockAtSeconds(3));
+        assertEquals(resumed, fixture.coordinator().snapshot());
+
+        fixture.bootstrapState().inventory().recordDeparture(new PhysicalToteId("startup-2"));
+        fixture.coordinator().advance(clockAtSeconds(6));
+        DspSupplySnapshot completed = fixture.coordinator().snapshot();
+        assertEquals(
+                PhysicalToteSupplyState.STORED_IN_OSR,
+                physicalTote(completed, "startup-4").state());
+        assertEquals(2, completed.admittedAfterStartupCount());
+        assertEquals(ServiceCentreAuthorizationState.PRELOADED,
+                serviceCentre(completed, "sc-startup").authorizationState());
+        assertTrue(completed.activeInboundServiceCentreId().isEmpty());
+        assertEquals(Optional.empty(), completed.nextPhysicalAdmissionElapsedTime());
+        assertEquals(2, serviceCentre(completed, "sc-startup").preloadedCount());
+        assertEquals(2, serviceCentre(completed, "sc-startup").admittedAfterStartupCount());
+    }
+
     private static Fixture fixture(
             int capacity,
             List<InboundToteManifest> laterManifests) {
@@ -308,5 +366,38 @@ class DspRateLimitedInboundSupplyTest {
             OsrBootstrapState bootstrapState,
             List<InboundToteManifest> laterManifests,
             OrderSheetKey laterEmptyKey) {
+    }
+
+    private static StartupFixture startupOverflowFixture() {
+        List<InboundToteManifest> manifests = List.of(
+                manifest("startup-3", "sc-startup", OrderType.ADAPTED, 2),
+                manifest("startup-1", "sc-startup", OrderType.FULL_PACK, 0),
+                manifest("startup-2", "sc-startup", OrderType.FULL_PACK, 1),
+                manifest("startup-4", "sc-startup", OrderType.ASSOCIATED, 3));
+        OrderSheetKey empty = new OrderSheetKey("startup-empty", 1);
+        OsrInventoryConfig inventoryConfig = new OsrInventoryConfig(
+                2, List.of("sc-startup"));
+        DspServiceCentreSupplyPlan plan = new DspServiceCentreSupplyPlan(
+                List.of(new ServiceCentreSupplyBatch(
+                        "sc-startup", 999, 0, true, manifests, Set.of(empty))),
+                List.of());
+        OsrPhysicalInventory inventory = new OsrPhysicalInventory(inventoryConfig);
+        inventory.storeAll(List.of(manifests.get(1), manifests.get(2)));
+        OsrBootstrapState bootstrapState = new OsrBootstrapState(
+                inventory,
+                Set.of(empty),
+                List.of(manifests.get(0).physicalToteId(), manifests.get(3).physicalToteId()));
+        return new StartupFixture(
+                new DspServiceCentreSupplyCoordinator(
+                        plan,
+                        new ServiceCentreSupplyConfig(0),
+                        FixedIntervalInboundToteArrivalPolicy.peak(),
+                        bootstrapState),
+                bootstrapState);
+    }
+
+    private record StartupFixture(
+            DspServiceCentreSupplyCoordinator coordinator,
+            OsrBootstrapState bootstrapState) {
     }
 }

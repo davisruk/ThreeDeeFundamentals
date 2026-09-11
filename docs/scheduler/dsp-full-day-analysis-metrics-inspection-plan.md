@@ -2,13 +2,14 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: active. Steps 1-11 are implemented and committed through `b1136c4`, and the focused
-regression and complete Gradle suite are green. Step 11 added the deployed 12N line-type code `03`
-mapping and full-day-only unresolved Third Party product projection required by the preceding
-external-data run. The next external-data attempt exposed production reuse of inbound carrier
-barcodes across distinct DSP journeys. Step 12 deterministically substitutes a unique simulation ID
-for each later occurrence while preserving the original barcode in the load report. Step 13 owns
-final regression, external verification, review, and closure.
+Status: active. Steps 1-12 are implemented and committed through `a3a0b3b`. Step 11 added the
+deployed 12N line-type code `03` mapping and full-day-only unresolved Third Party product projection.
+Step 12 deterministically substitutes a unique simulation ID for each later occurrence of a reused
+inbound carrier barcode while preserving the original barcode in the load report. The next
+external-data attempt exposed 1,315 startup-eligible physical manifests against the configured
+1,200-slot OSR. Step 13 replaces the invalid all-or-fail preload assumption with a capacity-bounded
+deterministic preload whose overflow enters through normal rate-limited supply. Step 14 owns final
+regression, external verification, review, and closure.
 
 ## Purpose
 
@@ -64,6 +65,9 @@ selected step's change surface.
 - `FixedStepExecutionDriver` remains the generic execution mechanism. Headless acceleration uses
   repeated bounded fixed steps, never one large world delta.
 - `DspServiceCentreSupplyCoordinator` owns priority-ordered, low-water, rate-limited supply.
+- `OsrPhysicalInventory` remains the hard physical-capacity authority. Startup selection may fill
+  but never exceed it; startup-eligible overflow remains upstream and uses the supply coordinator's
+  existing timed admission and capacity-blocking semantics.
 - `DspOperationalReleaseRuntimeFactory.createElasticWithAv02(...)` remains the one OSR/AV02
   operational ranking and command-application boundary.
 - Every physical route uses launch hydration, common warehouse transport, terminal arrival,
@@ -1045,7 +1049,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 13 owns post-amendment regression
+No additional user verification is required for this step. Step 14 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1131,7 +1135,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 13 owns the post-change focused
+No additional user verification is required for this step. Step 14 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1290,7 +1294,7 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 13 owns the post-change focused
+No additional user verification is required for this step. Step 14 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
@@ -1486,12 +1490,243 @@ carrier barcode without modeling physical-carrier reuse.
 
 ### User verification
 
-No additional user verification is required for this step. Step 13 owns the post-change focused
+No additional user verification is required for this step. Step 14 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Normalize reused inbound tote identifiers`
 
-## Step 13: Regression, External Dataset Run, Review, And Closure
+## Step 13: Bound Startup OSR Preload And Rate-Limit Its Overflow
+
+This is a formal plan amendment added after the next external-data attempt. The production day has
+1,315 physical manifests for configured startup service centres `104` and `108`, while the OSR
+capacity is 1,200. The existing bootstrap fails before simulation because it assumes every manifest
+for those centres is already resident at 06:00. The revised model keeps the first capacity-bounded
+subset resident and treats the deterministic remainder as already-authorized startup supply waiting
+upstream. No manifest is omitted, and OSR capacity is never relaxed.
+
+This amendment changes the earlier OSR-plan assumption that an over-capacity startup selection must
+fail atomically. It does not reinterpret the configured 1,200 capacity, increase capacity to fit one
+dataset, or authorize later service centres early. Startup centres remain logically authorized at
+elapsed zero; only their excess physical manifests arrive after startup.
+
+### Required reading for this step
+
+- `docs/scheduler/dsp-osr-physical-inventory-plan.md`, especially its startup ordering, atomic
+  inventory mutation, physical identity, and EMPTY authorization contracts;
+- `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`, especially startup-centre state,
+  ADAPTED-first ordering, due-time, capacity-block, recovery, and snapshot-count contracts;
+- `OsrInventoryBootstrapFactory`, `OsrBootstrapState`, `OsrPhysicalInventory`, and
+  `OsrInventorySnapshot`;
+- `DspServiceCentreSupplyPlanFactory`, `DspServiceCentreSupplyPlan`,
+  `ServiceCentreSupplyBatch`, `DspServiceCentreSupplyCoordinator`,
+  `ServiceCentreAuthorizationState`, `PhysicalToteSupplyState`, and their snapshot records;
+- the OSR/supply construction in `DspFullDayAnalysisRuntimeFactory` and the exact focused tests
+  named below.
+
+### Required change surface
+
+Modify production in:
+
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/osr/OsrBootstrapState.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/osr/OsrInventoryBootstrapFactory.java`;
+- `app/src/main/java/online/davisfamily/warehouse/sim/dsp/supply/DspServiceCentreSupplyCoordinator.java`.
+
+Modify focused coverage in:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/osr/OsrBootstrapStateTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/osr/OsrInventoryBootstrapFactoryTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/osr/DspOsrPhysicalInventoryScenarioTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/supply/DspServiceCentreSupplyCoordinatorBootstrapTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/supply/DspRateLimitedInboundSupplyTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/supply/DspServiceCentreSupplyFlowTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/DspFullDayAnalysisScenarioTest.java`.
+
+Do not modify `OsrInventoryConfig` or its production baseline; `OsrPhysicalInventory` capacity or
+admission rules; `DspServiceCentreSupplyPlanFactory` ordering; `ServiceCentreSupplyBatch` or
+`preloadedAtStart` meaning configured startup-service-centre membership; either supply-state enum;
+low-water authorization for non-startup centres; operational release, lifecycle, scheduler,
+routing, stations, P2P, metrics, or report schemas. Do not drop, defer as unsupported, or fabricate
+completion for startup overflow.
+
+### Behavioral specification
+
+#### Capacity-bounded bootstrap
+
+- Extend `OsrBootstrapState` by appending an ordered
+  `List<PhysicalToteId> startupOverflowPhysicalToteIds` component. Its canonical constructor must
+  reject a null list, null elements, and duplicate IDs, and must store an immutable defensive copy.
+  Keep the existing two-argument constructor as a delegating overload that supplies `List.of()` so
+  existing complete-bootstrap callers remain source-compatible.
+- `OsrInventoryBootstrapFactory` must continue selecting every retained manifest whose service
+  centre occurs in `OsrInventoryConfig.preloadServiceCentreIds()`, preserving assembled
+  `LoadedDspData.inboundToteManifests()` order across service centres. Validate the complete selected
+  sequence, including distinct non-null physical IDs, before creating or mutating inventory.
+- Let `initialCount = min(selectedCount, config.capacity())`. Store exactly the selected prefix
+  `[0, initialCount)` through one existing atomic `OsrPhysicalInventory.storeAll(...)` call. Return
+  the physical IDs of the selected suffix `[initialCount, selectedCount)` as the bootstrap state's
+  overflow list in unchanged assembled-data order. An oversized selection is valid and must not
+  throw merely because `selectedCount > capacity`.
+- If the selected count fits, behavior remains unchanged and the overflow list is empty. If no slot
+  exists after the bounded prefix, the inventory is exactly full; no overflow manifest is inserted
+  until the supply coordinator observes capacity through normal simulation progress.
+- Continue authorizing every EMPTY sheet for every configured startup centre at elapsed zero,
+  independently of which physical manifests fit. EMPTY work consumes no inventory slot.
+
+#### Coordinator bootstrap validation and provenance
+
+- During `DspServiceCentreSupplyCoordinator` construction, resolve every overflow ID to exactly one
+  manifest in a `preloadedAtStart` supply batch. Before publishing coordinator state, reject an
+  overflow ID that is unknown, belongs to a non-startup batch, is currently stored or departed, or
+  is duplicated; reject a startup-batch manifest that is neither currently stored nor listed as
+  overflow. Preserve the existing rejection of stored inventory outside startup batches, departed
+  bootstrap history, duplicate plan IDs, and mismatched startup EMPTY authorization.
+- Add a private immutable-membership set of the IDs actually resident at bootstrap, named
+  `initiallyPreloadedPhysicalToteIds` or a mechanically equivalent local name. This set is permanent
+  provenance: an initially resident tote remains counted as preloaded after departure. A startup
+  overflow tote admitted later is never reclassified as initially preloaded merely because its
+  batch has `preloadedAtStart == true`.
+- For each initially resident physical manifest, initialize `PRELOADED_IN_OSR`. For each startup
+  overflow manifest, initialize `AUTHORIZED_WAITING`. For each non-startup manifest, retain
+  `HELD_UPSTREAM`.
+- Every startup batch remains authorized at `Duration.ZERO`, and all of its EMPTY keys are
+  authorized immediately. A startup batch with overflow has internal authorization state
+  `AUTHORIZED`; a startup batch without overflow retains `PRELOADED`. Only one overflowing startup
+  batch is physically active at a time.
+- Select the first active startup-overflow batch from existing `plan.batches()` order. When it is
+  exhausted, select the next startup batch with pending overflow in that same order. Within each
+  batch, use its existing `physicalManifests()` order and skip initially stored IDs; this preserves
+  the established ADAPTED-first, then source-sequence ordering for physical arrivals. The bootstrap
+  prefix alone preserves assembled-data order; do not reorder that already-resident prefix.
+
+#### Timed overflow admission and continuation
+
+- Schedule the first pending overflow manifest for one full positive arrival-policy interval after
+  elapsed zero. For each subsequent startup-overflow batch, schedule its first pending manifest one
+  full interval after the elapsed time at which the preceding active batch was exhausted. Do not
+  admit overflow in the constructor or at elapsed zero.
+- Feed startup overflow through the existing `admitDuePhysicalManifests(...)` path and
+  `OsrPhysicalInventory.store(...)`. A due head against a full OSR becomes
+  `BLOCKED_BY_OSR_CAPACITY`; before its due time it remains `AUTHORIZED_WAITING`.
+- Preserve existing recovery semantics: after capacity becomes available, admit exactly the
+  blocked head at the current elapsed time, schedule the following pending manifest one full
+  interval later, and stop admissions for that advance. Skipped clock updates may catch up only
+  arrivals that were never capacity-blocked. Never burst accumulated blocked startup overflow.
+- `admittedAfterStartupCount` and arrival-policy ordinal include startup overflow admissions as well
+  as later-centre admissions. They exclude the bounded bootstrap prefix.
+- Once all overflow for an active startup batch has entered OSR or departed, return its internal
+  state to `PRELOADED`, clear its active timing, and activate the next startup-overflow batch as
+  above. Preserve the existing effective-state rule: a startup batch reports `SUPPLY_COMPLETE` only
+  when none of its physical manifests waits upstream and every one has departed the OSR.
+- Only after all startup overflow is exhausted may the existing low-water rule authorize the first
+  `HELD_UPSTREAM` non-startup service centre. That authorization still occurs on a later coordinator
+  advance, in existing plan order, at occupancy less than or equal to the configured low-water
+  mark. Startup overflow itself is already authorized and must not wait for low water.
+
+#### Snapshot accounting
+
+- Derive `PhysicalToteSupplySnapshot` stored-state classification from permanent initial-preload
+  provenance, not from the batch-wide `preloadedAtStart` flag. Initially resident IDs report
+  `PRELOADED_IN_OSR` while stored; admitted startup-overflow IDs report `STORED_IN_OSR`; either may
+  later report `DEPARTED_FROM_OSR`.
+- Per service centre, `preloadedCount` is the number of IDs in
+  `initiallyPreloadedPhysicalToteIds`; `admittedCount` is the number of non-initial IDs that have
+  reached `STORED_IN_OSR` or `DEPARTED_FROM_OSR`; and `upstreamWaitingCount` includes
+  `HELD_UPSTREAM`, `AUTHORIZED_WAITING`, and `BLOCKED_BY_OSR_CAPACITY`. These counts must partition
+  the batch total without double counting.
+- Global admitted-after-startup count includes admitted startup overflow and remains consistent
+  with the sum of per-centre admitted counts. Existing report and metrics consumers receive the
+  corrected values through unchanged snapshot APIs.
+
+### Initialization and mutation sequence
+
+1. The bootstrap factory validates the full startup-eligible sequence and computes immutable prefix
+   and suffix values without mutation.
+2. The mutation boundary is the one atomic `storeAll(...)` of the bounded prefix; then the factory
+   publishes inventory, EMPTY authorization, and ordered overflow IDs together.
+3. The coordinator first validates the complete inventory/overflow/plan partition and EMPTY set
+   without mutating inventory.
+4. It records permanent initial-preload provenance and initializes all authorization and physical
+   states, then schedules only the first startup-overflow batch.
+5. During simulation, every overflow admission rechecks live inventory capacity and mutates only
+   through `store(...)`; failed or blocked admission leaves inventory membership and queue order
+   unchanged.
+6. Batch transition updates coordinator state and due time only after the preceding batch has no
+   pending manifest. Non-startup low-water authorization remains last.
+
+### Decision-complete test contract
+
+Extend `OsrBootstrapStateTest` to prove ordered overflow IDs are defensively copied and immutable,
+the two-argument constructor produces an empty list, and null/duplicate overflow IDs are rejected.
+
+Replace `OsrInventoryBootstrapFactoryTest.shouldFailClearlyWhenInitialPreloadExceedsCapacity` with
+coverage proving an over-capacity selection stores exactly the first capacity-sized prefix in
+assembled-data order, returns every remaining ID in exact suffix order, retains all startup EMPTY
+authorization, and does not put an overflow ID in inventory/history. Retain the existing fitting,
+multi-manifest, order, EMPTY, and later-centre tests.
+
+Replace `DspOsrPhysicalInventoryScenarioTest.shouldRejectAnOverCapacityInitialDatasetAtomically`
+with an assembled-data scenario proving bounded occupancy, exact prefix/suffix partition, no lost
+manifest, and unchanged per-physical-ID identity. This test must fail an implementation that simply
+raises capacity or silently truncates the dataset.
+
+Extend `DspServiceCentreSupplyCoordinatorBootstrapTest` with a two-startup-centre fixture whose
+bootstrap prefix cuts through one centre. Assert all startup EMPTY keys and authorization times are
+present at zero, only prefix IDs are `PRELOADED_IN_OSR`, overflow IDs are
+`AUTHORIZED_WAITING`, the first overflowing batch in supply-plan order is active, and initial
+preloaded/admitted/waiting counts partition each batch. Add representative negative cases for an
+unknown overflow ID, an overflow ID in a non-startup batch, and an omitted startup manifest. These
+three cases are sufficient for cross-boundary validation; retain existing inventory and EMPTY
+mismatch coverage.
+
+Extend `DspRateLimitedInboundSupplyTest` to prove the first startup overflow is not admitted at zero
+or before its due time, becomes capacity-blocked when due against a full OSR, and admits exactly once
+after one explicit `recordDeparture(...)`. Assert the next overflow receives a full interval from
+recovery and cannot burst in the same advance. Prove the admitted ordinal/count includes overflow,
+and an admitted startup-overflow tote reports `STORED_IN_OSR` rather than
+`PRELOADED_IN_OSR`.
+
+Extend `DspServiceCentreSupplyFlowTest` with overflow in two startup batches followed by one normal
+later batch. Prove startup batches drain one at a time in existing plan order and existing
+ADAPTED-first physical order, both were authorized at zero, no occupancy exceeds capacity, and the
+later batch cannot authorize until all startup overflow has entered and the low-water boundary is
+subsequently met. Prove blocked recovery does not reorder or burst.
+
+Extend `DspFullDayAnalysisScenarioTest` through public runtime construction with a bounded supported
+fixture containing more startup physical manifests than a deliberately small OSR capacity. Prove
+construction no longer throws, initial occupancy equals capacity, every excess manifest is visible
+as upstream startup overflow, all manifests retain lifecycle/runtime ownership, and the scenario
+reaches its expected supported terminal result after capacity is released. The scenario must catch
+an implementation that fixes only the isolated factory but leaves coordinator bootstrap rejecting
+partial startup residence.
+
+The combined tests must also preserve the empty-overflow compatibility path and catch an
+implementation that admits overflow eagerly, waits for low water before processing startup
+overflow, admits two startup batches concurrently, misclassifies all startup-centre totes as
+preloaded, loses an EMPTY authorization, bypasses `OsrPhysicalInventory.store(...)`, or allows a
+later centre to overtake startup overflow.
+
+### Expected output
+
+A full production day may contain more startup-centre physical manifests than the OSR can hold at
+06:00. Runtime construction fills the OSR with the deterministic first 1,200, exposes the remaining
+115 as authorized upstream work, and admits them at the configured physical arrival rate as OSR
+capacity becomes available. All 1,315 manifests remain represented and the OSR never exceeds its
+configured capacity.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.osr.OsrBootstrapStateTest --tests online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryBootstrapFactoryTest --tests online.davisfamily.warehouse.sim.dsp.osr.DspOsrPhysicalInventoryScenarioTest --tests online.davisfamily.warehouse.sim.dsp.supply.DspServiceCentreSupplyCoordinatorBootstrapTest --tests online.davisfamily.warehouse.sim.dsp.supply.DspRateLimitedInboundSupplyTest --tests online.davisfamily.warehouse.sim.dsp.supply.DspServiceCentreSupplyFlowTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisScenarioTest
+```
+
+### User verification
+
+No additional user verification is required for this step. Step 14 owns the post-change focused
+regression, complete suite, and repeated external-data run.
+
+Proposed commit message: `Rate limit startup OSR overflow`
+
+## Step 14: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, or 32R during
 closure.
@@ -1505,7 +1740,7 @@ No model-run verification is authorized in this step.
 Run the focused regression set:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.* --tests online.davisfamily.warehouse.sim.dsp.p2p.bag.* --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.* --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.* --tests online.davisfamily.warehouse.sim.dsp.av02.* --tests online.davisfamily.warehouse.sim.dsp.station.processing.* --tests online.davisfamily.warehouse.sim.dsp.station.continuation.* --tests online.davisfamily.warehouse.sim.dsp.transport.routing.* --tests online.davisfamily.warehouse.sim.dsp.outbound.* --tests online.davisfamily.warehouse.sim.totebag.* --tests online.davisfamily.threedee.sim.framework.time.*
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.* --tests online.davisfamily.warehouse.sim.dsp.osr.* --tests online.davisfamily.warehouse.sim.dsp.supply.* --tests online.davisfamily.warehouse.sim.dsp.p2p.bag.* --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.* --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.* --tests online.davisfamily.warehouse.sim.dsp.av02.* --tests online.davisfamily.warehouse.sim.dsp.station.processing.* --tests online.davisfamily.warehouse.sim.dsp.station.continuation.* --tests online.davisfamily.warehouse.sim.dsp.transport.routing.* --tests online.davisfamily.warehouse.sim.dsp.outbound.* --tests online.davisfamily.warehouse.sim.totebag.* --tests online.davisfamily.threedee.sim.framework.time.*
 ```
 
 Then run the complete suite:
@@ -1521,6 +1756,9 @@ run `:app:dspFullDayAnalysis` with `--orders-directory=<directory path>` and the
 command-line contract in this plan, inspect the generated JSON and text, and confirm:
 
 - the entire supplied dataset is represented in load counts/exclusions;
+- initial OSR occupancy is at most the configured capacity; for the observed 1,315 startup-eligible
+  manifests and 1,200-slot configuration, the first 1,200 are initially resident and all remaining
+  115 are represented as admitted-after-startup or upstream waiting rather than omitted;
 - the report and inspection say `UNCALIBRATED` and `P2P_OUTPUT_CLOSED` prominently;
 - the run terminates cleanly at supported completion or exact hard cutoff;
 - OSR, inbound/outbound rates, centre outcomes, unfinished identities, line utilization, and block
@@ -1568,6 +1806,10 @@ class/method/control-flow evidence:
   collision-free DSP journey IDs during assembly; the first occurrence remains unchanged, exact
   substitutions remain ordered and auditable in the load report, and every downstream uniqueness
   guard remains intact;
+- an oversized startup-service-centre selection is partitioned into a deterministic
+  capacity-bounded resident prefix and a complete overflow suffix; overflow is authorized at zero,
+  admitted through the existing rate/capacity owner without burst or reordering, and correctly
+  separated from initial-preload provenance in immutable supply snapshots;
 - no Exception/MANUAL execution, NS bag fabrication, dispatch/32R, calibrated timing, renderer-loop
   integration, new visual topology, event-driven fast-forward, mutable reset, or source-data
   mutation was added;
@@ -1584,6 +1826,11 @@ After focused/full tests, the external-data run, and architecture review are gre
 - update `docs/codex-context.md` and only stale current-position/reading-order text in
   `docs/codex-instructions.md`;
 - update the runtime interlude in `docs/machines/phase-1-stations-roadmap.md`;
+- reconcile the superseded all-or-fail startup assumption in
+  `docs/scheduler/dsp-osr-physical-inventory-plan.md` and startup-centre assumptions in
+  `docs/scheduler/dsp-rate-limited-service-centre-supply-plan.md`: mark them as amended by this
+  completed full-day plan, record the capacity-bounded prefix/overflow contract, and do not rewrite
+  unrelated completed-plan history;
 - record full-day analysis as explicitly uncalibrated and based on provisional P2P output closure;
 - make the next programme feature an explicit user decision between Exception Station Phase 1,
   timing calibration, outbound dispatch/32R prerequisites, or renderer integration; do not select
@@ -1616,3 +1863,6 @@ Proposed commit message: `Complete full-day DSP analysis`
 - Reused production transport-container barcodes are normalized into distinct deterministic DSP
   journey IDs after their first retained occurrence, with exact substitutions reported and no
   carrier-reuse state added to the lifecycle or runtime.
+- Startup-service-centre physical manifests beyond configured OSR capacity remain complete,
+  authorized upstream work. The deterministic capacity-sized prefix is resident at 06:00 and the
+  suffix enters via ordinary rate-limited, capacity-blocked supply without exceeding OSR capacity.

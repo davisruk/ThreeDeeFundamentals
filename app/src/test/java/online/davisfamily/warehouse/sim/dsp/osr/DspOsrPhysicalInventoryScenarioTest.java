@@ -3,7 +3,6 @@ package online.davisfamily.warehouse.sim.dsp.osr;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -110,17 +109,22 @@ class DspOsrPhysicalInventoryScenarioTest {
     }
 
     @Test
-    void shouldRejectAnOverCapacityInitialDatasetAtomically() {
+    void shouldBoundAnOverCapacityInitialDatasetWithoutDroppingManifests() {
         Scenario scenario = scenario();
 
-        IllegalStateException failure = assertThrows(
-                IllegalStateException.class,
-                () -> new OsrInventoryBootstrapFactory().create(
-                        scenario.data(),
-                        new OsrInventoryConfig(4, List.of("104", "108"))));
+        OsrBootstrapState bounded = new OsrInventoryBootstrapFactory().create(
+                scenario.data(),
+                new OsrInventoryConfig(4, List.of("104", "108")));
 
-        assertTrue(failure.getMessage().contains("selected=5"));
-        assertTrue(failure.getMessage().contains("capacity=4"));
+        assertEquals(EXPECTED_PRELOAD_IDS.subList(0, 4),
+                bounded.inventorySnapshot().storedTotes().stream()
+                        .map(InboundToteManifest::physicalToteId)
+                        .toList());
+        assertEquals(List.of(EXPECTED_PRELOAD_IDS.getLast()),
+                bounded.startupOverflowPhysicalToteIds());
+        assertEquals(4, bounded.inventorySnapshot().occupancy());
+        assertTrue(bounded.inventorySnapshot().full());
+        assertTrue(bounded.inventorySnapshot().departedTotes().isEmpty());
         assertEquals(5, scenario.bootstrap().inventorySnapshot().occupancy());
         assertEquals(EXPECTED_PRELOAD_IDS,
                 scenario.bootstrap().inventorySnapshot().storedTotes().stream()
