@@ -2,6 +2,8 @@ package online.davisfamily.warehouse.sim.dsp.p2p.allocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -96,6 +98,56 @@ class P2pWorkloadSnapshotTest {
         assertEquals(1, service108.remainingUnallocatedPackCount());
         assertEquals(1, service108.remainingUnallocatedBagCount());
         assertEquals(Duration.ofSeconds(5), service108.estimatedSingleLineWork());
+    }
+
+    @Test
+    void shouldReuseFiveThousandBagPlanIndexAndRetainWorkloadValues() {
+        LargePlanFixture fixture = fiveThousandBagPlan();
+
+        P2pWorkloadPlanIndex initial = factory.planIndexFor(
+                fixture.planning(), fixture.manifestCatalog());
+        assertSame(initial, factory.planIndexFor(
+                fixture.planning(), fixture.manifestCatalog()));
+
+        P2pWorkloadSnapshot first = factory.create(
+                P2pServiceCentreWorkSnapshot.empty(),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+        P2pWorkloadSnapshot second = factory.create(
+                P2pServiceCentreWorkSnapshot.empty(),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+
+        assertEquals(first, second);
+        assertEquals(3, first.serviceCentres().size());
+        assertEquals(5_000, first.serviceCentres().stream()
+                .mapToInt(P2pServiceCentreWorkloadSnapshot::remainingUnallocatedBagCount)
+                .sum());
+        assertEquals(5_000, first.serviceCentres().stream()
+                .mapToInt(P2pServiceCentreWorkloadSnapshot::remainingUnallocatedPackCount)
+                .sum());
+
+        BagPlanningResult replacementPlanning = new BagPlanningResult(
+                fixture.planning().plannedBags(),
+                fixture.planning().p2pToteLoadPlans(),
+                fixture.planning().packTraces());
+        P2pWorkloadPlanIndex afterPlanningReplacement = factory.planIndexFor(
+                replacementPlanning, fixture.manifestCatalog());
+        assertNotSame(initial, afterPlanningReplacement);
+        assertSame(afterPlanningReplacement, factory.planIndexFor(
+                replacementPlanning, fixture.manifestCatalog()));
+
+        InboundToteManifestCatalog replacementCatalog = new InboundToteManifestCatalog(
+                fixture.manifestCatalog().manifests());
+        P2pWorkloadPlanIndex afterCatalogReplacement = factory.planIndexFor(
+                replacementPlanning, replacementCatalog);
+        assertNotSame(afterPlanningReplacement, afterCatalogReplacement);
+        assertSame(afterCatalogReplacement, factory.planIndexFor(
+                replacementPlanning, replacementCatalog));
     }
 
     @Test
@@ -225,6 +277,27 @@ class P2pWorkloadSnapshotTest {
     }
 
     @Test
+    void shouldFullyRevalidateReplacementPlanAndManifestInputs() {
+        InboundToteManifest input = manifest("input-104", "order-104", "104", 0);
+        PlannedBag bag = plannedBag(
+                "rx-104", "104", "pharmacy-104", input, "pack-104");
+        BagPlanningResult validPlanning = planning(List.of(bag), List.of(input));
+        InboundToteManifestCatalog validCatalog = new InboundToteManifestCatalog(List.of(input));
+
+        P2pWorkloadPlanIndex initial = factory.planIndexFor(validPlanning, validCatalog);
+
+        BagPlanningResult invalidPlanning = new BagPlanningResult(
+                List.of(bag), List.of(), List.of());
+        assertThrows(IllegalStateException.class, () -> factory.planIndexFor(
+                invalidPlanning, validCatalog));
+
+        assertThrows(IllegalStateException.class, () -> factory.planIndexFor(
+                validPlanning, new InboundToteManifestCatalog(List.of())));
+
+        assertSame(initial, factory.planIndexFor(validPlanning, validCatalog));
+    }
+
+    @Test
     void shouldRejectOverflowAndInvalidOrMutableDomainValues() {
         InboundToteManifest first = manifest("input-1", "order-1", "104", 0);
         InboundToteManifest second = manifest("input-2", "order-2", "104", 1);
@@ -278,6 +351,38 @@ class P2pWorkloadSnapshotTest {
             }
         }
         return new BagPlanningResult(bags, List.of(), traces);
+    }
+
+    private static LargePlanFixture fiveThousandBagPlan() {
+        InboundToteManifest input104 = manifest("input-104", "order-104", "104", 0);
+        InboundToteManifest input108 = manifest("input-108", "order-108", "108", 1);
+        InboundToteManifest input109 = manifest("input-109", "order-109", "109", 2);
+        Map<String, InboundToteManifest> inputs = Map.of(
+                "104", input104,
+                "108", input108,
+                "109", input109);
+
+        List<PlannedBag> bags = new ArrayList<>(5_000);
+        List<PlannedPackTrace> traces = new ArrayList<>(5_000);
+        for (int index = 0; index < 5_000; index++) {
+            String serviceCentreId = switch (index % 3) {
+                case 0 -> "104";
+                case 1 -> "108";
+                default -> "109";
+            };
+            InboundToteManifest input = inputs.get(serviceCentreId);
+            PlannedBag bag = plannedBag(
+                    "rx-large-" + index,
+                    serviceCentreId,
+                    "pharmacy-" + serviceCentreId,
+                    input,
+                    "pack-large-" + index);
+            bags.add(bag);
+            traces.add(trace("pack-large-" + index, bag, input));
+        }
+        return new LargePlanFixture(
+                new BagPlanningResult(bags, List.of(), traces),
+                new InboundToteManifestCatalog(List.of(input104, input108, input109)));
     }
 
     private static PlannedPackTrace trace(
@@ -355,5 +460,10 @@ class P2pWorkloadSnapshotTest {
 
     private static OutboundAllocationSnapshot emptyOutbound() {
         return new OutboundAllocationSnapshot(Map.of(), List.of(), List.of());
+    }
+
+    private record LargePlanFixture(
+            BagPlanningResult planning,
+            InboundToteManifestCatalog manifestCatalog) {
     }
 }

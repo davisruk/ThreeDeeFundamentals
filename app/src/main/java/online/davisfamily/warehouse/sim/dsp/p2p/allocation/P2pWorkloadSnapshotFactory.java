@@ -13,7 +13,6 @@ import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
-import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
@@ -27,6 +26,10 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshot;
 
 public final class P2pWorkloadSnapshotFactory {
+
+    private BagPlanningResult lastBagPlanningResult;
+    private InboundToteManifestCatalog lastManifestCatalog;
+    private P2pWorkloadPlanIndex lastPlanIndex;
 
     public P2pWorkloadSnapshot create(
             P2pServiceCentreWorkSnapshot workSnapshot,
@@ -67,17 +70,14 @@ public final class P2pWorkloadSnapshotFactory {
                 manifestCatalog,
                 av02InventorySnapshot,
                 lifecycleSnapshot);
-        Map<BagKey, PlannedBag> plannedBags = indexPlannedBags(
-                bagPlanningResult, manifestCatalog);
+        P2pWorkloadPlanIndex planIndex = planIndexFor(bagPlanningResult, manifestCatalog);
         Set<BagKey> allocatedBagKeys = validateAllocatedBags(
-                outboundAllocationSnapshot, plannedBags);
+                outboundAllocationSnapshot, planIndex.plannedBagsByKey());
 
         LinkedHashSet<String> orderedServiceCentreIds = new LinkedHashSet<>();
         orderedServiceCentreIds.addAll(workSnapshot.remainingToteIdsByServiceCentre().keySet());
         orderedServiceCentreIds.addAll(workSnapshot.unallocatedEmptyOrdersByServiceCentre().keySet());
-        bagPlanningResult.plannedBags().stream()
-                .map(PlannedBag::serviceCentreId)
-                .forEach(orderedServiceCentreIds::add);
+        orderedServiceCentreIds.addAll(planIndex.orderedServiceCentreIds());
 
         List<P2pServiceCentreWorkloadSnapshot> serviceCentres = new ArrayList<>();
         for (String serviceCentreId : orderedServiceCentreIds) {
@@ -88,8 +88,8 @@ public final class P2pWorkloadSnapshotFactory {
                 }
             });
 
-            List<PlannedBag> remainingBags = bagPlanningResult.plannedBags().stream()
-                    .filter(bag -> bag.serviceCentreId().equals(serviceCentreId))
+            List<PlannedBag> remainingBags = planIndex.plannedBagsByServiceCentre()
+                    .getOrDefault(serviceCentreId, List.of()).stream()
                     .filter(bag -> !allocatedBagKeys.contains(bag.bagKey()))
                     .toList();
             int remainingPackCount = remainingPackCount(remainingBags);
@@ -114,6 +114,22 @@ public final class P2pWorkloadSnapshotFactory {
                     estimate));
         }
         return new P2pWorkloadSnapshot(serviceCentres);
+    }
+
+    P2pWorkloadPlanIndex planIndexFor(
+            BagPlanningResult bagPlanningResult,
+            InboundToteManifestCatalog manifestCatalog) {
+        if (bagPlanningResult == lastBagPlanningResult
+                && manifestCatalog == lastManifestCatalog
+                && lastPlanIndex != null) {
+            return lastPlanIndex;
+        }
+        P2pWorkloadPlanIndex replacement = P2pWorkloadPlanIndex.from(
+                bagPlanningResult, manifestCatalog);
+        lastBagPlanningResult = bagPlanningResult;
+        lastManifestCatalog = manifestCatalog;
+        lastPlanIndex = replacement;
+        return replacement;
     }
 
     private static Map<PhysicalToteId, String> validateRemainingTotes(
@@ -201,50 +217,6 @@ public final class P2pWorkloadSnapshotFactory {
                     PhysicalToteRecord.inboundPack(manifest.physicalToteId()));
         }
         return new PhysicalToteLifecycleSnapshot(records, List.of());
-    }
-
-    private static Map<BagKey, PlannedBag> indexPlannedBags(
-            BagPlanningResult bagPlanningResult,
-            InboundToteManifestCatalog manifestCatalog) {
-        Map<String, PlannedPackTrace> tracesByPackId = new LinkedHashMap<>();
-        for (PlannedPackTrace trace : bagPlanningResult.packTraces()) {
-            tracesByPackId.put(trace.physicalPackId(), trace);
-        }
-
-        Map<BagKey, PlannedBag> plannedBags = new LinkedHashMap<>();
-        Set<String> plannedPackIds = new LinkedHashSet<>();
-        for (PlannedBag plannedBag : bagPlanningResult.plannedBags()) {
-            plannedBags.put(plannedBag.bagKey(), plannedBag);
-            for (String packId : plannedBag.physicalPackIds()) {
-                if (!plannedPackIds.add(packId)) {
-                    throw new IllegalStateException(
-                            "Physical pack appears in multiple planned bags: " + packId);
-                }
-                PlannedPackTrace trace = tracesByPackId.get(packId);
-                if (trace == null || !trace.bagKey().equals(plannedBag.bagKey())) {
-                    throw new IllegalStateException(
-                            "Planned bag pack is missing its matching pack trace: " + packId);
-                }
-                if (!trace.sourceProvenance().serviceCentreId()
-                        .equals(plannedBag.serviceCentreId())) {
-                    throw new IllegalStateException(
-                            "Planned bag and pack trace service centres do not match");
-                }
-                InboundToteManifest inputManifest = manifestCatalog
-                        .findByPhysicalToteId(trace.inputPhysicalToteId())
-                        .orElseThrow(() -> new IllegalStateException(
-                                "Planned pack input tote has no inbound manifest: " + packId));
-                if (!inputManifest.serviceCentreId().equals(plannedBag.serviceCentreId())) {
-                    throw new IllegalStateException(
-                            "Planned bag service centre does not match its input manifest");
-                }
-            }
-        }
-        if (!plannedPackIds.equals(tracesByPackId.keySet())) {
-            throw new IllegalStateException(
-                    "Planned pack traces must exactly match planned bag physical packs");
-        }
-        return Map.copyOf(plannedBags);
     }
 
     private static Set<BagKey> validateAllocatedBags(
