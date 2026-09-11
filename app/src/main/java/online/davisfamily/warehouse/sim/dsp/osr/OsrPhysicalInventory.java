@@ -15,12 +15,14 @@ public final class OsrPhysicalInventory {
     private final Map<PhysicalToteId, InboundToteManifest> storedTotes = new LinkedHashMap<>();
     private final Set<PhysicalToteId> seenPhysicalToteIds = new LinkedHashSet<>();
     private final List<InboundToteManifest> departedTotes = new ArrayList<>();
+    private OsrInventorySnapshot currentSnapshot;
 
     public OsrPhysicalInventory(OsrInventoryConfig config) {
         if (config == null) {
             throw new IllegalArgumentException("config must not be null");
         }
         this.config = config;
+        this.currentSnapshot = new OsrInventorySnapshot(config.capacity(), List.of(), List.of());
     }
 
     public void store(InboundToteManifest manifest) {
@@ -57,29 +59,46 @@ public final class OsrPhysicalInventory {
                             + ", candidates=" + manifests.size());
         }
 
+        if (manifests.isEmpty()) {
+            return;
+        }
+
+        List<InboundToteManifest> nextStoredTotes = new ArrayList<>(storedTotes.values());
+        nextStoredTotes.addAll(manifests);
+        OsrInventorySnapshot nextSnapshot = new OsrInventorySnapshot(
+                config.capacity(), nextStoredTotes, departedTotes);
+
         for (InboundToteManifest manifest : manifests) {
             storedTotes.put(manifest.physicalToteId(), manifest);
             seenPhysicalToteIds.add(manifest.physicalToteId());
         }
+        currentSnapshot = nextSnapshot;
     }
 
     public InboundToteManifest recordDeparture(PhysicalToteId physicalToteId) {
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");
         }
-        InboundToteManifest manifest = storedTotes.remove(physicalToteId);
+        InboundToteManifest manifest = storedTotes.get(physicalToteId);
         if (manifest == null) {
             throw new IllegalStateException(
                     "Physical tote is not currently stored in OSR: " + physicalToteId.value());
         }
+
+        List<InboundToteManifest> nextStoredTotes = new ArrayList<>(storedTotes.values());
+        nextStoredTotes.remove(manifest);
+        List<InboundToteManifest> nextDepartedTotes = new ArrayList<>(departedTotes);
+        nextDepartedTotes.add(manifest);
+        OsrInventorySnapshot nextSnapshot = new OsrInventorySnapshot(
+                config.capacity(), nextStoredTotes, nextDepartedTotes);
+
+        storedTotes.remove(physicalToteId);
         departedTotes.add(manifest);
+        currentSnapshot = nextSnapshot;
         return manifest;
     }
 
     public OsrInventorySnapshot snapshot() {
-        return new OsrInventorySnapshot(
-                config.capacity(),
-                List.copyOf(storedTotes.values()),
-                departedTotes);
+        return currentSnapshot;
     }
 }

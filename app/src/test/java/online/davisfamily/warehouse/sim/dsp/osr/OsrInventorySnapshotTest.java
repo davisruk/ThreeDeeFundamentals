@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.osr;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -52,6 +53,23 @@ class OsrInventorySnapshotTest {
                 List.copyOf(snapshot.occupancyByOrderType().keySet()));
         assertEquals(Map.of(OrderType.ASSOCIATED, 2, OrderType.ADAPTED, 1),
                 snapshot.occupancyByOrderType());
+
+        assertSame(snapshot.storedTotesFor(sharedSheet), snapshot.storedTotesFor(sharedSheet));
+        assertSame(snapshot.storedTotes(), snapshot.storedTotes());
+        assertSame(snapshot.departedTotes(), snapshot.departedTotes());
+        assertSame(
+                snapshot.storedTotesForServiceCentre("108"),
+                snapshot.storedTotesForServiceCentre(" 108 "));
+        assertSame(
+                snapshot.occupancyByServiceCentre(),
+                snapshot.occupancyByServiceCentre());
+        assertSame(snapshot.occupancyByOrderType(), snapshot.occupancyByOrderType());
+        assertSame(
+                snapshot.storedTotesFor(new OrderSheetKey("missing", 1)),
+                snapshot.storedTotesFor(new OrderSheetKey("missing", 1)));
+        assertSame(
+                snapshot.storedTotesForServiceCentre("missing"),
+                snapshot.storedTotesForServiceCentre("missing"));
     }
 
     @Test
@@ -110,6 +128,21 @@ class OsrInventorySnapshotTest {
                 () -> snapshot.storedTotesForServiceCentre("108").clear());
         assertThrows(UnsupportedOperationException.class,
                 () -> snapshot.occupancyByServiceCentre().put("116", 1));
+    }
+
+    @Test
+    void shouldPreserveValueEqualityHashCodeAndToString() {
+        InboundToteManifest first = manifest("tote-1", "order-1", 1, OrderType.FULL_PACK, "104", 1);
+        InboundToteManifest departed = manifest(
+                "tote-2", "order-2", 1, OrderType.ADAPTED, "108", 2);
+        OsrInventorySnapshot snapshot = new OsrInventorySnapshot(
+                3, List.of(first), List.of(departed));
+        OsrInventorySnapshot equivalent = new OsrInventorySnapshot(
+                3, List.of(first), List.of(departed));
+
+        assertEquals(snapshot, equivalent);
+        assertEquals(snapshot.hashCode(), equivalent.hashCode());
+        assertEquals(snapshot.toString(), equivalent.toString());
     }
 
     private static InboundToteManifest manifest(

@@ -2,6 +2,8 @@ package online.davisfamily.warehouse.sim.dsp.osr;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -121,6 +123,46 @@ class OsrPhysicalInventoryTest {
         assertThrows(IllegalArgumentException.class, () -> inventory.storeAll(null));
         assertThrows(IllegalArgumentException.class, () -> inventory.storeAll(withNull));
         assertThrows(IllegalArgumentException.class, () -> new OsrPhysicalInventory(null));
+    }
+
+    @Test
+    void shouldReuseSnapshotUntilARealInventoryMutation() {
+        OsrPhysicalInventory inventory = inventory(2);
+        InboundToteManifest first = manifest("tote-1", "order-1", 1);
+        InboundToteManifest second = manifest("tote-2", "order-2", 2);
+        InboundToteManifest third = manifest("tote-3", "order-3", 3);
+
+        OsrInventorySnapshot initial = inventory.snapshot();
+        assertSame(initial, inventory.snapshot());
+
+        inventory.storeAll(List.of());
+        assertSame(initial, inventory.snapshot());
+
+        inventory.store(first);
+        OsrInventorySnapshot afterFirstStore = inventory.snapshot();
+        assertNotSame(initial, afterFirstStore);
+        assertSame(afterFirstStore, inventory.snapshot());
+
+        assertThrows(IllegalStateException.class,
+                () -> inventory.storeAll(List.of(second, third)));
+        assertSame(afterFirstStore, inventory.snapshot());
+
+        inventory.store(second);
+        OsrInventorySnapshot afterSecondStore = inventory.snapshot();
+        assertNotSame(afterFirstStore, afterSecondStore);
+
+        assertThrows(IllegalStateException.class,
+                () -> inventory.store(second));
+        assertSame(afterSecondStore, inventory.snapshot());
+
+        inventory.recordDeparture(first.physicalToteId());
+        OsrInventorySnapshot afterDeparture = inventory.snapshot();
+        assertNotSame(afterSecondStore, afterDeparture);
+        assertSame(afterDeparture, inventory.snapshot());
+
+        assertThrows(IllegalStateException.class,
+                () -> inventory.recordDeparture(first.physicalToteId()));
+        assertSame(afterDeparture, inventory.snapshot());
     }
 
     private static OsrPhysicalInventory inventory(int capacity) {
