@@ -69,6 +69,9 @@ class DspFullDayAnalysisScenarioTest {
         assertEquals(DspCompletionMilestone.P2P_OUTPUT_CLOSED, report.completionMilestone());
         assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, report.state());
         assertEquals(DspFullDayTerminationReason.HARD_CUTOFF_REACHED, report.terminationReason());
+        assertEquals(List.of("104", "108", "116", "109"), report.serviceCentres().stream()
+                .map(result -> result.serviceCentreId())
+                .toList());
 
         assertEquals(5, report.p2pLines().size());
         assertEquals(5, snapshot.p2pLines().size());

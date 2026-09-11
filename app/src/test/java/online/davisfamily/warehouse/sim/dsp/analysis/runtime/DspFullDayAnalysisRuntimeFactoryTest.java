@@ -50,6 +50,37 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     }
 
     @Test
+    void shouldKeepCompletionCountsIndexedByServiceCentreAcrossFixedSteps(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadSingleFullPack(directory, profile);
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var initial = runtime.snapshot().completionSnapshots();
+            assertEquals(List.of("104", "108"), initial.stream()
+                    .map(snapshot -> snapshot.serviceCentreId())
+                    .toList());
+            assertEquals(1, initial.get(0).osrWaitingCount());
+            assertEquals(1, initial.get(0).remainingPhysicalPackCount());
+            assertEquals(1, initial.get(0).remainingPlannedBagCount());
+            assertEquals(1, initial.get(1).osrWaitingCount());
+            assertEquals(1, initial.get(1).remainingPhysicalPackCount());
+            assertEquals(1, initial.get(1).remainingPlannedBagCount());
+
+            runtime.update(1d);
+
+            var afterOneFixedStep = runtime.snapshot().completionSnapshots();
+            assertEquals(List.of("104", "108"), afterOneFixedStep.stream()
+                    .map(snapshot -> snapshot.serviceCentreId())
+                    .toList());
+            assertTrue(afterOneFixedStep.stream()
+                    .allMatch(snapshot -> snapshot.remainingPlannedBagCount() >= 0
+                            && snapshot.remainingPhysicalPackCount() >= 0));
+        }
+    }
+
+    @Test
     void shouldValidateBeforeRegisteringAnyController(@TempDir Path directory)
             throws IOException {
         DspUncalibratedFullDayProfile valid = profile();
