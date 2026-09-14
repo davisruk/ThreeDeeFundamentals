@@ -15,12 +15,6 @@
 $sampleFile = "C:\misc\cpas-test\scheduler-testing\dsp-$step-execution-sample.txt"
 & $jfr print --json --events jdk.ExecutionSample --stack-depth 16 $recording | Out-File -Encoding utf8 $sampleFile
 
-$objectAllocationFile = "C:\misc\cpas-test\scheduler-testing\dsp-$step-object-allocation-samples.json"
-& $jfr print --json `
-    --events jdk.ObjectAllocationSample `
-    --stack-depth 16 $recording |
-    Out-File -Encoding utf8 $objectAllocationFile
-
 $targets = @(
     "P2pBagCorrelationAssignmentSnapshot.lineFor",
     "DspOperationalReleaseSnapshot.findByPhysicalToteId"

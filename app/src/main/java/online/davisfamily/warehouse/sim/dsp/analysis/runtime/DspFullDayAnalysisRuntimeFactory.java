@@ -722,17 +722,18 @@ public final class DspFullDayAnalysisRuntimeFactory {
                         Math.multiplyExact(
                                 profile.queueCapacities().stationQueueCapacity(),
                                 profile.p2pLineDefinitions().size())),
-                () -> new StationSnapshot(
-                        StationType.P2P,
-                        lineRuntimes.stream()
-                                .map(DspHeadlessP2pLineRuntime::snapshot)
-                                .map(DspHeadlessP2pLineRuntimeSnapshot::activity)
-                                .mapToInt(activity -> activity.packPath().nonIdlePrlCount())
-                                .sum(),
-                        lineRuntimes.stream()
-                                .map(DspHeadlessP2pLineRuntime::snapshot)
-                                .mapToInt(snapshot -> snapshot.activity().input().stationArrivalCount())
-                                .sum()),
+                () -> {
+                    int nonIdlePrlCount = 0;
+                    int stationArrivalCount = 0;
+                    for (DspHeadlessP2pLineRuntime lineRuntime : lineRuntimes) {
+                        nonIdlePrlCount += lineRuntime.nonIdlePrlCount();
+                        stationArrivalCount += lineRuntime.stationArrivalCount();
+                    }
+                    return new StationSnapshot(
+                            StationType.P2P,
+                            nonIdlePrlCount,
+                            stationArrivalCount);
+                },
                 profile.p2pLineDefinitions().getFirst().destination().targetId());
     }
 

@@ -200,6 +200,22 @@ public final class DspHeadlessP2pLineRuntime implements AutoCloseable {
         return prlConveyors;
     }
 
+    /** Returns the live number of PRLs that are not idle without creating a line snapshot. */
+    public int nonIdlePrlCount() {
+        int count = 0;
+        for (PrlConveyor prl : prlConveyors) {
+            if (prl.getAssignment().getState() != PrlState.IDLE) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Returns the live station-arrival occupancy without creating an activity snapshot. */
+    public int stationArrivalCount() {
+        return stationArrivalQueue.occupancy();
+    }
+
     public List<PdcDiversionDevice> pdcDiversionDevices() {
         return pdcDiversionDevices;
     }

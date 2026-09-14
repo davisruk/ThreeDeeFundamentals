@@ -99,6 +99,26 @@ class StationRoutedToteArrivalQueueTest {
     }
 
     @Test
+    void shouldExposeLightweightOccupancyWithoutChangingQueueSemantics() {
+        OperationalRouteDestination destination = destination(StationType.P2P, "p2p-1");
+        StationRoutedToteArrivalQueue queue = queue(destination, 2);
+        RoutedPhysicalTote first = routed("tote-1", destination);
+        RoutedPhysicalTote second = routed("tote-2", destination);
+
+        assertEquals(0, queue.occupancy());
+        queue.enqueue(first);
+        assertEquals(1, queue.occupancy());
+        assertEquals(queue.snapshot().occupancy(), queue.occupancy());
+        queue.enqueue(second);
+        assertEquals(2, queue.occupancy());
+        assertEquals(queue.snapshot().occupancy(), queue.occupancy());
+        assertSame(first, queue.dequeue().orElseThrow());
+        assertEquals(1, queue.occupancy());
+        assertSame(second, queue.dequeue().orElseThrow());
+        assertEquals(0, queue.occupancy());
+    }
+
+    @Test
     void shouldKeepZeroCapacityQueueEmptyAndRejectInvalidInput() {
         OperationalRouteDestination destination = destination(
                 StationType.ADAPTING, "bench-1");

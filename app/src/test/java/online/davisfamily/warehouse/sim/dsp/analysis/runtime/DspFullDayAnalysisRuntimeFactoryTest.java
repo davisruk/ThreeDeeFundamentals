@@ -81,6 +81,43 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     }
 
     @Test
+    void shouldRefreshComposedP2pAdmissionAcrossOperationalEvaluations(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadSingleFullPack(directory, profile);
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            runtime.update(1d);
+            DspFullDayAnalysisRuntimeSnapshot first = runtime.snapshot();
+            long firstSequence = first.operationalRelease()
+                    .lastCompletedEvaluationSequence()
+                    .orElseThrow();
+
+            runtime.update(1d);
+            DspFullDayAnalysisRuntimeSnapshot second = runtime.snapshot();
+            long secondSequence = second.operationalRelease()
+                    .lastCompletedEvaluationSequence()
+                    .orElseThrow();
+
+            assertTrue(secondSequence > firstSequence);
+            assertTrue(first.operationalRelease().lastEvaluation().isPresent());
+            assertTrue(second.operationalRelease().lastEvaluation().isPresent());
+            assertEquals(second.p2pLines().size(), runtime.lineRuntimes().size());
+            for (int index = 0; index < runtime.lineRuntimes().size(); index++) {
+                DspHeadlessP2pLineRuntime lineRuntime = runtime.lineRuntimes().get(index);
+                DspHeadlessP2pLineRuntimeSnapshot lineSnapshot = second.p2pLines().get(index);
+                assertEquals(
+                        lineSnapshot.activity().packPath().nonIdlePrlCount(),
+                        lineRuntime.nonIdlePrlCount());
+                assertEquals(
+                        lineSnapshot.activity().input().stationArrivalCount(),
+                        lineRuntime.stationArrivalCount());
+            }
+        }
+    }
+
+    @Test
     void shouldValidateBeforeRegisteringAnyController(@TempDir Path directory)
             throws IOException {
         DspUncalibratedFullDayProfile valid = profile();

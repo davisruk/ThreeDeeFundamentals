@@ -38,6 +38,23 @@ public final class StationRoutedToteArrivalQueue {
         return waitQueue.canAccept();
     }
 
+    /**
+     * Returns the current station-arrival occupancy without copying the FIFO contents.
+     *
+     * <p>The full invariant check remains owned by the detailed queue operations and snapshot
+     * boundary. This query performs the size relationship check needed by lightweight admission
+     * inspection without allocating a tote-id list or set.</p>
+     */
+    public int occupancy() {
+        int queueSize = waitQueue.size();
+        if (queueSize != totesByPhysicalToteId.size()) {
+            throw new IllegalStateException(
+                    "Station arrival queue/payload size mismatch: "
+                            + destination.targetId());
+        }
+        return queueSize;
+    }
+
     public boolean contains(PhysicalToteId physicalToteId) {
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");

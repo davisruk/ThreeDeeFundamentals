@@ -57,6 +57,7 @@ import online.davisfamily.warehouse.sim.dsp.station.processing.StationArrivalCla
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
 import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
+import online.davisfamily.warehouse.sim.totebag.assignment.PrlAssignmentPlan;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
@@ -118,6 +119,30 @@ class DspHeadlessP2pLineRuntimeTest {
         runtime.close();
         runtime.close();
         assertTrue(runtime.isClosed());
+    }
+
+    @Test
+    void shouldExposeLiveLightweightCountsConsistentWithDetailedSnapshots() {
+        Fixture fixture = fixture();
+        DspHeadlessP2pLineRuntime runtime = fixture.runtime();
+
+        DspHeadlessP2pLineRuntimeSnapshot initial = runtime.snapshot();
+        assertEquals(initial.activity().packPath().nonIdlePrlCount(), runtime.nonIdlePrlCount());
+        assertEquals(initial.activity().input().stationArrivalCount(), runtime.stationArrivalCount());
+        assertEquals(0, runtime.nonIdlePrlCount());
+        assertEquals(0, runtime.stationArrivalCount());
+
+        runtime.prlConveyors().getFirst().assign(new PrlAssignmentPlan(
+                runtime.prlConveyors().getFirst().getId(),
+                fixture.correlationId(),
+                1));
+        fixture.enqueue("input-tote-1", fixture.firstPlan());
+
+        DspHeadlessP2pLineRuntimeSnapshot active = runtime.snapshot();
+        assertEquals(active.activity().packPath().nonIdlePrlCount(), runtime.nonIdlePrlCount());
+        assertEquals(active.activity().input().stationArrivalCount(), runtime.stationArrivalCount());
+        assertEquals(1, runtime.nonIdlePrlCount());
+        assertEquals(1, runtime.stationArrivalCount());
     }
 
     @Test

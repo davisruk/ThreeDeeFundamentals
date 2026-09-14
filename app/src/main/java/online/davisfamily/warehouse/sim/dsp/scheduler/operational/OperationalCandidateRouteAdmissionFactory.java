@@ -48,6 +48,12 @@ public final class OperationalCandidateRouteAdmissionFactory {
 
         Map<String, OperationalRouteTargetAdmissionSnapshot> targetAdmissionsById =
                 snapshotAdmissionsByTargetId();
+        StationAdmissionResolver evaluationResolver = stationAdmissionResolver.forEvaluation(
+                logicalSnapshot);
+        if (evaluationResolver == null) {
+            throw new IllegalStateException(
+                    "stationAdmissionResolver.forEvaluation returned null");
+        }
         List<OperationalCandidateRouteAdmission> admissions = new ArrayList<>();
         for (DspOperationalReleaseCandidate candidate : candidates) {
             if (candidate == null) {
@@ -60,7 +66,7 @@ public final class OperationalCandidateRouteAdmissionFactory {
             }
 
             StationType stationType = routeEntryStation.orElseThrow();
-            StationAdmissionSnapshot stationAdmission = stationAdmissionResolver.admissionFor(
+            StationAdmissionSnapshot stationAdmission = evaluationResolver.admissionFor(
                     stationType,
                     candidate.logicalOrderState(),
                     logicalSnapshot);

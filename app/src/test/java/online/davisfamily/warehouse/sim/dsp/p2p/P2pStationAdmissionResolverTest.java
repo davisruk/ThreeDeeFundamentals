@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.p2p;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -95,6 +96,101 @@ class P2pStationAdmissionResolverTest {
         resolver.admissionFor(StationType.P2P, candidate("order-1"), snapshot());
 
         assertEquals(2, calls.get());
+    }
+
+    @Test
+    void shouldCaptureP2pStateOncePerEvaluationAndRefreshForNextEvaluation() {
+        AtomicInteger p2pSnapshotCalls = new AtomicInteger();
+        AtomicInteger stationSnapshotCalls = new AtomicInteger();
+        P2pStationAdmissionResolver resolver = new P2pStationAdmissionResolver(
+                new SnapshotStationAdmissionResolver(),
+                new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
+                () -> new P2pAdmissionSnapshot(
+                        "p2p-1",
+                        p2pSnapshotCalls.incrementAndGet(),
+                        Set.of("bag-a"),
+                        Set.of("bag-a"),
+                        true),
+                new StationCapacity(1, 1),
+                () -> new StationSnapshot(
+                        StationType.P2P,
+                        0,
+                        stationSnapshotCalls.incrementAndGet()),
+                "p2p-ingress");
+        WarehouseSchedulerSnapshot firstSnapshot = snapshot();
+
+        StationAdmissionResolver firstEvaluation = resolver.forEvaluation(firstSnapshot);
+        StationAdmissionSnapshot first = firstEvaluation.admissionFor(
+                StationType.P2P, candidate("order-1"), firstSnapshot);
+        StationAdmissionSnapshot second = firstEvaluation.admissionFor(
+                StationType.P2P, candidate("order-2"), firstSnapshot);
+
+        assertEquals(1, p2pSnapshotCalls.get());
+        assertEquals(1, stationSnapshotCalls.get());
+        assertSame(first.snapshot(), second.snapshot());
+        assertSame(first.capacity(), second.capacity());
+        assertEquals(1, first.snapshot().queued());
+        assertEquals("p2p-ingress", second.selectedTargetId().orElseThrow());
+
+        WarehouseSchedulerSnapshot secondSnapshot = snapshot();
+        StationAdmissionResolver secondEvaluation = resolver.forEvaluation(secondSnapshot);
+        StationAdmissionSnapshot refreshed = secondEvaluation.admissionFor(
+                StationType.P2P, candidate("order-3"), secondSnapshot);
+
+        assertEquals(2, p2pSnapshotCalls.get());
+        assertEquals(2, stationSnapshotCalls.get());
+        assertNotSame(first.snapshot(), refreshed.snapshot());
+        assertEquals(2, refreshed.snapshot().queued());
+    }
+
+    @Test
+    void shouldNotCaptureP2pStateForEvaluationContainingOnlyFallbackStations() {
+        AtomicInteger p2pSnapshotCalls = new AtomicInteger();
+        AtomicInteger stationSnapshotCalls = new AtomicInteger();
+        StationAdmissionSnapshot fallbackAdmission = new StationAdmissionSnapshot(
+                StationType.MANUAL,
+                new StationCapacity(1, 1),
+                new StationSnapshot(StationType.MANUAL, 0, 0),
+                true,
+                "");
+        P2pStationAdmissionResolver resolver = new P2pStationAdmissionResolver(
+                (stationType, candidate, snapshot) -> fallbackAdmission,
+                new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
+                () -> {
+                    p2pSnapshotCalls.incrementAndGet();
+                    return p2pSnapshot();
+                },
+                new StationCapacity(1, 1),
+                () -> {
+                    stationSnapshotCalls.incrementAndGet();
+                    return new StationSnapshot(StationType.P2P, 0, 0);
+                });
+        WarehouseSchedulerSnapshot evaluationSnapshot = snapshot();
+        StationAdmissionResolver scoped = resolver.forEvaluation(evaluationSnapshot);
+
+        assertSame(fallbackAdmission, scoped.admissionFor(
+                StationType.MANUAL,
+                candidate("order-1"),
+                evaluationSnapshot));
+        assertEquals(0, p2pSnapshotCalls.get());
+        assertEquals(0, stationSnapshotCalls.get());
+    }
+
+    @Test
+    void shouldRejectDifferentSnapshotOnEvaluationScopedResolver() {
+        P2pStationAdmissionResolver resolver = new P2pStationAdmissionResolver(
+                new SnapshotStationAdmissionResolver(),
+                new StaticP2pAdmission(P2pAdmissionResult.acceptedResult()),
+                this::p2pSnapshot,
+                new StationCapacity(1, 1),
+                () -> new StationSnapshot(StationType.P2P, 0, 0));
+        WarehouseSchedulerSnapshot evaluationSnapshot = snapshot();
+        StationAdmissionResolver scoped = resolver.forEvaluation(evaluationSnapshot);
+
+        assertThrows(IllegalArgumentException.class, () -> scoped.admissionFor(
+                StationType.P2P,
+                candidate("order-1"),
+                snapshot()));
     }
 
     @Test

@@ -16,8 +16,11 @@ strict JSON-backed invocation, Step 15 adds compact persistent progress logging,
 removes the proven full-day correlation-set allocation hot path. The next profiled run exposed
 separate completion, OSR, and P2P-workload costs: Steps 17-19 remove those measured or directly
 masked multiplicative paths. The Step 20 profile gate then identified two material immutable-
-snapshot linear lookups; Step 21 indexes and reuses those snapshots, and Step 22 owns final
-regression, external verification, review, and closure. A broader engine and
+snapshot linear lookups; Step 21 indexes and reuses those snapshots. The repeat allocation profile
+then exposed per-candidate reconstruction of complete headless P2P line snapshots for two station-
+capacity counts; Step 22 captures that state once per admission evaluation and obtains the counts
+without detailed snapshots. Step 23 owns final regression, external verification, review, and
+closure. A broader engine and
 render-integrated simulation allocation review remains deferred until the functional full-day path
 is working end to end.
 
@@ -1110,7 +1113,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 22 owns post-amendment regression
+No additional user verification is required for this step. Step 23 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1196,7 +1199,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 22 owns the post-change focused
+No additional user verification is required for this step. Step 23 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1355,7 +1358,7 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 22 owns the post-change focused
+No additional user verification is required for this step. Step 23 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
@@ -1551,7 +1554,7 @@ carrier barcode without modeling physical-carrier reuse.
 
 ### User verification
 
-No additional user verification is required for this step. Step 22 owns the post-change focused
+No additional user verification is required for this step. Step 23 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Normalize reused inbound tote identifiers`
@@ -1782,7 +1785,7 @@ configured capacity.
 
 ### User verification
 
-No additional user verification is required for this step. Step 22 owns the post-change focused
+No additional user verification is required for this step. Step 23 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Rate limit startup OSR overflow`
@@ -1893,7 +1896,7 @@ argument, while existing CLI automation and deterministic input ordering remain 
 
 ### User verification
 
-No additional user verification is required for this step. Step 22 owns regression and the
+No additional user verification is required for this step. Step 23 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Accept full-day analysis configuration`
@@ -2071,7 +2074,7 @@ block available, while final report and inspection retain exact diagnostic ident
 
 ### User verification
 
-No additional user verification is required for this step. Step 22 owns regression and the
+No additional user verification is required for this step. Step 23 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Persist compact full-day progress`
@@ -2219,7 +2222,7 @@ the later broad optimization review, not a calibrated performance promise.
 
 If PT1M does not appear within five minutes, capture a fresh `jcmd <pid> Thread.print -l`, stop the
 run, and do not broaden this implementation step speculatively. Amend the plan around the newly
-measured hotspot. Step 22 still owns the complete-day external run, focused regression, full suite,
+measured hotspot. Step 23 still owns the complete-day external run, focused regression, full suite,
 review, and closure.
 
 Proposed commit message: `Reuse full-day P2P admission snapshots`
@@ -2666,11 +2669,169 @@ neither method remains a material inclusive execution-sample site. Confirm alloc
 remain bounded and that simulated progress reaches at least as far as the Step 20 run. If another
 avoidable DSP/full-day site is material, amend the plan with one measured bounded step before
 closure. If this profile is green, analyse the durable progress log and separately plan any
-functional correction exposed by the Third Party termination before Step 22.
+functional correction exposed by the Third Party termination before Step 23.
 
 Proposed commit message: `Index hot DSP snapshot lookups`
 
-## Step 22: Regression, External Dataset Run, Review, And Closure
+The repeat Step 21 recording contained 2,533 execution samples. The indexed methods no longer
+descended into their former list scans, so their remaining inclusive samples are invocation
+frequency rather than evidence that the indexes failed. Allocation-sample attribution found that
+`DspOperationalReleaseSnapshot` accounted for only 3.96% of sampled
+`LinkedHashMap.newNode` weight and 3.28% of sampled `HashMap.resize` weight. The material caller was
+instead `DspHeadlessP2pLineRuntime.snapshot` (523,992,536 and 244,162,048 sampled bytes
+respectively), followed by its snapshot-constructor map-copy lambdas and
+`ToteToBagFlowController.getPrlsById`. Source tracing established that
+`OperationalCandidateRouteAdmissionFactory.create` asks the P2P resolver for admission once per
+candidate, while the full-day P2P station supplier builds two complete snapshots of every line to
+obtain only non-idle-PRL and station-arrival counts. Step 22 owns this newly measured
+multiplicative path. `P2pServiceCentreWorkloadSnapshot.distinctCopy`, genuine-addition
+`P2pBagCorrelationAssignmentSnapshot` reconstruction, and all other map sites remain separate
+re-profile candidates and must not be folded into Step 22 without new evidence.
+
+## Step 22: Capture P2P Admission State Once Per Evaluation
+
+This step removes complete P2P line-inspection snapshots from per-candidate operational admission
+and gives one candidate batch a single coherent view of P2P admission capacity. It does not change
+candidate ranking, route selection, target capacity, line allocation, correlation assignment,
+station processing, machine timing, or report/inspection snapshot behavior. It is not the deferred
+general engine/render-integrated optimization review.
+
+### Required reading for this step
+
+- `StationAdmissionResolver`, `OperationalCandidateRouteAdmissionFactory`,
+  `DspOperationalReleaseSnapshotFactory`, and `DspOperationalReleaseScheduler`;
+- `P2pStationAdmissionResolver`, `P2pCapacityStationAdapter`, `P2pAdmissionSnapshot`,
+  `StationSnapshot`, and `StationCapacity`;
+- the `stationAdmissionResolver` composition in `DspFullDayAnalysisRuntimeFactory`;
+- `DspHeadlessP2pLineRuntime`, `DspHeadlessP2pLineRuntimeSnapshot`,
+  `ToteToBagP2pLineActivityProbe`, `ToteToBagFlowController`, and
+  `StationRoutedToteArrivalQueue`;
+- `OperationalCandidateRouteAdmissionFactoryTest`, `P2pStationAdmissionResolverTest`,
+  `DspHeadlessP2pLineRuntimeTest`, `DspFullDayAnalysisRuntimeFactoryTest`, and
+  `StationRoutedToteArrivalQueueTest`.
+
+### Required change surface
+
+Modify production only in:
+
+- `StationAdmissionResolver.java`;
+- `OperationalCandidateRouteAdmissionFactory.java`;
+- `P2pStationAdmissionResolver.java`;
+- `DspHeadlessP2pLineRuntime.java`;
+- `DspFullDayAnalysisRuntimeFactory.java`;
+- `StationRoutedToteArrivalQueue.java`.
+
+Extend only the five tests named in the required reading. Do not change
+`DspHeadlessP2pLineRuntimeSnapshot`, `ToteToBagFlowController`, workload snapshots, correlation-
+assignment ownership, report projection, metrics, progress logging, machine classes, or the user-
+owned JFR PowerShell scripts. Their allocation sites are evidence to re-measure after the
+per-candidate caller is removed, not authorization to optimize them together. If the required
+implementation crosses one of those boundaries, stop and amend the plan.
+
+### Evaluation-scoped admission contract
+
+- Add one default evaluation-scoping method to `StationAdmissionResolver` while retaining exactly
+  one abstract method so every existing lambda remains source compatible. Given a non-null
+  `WarehouseSchedulerSnapshot`, the default returns the existing resolver and changes no behavior.
+  The returned resolver is explicitly scoped to that one immutable logical snapshot and candidate
+  batch; it must not be retained by a scheduler or reused for a later evaluation.
+- In `OperationalCandidateRouteAdmissionFactory.create`, obtain the evaluation-scoped resolver
+  exactly once after validating inputs and before iterating candidates. Route every candidate in
+  that invocation through the scoped resolver. A second `create` call must obtain a fresh scope,
+  even if a caller supplies an equal snapshot value. Candidate encounter order, skipped routes,
+  null handling, effective target-capacity checks, and returned immutable order remain unchanged.
+- Override the scoping method in `P2pStationAdmissionResolver`. The short-lived scoped resolver
+  must preserve the configured selected target and delegate non-P2P candidates through the
+  fallback resolver's scope. On its first P2P candidate only, lazily capture exactly one
+  `P2pAdmissionSnapshot`, one aggregate `StationSnapshot`, and one
+  `P2pCapacityStationAdapter`; reuse those immutable values for every later P2P candidate in that
+  same scope. A scope containing no P2P candidate must not invoke either P2P snapshot supplier.
+- Keep direct calls to the long-lived `P2pStationAdmissionResolver.admissionFor` compatible and
+  fresh: each direct call obtains current supplier state exactly as before. Do not put mutable
+  evaluation state on the long-lived resolver, in a static cache, or in shared domain state. The
+  short-lived scope is simulation-thread-owned and cannot outlive the factory invocation.
+- Capturing once is behaviorally valid because candidate admission does not mutate station or P2P
+  ownership during `OperationalCandidateRouteAdmissionFactory.create`; mutation occurs only after
+  the resulting candidate admissions are ranked and release is accepted. The scoped snapshot is
+  therefore the coherent state for the entire candidate decision batch.
+
+### Lightweight station-count contract
+
+- Add an allocation-free occupancy query to `StationRoutedToteArrivalQueue` backed by
+  `MachineWaitQueue.size()`. It must return the current count after enqueue/dequeue, verify the
+  queue and payload-map sizes agree without copying tote IDs or constructing a set, and leave the
+  existing full invariant validation and detailed `snapshot()` contract unchanged.
+- Add package-local or public read-only methods on `DspHeadlessP2pLineRuntime` for current non-idle
+  PRL count and station-arrival count. The PRL count iterates the runtime's stable PRL list with a
+  primitive counter and no stream or temporary collection; the arrival count delegates to the new
+  queue occupancy query. Both values must remain live as machine/queue state changes and must not
+  call `snapshot()`, `activityProbe.snapshot()`, `ToteToBagFlowController.getPrlsById`, outbound
+  snapshotting, or report projection.
+- Replace the full-day P2P `StationSnapshot` supplier's two stream pipelines and two complete
+  snapshots per line with one explicit pass over the five line runtimes. Sum the two lightweight
+  counts and construct only the single aggregate `StationSnapshot` required by the capacity
+  adapter. Preserve the existing station type, capacity formula, selected target, overflow
+  behavior, integer semantics, and line encounter order.
+- Do not cache the lightweight counts between admission evaluations. The evaluation scope reuses
+  one captured aggregate snapshot within a batch; the next batch reads fresh live line state.
+
+### Decision-complete test contract
+
+Extend `OperationalCandidateRouteAdmissionFactoryTest` with a resolver whose scoping method counts
+captures and whose scoped resolver counts candidate calls. With a large ordered candidate list,
+prove one scope is created, every routed candidate uses it in encounter order, skipped candidates
+remain skipped, and a second factory invocation creates exactly one new scope. Existing lambda-
+based resolver tests must continue to compile and pass, proving the interface remains functional.
+
+Extend `P2pStationAdmissionResolverTest` to prove multiple P2P candidates in one scope call each
+snapshot supplier once and reuse one capacity view; a mixed station batch still delegates
+non-P2P candidates correctly; a no-P2P scope never calls the P2P suppliers; a second scope observes
+changed supplier values; and direct unscoped `admissionFor` calls remain fresh. Retain selected-
+target, capacity, blocked-reason, invalid-input, and fallback behavior.
+
+Extend `StationRoutedToteArrivalQueueTest` to prove the lightweight occupancy is zero initially,
+tracks enqueue/dequeue exactly, agrees with detailed snapshot occupancy, and preserves zero-
+capacity, FIFO, destination, and duplicate protections. Extend
+`DspHeadlessP2pLineRuntimeTest` to prove both lightweight counts agree with detailed snapshots at
+idle and after representative station/PRL state changes, without changing line ownership or
+machine behavior. Extend `DspFullDayAnalysisRuntimeFactoryTest` to prove the composed full-day
+resolver retains the same P2P target/capacity decision and refreshes it between operational
+evaluations. Do not use wall-clock limits, JFR internals, or constructor counters in production as
+unit-test assertions.
+
+### Expected output
+
+Each operational candidate batch obtains at most one P2P admission snapshot and one aggregate P2P
+station snapshot, regardless of candidate count. The aggregate count reads live line state without
+constructing complete line, activity, outbound, PRL-state, or station-processing snapshots. All
+scheduler and domain outcomes remain unchanged.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalCandidateRouteAdmissionFactoryTest --tests online.davisfamily.warehouse.sim.dsp.p2p.P2pStationAdmissionResolverTest --tests online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueueTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspHeadlessP2pLineRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSchedulerTest
+```
+
+### User verification
+
+Rebuild the installed distribution and repeat the same external-day run with a fresh progress log.
+Capture a comparable 45-second JFR recording after the start block and use the existing external
+analysis scripts with a Step 22 prefix. The run may still terminate at the known Third Party
+functional issue; do not suppress that failure in this optimization step.
+
+Confirm `DspHeadlessP2pLineRuntime.snapshot`, its constructor-copy lambdas,
+`ToteToBagFlowController.getPrlsById`, and `ToteToBagP2pLineActivityProbe.snapshot` no longer occur
+beneath per-candidate P2P station admission. Confirm the P2P snapshot suppliers execute once per
+operational candidate batch rather than once per P2P candidate, simulated progress reaches at
+least as far as the Step 21 run, GC remains healthy, and memory remains bounded. Re-run weighted
+allocation attribution for `LinkedHashMap.newNode` and `HashMap.resize`; separately report any
+remaining material callers, especially `P2pServiceCentreWorkloadSnapshot.distinctCopy` and
+genuine-addition `P2pBagCorrelationAssignmentSnapshot` construction. A remaining material site
+requires its own measured plan amendment before closure; do not broaden Step 22 after the fact.
+
+Proposed commit message: `Reuse P2P admission evaluation state`
+
+## Step 23: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the
 deferred broad engine/simulation optimization review during closure.
@@ -2741,6 +2902,9 @@ class/method/control-flow evidence:
 - operational-release snapshots retain one immutable physical-tote candidate index, reuse it for
   route-admission validation and candidate lookup, and preserve every former record constructor,
   accessor, validation, ordering, and value-semantic contract;
+- each operational candidate batch captures one coherent P2P admission/capacity view lazily,
+  reuses it across P2P candidates, refreshes it for the next batch, and obtains aggregate live line
+  occupancy without constructing detailed line, activity, outbound, or PRL-map snapshots;
 - immutable P2P bag/trace/manifest plan indexes are reused while input identities remain unchanged,
   while lifecycle, AV02, outbound, lease, clock, and remaining-work state remain fresh per
   allocation evaluation;
@@ -2808,10 +2972,11 @@ After focused/full tests, the external-data run, and architecture review are gre
   unrelated completed-plan history;
 - record full-day analysis as explicitly uncalibrated and based on provisional P2P output closure;
 - record the measured full-day P2P admission, completion aggregation, OSR snapshot, immutable
-  P2P-workload index, correlation-assignment snapshot, and operational-release candidate-index
-  corrections together with the Step 20 and Step 21 profile evidence, without claiming general
-  engine optimization; retain a broader render-integrated engine/simulation allocation and
-  performance review as explicitly deferred work after functional full-day completion;
+  P2P-workload index, correlation-assignment snapshot, operational-release candidate-index, and
+  evaluation-scoped lightweight P2P station-capacity corrections together with the Step 20,
+  Step 21, and Step 22 profile evidence, without claiming general engine optimization; retain a
+  broader render-integrated engine/simulation allocation and performance review as explicitly
+  deferred work after functional full-day completion;
 - make the next programme feature an explicit user decision between Exception Station Phase 1,
   timing calibration, outbound dispatch/32R prerequisites, or renderer integration; do not select
   one during closure;

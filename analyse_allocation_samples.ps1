@@ -2,6 +2,10 @@
 
 $allocationFile = "C:\misc\cpas-test\scheduler-testing\dsp-$step-object-allocation-samples.json"
 
+& $jfr print --json `
+    --events jdk.ObjectAllocationSample `
+    --stack-depth 16 $recording |
+    Out-File -Encoding utf8 $allocationFile
 $json = Get-Content $allocationFile -Raw | ConvertFrom-Json
 $samples = $json.recording.events
 

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -17,6 +18,7 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteT
 import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTargetRegistry;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 
 class OperationalCandidateRouteAdmissionFactoryTest {
 
@@ -173,6 +175,62 @@ class OperationalCandidateRouteAdmissionFactoryTest {
         assertTrue(admissions.stream().allMatch(admission ->
                 admission.stationAdmission().selectedTargetId().orElseThrow()
                         .equals("p2p-1")));
+    }
+
+    @Test
+    void shouldScopeResolverOncePerCandidateBatchAndRefreshForNextBatch() {
+        List<DspOperationalReleaseCandidate> candidates = new ArrayList<>();
+        candidates.add(OperationalRouteAdmissionTestSupport.candidate(
+                "no-route",
+                OperationalRouteAdmissionTestSupport.noRoute()));
+        for (int index = 0; index < 1_000; index++) {
+            candidates.add(OperationalRouteAdmissionTestSupport.candidate(
+                    "ordered-" + index,
+                    OperationalRouteAdmissionTestSupport.route(StationType.P2P)));
+        }
+        List<String> admittedOrderIds = new ArrayList<>();
+        AtomicInteger scopeCalls = new AtomicInteger();
+        AtomicInteger scopedAdmissionCalls = new AtomicInteger();
+        StationAdmissionResolver scopedResolver = (stationType, order, snapshot) -> {
+            scopedAdmissionCalls.incrementAndGet();
+            admittedOrderIds.add(order.order().orderId());
+            return OperationalRouteAdmissionTestSupport.openAdmission(
+                    stationType, "p2p-1");
+        };
+        StationAdmissionResolver resolver = new StationAdmissionResolver() {
+            @Override
+            public StationAdmissionSnapshot admissionFor(
+                    StationType stationType,
+                    online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState candidate,
+                    WarehouseSchedulerSnapshot snapshot) {
+                throw new AssertionError("unscoped resolver must not be used");
+            }
+
+            @Override
+            public StationAdmissionResolver forEvaluation(WarehouseSchedulerSnapshot snapshot) {
+                scopeCalls.incrementAndGet();
+                return scopedResolver;
+            }
+        };
+        OperationalCandidateRouteAdmissionFactory factory = factory(
+                resolver,
+                new OperationalRouteTargetRegistry(List.of(
+                        OperationalRouteAdmissionTestSupport.queue(
+                                StationType.P2P, "p2p-1", candidates.size() + 1))));
+        WarehouseSchedulerSnapshot logicalSnapshot =
+                OperationalRouteAdmissionTestSupport.logicalSnapshot(candidates);
+
+        List<OperationalCandidateRouteAdmission> first = factory.create(candidates, logicalSnapshot);
+        List<OperationalCandidateRouteAdmission> second = factory.create(candidates, logicalSnapshot);
+
+        assertEquals(2, scopeCalls.get());
+        assertEquals(2_000, scopedAdmissionCalls.get());
+        assertEquals(1_000, first.size());
+        assertEquals(1_000, second.size());
+        assertEquals("order-ordered-0", admittedOrderIds.get(0));
+        assertEquals("order-ordered-999", admittedOrderIds.get(999));
+        assertEquals("order-ordered-0", admittedOrderIds.get(1_000));
+        assertEquals("order-ordered-999", admittedOrderIds.get(1_999));
     }
 
     @Test

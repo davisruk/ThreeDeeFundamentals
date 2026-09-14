@@ -81,7 +81,81 @@ public class P2pStationAdmissionResolver implements StationAdmissionResolver {
     }
 
     @Override
+    public StationAdmissionResolver forEvaluation(WarehouseSchedulerSnapshot snapshot) {
+        if (snapshot == null) {
+            throw new IllegalArgumentException("snapshot must not be null");
+        }
+        StationAdmissionResolver scopedFallback = fallbackResolver.forEvaluation(snapshot);
+        if (scopedFallback == null) {
+            throw new IllegalStateException(
+                    "fallbackResolver.forEvaluation returned null");
+        }
+        return new EvaluationScopedResolver(scopedFallback, snapshot);
+    }
+
+    @Override
     public StationAdmissionSnapshot admissionFor(
+            StationType stationType,
+            DspSchedulerOrderState candidate,
+            WarehouseSchedulerSnapshot snapshot) {
+        validateAdmissionInputs(stationType, candidate, snapshot);
+        if (stationType != StationType.P2P) {
+            return fallbackResolver.admissionFor(stationType, candidate, snapshot);
+        }
+
+        return newP2pAdapter().admissionFor(candidate.order());
+    }
+
+    private P2pCapacityStationAdapter newP2pAdapter() {
+        P2pAdmissionSnapshot p2pSnapshot = p2pSnapshotSupplier.get();
+        StationSnapshot stationSnapshot = p2pStationSnapshotSupplier.get();
+        return selectedTargetId
+                .map(targetId -> new P2pCapacityStationAdapter(
+                        p2pAdmission,
+                        p2pSnapshot,
+                        p2pCapacity,
+                        stationSnapshot,
+                        targetId))
+                .orElseGet(() -> new P2pCapacityStationAdapter(
+                        p2pAdmission,
+                        p2pSnapshot,
+                        p2pCapacity,
+                        stationSnapshot));
+    }
+
+    private final class EvaluationScopedResolver implements StationAdmissionResolver {
+        private final StationAdmissionResolver scopedFallback;
+        private final WarehouseSchedulerSnapshot evaluationSnapshot;
+        private P2pCapacityStationAdapter p2pAdapter;
+
+        private EvaluationScopedResolver(
+                StationAdmissionResolver scopedFallback,
+                WarehouseSchedulerSnapshot evaluationSnapshot) {
+            this.scopedFallback = scopedFallback;
+            this.evaluationSnapshot = evaluationSnapshot;
+        }
+
+        @Override
+        public StationAdmissionSnapshot admissionFor(
+                StationType stationType,
+                DspSchedulerOrderState candidate,
+                WarehouseSchedulerSnapshot snapshot) {
+            validateAdmissionInputs(stationType, candidate, snapshot);
+            if (snapshot != evaluationSnapshot) {
+                throw new IllegalArgumentException(
+                        "evaluation-scoped resolver received a different snapshot");
+            }
+            if (stationType != StationType.P2P) {
+                return scopedFallback.admissionFor(stationType, candidate, snapshot);
+            }
+            if (p2pAdapter == null) {
+                p2pAdapter = newP2pAdapter();
+            }
+            return p2pAdapter.admissionFor(candidate.order());
+        }
+    }
+
+    private static void validateAdmissionInputs(
             StationType stationType,
             DspSchedulerOrderState candidate,
             WarehouseSchedulerSnapshot snapshot) {
@@ -94,23 +168,6 @@ public class P2pStationAdmissionResolver implements StationAdmissionResolver {
         if (snapshot == null) {
             throw new IllegalArgumentException("snapshot must not be null");
         }
-        if (stationType != StationType.P2P) {
-            return fallbackResolver.admissionFor(stationType, candidate, snapshot);
-        }
-
-        P2pCapacityStationAdapter adapter = selectedTargetId
-                .map(targetId -> new P2pCapacityStationAdapter(
-                        p2pAdmission,
-                        p2pSnapshotSupplier.get(),
-                        p2pCapacity,
-                        p2pStationSnapshotSupplier.get(),
-                        targetId))
-                .orElseGet(() -> new P2pCapacityStationAdapter(
-                        p2pAdmission,
-                        p2pSnapshotSupplier.get(),
-                        p2pCapacity,
-                        p2pStationSnapshotSupplier.get()));
-        return adapter.admissionFor(candidate.order());
     }
 
     private static String requireTargetId(String targetId) {
