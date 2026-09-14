@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.p2p.allocation;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -30,6 +31,8 @@ public final class P2pWorkloadSnapshotFactory {
     private BagPlanningResult lastBagPlanningResult;
     private InboundToteManifestCatalog lastManifestCatalog;
     private P2pWorkloadPlanIndex lastPlanIndex;
+    private P2pWorkloadSnapshot lastSnapshot;
+    private Map<String, P2pServiceCentreWorkloadSnapshot> lastServiceCentreSnapshots = Map.of();
 
     public P2pWorkloadSnapshot create(
             P2pServiceCentreWorkSnapshot workSnapshot,
@@ -81,39 +84,78 @@ public final class P2pWorkloadSnapshotFactory {
 
         List<P2pServiceCentreWorkloadSnapshot> serviceCentres = new ArrayList<>();
         for (String serviceCentreId : orderedServiceCentreIds) {
-            List<PhysicalToteId> remainingToteIds = workSnapshot.remainingToteIds(serviceCentreId);
+            String normalizedServiceCentreId = serviceCentreId.trim();
+            List<PhysicalToteId> remainingToteIds = workSnapshot.remainingToteIds(
+                    normalizedServiceCentreId);
             remainingToteIds.forEach(toteId -> {
-                if (!serviceCentreId.equals(remainingToteOwners.get(toteId))) {
+                if (!normalizedServiceCentreId.equals(remainingToteOwners.get(toteId))) {
                     throw new IllegalStateException("Remaining tote owner changed during workload creation");
                 }
             });
 
-            List<PlannedBag> remainingBags = planIndex.plannedBagsByServiceCentre()
-                    .getOrDefault(serviceCentreId, List.of()).stream()
-                    .filter(bag -> !allocatedBagKeys.contains(bag.bagKey()))
-                    .toList();
-            int remainingPackCount = remainingPackCount(remainingBags);
-            List<BagKey> remainingBagKeys = remainingBags.stream()
-                    .map(PlannedBag::bagKey)
-                    .toList();
+            List<BagKey> remainingBagKeys = new ArrayList<>();
+            int remainingPackCount = 0;
+            try {
+                for (PlannedBag plannedBag : planIndex.plannedBagsByServiceCentre()
+                        .getOrDefault(normalizedServiceCentreId, List.of())) {
+                    if (allocatedBagKeys.contains(plannedBag.bagKey())) {
+                        continue;
+                    }
+                    remainingBagKeys.add(plannedBag.bagKey());
+                    remainingPackCount = Math.addExact(
+                            remainingPackCount,
+                            plannedBag.physicalPackIds().size());
+                }
+            } catch (ArithmeticException exception) {
+                throw new IllegalArgumentException("remaining pack count overflow", exception);
+            }
             List<OrderSheetKey> emptyOrders = workSnapshot
                     .unallocatedEmptyOrdersByServiceCentre()
-                    .getOrDefault(serviceCentreId, List.of());
+                    .getOrDefault(normalizedServiceCentreId, List.of());
             Duration estimate = estimate(
                     remainingToteIds.size(),
                     remainingPackCount,
                     remainingBagKeys.size(),
                     costConfig);
 
-            serviceCentres.add(new P2pServiceCentreWorkloadSnapshot(
-                    serviceCentreId,
+            P2pServiceCentreWorkloadSnapshot previous = lastServiceCentreSnapshots.get(
+                    normalizedServiceCentreId);
+            if (sameWorkloadValues(
+                    previous,
+                    normalizedServiceCentreId,
                     remainingToteIds,
                     remainingPackCount,
                     remainingBagKeys,
                     emptyOrders,
-                    estimate));
+                    estimate)) {
+                serviceCentres.add(previous);
+            } else {
+                serviceCentres.add(new P2pServiceCentreWorkloadSnapshot(
+                        normalizedServiceCentreId,
+                        remainingToteIds,
+                        remainingPackCount,
+                        remainingBagKeys,
+                        emptyOrders,
+                        estimate));
+            }
         }
-        return new P2pWorkloadSnapshot(serviceCentres);
+
+        if (sameServiceCentreSequence(serviceCentres)) {
+            return lastSnapshot;
+        }
+
+        P2pWorkloadSnapshot replacement = new P2pWorkloadSnapshot(serviceCentres);
+        Map<String, P2pServiceCentreWorkloadSnapshot> replacementServiceCentreSnapshots =
+                new LinkedHashMap<>();
+        for (P2pServiceCentreWorkloadSnapshot serviceCentre : serviceCentres) {
+            replacementServiceCentreSnapshots.put(
+                    serviceCentre.serviceCentreId(),
+                    serviceCentre);
+        }
+        lastSnapshot = replacement;
+        lastServiceCentreSnapshots = Collections.unmodifiableMap(
+                replacementServiceCentreSnapshots);
+        return replacement;
     }
 
     P2pWorkloadPlanIndex planIndexFor(
@@ -239,16 +281,34 @@ public final class P2pWorkloadSnapshotFactory {
         return Set.copyOf(allocatedBagKeys);
     }
 
-    private static int remainingPackCount(List<PlannedBag> remainingBags) {
-        int count = 0;
-        try {
-            for (PlannedBag remainingBag : remainingBags) {
-                count = Math.addExact(count, remainingBag.physicalPackIds().size());
-            }
-        } catch (ArithmeticException exception) {
-            throw new IllegalArgumentException("remaining pack count overflow", exception);
+    private static boolean sameWorkloadValues(
+            P2pServiceCentreWorkloadSnapshot previous,
+            String serviceCentreId,
+            List<PhysicalToteId> remainingToteIds,
+            int remainingPackCount,
+            List<BagKey> remainingBagKeys,
+            List<OrderSheetKey> emptyOrders,
+            Duration estimate) {
+        return previous != null
+                && previous.serviceCentreId().equals(serviceCentreId)
+                && previous.remainingToteIds().equals(remainingToteIds)
+                && previous.remainingUnallocatedPackCount() == remainingPackCount
+                && previous.remainingBagKeys().equals(remainingBagKeys)
+                && previous.unallocatedEmptyOrderSheetKeys().equals(emptyOrders)
+                && previous.estimatedSingleLineWork().equals(estimate);
+    }
+
+    private boolean sameServiceCentreSequence(
+            List<P2pServiceCentreWorkloadSnapshot> serviceCentres) {
+        if (lastSnapshot == null || serviceCentres.size() != lastSnapshot.serviceCentres().size()) {
+            return false;
         }
-        return count;
+        for (int index = 0; index < serviceCentres.size(); index++) {
+            if (serviceCentres.get(index) != lastSnapshot.serviceCentres().get(index)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Duration estimate(

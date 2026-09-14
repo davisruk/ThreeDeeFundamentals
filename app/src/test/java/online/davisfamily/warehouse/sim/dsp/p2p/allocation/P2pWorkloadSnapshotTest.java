@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.p2p.allocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -110,19 +111,26 @@ class P2pWorkloadSnapshotTest {
                 fixture.planning(), fixture.manifestCatalog()));
 
         P2pWorkloadSnapshot first = factory.create(
-                P2pServiceCentreWorkSnapshot.empty(),
+                new P2pServiceCentreWorkSnapshot(
+                        new LinkedHashMap<>(),
+                        new LinkedHashMap<>()),
                 fixture.manifestCatalog(),
                 fixture.planning(),
                 emptyOutbound(),
                 COSTS);
         P2pWorkloadSnapshot second = factory.create(
-                P2pServiceCentreWorkSnapshot.empty(),
+                new P2pServiceCentreWorkSnapshot(
+                        new LinkedHashMap<>(),
+                        new LinkedHashMap<>()),
                 fixture.manifestCatalog(),
                 fixture.planning(),
                 emptyOutbound(),
                 COSTS);
 
-        assertEquals(first, second);
+        assertSame(first, second);
+        for (int index = 0; index < first.serviceCentres().size(); index++) {
+            assertSame(first.serviceCentres().get(index), second.serviceCentres().get(index));
+        }
         assertEquals(3, first.serviceCentres().size());
         assertEquals(5_000, first.serviceCentres().stream()
                 .mapToInt(P2pServiceCentreWorkloadSnapshot::remainingUnallocatedBagCount)
@@ -148,6 +156,177 @@ class P2pWorkloadSnapshotTest {
         assertNotSame(afterPlanningReplacement, afterCatalogReplacement);
         assertSame(afterCatalogReplacement, factory.planIndexFor(
                 replacementPlanning, replacementCatalog));
+    }
+
+    @Test
+    void shouldReplaceOnlyCentresWhoseWorkloadValuesChange() {
+        LargePlanFixture fixture = fiveThousandBagPlan();
+        P2pWorkloadSnapshot base = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        new LinkedHashMap<>(),
+                        new LinkedHashMap<>()),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+        InboundToteManifest input104 = fixture.manifestCatalog()
+                .findByPhysicalToteId(new PhysicalToteId("input-104"))
+                .orElseThrow();
+
+        P2pWorkloadSnapshot toteChanged = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        Map.of("104", List.of(input104.physicalToteId())),
+                        Map.of()),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+
+        assertNotSame(base, toteChanged);
+        assertNotSame(base.require("104"), toteChanged.require("104"));
+        assertSame(base.require("108"), toteChanged.require("108"));
+        assertSame(base.require("109"), toteChanged.require("109"));
+        assertEquals(0, base.require("104").remainingInboundToteCount());
+        assertEquals(1, toteChanged.require("104").remainingInboundToteCount());
+
+        P2pWorkloadSnapshot noTote = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        new LinkedHashMap<>(),
+                        new LinkedHashMap<>()),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+        PlannedBag firstBag = fixture.planning().plannedBags().getFirst();
+        P2pWorkloadSnapshot bagChanged = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        new LinkedHashMap<>(),
+                        new LinkedHashMap<>()),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                allocatedSnapshot(firstBag),
+                COSTS);
+
+        assertNotSame(noTote, bagChanged);
+        assertNotSame(noTote.require("104"), bagChanged.require("104"));
+        assertSame(noTote.require("108"), bagChanged.require("108"));
+        assertSame(noTote.require("109"), bagChanged.require("109"));
+        assertEquals(
+                noTote.require("104").remainingUnallocatedBagCount() - 1,
+                bagChanged.require("104").remainingUnallocatedBagCount());
+
+        P2pWorkloadSnapshot emptyChanged = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        new LinkedHashMap<>(),
+                        Map.of("108", List.of(new OrderSheetKey("new-empty-108", 1)))),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                allocatedSnapshot(firstBag),
+                COSTS);
+
+        assertNotSame(bagChanged, emptyChanged);
+        assertSame(bagChanged.require("104"), emptyChanged.require("104"));
+        assertNotSame(bagChanged.require("108"), emptyChanged.require("108"));
+        assertSame(bagChanged.require("109"), emptyChanged.require("109"));
+        assertEquals(
+                List.of(new OrderSheetKey("new-empty-108", 1)),
+                emptyChanged.require("108").unallocatedEmptyOrderSheetKeys());
+
+        P2pWorkloadCostConfig changedCosts = new P2pWorkloadCostConfig(
+                COSTS.toteHandlingCost(),
+                COSTS.packProcessingCost(),
+                COSTS.baggingCost().plus(Duration.ofSeconds(1)));
+        P2pWorkloadSnapshot costChanged = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        new LinkedHashMap<>(),
+                        Map.of("108", List.of(new OrderSheetKey("new-empty-108", 1)))),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                allocatedSnapshot(firstBag),
+                changedCosts);
+
+        assertNotSame(emptyChanged, costChanged);
+        assertNotSame(emptyChanged.require("104"), costChanged.require("104"));
+        assertNotSame(emptyChanged.require("108"), costChanged.require("108"));
+        assertNotSame(emptyChanged.require("109"), costChanged.require("109"));
+        assertNotEquals(
+                emptyChanged.require("108").estimatedSingleLineWork(),
+                costChanged.require("108").estimatedSingleLineWork());
+    }
+
+    @Test
+    void shouldReplaceEqualCountValuesWhenToteIdentityOrOrderingChanges() {
+        LargePlanFixture fixture = fiveThousandBagPlan();
+        InboundToteManifest input104 = fixture.manifestCatalog()
+                .findByPhysicalToteId(new PhysicalToteId("input-104"))
+                .orElseThrow();
+        InboundToteManifest input108 = fixture.manifestCatalog()
+                .findByPhysicalToteId(new PhysicalToteId("input-108"))
+                .orElseThrow();
+        InboundToteManifest input109 = fixture.manifestCatalog()
+                .findByPhysicalToteId(new PhysicalToteId("input-109"))
+                .orElseThrow();
+        InboundToteManifest alternate104 = manifest(
+                "alternate-104", "order-alternate-104", "104", 3);
+        InboundToteManifestCatalog replacementCatalog = new InboundToteManifestCatalog(
+                List.of(input104, alternate104, input108, input109));
+
+        P2pWorkloadSnapshot original = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        Map.of("104", List.of(input104.physicalToteId())),
+                        Map.of()),
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+        P2pWorkloadSnapshot alternate = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        Map.of("104", List.of(alternate104.physicalToteId())),
+                        Map.of()),
+                replacementCatalog,
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+
+        assertEquals(
+                original.require("104").remainingInboundToteCount(),
+                alternate.require("104").remainingInboundToteCount());
+        assertNotSame(original.require("104"), alternate.require("104"));
+        assertSame(original.require("108"), alternate.require("108"));
+        assertSame(original.require("109"), alternate.require("109"));
+
+        P2pWorkloadSnapshot ordered = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        Map.of("104", List.of(
+                                input104.physicalToteId(),
+                                alternate104.physicalToteId())),
+                        Map.of()),
+                replacementCatalog,
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+        P2pWorkloadSnapshot reordered = factory.create(
+                new P2pServiceCentreWorkSnapshot(
+                        Map.of("104", List.of(
+                                alternate104.physicalToteId(),
+                                input104.physicalToteId())),
+                        Map.of()),
+                replacementCatalog,
+                fixture.planning(),
+                emptyOutbound(),
+                COSTS);
+
+        assertEquals(2, ordered.require("104").remainingInboundToteCount());
+        assertEquals(2, reordered.require("104").remainingInboundToteCount());
+        assertNotSame(ordered.require("104"), reordered.require("104"));
+        assertSame(ordered.require("108"), reordered.require("108"));
+        assertSame(ordered.require("109"), reordered.require("109"));
+        assertEquals(
+                List.of(input104.physicalToteId(), alternate104.physicalToteId()),
+                ordered.require("104").remainingToteIds());
+        assertEquals(
+                List.of(alternate104.physicalToteId(), input104.physicalToteId()),
+                reordered.require("104").remainingToteIds());
     }
 
     @Test
@@ -295,6 +474,68 @@ class P2pWorkloadSnapshotTest {
                 validPlanning, new InboundToteManifestCatalog(List.of())));
 
         assertSame(initial, factory.planIndexFor(validPlanning, validCatalog));
+    }
+
+    @Test
+    void shouldKeepPreviousSnapshotWhenLaterCentreValidationFails() {
+        InboundToteManifest input104 = manifest("input-104", "order-104", "104", 0);
+        PlannedBag bag104 = plannedBag(
+                "rx-104", "104", "pharmacy-104", input104, "pack-104");
+        BagPlanningResult planning = planning(List.of(bag104), List.of(input104));
+        InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(List.of(input104));
+        P2pServiceCentreWorkSnapshot validWork = new P2pServiceCentreWorkSnapshot(
+                Map.of("104", List.of(input104.physicalToteId())),
+                Map.of());
+        P2pWorkloadSnapshot successful = factory.create(
+                validWork,
+                catalog,
+                planning,
+                emptyOutbound(),
+                COSTS);
+
+        LinkedHashMap<String, List<PhysicalToteId>> invalidTotes = new LinkedHashMap<>();
+        invalidTotes.put("104", List.of(input104.physicalToteId()));
+        invalidTotes.put("108", List.of(new PhysicalToteId("missing-108")));
+        assertThrows(
+                IllegalStateException.class,
+                () -> factory.create(
+                        new P2pServiceCentreWorkSnapshot(invalidTotes, Map.of()),
+                        catalog,
+                        planning,
+                        emptyOutbound(),
+                        COSTS));
+
+        assertSame(successful, factory.create(
+                validWork,
+                catalog,
+                planning,
+                emptyOutbound(),
+                COSTS));
+    }
+
+    @Test
+    void shouldKeepWorkloadCachesIndependentAcrossFactoryInstances() {
+        InboundToteManifest input = manifest("input-104", "order-104", "104", 0);
+        PlannedBag bag = plannedBag(
+                "rx-104", "104", "pharmacy-104", input, "pack-104");
+        BagPlanningResult planning = planning(List.of(bag), List.of(input));
+        InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(List.of(input));
+
+        P2pWorkloadSnapshot first = new P2pWorkloadSnapshotFactory().create(
+                P2pServiceCentreWorkSnapshot.empty(),
+                catalog,
+                planning,
+                emptyOutbound(),
+                COSTS);
+        P2pWorkloadSnapshot second = new P2pWorkloadSnapshotFactory().create(
+                P2pServiceCentreWorkSnapshot.empty(),
+                catalog,
+                planning,
+                emptyOutbound(),
+                COSTS);
+
+        assertNotSame(first, second);
+        assertNotSame(first.require("104"), second.require("104"));
     }
 
     @Test

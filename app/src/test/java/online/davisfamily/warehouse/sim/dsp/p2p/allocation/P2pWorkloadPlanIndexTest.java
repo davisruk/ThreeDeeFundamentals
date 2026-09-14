@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.allocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -66,6 +67,34 @@ class P2pWorkloadPlanIndexTest {
                 () -> index.plannedBagsByServiceCentre().get("104").clear());
         assertThrows(UnsupportedOperationException.class,
                 () -> index.orderedServiceCentreIds().clear());
+    }
+
+    @Test
+    void shouldRebuildIndependentViewsForReplacementInputIdentities() {
+        InboundToteManifest input104 = manifest("input-104", "order-104", "104", 0);
+        PlannedBag bag104 = bag("rx-104", "104", input104, "pack-104");
+        BagPlanningResult planning = planning(List.of(bag104), List.of(input104));
+        InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(List.of(input104));
+
+        P2pWorkloadPlanIndex first = P2pWorkloadPlanIndex.from(planning, catalog);
+        P2pWorkloadPlanIndex replacement = P2pWorkloadPlanIndex.from(
+                new BagPlanningResult(
+                        planning.plannedBags(),
+                        planning.p2pToteLoadPlans(),
+                        planning.packTraces()),
+                new InboundToteManifestCatalog(catalog.manifests()));
+
+        assertNotSame(first, replacement);
+        assertEquals(first.plannedBagsByKey(), replacement.plannedBagsByKey());
+        assertEquals(
+                first.plannedBagsByServiceCentre(),
+                replacement.plannedBagsByServiceCentre());
+        assertEquals(first.orderedServiceCentreIds(), replacement.orderedServiceCentreIds());
+        assertNotSame(first.plannedBagsByKey(), replacement.plannedBagsByKey());
+        assertNotSame(
+                first.plannedBagsByServiceCentre(),
+                replacement.plannedBagsByServiceCentre());
+        assertNotSame(first.orderedServiceCentreIds(), replacement.orderedServiceCentreIds());
     }
 
     @Test
