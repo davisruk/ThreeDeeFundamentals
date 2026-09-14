@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.supply;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Duration;
@@ -70,9 +71,11 @@ class DspServiceCentreSupplyControllerTest {
 
         controller.update(context, 0.001d);
         DspSupplySnapshot afterFirstUpdate = controller.snapshot();
+        assertSame(afterFirstUpdate, controller.snapshot());
         controller.update(context, 999d);
 
         assertEquals(2, supplierCalls.get());
+        assertSame(afterFirstUpdate, controller.snapshot());
         assertEquals(afterFirstUpdate, controller.snapshot());
         assertEquals(
                 Optional.of(Duration.ofSeconds(8)),
@@ -103,7 +106,9 @@ class DspServiceCentreSupplyControllerTest {
                 () -> new DspServiceCentreSupplyController(
                         () -> null,
                         fixture.coordinator()).update(new SimulationContext(), 0d));
-        assertEquals(fixture.coordinator().snapshot(), controller.snapshot());
+        DspSupplySnapshot delegated = controller.snapshot();
+        assertSame(delegated, controller.snapshot());
+        assertSame(fixture.coordinator().snapshot(), delegated);
         assertThrows(
                 UnsupportedOperationException.class,
                 () -> controller.snapshot().serviceCentres().clear());

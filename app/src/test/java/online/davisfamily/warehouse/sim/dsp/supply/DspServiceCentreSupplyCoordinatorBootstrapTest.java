@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.supply;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,6 +31,7 @@ class DspServiceCentreSupplyCoordinatorBootstrapTest {
     void shouldRepresentPreloadedAndHeldUpstreamBatches() {
         Fixture fixture = fixture();
         DspSupplySnapshot snapshot = fixture.coordinator().snapshot();
+        assertSame(snapshot, fixture.coordinator().snapshot());
 
         ServiceCentreSupplySnapshot preloaded = snapshot.serviceCentres().get(0);
         ServiceCentreSupplySnapshot held = snapshot.serviceCentres().get(1);

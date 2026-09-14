@@ -1,6 +1,9 @@
 package online.davisfamily.warehouse.sim.dsp.supply;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -35,11 +38,18 @@ class DspRateLimitedInboundSupplyTest {
         Fixture fixture = fixture(10, laterManifests());
 
         fixture.coordinator().advance(clockAtSeconds(0));
+        DspSupplySnapshot authorized = fixture.coordinator().snapshot();
+        assertSame(authorized, fixture.coordinator().snapshot());
+
         fixture.coordinator().advance(clockAtSeconds(2));
+        assertSame(authorized, fixture.coordinator().snapshot());
         assertEquals(1, fixture.bootstrapState().inventorySnapshot().occupancy());
 
         fixture.coordinator().advance(clockAtSeconds(3));
 
+        DspSupplySnapshot admitted = fixture.coordinator().snapshot();
+        assertNotSame(authorized, admitted);
+        assertSame(admitted, fixture.coordinator().snapshot());
         assertEquals(2, fixture.bootstrapState().inventorySnapshot().occupancy());
         assertTrue(fixture.bootstrapState().inventorySnapshot()
                 .contains(fixture.laterManifests().getFirst().physicalToteId()));
@@ -185,6 +195,85 @@ class DspRateLimitedInboundSupplyTest {
     }
 
     @Test
+    void shouldRefreshForExternalOsrChangesEvenWhenFinalOccupancyIsEqual() {
+        Fixture fixture = fixture(10, laterManifests());
+        DspSupplySnapshot before = fixture.coordinator().snapshot();
+        InboundToteManifest externalManifest = fixture.laterManifests().getFirst();
+
+        fixture.bootstrapState().inventory().store(externalManifest);
+        fixture.bootstrapState().inventory().recordDeparture(externalManifest.physicalToteId());
+
+        DspSupplySnapshot after = fixture.coordinator().snapshot();
+        assertNotSame(before, after);
+        assertEquals(before.osrOccupancy(), after.osrOccupancy());
+        assertEquals(
+                PhysicalToteSupplyState.HELD_UPSTREAM,
+                physicalTote(before, "adapted-1").state());
+        assertEquals(
+                PhysicalToteSupplyState.DEPARTED_FROM_OSR,
+                physicalTote(after, "adapted-1").state());
+        assertEquals(0, before.admittedAfterStartupCount());
+        assertEquals(1, after.admittedAfterStartupCount());
+    }
+
+    @Test
+    void shouldRetainCachedSnapshotAfterFailedInventoryOperation() {
+        Fixture fixture = fixture(10, laterManifests());
+        DspSupplySnapshot cached = fixture.coordinator().snapshot();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> fixture.bootstrapState().inventory().recordDeparture(
+                        new PhysicalToteId("not-currently-stored")));
+
+        assertSame(cached, fixture.coordinator().snapshot());
+    }
+
+    @Test
+    void shouldDiscardCachedSnapshotAfterPolicyFailureFollowsAdmission() {
+        InboundToteArrivalPolicy failingPolicy = new InboundToteArrivalPolicy() {
+            private int calls;
+
+            @Override
+            public String policyId() {
+                return "FAIL_AFTER_FIRST_ADMISSION";
+            }
+
+            @Override
+            public Duration intervalBeforeNextTote(
+                    InboundToteManifest nextManifest,
+                    long previouslyAdmittedToteCount) {
+                if (calls++ == 0) {
+                    return Duration.ofSeconds(3);
+                }
+                throw new IllegalStateException("arrival policy failure");
+            }
+        };
+        List<InboundToteManifest> manifests = List.of(
+                manifest("first", "sc-later", OrderType.ADAPTED, 1),
+                manifest("second", "sc-later", OrderType.FULL_PACK, 2));
+        Fixture fixture = fixture(10, manifests, failingPolicy);
+
+        fixture.coordinator().advance(clockAtSeconds(0));
+        DspSupplySnapshot authorized = fixture.coordinator().snapshot();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> fixture.coordinator().advance(clockAtSeconds(3)));
+
+        DspSupplySnapshot afterFailure = fixture.coordinator().snapshot();
+        assertNotSame(authorized, afterFailure);
+        assertSame(afterFailure, fixture.coordinator().snapshot());
+        assertEquals(1, afterFailure.admittedAfterStartupCount());
+        assertEquals(
+                PhysicalToteSupplyState.STORED_IN_OSR,
+                physicalTote(afterFailure, "first").state());
+        assertEquals(
+                PhysicalToteSupplyState.AUTHORIZED_WAITING,
+                physicalTote(afterFailure, "second").state());
+    }
+
+    @Test
     void shouldRateLimitAndBlockStartupOverflowWithoutReclassifyingIt() {
         StartupFixture fixture = startupOverflowFixture();
 
@@ -211,7 +300,12 @@ class DspRateLimitedInboundSupplyTest {
                 physicalTote(blocked, "startup-4").state());
         assertEquals(0, blocked.admittedAfterStartupCount());
 
+        fixture.coordinator().advance(clockAtSeconds(3));
+        assertSame(blocked, fixture.coordinator().snapshot());
+
         fixture.bootstrapState().inventory().recordDeparture(new PhysicalToteId("startup-1"));
+        DspSupplySnapshot afterDeparture = fixture.coordinator().snapshot();
+        assertNotSame(blocked, afterDeparture);
         fixture.coordinator().advance(clockAtSeconds(3));
         DspSupplySnapshot resumed = fixture.coordinator().snapshot();
         assertEquals(
@@ -245,6 +339,16 @@ class DspRateLimitedInboundSupplyTest {
     private static Fixture fixture(
             int capacity,
             List<InboundToteManifest> laterManifests) {
+        return fixture(
+                capacity,
+                laterManifests,
+                FixedIntervalInboundToteArrivalPolicy.peak());
+    }
+
+    private static Fixture fixture(
+            int capacity,
+            List<InboundToteManifest> laterManifests,
+            InboundToteArrivalPolicy arrivalPolicy) {
         InboundToteManifest preloaded = manifest(
                 "preloaded",
                 "sc-preloaded",
@@ -284,7 +388,7 @@ class DspRateLimitedInboundSupplyTest {
                 new DspServiceCentreSupplyCoordinator(
                         plan,
                         new ServiceCentreSupplyConfig(1),
-                        FixedIntervalInboundToteArrivalPolicy.peak(),
+                        arrivalPolicy,
                         bootstrapState),
                 bootstrapState,
                 laterManifests,

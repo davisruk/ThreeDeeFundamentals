@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -36,6 +37,8 @@ public final class DspServiceCentreSupplyCoordinator {
     private String activeInboundServiceCentreId;
     private Duration nextPhysicalAdmissionElapsedTime;
     private Duration latestClockElapsedTime;
+    private DspSupplySnapshot cachedSnapshot;
+    private OsrInventorySnapshot cachedInventorySnapshot;
 
     public DspServiceCentreSupplyCoordinator(
             DspServiceCentreSupplyPlan plan,
@@ -113,27 +116,27 @@ public final class DspServiceCentreSupplyCoordinator {
             firstInterval = positiveArrivalInterval(
                     batch.physicalManifests().getFirst());
         }
-        authorizationStates.put(
+        setAuthorizationState(
                 batch.serviceCentreId(),
                 batch.physicalManifests().isEmpty()
                         ? ServiceCentreAuthorizationState.SUPPLY_COMPLETE
                         : ServiceCentreAuthorizationState.AUTHORIZED);
-        authorizationElapsedTimes.put(
+        setAuthorizationElapsedTime(
                 batch.serviceCentreId(),
                 Optional.of(elapsedSimulationTime));
-        authorizedEmptyOrderSheetKeys.addAll(batch.emptyOrderSheetKeys());
+        addAuthorizedEmptyOrderSheetKeys(batch.emptyOrderSheetKeys());
 
         if (batch.physicalManifests().isEmpty()) {
             return true;
         }
 
-        activeInboundServiceCentreId = batch.serviceCentreId();
+        setActiveInboundServiceCentreId(batch.serviceCentreId());
         for (InboundToteManifest manifest : batch.physicalManifests()) {
-            physicalToteStates.put(
+            setPhysicalToteState(
                     manifest.physicalToteId(),
                     PhysicalToteSupplyState.AUTHORIZED_WAITING);
         }
-        nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(firstInterval);
+        setNextPhysicalAdmissionElapsedTime(elapsedSimulationTime.plus(firstInterval));
         return true;
     }
 
@@ -176,7 +179,7 @@ public final class DspServiceCentreSupplyCoordinator {
                 return;
             }
             if (inventorySnapshot.full()) {
-                physicalToteStates.put(
+                setPhysicalToteState(
                         nextManifest.physicalToteId(),
                         PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY);
                 return;
@@ -191,8 +194,8 @@ public final class DspServiceCentreSupplyCoordinator {
                 completeActiveBatch(activeBatch, elapsedSimulationTime);
                 return;
             }
-            nextPhysicalAdmissionElapsedTime = scheduledDueTime.plus(
-                    positiveArrivalInterval(followingManifest));
+            setNextPhysicalAdmissionElapsedTime(scheduledDueTime.plus(
+                    positiveArrivalInterval(followingManifest)));
         }
     }
 
@@ -206,8 +209,8 @@ public final class DspServiceCentreSupplyCoordinator {
             completeActiveBatch(activeBatch, elapsedSimulationTime);
             return;
         }
-        nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(
-                positiveArrivalInterval(followingManifest));
+        setNextPhysicalAdmissionElapsedTime(elapsedSimulationTime.plus(
+                positiveArrivalInterval(followingManifest)));
     }
 
     private void admitManifest(
@@ -217,10 +220,12 @@ public final class DspServiceCentreSupplyCoordinator {
             throw new IllegalStateException("OSR capacity is full");
         }
         bootstrapState.inventory().store(manifest);
-        physicalToteStates.put(
+        invalidateSupplySnapshot();
+        setPhysicalToteState(
                 manifest.physicalToteId(),
                 PhysicalToteSupplyState.STORED_IN_OSR);
         admittedAfterStartupCount++;
+        invalidateSupplySnapshot();
     }
 
     private ServiceCentreSupplyBatch activeBatch() {
@@ -244,16 +249,16 @@ public final class DspServiceCentreSupplyCoordinator {
             ServiceCentreSupplyBatch batch,
             Duration elapsedSimulationTime) {
         if (batch.preloadedAtStart()) {
-            authorizationStates.put(
+            setAuthorizationState(
                     batch.serviceCentreId(),
                     ServiceCentreAuthorizationState.PRELOADED);
         } else {
-            authorizationStates.put(
+            setAuthorizationState(
                     batch.serviceCentreId(),
                     ServiceCentreAuthorizationState.SUPPLY_COMPLETE);
         }
-        activeInboundServiceCentreId = null;
-        nextPhysicalAdmissionElapsedTime = null;
+        setActiveInboundServiceCentreId(null);
+        setNextPhysicalAdmissionElapsedTime(null);
         if (batch.preloadedAtStart()) {
             activateNextStartupOverflowBatch(elapsedSimulationTime);
         }
@@ -271,9 +276,9 @@ public final class DspServiceCentreSupplyCoordinator {
             if (nextManifest == null) {
                 continue;
             }
-            activeInboundServiceCentreId = candidate.serviceCentreId();
-            nextPhysicalAdmissionElapsedTime = elapsedSimulationTime.plus(
-                    positiveArrivalInterval(nextManifest));
+            setActiveInboundServiceCentreId(candidate.serviceCentreId());
+            setNextPhysicalAdmissionElapsedTime(elapsedSimulationTime.plus(
+                    positiveArrivalInterval(nextManifest)));
             return;
         }
     }
@@ -291,6 +296,10 @@ public final class DspServiceCentreSupplyCoordinator {
 
     public DspSupplySnapshot snapshot() {
         OsrInventorySnapshot inventorySnapshot = bootstrapState.inventorySnapshot();
+        if (cachedSnapshot != null && cachedInventorySnapshot == inventorySnapshot) {
+            return cachedSnapshot;
+        }
+
         List<ServiceCentreSupplySnapshot> serviceCentreSnapshots = new ArrayList<>();
         Set<OrderSheetKey> snapshotAuthorizedEmptyKeys = new LinkedHashSet<>();
         long snapshotAdmittedAfterStartupCount = 0;
@@ -329,7 +338,7 @@ public final class DspServiceCentreSupplyCoordinator {
         }
 
         admittedAfterStartupCount = snapshotAdmittedAfterStartupCount;
-        return new DspSupplySnapshot(
+        DspSupplySnapshot snapshot = new DspSupplySnapshot(
                 arrivalPolicy.policyId(),
                 config.lowWaterMark(),
                 inventorySnapshot.capacity(),
@@ -339,6 +348,9 @@ public final class DspServiceCentreSupplyCoordinator {
                 snapshotAuthorizedEmptyKeys,
                 serviceCentreSnapshots,
                 admittedAfterStartupCount);
+        cachedInventorySnapshot = inventorySnapshot;
+        cachedSnapshot = snapshot;
+        return snapshot;
     }
 
     private ServiceCentreAuthorizationState effectiveAuthorizationState(
@@ -443,14 +455,14 @@ public final class DspServiceCentreSupplyCoordinator {
             boolean hasOverflow = batch.physicalManifests().stream()
                     .map(InboundToteManifest::physicalToteId)
                     .anyMatch(startupOverflowPhysicalToteIds::contains);
-            authorizationStates.put(
+            setAuthorizationState(
                     batch.serviceCentreId(),
                     batch.preloadedAtStart()
                             ? (hasOverflow
                                     ? ServiceCentreAuthorizationState.AUTHORIZED
                                     : ServiceCentreAuthorizationState.PRELOADED)
                             : ServiceCentreAuthorizationState.HELD_UPSTREAM);
-            authorizationElapsedTimes.put(
+            setAuthorizationElapsedTime(
                     batch.serviceCentreId(),
                     batch.preloadedAtStart()
                             ? Optional.of(Duration.ZERO)
@@ -465,12 +477,74 @@ public final class DspServiceCentreSupplyCoordinator {
                 } else {
                     state = PhysicalToteSupplyState.HELD_UPSTREAM;
                 }
-                physicalToteStates.put(physicalToteId, state);
+                setPhysicalToteState(physicalToteId, state);
             }
         }
-        authorizedEmptyOrderSheetKeys.addAll(bootstrapState.authorizedEmptyOrderSheetKeys());
+        addAuthorizedEmptyOrderSheetKeys(bootstrapState.authorizedEmptyOrderSheetKeys());
 
         activateNextStartupOverflowBatch(Duration.ZERO);
+    }
+
+    private void setAuthorizationState(
+            String serviceCentreId,
+            ServiceCentreAuthorizationState state) {
+        ServiceCentreAuthorizationState previous = authorizationStates.put(
+                serviceCentreId,
+                state);
+        if (previous != state) {
+            invalidateSupplySnapshot();
+        }
+    }
+
+    private void setAuthorizationElapsedTime(
+            String serviceCentreId,
+            Optional<Duration> elapsedTime) {
+        Optional<Duration> previous = authorizationElapsedTimes.put(
+                serviceCentreId,
+                elapsedTime);
+        if (!Objects.equals(previous, elapsedTime)) {
+            invalidateSupplySnapshot();
+        }
+    }
+
+    private void addAuthorizedEmptyOrderSheetKeys(Set<OrderSheetKey> keys) {
+        boolean changed = false;
+        for (OrderSheetKey key : keys) {
+            changed |= authorizedEmptyOrderSheetKeys.add(key);
+        }
+        if (changed) {
+            invalidateSupplySnapshot();
+        }
+    }
+
+    private void setPhysicalToteState(
+            PhysicalToteId physicalToteId,
+            PhysicalToteSupplyState state) {
+        PhysicalToteSupplyState previous = physicalToteStates.put(
+                physicalToteId,
+                state);
+        if (previous != state) {
+            invalidateSupplySnapshot();
+        }
+    }
+
+    private void setActiveInboundServiceCentreId(String serviceCentreId) {
+        if (!Objects.equals(activeInboundServiceCentreId, serviceCentreId)) {
+            activeInboundServiceCentreId = serviceCentreId;
+            invalidateSupplySnapshot();
+        }
+    }
+
+    private void setNextPhysicalAdmissionElapsedTime(Duration elapsedTime) {
+        if (!Objects.equals(nextPhysicalAdmissionElapsedTime, elapsedTime)) {
+            nextPhysicalAdmissionElapsedTime = elapsedTime;
+            invalidateSupplySnapshot();
+        }
+    }
+
+    private void invalidateSupplySnapshot() {
+        cachedSnapshot = null;
+        cachedInventorySnapshot = null;
     }
 
     private PhysicalToteSupplySnapshot physicalToteSnapshot(

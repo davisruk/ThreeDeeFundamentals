@@ -1,6 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.supply;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,10 +35,12 @@ class DspServiceCentreSupplyAuthorizationTest {
     @Test
     void shouldNotAuthorizeWhileOccupancyIsAboveLowWaterMark() {
         Fixture fixture = fixture();
+        DspSupplySnapshot initial = fixture.coordinator().snapshot();
 
         fixture.coordinator().advance(clockAtSeconds(10));
 
         DspSupplySnapshot snapshot = fixture.coordinator().snapshot();
+        assertSame(initial, snapshot);
         assertEquals(3, snapshot.osrOccupancy());
         assertTrue(snapshot.activeInboundServiceCentreId().isEmpty());
         assertEquals(
@@ -137,6 +141,34 @@ class DspServiceCentreSupplyAuthorizationTest {
                 () -> fixture.coordinator().advance(clockAtSeconds(4)));
     }
 
+    @Test
+    void shouldRefreshOnlyForAuthorizationAndCompletionMutations() {
+        EmptyOnlyFixture fixture = emptyOnlyFixture();
+        fixture.bootstrapState().inventory().recordDeparture(fixture.preloadedToteId());
+
+        DspSupplySnapshot initial = fixture.coordinator().snapshot();
+        assertSame(initial, fixture.coordinator().snapshot());
+
+        fixture.coordinator().advance(clockAtSeconds(1));
+        DspSupplySnapshot afterEmptyAuthorization = fixture.coordinator().snapshot();
+        assertNotSame(initial, afterEmptyAuthorization);
+        assertSame(afterEmptyAuthorization, fixture.coordinator().snapshot());
+
+        fixture.coordinator().advance(clockAtSeconds(2));
+        DspSupplySnapshot afterPhysicalAuthorization = fixture.coordinator().snapshot();
+        assertNotSame(afterEmptyAuthorization, afterPhysicalAuthorization);
+
+        fixture.coordinator().advance(clockAtSeconds(5));
+        DspSupplySnapshot completed = fixture.coordinator().snapshot();
+        assertNotSame(afterPhysicalAuthorization, completed);
+        assertEquals(
+                ServiceCentreAuthorizationState.SUPPLY_COMPLETE,
+                serviceCentre(completed, "sc-next").authorizationState());
+
+        fixture.coordinator().advance(clockAtSeconds(5));
+        assertSame(completed, fixture.coordinator().snapshot());
+    }
+
     private static Fixture fixture() {
         InboundToteManifest preloadedOne = manifest("preloaded-1", "sc-preloaded", OrderType.FULL_PACK, 0);
         InboundToteManifest preloadedTwo = manifest("preloaded-2", "sc-preloaded", OrderType.ADAPTED, 1);
@@ -196,7 +228,8 @@ class DspServiceCentreSupplyAuthorizationTest {
                         new ServiceCentreSupplyConfig(1),
                         FixedIntervalInboundToteArrivalPolicy.peak(),
                         bootstrapState),
-                bootstrapState);
+                bootstrapState,
+                preloaded.physicalToteId());
     }
 
     private static ServiceCentreSupplyBatch batch(
@@ -266,7 +299,8 @@ class DspServiceCentreSupplyAuthorizationTest {
 
     private record EmptyOnlyFixture(
             DspServiceCentreSupplyCoordinator coordinator,
-            OsrBootstrapState bootstrapState) {
+            OsrBootstrapState bootstrapState,
+            PhysicalToteId preloadedToteId) {
     }
 
 }

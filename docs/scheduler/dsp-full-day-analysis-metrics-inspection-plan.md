@@ -19,7 +19,8 @@ masked multiplicative paths. The Step 20 profile gate then identified two materi
 snapshot linear lookups; Step 21 indexes and reuses those snapshots. The repeat allocation profile
 then exposed per-candidate reconstruction of complete headless P2P line snapshots for two station-
 capacity counts; Step 22 captures that state once per admission evaluation and obtains the counts
-without detailed snapshots. Step 23 owns final regression, external verification, review, and
+without detailed snapshots. Steps 23-25 address measured supply, workload, and lifecycle
+snapshot allocations, with a shared profile gate after Step 25. Step 26 owns final regression, external verification, review, and
 closure. A broader engine and
 render-integrated simulation allocation review remains deferred until the functional full-day path
 is working end to end.
@@ -1113,7 +1114,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 23 owns post-amendment regression
+No additional user verification is required for this step. Step 26 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1199,7 +1200,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 23 owns the post-change focused
+No additional user verification is required for this step. Step 26 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1358,7 +1359,7 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 23 owns the post-change focused
+No additional user verification is required for this step. Step 26 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
@@ -1554,7 +1555,7 @@ carrier barcode without modeling physical-carrier reuse.
 
 ### User verification
 
-No additional user verification is required for this step. Step 23 owns the post-change focused
+No additional user verification is required for this step. Step 26 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Normalize reused inbound tote identifiers`
@@ -1785,7 +1786,7 @@ configured capacity.
 
 ### User verification
 
-No additional user verification is required for this step. Step 23 owns the post-change focused
+No additional user verification is required for this step. Step 26 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Rate limit startup OSR overflow`
@@ -1896,7 +1897,7 @@ argument, while existing CLI automation and deterministic input ordering remain 
 
 ### User verification
 
-No additional user verification is required for this step. Step 23 owns regression and the
+No additional user verification is required for this step. Step 26 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Accept full-day analysis configuration`
@@ -2074,7 +2075,7 @@ block available, while final report and inspection retain exact diagnostic ident
 
 ### User verification
 
-No additional user verification is required for this step. Step 23 owns regression and the
+No additional user verification is required for this step. Step 26 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Persist compact full-day progress`
@@ -2222,7 +2223,7 @@ the later broad optimization review, not a calibrated performance promise.
 
 If PT1M does not appear within five minutes, capture a fresh `jcmd <pid> Thread.print -l`, stop the
 run, and do not broaden this implementation step speculatively. Amend the plan around the newly
-measured hotspot. Step 23 still owns the complete-day external run, focused regression, full suite,
+measured hotspot. Step 26 still owns the complete-day external run, focused regression, full suite,
 review, and closure.
 
 Proposed commit message: `Reuse full-day P2P admission snapshots`
@@ -2669,7 +2670,7 @@ neither method remains a material inclusive execution-sample site. Confirm alloc
 remain bounded and that simulated progress reaches at least as far as the Step 20 run. If another
 avoidable DSP/full-day site is material, amend the plan with one measured bounded step before
 closure. If this profile is green, analyse the durable progress log and separately plan any
-functional correction exposed by the Third Party termination before Step 23.
+functional correction exposed by the Third Party termination before Step 26.
 
 Proposed commit message: `Index hot DSP snapshot lookups`
 
@@ -2831,7 +2832,252 @@ requires its own measured plan amendment before closure; do not broaden Step 22 
 
 Proposed commit message: `Reuse P2P admission evaluation state`
 
-## Step 23: Regression, External Dataset Run, Review, And Closure
+## Step 23: Reuse Supply Snapshots Between State Changes
+
+### Evidence and scope
+
+The Step 22 allocation attribution places approximately 3.41 GB of sampled weight beneath
+`ServiceCentreSupplySnapshot` across map-node allocation and resizing. Repeated supply reads
+reconstruct all service centres and physical-tote projections. This step introduces lazy reuse at
+the coordinator, whose snapshot also depends on external OSR inventory departures.
+
+### Required reading and change surface
+
+Read `DspServiceCentreSupplyCoordinator`, `DspServiceCentreSupplyController`,
+`DspSupplySnapshot`, `ServiceCentreSupplySnapshot`, `PhysicalToteSupplySnapshot`,
+`OsrBootstrapState`, and `OsrPhysicalInventory`, together with the supply authorization,
+rate-limited inbound, bootstrap, and controller tests. Read the completed rate-limited supply
+plan and Step 13's overflow contract.
+
+Modify production only in `DspServiceCentreSupplyCoordinator.java`. Extend
+`DspServiceCentreSupplyAuthorizationTest`, `DspRateLimitedInboundSupplyTest`,
+`DspServiceCentreSupplyCoordinatorBootstrapTest`, and `DspServiceCentreSupplyControllerTest`.
+Snapshot records, the OSR owner, arrival policy, and runtime composition remain unchanged.
+
+### Implementation contract
+
+- Retain a nullable cached `DspSupplySnapshot` and the exact `OsrInventorySnapshot` used to
+  construct it. Both fields belong to the simulation-thread-owned coordinator.
+- A read obtains the current OSR snapshot once. Return the cached supply snapshot directly when
+  it is valid and the OSR snapshot is the identical instance. Step 18 guarantees OSR snapshot
+  identity remains stable between inventory changes. Do not compare whole inventories.
+- Invalidate the cache at genuine coordinator mutations: authorization state/time and EMPTY
+  authorization changes; physical supply-state changes, including first capacity blocking;
+  active inbound centre changes; next-admission time changes; and admitted-count changes.
+  Centralize private mutation helpers where needed. Repeated assignment of an equal value must
+  not invalidate. Keep initialization ordered as now and leave the cache empty until first read.
+- Advancing only `latestClockElapsedTime` must not invalidate: this field is a monotonicity guard
+  and is absent from the snapshot. Polling before an admission is due, remaining capacity-blocked,
+  or finding no eligible authorization must retain cache identity.
+- Preserve the existing snapshot reconstruction and validation on a miss, including reconciliation
+  of `admittedAfterStartupCount` from inventory. Preserve this existing side effect and its
+  relationship to the arrival policy. Publish the cache and its inventory identity only after
+  successful construction and reconciliation.
+- Invalidate immediately alongside each successful mutation, before a later operation can throw.
+  A failure after a partial existing mutation must never leave an old cached snapshot eligible
+  for return. Do not change existing transaction semantics or introduce rollback.
+- An OSR departure or store outside `advance` must cause a miss, even when occupancy happens to
+  be unchanged after a store/departure pair. Effective PRELOADED-to-SUPPLY_COMPLETE state,
+  provenance counts, and physical tote state must refresh.
+- Preserve authorization order, inclusive low-water checks, no-burst recovery, startup overflow,
+  FIFO order, public signatures, and immutable detached historical snapshots.
+
+### Decision-complete test contract
+
+Assert repeated coordinator and controller snapshot reads return the identical object. Prove
+identity survives clock-only advancement, not-yet-due admission, repeated capacity blocking, and
+no remaining authorizations. Prove authorization (including EMPTY-only), first capacity blocking,
+admission, due-time rescheduling, and batch completion refresh all affected values, followed by
+stable repeated reads. Exercise startup overflow through its existing bootstrap fixture.
+
+Mutate OSR through its real store/departure methods without advancing the coordinator and assert
+snapshot refresh, correct occupancy and departed state, and unchanged old snapshots. Include a
+store/departure sequence with equal final occupancy. Retain invalid-time, duplicate, capacity,
+authorization-order, and no-burst assertions. Verify a failed operation without mutation leaves the
+cached identity intact; where a later policy failure follows an existing mutation, the next read
+must reflect that mutation rather than return a stale cache.
+
+### Expected output
+
+Repeated supply reads and clock polling allocate no equivalent supply snapshot graph. Supply and
+OSR changes remain visible at the next read.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.supply.*
+```
+
+### User verification
+
+No separate external run is required. Step 25 owns the shared repeat profiling checkpoint.
+
+Proposed commit message: `Reuse unchanged supply snapshots`
+
+## Step 24: Reuse Equivalent P2P Workload Values
+
+### Evidence and scope
+
+`P2pServiceCentreWorkloadSnapshot.distinctCopy` accounts for approximately 2.70 GB of sampled
+weight across the two map allocation sites in Step 22. Its temporary uniqueness sets are rebuilt
+for equivalent workload lists. Reuse the last validated per-centre value while retaining fresh
+validation of dynamic ownership.
+
+### Required reading and change surface
+
+Read `P2pWorkloadSnapshotFactory`, `P2pWorkloadPlanIndex`,
+`P2pServiceCentreWorkloadSnapshot`, `P2pWorkloadSnapshot`,
+`P2pServiceCentreWorkSnapshot`, `P2pServiceCentreWorkSnapshotFactory`, and
+`DspP2pElasticAllocationRuntime`, plus `P2pWorkloadSnapshotTest` and
+`P2pWorkloadPlanIndexTest`. Re-read Step 19's stable-index contract.
+
+Modify production only in `P2pWorkloadSnapshotFactory.java`. Extend
+`P2pWorkloadSnapshotTest.java` and `P2pWorkloadPlanIndexTest.java`. Keep public snapshot records,
+constructors, validation rules, lease retention, allocation policy, and cost model unchanged.
+
+### Implementation contract
+
+- Retain at most the last successfully published `P2pWorkloadSnapshot` and a map from centre ID
+  to its per-centre workload values. This bounded cache is local to each factory instance.
+- Continue executing current dynamic input validation on every call: null checks, remaining tote
+  ownership/source/lifecycle validation, allocated-bag identity validation, and owner consistency.
+  A cache hit must never bypass those checks.
+- Use one explicit encounter-ordered pass over each centre's indexed planned bags to build
+  remaining bag keys and sum pack counts, replacing the intermediate remaining-bag list and second
+  stream projection. Preserve the current integer overflow checks and cost-estimation semantics.
+- Before constructing a per-centre snapshot, compare its six public component values against the
+  prior cached centre: normalized centre ID, ordered remaining tote IDs, pack count, ordered bag
+  keys, ordered unallocated EMPTY sheets, and estimated work duration. Use value equality, not
+  incoming list identity or only counts. Equal components reuse the exact prior validated object.
+  Different components go through the existing public constructor and all its validation.
+- Comparing against a validated prior ordered list is sufficient for equivalent-list reuse:
+  duplicate/null content cannot equal the previously valid list. Do not add an unchecked public
+  constructor, trust arbitrary incoming lists, or retain mutable caller collections.
+- Reuse the aggregate snapshot if the final ordered centre values are unchanged. Otherwise build
+  a replacement aggregate and centre map. Publish replacement cache fields only after the whole
+  operation succeeds; a failed later centre must leave the prior cache intact.
+- Remove absent centres on publication. Retain no history beyond the last result. Input plan or
+  cost changes must still be validated and reflected in results; Step 19's plan index continues
+  to refresh on its existing identity boundary.
+- This step removes equivalent value construction, not all per-step traversal. It must not invent
+  mutation versions for work, bag, AV02, or lifecycle owners.
+
+### Decision-complete test contract
+
+Use a large ordered fixture and assert equal but independently created input collections reuse
+both the aggregate and per-centre objects. Change one centre's remaining tote, allocate one bag,
+and change EMPTY work in separate cases; only affected centre values should be replaced and old
+snapshots must remain detached. Change identities while keeping counts equal to catch count-only
+caches. Change ordering, cost configuration, and bag/manifest inputs and verify correct results.
+
+Retain malformed ownership, duplicate/null IDs, unknown allocated bag, altered bag identity, and
+AV02 lifecycle failures after a successful cached call. A later-centre validation failure must
+leave the prior successful cache reusable. Verify removed centres are absent, aggregate ordering
+is preserved, and separate factory instances share no mutable cache.
+
+### Expected output
+
+Equivalent per-centre workloads reuse validated immutable values and avoid repeated uniqueness
+sets; genuine workload changes remain visible each evaluation.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadPlanIndexTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.ElasticP2pLeaseRetentionPolicyTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntimeTest
+```
+
+### User verification
+
+No separate external run is required. Step 25 owns the shared repeat profiling checkpoint.
+
+Proposed commit message: `Reuse equivalent P2P workload snapshots`
+
+## Step 25: Reuse Lifecycle Snapshots And Repeat The Performance Gate
+
+### Evidence and scope
+
+Step 22 attributed approximately 1.29 GB across the two map allocation sites to lifecycle
+snapshot construction. `PhysicalToteLifecycleLedger.snapshot()` currently copies all tote records
+and assignments on every read. Cache the immutable value lazily at its authoritative owner.
+
+### Required reading and change surface
+
+Read `PhysicalToteLifecycleLedger`, `PhysicalToteLifecycleSnapshot`,
+`PhysicalToteRecord`, `PhysicalToteAssignment`, the lifecycle requirements, and
+`PhysicalToteLifecycleLedgerTest`. Inspect callers of the ledger's mutation methods and the
+existing OSR lazy snapshot pattern.
+
+Modify production only in `PhysicalToteLifecycleLedger.java`; extend only
+`PhysicalToteLifecycleLedgerTest.java`. Keep snapshot records, lifecycle transition rules,
+assignment indexing/query algorithms, runtime consumers, and thread boundaries unchanged.
+
+### Implementation contract
+
+- Add a nullable instance cache of `PhysicalToteLifecycleSnapshot`. First read builds the
+  existing defensive snapshot; subsequent reads return the exact same object.
+- Invalidate only after successful registration, tote transition, assignment addition, or
+  assignment termination. Invalidate immediately after the collection mutation. Preserve all
+  prevalidation, exception ordering, assignment sequence increments, and return values.
+- Failed duplicate registration, illegal transition, incompatible/exclusive assignment, invalid
+  activation/termination, or missing active assignment must not replace or invalidate the cache
+  when no mutation occurred. Reads and history queries do not invalidate.
+- Do not eagerly rebuild at mutation time: multiple mutations before a read should result in one
+  subsequent snapshot construction. Keep immutable historical snapshot values detached, and use
+  no global state, synchronization, object pool, or reset API.
+
+### Decision-complete test contract
+
+Prove repeated empty/populated reads return identical snapshots. Exercise all four successful
+mutation methods, verifying a fresh snapshot with correct values and stable subsequent identity.
+Hold earlier snapshots across transitions and termination and prove their records/history remain
+unchanged. Cover duplicate registration, illegal transition, assignment rejection, and termination
+rejection after a cache exists, asserting cache identity and sequence behavior remain unchanged.
+Exercise several successful mutations before reading and verify the final complete value.
+Use two independent ledgers to demonstrate cache isolation.
+
+### Expected output
+
+Lifecycle snapshot graphs are reconstructed on demand only after lifecycle mutation.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.lifecycle.* --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest
+```
+
+### User verification: shared Steps 23-25 profile gate
+
+After all three focused checks pass, rebuild the distribution with:
+
+```powershell
+.\gradlew :app:installDist
+```
+
+Run the same external day/configuration with a fresh progress log and
+`progressIntervalSeconds=60`. Capture a 45-second JFR recording after the completed start block
+and use the existing scripts with a Step 25 filename prefix. Retain hot methods, allocation by
+site, GC, execution stacks, and weighted allocation attribution outside source control.
+
+Confirm supply/lifecycle snapshot construction is absent from repeated unchanged reads and
+workload uniqueness-set construction is absent for equivalent values. Recheck the earlier
+Step 16-22 targets for regressions. Record recording duration, simulated-time interval covered,
+PT1M/PT2M wall-clock timings, GC pauses, and post-GC heap alongside weighted allocations.
+Allocation weights estimate allocation volume, not retained memory; neither larger totals nor
+lower percentages alone prove improved throughput. Compare equal simulated work where available,
+and do not interpret Old Garbage Collection events as automatically being full stop-the-world GC.
+
+The Step 22 reference has 30.57% map-node and 19.99% resize allocation pressure, 36 young and
+12 old collection events, and a longest reported pause of 21.5 ms. These describe the captured
+window, not whole-run memory or throughput.
+
+If the remaining profile is acceptable and progress advances, analyse the durable progress log
+and separately plan the known Third Party failure before closure. Preserve that failure during
+this performance work. A remaining dominant avoidable site requires another evidence-based
+amendment; do not expand these implementation steps retrospectively.
+
+Proposed commit message: `Reuse unchanged lifecycle snapshots`
+
+## Step 26: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the
 deferred broad engine/simulation optimization review during closure.
