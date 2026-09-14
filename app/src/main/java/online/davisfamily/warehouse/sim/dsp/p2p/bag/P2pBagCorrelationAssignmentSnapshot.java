@@ -1,19 +1,24 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.bag;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
 /** Immutable value view of committed correlation ownership. */
-public record P2pBagCorrelationAssignmentSnapshot(
-        List<P2pBagCorrelationAssignment> assignments) {
+public final class P2pBagCorrelationAssignmentSnapshot {
+    private static final P2pBagCorrelationAssignmentSnapshot EMPTY =
+            new P2pBagCorrelationAssignmentSnapshot(List.of());
 
-    public P2pBagCorrelationAssignmentSnapshot {
+    private final List<P2pBagCorrelationAssignment> assignments;
+    private final Map<String, P2pBagCorrelationAssignment> assignmentsByCorrelation;
+
+    public P2pBagCorrelationAssignmentSnapshot(
+            List<P2pBagCorrelationAssignment> assignments) {
         if (assignments == null) {
             throw new IllegalArgumentException("assignments must not be null");
         }
@@ -28,7 +33,8 @@ public record P2pBagCorrelationAssignmentSnapshot(
                                 + assignment.correlationId());
             }
         }
-        assignments = List.copyOf(assignments);
+        this.assignments = List.copyOf(assignments);
+        this.assignmentsByCorrelation = Collections.unmodifiableMap(byCorrelation);
     }
 
     public P2pBagCorrelationAssignmentSnapshot(
@@ -37,14 +43,16 @@ public record P2pBagCorrelationAssignmentSnapshot(
     }
 
     public static P2pBagCorrelationAssignmentSnapshot empty() {
-        return new P2pBagCorrelationAssignmentSnapshot(List.of());
+        return EMPTY;
+    }
+
+    public List<P2pBagCorrelationAssignment> assignments() {
+        return assignments;
     }
 
     public Optional<P2pBagCorrelationAssignment> find(String correlationId) {
         String normalized = requireValue(correlationId, "correlationId");
-        return assignments.stream()
-                .filter(assignment -> assignment.correlationId().equals(normalized))
-                .findFirst();
+        return Optional.ofNullable(assignmentsByCorrelation.get(normalized));
     }
 
     public Optional<P2pLineId> lineFor(String correlationId) {
@@ -52,9 +60,7 @@ public record P2pBagCorrelationAssignmentSnapshot(
     }
 
     public Map<String, P2pBagCorrelationAssignment> assignmentsByCorrelation() {
-        Map<String, P2pBagCorrelationAssignment> result = new LinkedHashMap<>();
-        assignments.forEach(assignment -> result.put(assignment.correlationId(), assignment));
-        return Collections.unmodifiableMap(result);
+        return assignmentsByCorrelation;
     }
 
     public Map<String, P2pBagCorrelationAssignment> correlationAssignments() {
@@ -74,6 +80,27 @@ public record P2pBagCorrelationAssignmentSnapshot(
                 .allMatch(lineId::equals);
     }
 
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof P2pBagCorrelationAssignmentSnapshot that)) {
+            return false;
+        }
+        return assignments.equals(that.assignments);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(assignments);
+    }
+
+    @Override
+    public String toString() {
+        return "P2pBagCorrelationAssignmentSnapshot[assignments=" + assignments + "]";
+    }
+
     private static String requireValue(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " must not be blank");
@@ -91,6 +118,6 @@ public record P2pBagCorrelationAssignmentSnapshot(
             throw new IllegalArgumentException(
                     "assignmentsByCorrelation must not contain null keys or values");
         }
-        return new ArrayList<>(assignmentsByCorrelation.values());
+        return List.copyOf(assignmentsByCorrelation.values());
     }
 }

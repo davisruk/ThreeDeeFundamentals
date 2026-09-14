@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -18,15 +19,17 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapsho
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 
-public record DspOperationalReleaseSnapshot(
-        List<DspOperationalReleaseCandidate> candidates,
-        List<ServiceCentrePharmacyGroup> pharmacyGroups,
-        Map<StationType, StationAdmissionSnapshot> stationAdmissions,
-        Set<PreparedLineKey> preparedLineKeys,
-        List<OperationalCandidateRouteAdmission> routeAdmissions,
-        P2pLineLeaseCatalogSnapshot p2pLineLeases,
-        Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
-        Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation) {
+public final class DspOperationalReleaseSnapshot {
+    private final List<DspOperationalReleaseCandidate> candidates;
+    private final List<ServiceCentrePharmacyGroup> pharmacyGroups;
+    private final Map<StationType, StationAdmissionSnapshot> stationAdmissions;
+    private final Set<PreparedLineKey> preparedLineKeys;
+    private final List<OperationalCandidateRouteAdmission> routeAdmissions;
+    private final P2pLineLeaseCatalogSnapshot p2pLineLeases;
+    private final Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions;
+    private final Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation;
+    private final Map<PhysicalToteId, DspOperationalReleaseCandidate>
+            candidatesByPhysicalToteId;
 
     public DspOperationalReleaseSnapshot(
             List<DspOperationalReleaseCandidate> candidates,
@@ -80,22 +83,67 @@ public record DspOperationalReleaseSnapshot(
                 Optional.empty());
     }
 
-    public DspOperationalReleaseSnapshot {
-        candidates = copyCandidates(candidates);
-        pharmacyGroups = copyAndValidateGroups(pharmacyGroups);
-        stationAdmissions = copyStationAdmissions(stationAdmissions);
-        preparedLineKeys = copyPreparedLineKeys(preparedLineKeys);
-        routeAdmissions = copyRouteAdmissions(routeAdmissions, candidates);
+    public DspOperationalReleaseSnapshot(
+            List<DspOperationalReleaseCandidate> candidates,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
+            Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation) {
+        CandidateCopies candidateCopies = copyCandidates(candidates);
+        this.candidates = candidateCopies.candidates();
+        this.candidatesByPhysicalToteId = candidateCopies.byPhysicalToteId();
+        this.pharmacyGroups = copyAndValidateGroups(pharmacyGroups);
+        this.stationAdmissions = copyStationAdmissions(stationAdmissions);
+        this.preparedLineKeys = copyPreparedLineKeys(preparedLineKeys);
+        this.routeAdmissions = copyRouteAdmissions(
+                routeAdmissions, this.candidatesByPhysicalToteId);
         if (p2pLineLeases == null) {
             throw new IllegalArgumentException("p2pLineLeases must not be null");
         }
-        p2pRouteAdmissions = copyP2pRouteAdmissions(
+        this.p2pLineLeases = p2pLineLeases;
+        this.p2pRouteAdmissions = copyP2pRouteAdmissions(
                 p2pRouteAdmissions, p2pLineLeases);
         if (elasticP2pAllocation == null) {
             throw new IllegalArgumentException("elasticP2pAllocation must not be null");
         }
-        validateElasticAllocation(candidates, p2pLineLeases, elasticP2pAllocation);
-        validateCandidateGroups(candidates, pharmacyGroups);
+        this.elasticP2pAllocation = elasticP2pAllocation;
+        validateElasticAllocation(this.candidates, p2pLineLeases, elasticP2pAllocation);
+        validateCandidateGroups(this.candidates, this.pharmacyGroups);
+    }
+
+    public List<DspOperationalReleaseCandidate> candidates() {
+        return candidates;
+    }
+
+    public List<ServiceCentrePharmacyGroup> pharmacyGroups() {
+        return pharmacyGroups;
+    }
+
+    public Map<StationType, StationAdmissionSnapshot> stationAdmissions() {
+        return stationAdmissions;
+    }
+
+    public Set<PreparedLineKey> preparedLineKeys() {
+        return preparedLineKeys;
+    }
+
+    public List<OperationalCandidateRouteAdmission> routeAdmissions() {
+        return routeAdmissions;
+    }
+
+    public P2pLineLeaseCatalogSnapshot p2pLineLeases() {
+        return p2pLineLeases;
+    }
+
+    public Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions() {
+        return p2pRouteAdmissions;
+    }
+
+    public Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation() {
+        return elasticP2pAllocation;
     }
 
     public Optional<DspOperationalReleaseCandidate> findByPhysicalToteId(
@@ -103,10 +151,7 @@ public record DspOperationalReleaseSnapshot(
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");
         }
-        return candidates.stream()
-                .filter(candidate -> candidate.physicalCandidate().physicalToteId()
-                        .equals(physicalToteId))
-                .findFirst();
+        return Optional.ofNullable(candidatesByPhysicalToteId.get(physicalToteId));
     }
 
     public List<ServiceCentrePharmacyGroup> groupsForServiceCentre(String serviceCentreId) {
@@ -135,8 +180,8 @@ public record DspOperationalReleaseSnapshot(
         if (candidate == null) {
             throw new IllegalArgumentException("candidate must not be null");
         }
-        DspOperationalReleaseCandidate storedCandidate = findByPhysicalToteId(
-                candidate.physicalCandidate().physicalToteId())
+        DspOperationalReleaseCandidate storedCandidate = Optional.ofNullable(
+                candidatesByPhysicalToteId.get(candidate.physicalCandidate().physicalToteId()))
                 .filter(candidate::equals)
                 .orElseThrow(() -> new IllegalArgumentException("candidate is not in this snapshot"));
 
@@ -149,6 +194,49 @@ public record DspOperationalReleaseSnapshot(
 
     public boolean stickyP2pAllocationEnabled() {
         return !p2pLineLeases.lines().isEmpty();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof DspOperationalReleaseSnapshot that)) {
+            return false;
+        }
+        return candidates.equals(that.candidates)
+                && pharmacyGroups.equals(that.pharmacyGroups)
+                && stationAdmissions.equals(that.stationAdmissions)
+                && preparedLineKeys.equals(that.preparedLineKeys)
+                && routeAdmissions.equals(that.routeAdmissions)
+                && p2pLineLeases.equals(that.p2pLineLeases)
+                && p2pRouteAdmissions.equals(that.p2pRouteAdmissions)
+                && elasticP2pAllocation.equals(that.elasticP2pAllocation);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                candidates,
+                pharmacyGroups,
+                stationAdmissions,
+                preparedLineKeys,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pRouteAdmissions,
+                elasticP2pAllocation);
+    }
+
+    @Override
+    public String toString() {
+        return "DspOperationalReleaseSnapshot[candidates=" + candidates
+                + ", pharmacyGroups=" + pharmacyGroups
+                + ", stationAdmissions=" + stationAdmissions
+                + ", preparedLineKeys=" + preparedLineKeys
+                + ", routeAdmissions=" + routeAdmissions
+                + ", p2pLineLeases=" + p2pLineLeases
+                + ", p2pRouteAdmissions=" + p2pRouteAdmissions
+                + ", elasticP2pAllocation=" + elasticP2pAllocation + "]";
     }
 
     private static void validateElasticAllocation(
@@ -180,23 +268,26 @@ public record DspOperationalReleaseSnapshot(
         });
     }
 
-    private static List<DspOperationalReleaseCandidate> copyCandidates(
+    private static CandidateCopies copyCandidates(
             List<DspOperationalReleaseCandidate> candidates) {
         if (candidates == null) {
             throw new IllegalArgumentException("candidates must not be null");
         }
         List<DspOperationalReleaseCandidate> copy = new ArrayList<>(candidates.size());
-        Set<PhysicalToteId> physicalToteIds = new LinkedHashSet<>();
+        Map<PhysicalToteId, DspOperationalReleaseCandidate> byPhysicalToteId =
+                new LinkedHashMap<>();
         for (DspOperationalReleaseCandidate candidate : candidates) {
             if (candidate == null) {
                 throw new IllegalArgumentException("candidates must not contain null elements");
             }
-            if (!physicalToteIds.add(candidate.physicalCandidate().physicalToteId())) {
+            if (byPhysicalToteId.putIfAbsent(
+                    candidate.physicalCandidate().physicalToteId(), candidate) != null) {
                 throw new IllegalArgumentException("candidate physical tote IDs must be distinct");
             }
             copy.add(candidate);
         }
-        return List.copyOf(copy);
+        return new CandidateCopies(
+                List.copyOf(copy), Collections.unmodifiableMap(byPhysicalToteId));
     }
 
     private static List<ServiceCentrePharmacyGroup> copyAndValidateGroups(
@@ -303,17 +394,10 @@ public record DspOperationalReleaseSnapshot(
 
     private static List<OperationalCandidateRouteAdmission> copyRouteAdmissions(
             List<OperationalCandidateRouteAdmission> routeAdmissions,
-            List<DspOperationalReleaseCandidate> candidates) {
+            Map<PhysicalToteId, DspOperationalReleaseCandidate> candidatesByPhysicalToteId) {
         if (routeAdmissions == null) {
             throw new IllegalArgumentException("routeAdmissions must not be null");
         }
-        Map<PhysicalToteId, DspOperationalReleaseCandidate> candidatesByPhysicalToteId =
-                new LinkedHashMap<>();
-        for (DspOperationalReleaseCandidate candidate : candidates) {
-            candidatesByPhysicalToteId.put(
-                    candidate.physicalCandidate().physicalToteId(), candidate);
-        }
-
         List<OperationalCandidateRouteAdmission> copy = new ArrayList<>();
         Set<PhysicalToteId> admittedPhysicalToteIds = new LinkedHashSet<>();
         OperationalRouteEntrySelector routeEntrySelector = new OperationalRouteEntrySelector();
@@ -344,6 +428,11 @@ public record DspOperationalReleaseSnapshot(
             copy.add(routeAdmission);
         }
         return List.copyOf(copy);
+    }
+
+    private record CandidateCopies(
+            List<DspOperationalReleaseCandidate> candidates,
+            Map<PhysicalToteId, DspOperationalReleaseCandidate> byPhysicalToteId) {
     }
 
     private static List<OperationalCandidateRouteAdmission> deriveCompatibilityRouteAdmissions(

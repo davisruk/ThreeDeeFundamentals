@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,6 +32,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 
 class DspOperationalReleaseSnapshotTest {
 
@@ -55,6 +57,29 @@ class DspOperationalReleaseSnapshotTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> snapshot(List.of(first, first), List.of(group("sc-1", "pharmacy-1", 0, 1))));
+    }
+
+    @Test
+    void shouldIndexLargeCandidateSnapshotWithoutChangingEncounterOrder() {
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", "pharmacy-1");
+        List<DspOperationalReleaseCandidate> candidates = new ArrayList<>();
+        for (int index = 0; index < 5_000; index++) {
+            candidates.add(candidate("tote-" + index, index, logicalState, List.of("pharmacy-1")));
+        }
+
+        DspOperationalReleaseSnapshot snapshot = snapshot(
+                candidates,
+                List.of(group("sc-1", "pharmacy-1", 0, 1)));
+
+        assertEquals(candidates, snapshot.candidates());
+        assertEquals(candidates.get(0), snapshot.findByPhysicalToteId(
+                new PhysicalToteId("tote-0")).orElseThrow());
+        assertEquals(candidates.get(2_500), snapshot.findByPhysicalToteId(
+                new PhysicalToteId("tote-2500")).orElseThrow());
+        assertEquals(candidates.get(4_999), snapshot.findByPhysicalToteId(
+                new PhysicalToteId("tote-4999")).orElseThrow());
+        assertTrue(snapshot.findByPhysicalToteId(new PhysicalToteId("missing")).isEmpty());
     }
 
     @Test
@@ -211,6 +236,10 @@ class DspOperationalReleaseSnapshotTest {
                 IllegalArgumentException.class,
                 () -> snapshot.groupIndexFor(candidate(
                         "other-tote", 2, logicalState, List.of("pharmacy-1"))));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> snapshot.groupIndexFor(candidate(
+                        "tote-1", 99, logicalState, List.of("pharmacy-1"))));
     }
 
     @Test
@@ -253,10 +282,63 @@ class DspOperationalReleaseSnapshotTest {
                                         openAdmission(StationType.P2P, "p2p-2")))));
     }
 
+    @Test
+    void shouldPreserveConstructorDefaultsAndValueSemantics() {
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", "pharmacy-1");
+        DspOperationalReleaseCandidate candidate = candidate(
+                "tote-1", 1, logicalState, List.of("pharmacy-1"));
+        List<ServiceCentrePharmacyGroup> groups = List.of(
+                group("sc-1", "pharmacy-1", 0, 1));
+
+        DspOperationalReleaseSnapshot fourArgument =
+                new DspOperationalReleaseSnapshot(candidateList(candidate), groups, Map.of(), Set.of());
+        DspOperationalReleaseSnapshot fiveArgument =
+                new DspOperationalReleaseSnapshot(
+                        candidateList(candidate), groups, Map.of(), Set.of(), List.of());
+        DspOperationalReleaseSnapshot sevenArgument =
+                new DspOperationalReleaseSnapshot(
+                        candidateList(candidate), groups, Map.of(), Set.of(), List.of(),
+                        new P2pLineLeaseCatalogSnapshot(List.of()),
+                        Map.of());
+        DspOperationalReleaseSnapshot eightArgument =
+                new DspOperationalReleaseSnapshot(
+                        candidateList(candidate), groups, Map.of(), Set.of(), List.of(),
+                        new P2pLineLeaseCatalogSnapshot(List.of()),
+                        Map.of(), Optional.empty());
+        DspOperationalReleaseSnapshot equivalent =
+                new DspOperationalReleaseSnapshot(
+                        candidateList(candidate), groups, Map.of(), Set.of(), List.of(),
+                        new P2pLineLeaseCatalogSnapshot(List.of()),
+                        Map.of(), Optional.empty());
+
+        assertEquals(List.of(), fourArgument.routeAdmissions());
+        assertEquals(List.of(), fiveArgument.routeAdmissions());
+        assertEquals(List.of(), sevenArgument.routeAdmissions());
+        assertEquals(Optional.empty(), eightArgument.elasticP2pAllocation());
+        assertEquals(equivalent, eightArgument);
+        assertEquals(equivalent.hashCode(), eightArgument.hashCode());
+        assertEquals(
+                "DspOperationalReleaseSnapshot[candidates=" + eightArgument.candidates()
+                        + ", pharmacyGroups=" + eightArgument.pharmacyGroups()
+                        + ", stationAdmissions=" + eightArgument.stationAdmissions()
+                        + ", preparedLineKeys=" + eightArgument.preparedLineKeys()
+                        + ", routeAdmissions=" + eightArgument.routeAdmissions()
+                        + ", p2pLineLeases=" + eightArgument.p2pLineLeases()
+                        + ", p2pRouteAdmissions=" + eightArgument.p2pRouteAdmissions()
+                        + ", elasticP2pAllocation=" + eightArgument.elasticP2pAllocation() + "]",
+                eightArgument.toString());
+    }
+
     private static DspOperationalReleaseSnapshot snapshot(
             List<DspOperationalReleaseCandidate> candidates,
             List<ServiceCentrePharmacyGroup> groups) {
         return new DspOperationalReleaseSnapshot(candidates, groups, Map.of(), Set.of());
+    }
+
+    private static List<DspOperationalReleaseCandidate> candidateList(
+            DspOperationalReleaseCandidate candidate) {
+        return List.of(candidate);
     }
 
     private static DspOperationalReleaseCandidate candidate(

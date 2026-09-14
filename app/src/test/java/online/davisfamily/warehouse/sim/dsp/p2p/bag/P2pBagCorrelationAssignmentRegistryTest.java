@@ -29,23 +29,37 @@ class P2pBagCorrelationAssignmentRegistryTest {
         P2pBagCorrelationAssignmentRegistry registry =
                 new P2pBagCorrelationAssignmentRegistry();
         Set<String> initial = registry.correlationIdsSnapshot();
+        P2pBagCorrelationAssignmentSnapshot initialSnapshot = registry.snapshot();
 
         assertSame(initial, registry.correlationIdsSnapshot());
+        assertSame(initialSnapshot, registry.snapshot());
+        assertSame(initialSnapshot, registry.assignmentSnapshot());
         assertThrows(UnsupportedOperationException.class, () -> initial.clear());
 
         registry.commit(List.of(BAG_A), assignment("tote-1", "line-1"));
         Set<String> afterFirstAddition = registry.correlationIdsSnapshot();
+        P2pBagCorrelationAssignmentSnapshot afterFirstSnapshot = registry.snapshot();
         assertNotSame(initial, afterFirstAddition);
+        assertNotSame(initialSnapshot, afterFirstSnapshot);
         assertEquals(Set.of("bag-a"), afterFirstAddition);
+        assertEquals(List.of("bag-a"), afterFirstSnapshot.assignments().stream()
+                .map(P2pBagCorrelationAssignment::correlationId).toList());
         assertSame(afterFirstAddition, registry.correlationIdsSnapshot());
+        assertSame(afterFirstSnapshot, registry.snapshot());
+        assertSame(afterFirstSnapshot, registry.assignmentSnapshot());
 
         registry.commit(List.of(BAG_A), assignment("tote-2", "line-1"));
         assertSame(afterFirstAddition, registry.correlationIdsSnapshot());
+        assertSame(afterFirstSnapshot, registry.snapshot());
 
         registry.commit(List.of(BAG_B), assignment("tote-3", "line-1"));
         Set<String> afterSecondAddition = registry.correlationIdsSnapshot();
+        P2pBagCorrelationAssignmentSnapshot afterSecondSnapshot = registry.snapshot();
         assertNotSame(afterFirstAddition, afterSecondAddition);
+        assertNotSame(afterFirstSnapshot, afterSecondSnapshot);
         assertEquals(Set.of("bag-a", "bag-b"), afterSecondAddition);
+        assertEquals(List.of("bag-a", "bag-b"), afterSecondSnapshot.assignments().stream()
+                .map(P2pBagCorrelationAssignment::correlationId).toList());
     }
 
     @Test
@@ -60,6 +74,8 @@ class P2pBagCorrelationAssignmentRegistryTest {
 
         assertEquals(firstAssignment, registry.find("bag-a").orElseThrow().p2pAssignment());
         assertEquals(beforeSecondTote, registry.snapshot());
+        assertSame(beforeSecondTote, registry.snapshot());
+        assertSame(beforeSecondTote, registry.assignmentSnapshot());
         assertEquals(new P2pLineId("line-1"), registry.lineFor("bag-a").orElseThrow());
         assertThrows(
                 UnsupportedOperationException.class,
@@ -81,6 +97,7 @@ class P2pBagCorrelationAssignmentRegistryTest {
                         List.of(BAG_A, BAG_B), assignment("tote-c", "line-1")));
 
         assertEquals(before, registry.snapshot());
+        assertSame(before, registry.snapshot());
         assertSame(correlationIdsBefore, registry.correlationIdsSnapshot());
         assertFalse(registry.compatibleWith(
                 List.of(BAG_A), registry.snapshot(), new P2pLineId("line-2")));

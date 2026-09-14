@@ -20,6 +20,8 @@ public final class P2pBagCorrelationAssignmentRegistry {
     private final Map<String, P2pBagCorrelationAssignment> assignmentsByCorrelation =
             new LinkedHashMap<>();
     private Set<String> correlationIdsSnapshot = Set.of();
+    private P2pBagCorrelationAssignmentSnapshot assignmentSnapshot =
+            P2pBagCorrelationAssignmentSnapshot.empty();
 
     public Optional<P2pBagCorrelationAssignment> find(String correlationId) {
         if (correlationId == null || correlationId.isBlank()) {
@@ -33,8 +35,7 @@ public final class P2pBagCorrelationAssignmentRegistry {
     }
 
     public P2pBagCorrelationAssignmentSnapshot snapshot() {
-        return new P2pBagCorrelationAssignmentSnapshot(
-                new ArrayList<>(assignmentsByCorrelation.values()));
+        return assignmentSnapshot;
     }
 
     public P2pBagCorrelationAssignmentSnapshot assignmentSnapshot() {
@@ -106,11 +107,17 @@ public final class P2pBagCorrelationAssignmentRegistry {
                 prospectiveCorrelationIds.add(addition.correlationId());
             }
             Set<String> publishedCorrelationIds = Set.copyOf(prospectiveCorrelationIds);
+            List<P2pBagCorrelationAssignment> prospectiveAssignments =
+                    new ArrayList<>(assignmentsByCorrelation.values());
+            prospectiveAssignments.addAll(additions);
+            P2pBagCorrelationAssignmentSnapshot publishedAssignmentSnapshot =
+                    new P2pBagCorrelationAssignmentSnapshot(prospectiveAssignments);
 
             for (P2pBagCorrelationAssignment addition : additions) {
                 assignmentsByCorrelation.put(addition.correlationId(), addition);
             }
             correlationIdsSnapshot = publishedCorrelationIds;
+            assignmentSnapshot = publishedAssignmentSnapshot;
         };
     }
 

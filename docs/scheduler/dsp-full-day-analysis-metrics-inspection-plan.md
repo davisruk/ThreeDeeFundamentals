@@ -15,8 +15,9 @@ unfinished identity as one enormous line without preserving progress across a st
 strict JSON-backed invocation, Step 15 adds compact persistent progress logging, and Step 16
 removes the proven full-day correlation-set allocation hot path. The next profiled run exposed
 separate completion, OSR, and P2P-workload costs: Steps 17-19 remove those measured or directly
-masked multiplicative paths, Step 20 is a profile gate for any remaining material hotspot, and
-Step 21 owns final regression, external verification, review, and closure. A broader engine and
+masked multiplicative paths. The Step 20 profile gate then identified two material immutable-
+snapshot linear lookups; Step 21 indexes and reuses those snapshots, and Step 22 owns final
+regression, external verification, review, and closure. A broader engine and
 render-integrated simulation allocation review remains deferred until the functional full-day path
 is working end to end.
 
@@ -1109,7 +1110,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 21 owns post-amendment regression
+No additional user verification is required for this step. Step 22 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1195,7 +1196,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 21 owns the post-change focused
+No additional user verification is required for this step. Step 22 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1354,7 +1355,7 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 21 owns the post-change focused
+No additional user verification is required for this step. Step 22 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
@@ -1550,7 +1551,7 @@ carrier barcode without modeling physical-carrier reuse.
 
 ### User verification
 
-No additional user verification is required for this step. Step 21 owns the post-change focused
+No additional user verification is required for this step. Step 22 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Normalize reused inbound tote identifiers`
@@ -1781,7 +1782,7 @@ configured capacity.
 
 ### User verification
 
-No additional user verification is required for this step. Step 21 owns the post-change focused
+No additional user verification is required for this step. Step 22 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Rate limit startup OSR overflow`
@@ -1892,7 +1893,7 @@ argument, while existing CLI automation and deterministic input ordering remain 
 
 ### User verification
 
-No additional user verification is required for this step. Step 21 owns regression and the
+No additional user verification is required for this step. Step 22 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Accept full-day analysis configuration`
@@ -2070,7 +2071,7 @@ block available, while final report and inspection retain exact diagnostic ident
 
 ### User verification
 
-No additional user verification is required for this step. Step 21 owns regression and the
+No additional user verification is required for this step. Step 22 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Persist compact full-day progress`
@@ -2218,7 +2219,7 @@ the later broad optimization review, not a calibrated performance promise.
 
 If PT1M does not appear within five minutes, capture a fresh `jcmd <pid> Thread.print -l`, stop the
 run, and do not broaden this implementation step speculatively. Amend the plan around the newly
-measured hotspot. Step 21 still owns the complete-day external run, focused regression, full suite,
+measured hotspot. Step 22 still owns the complete-day external run, focused regression, full suite,
 review, and closure.
 
 Proposed commit message: `Reuse full-day P2P admission snapshots`
@@ -2514,11 +2515,162 @@ memory, and observed PT1M/PT2M wall-clock durations. Specifically assess
 snapshot/report projection. Their earlier samples were too small and masked to justify changing
 their ownership yet.
 
-If another avoidable site is material, stop before Step 21 and formally add one bounded,
-decision-complete optimization step based on the new profile. Do not fold it into closure or the
-later broad engine/rendering review. If no material site remains, proceed to Step 21.
+The 45-second Step 20 recording contained 2,364 execution samples. Stack-inclusive analysis found
+424 samples (17.94%) in `P2pBagCorrelationAssignmentSnapshot.lineFor` and 161 samples (6.81%) in
+`DspOperationalReleaseSnapshot.findByPhysicalToteId`. Both methods linearly scan immutable lists,
+and the correlation-assignment supplier also reconstructs an equivalent snapshot for each sticky
+P2P candidate. Step 19's former target was no longer material, named application allocation sites
+were individually small, and GC remained healthy. The gate therefore routes to the bounded Step 21
+optimization. Do not proceed to Step 22 until its focused tests and repeat profile are green.
 
-## Step 21: Regression, External Dataset Run, Review, And Closure
+## Step 21: Index And Reuse Hot Immutable Lookup Snapshots
+
+This step removes only the two linear lookup paths established as material by Step 20. It does not
+change scheduling, ranking, line allocation, assignment, route admission, or completion behavior,
+and it does not begin the broader engine/render-integrated optimization review.
+
+### Required reading for this step
+
+- `P2pBagCorrelationAssignmentSnapshot`, `P2pBagCorrelationAssignmentRegistry`,
+  `P2pBagCorrelationAssignment`, `P2pBagCorrelationRequirement`, and
+  `BagCoherentOperationalP2pReleaseAssignmentCommitter`;
+- `DspP2pStickyLeaseRuntime.correlationAssignmentSnapshot()`,
+  `DspP2pElasticAllocationRuntime.correlationAssignmentSnapshot()`, and the correlation snapshot
+  use in `DspOperationalReleaseScheduler`;
+- `DspOperationalReleaseSnapshot`, `DspOperationalReleaseSnapshotFactory`,
+  `PharmacyGroupedSourceSequenceRankingPolicy`, and `DspOperationalReleaseScheduler`;
+- `OsrInventorySnapshot` and `OsrInventorySnapshotTest` as the existing record-to-indexed-
+  immutable-class compatibility pattern;
+- `P2pBagCorrelationAssignmentRegistryTest`, `DspOperationalReleaseSnapshotTest`,
+  `DspOperationalReleaseSnapshotFactoryTest`,
+  `PharmacyGroupedSourceSequenceRankingPolicyTest`, and
+  `DspOperationalReleaseSchedulerTest`.
+
+### Required change surface
+
+Modify production only in:
+
+- `P2pBagCorrelationAssignmentSnapshot.java`;
+- `P2pBagCorrelationAssignmentRegistry.java`;
+- `DspOperationalReleaseSnapshot.java`.
+
+Create `P2pBagCorrelationAssignmentSnapshotTest.java` and extend
+`P2pBagCorrelationAssignmentRegistryTest.java` and `DspOperationalReleaseSnapshotTest.java`.
+Production callers, factories, ranking/allocation policies, scheduler flow, and the user-owned JFR
+PowerShell scripts remain unchanged. If implementation requires changing one of those boundaries,
+stop and amend the plan rather than broadening this step.
+
+### Correlation-assignment snapshot contract
+
+- Convert `P2pBagCorrelationAssignmentSnapshot` from a record to a final immutable class because a
+  record cannot retain a derived per-instance index. Preserve the public `List` constructor, `Map`
+  constructor, `empty()`, `assignments()`, `find`, `lineFor`, `assignmentsByCorrelation`,
+  `correlationAssignments`, and `compatibleWith` signatures and their current validation and
+  normalization behavior.
+- Store exactly one defensive immutable encounter-ordered assignment list and one immutable
+  encounter-ordered `Map<String, P2pBagCorrelationAssignment>` built while validating that list.
+  `find` and `lineFor` must query that map directly. Both map accessors must return the same stored
+  map instance and must not reconstruct it.
+- Preserve the `Map` constructor's compatibility behavior: reject null keys or values, preserve
+  source-map value encounter order, and continue deriving correlation keys from assignment values;
+  do not introduce a new requirement that each source-map key equal its value's correlation ID.
+- Preserve record-style value behavior based only on the public `assignments` component: equal
+  assignment lists compare equal and produce equal hash codes, and `toString()` retains the former
+  `P2pBagCorrelationAssignmentSnapshot[assignments=...]` form. Derived indexes do not participate
+  in value identity. `empty()` returns one stable immutable empty instance.
+- Add a simulation-thread-owned cached `P2pBagCorrelationAssignmentSnapshot` field to
+  `P2pBagCorrelationAssignmentRegistry`, initialized from `empty()`. `snapshot()` returns this
+  field directly and `assignmentSnapshot()` continues to delegate to `snapshot()`.
+- In a prepared commit containing genuine additions, retain the current stale-state revalidation.
+  Before the mutation boundary, construct both the prospective immutable correlation-ID set and
+  the prospective immutable assignment snapshot from current assignments followed by additions.
+  Then append all additions to the registry map and publish both precomputed values. A rejected,
+  failed, or no-addition commit leaves the map and both cached object identities unchanged. No
+  synchronization, static mutable cache, or shared mutable collection is introduced.
+
+### Operational-release snapshot contract
+
+- Convert `DspOperationalReleaseSnapshot` from a record to a final immutable class, following the
+  `OsrInventorySnapshot` pattern. Preserve all four existing public constructor signatures, the
+  eight former component accessors, all query methods, validation messages/ordering where
+  observable, defensive immutability, encounter ordering, and record-style equality, hash code,
+  and `DspOperationalReleaseSnapshot[...]` text based only on those eight public components.
+- During construction, copy and validate candidates once while building one immutable
+  encounter-ordered `Map<PhysicalToteId, DspOperationalReleaseCandidate>`. Reuse that same
+  candidate index when validating route admissions instead of creating the current second local
+  candidate map. Keep the existing distinct-physical-tote rejection unchanged.
+- `findByPhysicalToteId` validates null exactly as now and performs one direct map lookup.
+  `groupIndexFor` uses the same indexed lookup and retains the equality check that rejects a
+  different candidate value carrying an existing physical tote ID. Do not cache or index pharmacy
+  groups, route-admission queries, station state, lease state, or elastic allocation in this step;
+  those paths were not established as material by Step 20.
+
+### Decision-complete test contract
+
+`P2pBagCorrelationAssignmentSnapshotTest` must:
+
+- construct 5,000 ordered assignments and prove `find` and `lineFor` return exact first, middle,
+  and last values and return empty for a missing normalized correlation;
+- prove the assignment list and correlation map preserve encounter order, are immutable and
+  defensively copied, and both map accessors repeatedly return the identical map instance;
+- cover null list/map content, duplicate assignment correlation IDs, blank lookup IDs, and the
+  existing map-constructor behavior where source keys need not equal assignment correlation IDs;
+- prove equivalent instances retain value equality/hash-code behavior and the former record-style
+  `toString()` form, and prove repeated `empty()` calls return the identical instance.
+
+Extend `P2pBagCorrelationAssignmentRegistryTest` to prove repeated `snapshot()` and
+`assignmentSnapshot()` reads return the identical immutable object; one successful genuine
+addition publishes exactly one new snapshot containing the old assignments followed by additions;
+a same-line no-addition commit retains snapshot and correlation-ID-set identities; a rejected
+mixed-line commit retains assignment values and both cached identities; and a later genuine
+addition replaces each cache once. These assertions must catch an implementation that still
+copies the assignment map/list on every scheduler candidate.
+
+Extend `DspOperationalReleaseSnapshotTest` to construct 5,000 distinct candidates for one valid
+service-centre/pharmacy group and prove exact first, middle, and last indexed lookup, missing lookup,
+null rejection, preserved candidate order, defensive immutability, and duplicate-ID rejection.
+Also prove `groupIndexFor` still rejects a different candidate value that reuses an indexed tote ID,
+all four constructor forms retain their defaults and accessors, and equivalent snapshots preserve
+value equality/hash-code and former record-style `toString()` behavior.
+
+Retain the existing factory, ranking, and scheduler tests to prove candidate construction,
+pharmacy grouping, route admission, sticky correlation compatibility, deterministic ranking, and
+release decisions are unchanged. Do not use wall-clock thresholds as unit-test evidence; the JFR
+repeat is the performance proof.
+
+### Expected output
+
+Correlation ownership snapshots are reconstructed only after genuine assignment additions and
+serve constant-time lookups between additions. Each operational-release snapshot retains one
+candidate index and serves constant-time physical-tote lookup throughout its immutable lifetime.
+No scheduler or domain outcome changes.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentRegistryTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotFactoryTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.PharmacyGroupedSourceSequenceRankingPolicyTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSchedulerTest
+```
+
+### User verification
+
+Rebuild the installed distribution and start the same external day with a fresh progress-log path.
+Capture a comparable 45-second JFR recording after the start block and use the existing external
+PowerShell analysis workflow with a Step 21 output prefix. The process may reach the already
+observed Third Party line failure during this bounded performance check; do not change or suppress
+that failure in this step.
+
+Confirm `P2pBagCorrelationAssignmentSnapshot.lineFor` no longer has a descendant chain that scans
+the assignment list, `DspOperationalReleaseSnapshot.findByPhysicalToteId` no longer has a
+descendant chain that scans candidates or calls `PhysicalToteId.equals` once per candidate, and
+neither method remains a material inclusive execution-sample site. Confirm allocations and GC
+remain bounded and that simulated progress reaches at least as far as the Step 20 run. If another
+avoidable DSP/full-day site is material, amend the plan with one measured bounded step before
+closure. If this profile is green, analyse the durable progress log and separately plan any
+functional correction exposed by the Third Party termination before Step 22.
+
+Proposed commit message: `Index hot DSP snapshot lookups`
+
+## Step 22: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the
 deferred broad engine/simulation optimization review during closure.
@@ -2578,11 +2730,17 @@ class/method/control-flow evidence:
 - immutable known-correlation IDs are constructed once per requirement catalog, active-correlation
   IDs only after genuine assignment additions, and full-day P2P admission snapshots are reused
   between those additions rather than rebuilt per release candidate;
+- immutable correlation-assignment snapshots and their encounter-ordered lookup maps are replaced
+  only after genuine assignment additions, while repeated scheduler-candidate reads reuse the same
+  snapshot and constant-time correlation lookup without changing assignment value semantics;
 - one full-day completion evaluation captures each dynamic owner once, reuses immutable input
   indexes, and aggregates whole-day collections in one pass while preserving conservative unknown
   ownership and exact completion values;
 - OSR inventory snapshots are immutable indexed values, retain record-compatible public behavior,
   and are replaced only after genuine inventory mutation rather than reconstructed on every read;
+- operational-release snapshots retain one immutable physical-tote candidate index, reuse it for
+  route-admission validation and candidate lookup, and preserve every former record constructor,
+  accessor, validation, ordering, and value-semantic contract;
 - immutable P2P bag/trace/manifest plan indexes are reused while input identities remain unchanged,
   while lifecycle, AV02, outbound, lease, clock, and remaining-work state remain fresh per
   allocation evaluation;
@@ -2649,9 +2807,10 @@ After focused/full tests, the external-data run, and architecture review are gre
   completed full-day plan, record the capacity-bounded prefix/overflow contract, and do not rewrite
   unrelated completed-plan history;
 - record full-day analysis as explicitly uncalibrated and based on provisional P2P output closure;
-- record the measured full-day P2P admission, completion aggregation, OSR snapshot, and immutable
-  P2P-workload index corrections together with the Step 20 profile evidence, without claiming
-  general engine optimization; retain a broader render-integrated engine/simulation allocation and
+- record the measured full-day P2P admission, completion aggregation, OSR snapshot, immutable
+  P2P-workload index, correlation-assignment snapshot, and operational-release candidate-index
+  corrections together with the Step 20 and Step 21 profile evidence, without claiming general
+  engine optimization; retain a broader render-integrated engine/simulation allocation and
   performance review as explicitly deferred work after functional full-day completion;
 - make the next programme feature an explicit user decision between Exception Station Phase 1,
   timing calibration, outbound dispatch/32R prerequisites, or renderer integration; do not select
