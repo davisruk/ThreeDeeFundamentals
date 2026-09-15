@@ -2,7 +2,7 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: active. Steps 1-12 are implemented and committed through `a3a0b3b`. Step 11 added the
+Status: active. Steps 1-25 are implemented and committed through `976d1d1`. Step 11 added the
 deployed 12N line-type code `03` mapping and full-day-only unresolved Third Party product projection.
 Step 12 deterministically substitutes a unique simulation ID for each later occurrence of a reused
 inbound carrier barcode while preserving the original barcode in the load report. The next
@@ -20,8 +20,11 @@ snapshot linear lookups; Step 21 indexes and reuses those snapshots. The repeat 
 then exposed per-candidate reconstruction of complete headless P2P line snapshots for two station-
 capacity counts; Step 22 captures that state once per admission evaluation and obtains the counts
 without detailed snapshots. Steps 23-25 address measured supply, workload, and lifecycle
-snapshot allocations, with a shared profile gate after Step 25. Step 26 owns final regression, external verification, review, and
-closure. A broader engine and
+snapshot allocations, with a shared profile gate after Step 25. The Step 25 profile confirmed
+those corrections and exposed a bounded set of remaining polling-driven snapshot, validation,
+completion, request, and metrics allocations. Steps 26-33 apply the static hot-path audit without
+broadening into general engine work, Step 34 owns the shared performance/functional gate, and Step
+35 owns final regression, external verification, review, and closure. A broader engine and
 render-integrated simulation allocation review remains deferred until the functional full-day path
 is working end to end.
 
@@ -1114,7 +1117,7 @@ same deterministic nonempty ordered `List<Path>` contract used by explicit files
 
 ### User verification
 
-No additional user verification is required for this step. Step 26 owns post-amendment regression
+No additional user verification is required for this step. Step 35 owns post-amendment regression
 and the external-data run.
 
 Proposed commit message: `Accept full-day order directories`
@@ -1200,7 +1203,7 @@ strict JSON binding. The metadata has no effect on mapped DSP work, and missing
 
 ### User verification
 
-No additional user verification is required for this step. Step 26 owns the post-change focused
+No additional user verification is required for this step. Step 35 owns the post-change focused
 regression, complete suite, and external-data run.
 
 Proposed commit message: `Accept optional 12N barcode metadata`
@@ -1359,7 +1362,7 @@ picks but do not abort a full-day run before the deferred Exception Station is i
 
 ### User verification
 
-No additional user verification is required for this step. Step 26 owns the post-change focused
+No additional user verification is required for this step. Step 35 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Accept third party 12N lines`
@@ -1555,7 +1558,7 @@ carrier barcode without modeling physical-carrier reuse.
 
 ### User verification
 
-No additional user verification is required for this step. Step 26 owns the post-change focused
+No additional user verification is required for this step. Step 35 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Normalize reused inbound tote identifiers`
@@ -1786,7 +1789,7 @@ configured capacity.
 
 ### User verification
 
-No additional user verification is required for this step. Step 26 owns the post-change focused
+No additional user verification is required for this step. Step 35 owns the post-change focused
 regression, complete suite, and repeated external-data run.
 
 Proposed commit message: `Rate limit startup OSR overflow`
@@ -1897,7 +1900,7 @@ argument, while existing CLI automation and deterministic input ordering remain 
 
 ### User verification
 
-No additional user verification is required for this step. Step 26 owns regression and the
+No additional user verification is required for this step. Step 35 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Accept full-day analysis configuration`
@@ -2075,7 +2078,7 @@ block available, while final report and inspection retain exact diagnostic ident
 
 ### User verification
 
-No additional user verification is required for this step. Step 26 owns regression and the
+No additional user verification is required for this step. Step 35 owns regression and the
 config-driven external-data run.
 
 Proposed commit message: `Persist compact full-day progress`
@@ -2223,7 +2226,7 @@ the later broad optimization review, not a calibrated performance promise.
 
 If PT1M does not appear within five minutes, capture a fresh `jcmd <pid> Thread.print -l`, stop the
 run, and do not broaden this implementation step speculatively. Amend the plan around the newly
-measured hotspot. Step 26 still owns the complete-day external run, focused regression, full suite,
+measured hotspot. Step 35 still owns the complete-day external run, focused regression, full suite,
 review, and closure.
 
 Proposed commit message: `Reuse full-day P2P admission snapshots`
@@ -2670,7 +2673,7 @@ neither method remains a material inclusive execution-sample site. Confirm alloc
 remain bounded and that simulated progress reaches at least as far as the Step 20 run. If another
 avoidable DSP/full-day site is material, amend the plan with one measured bounded step before
 closure. If this profile is green, analyse the durable progress log and separately plan any
-functional correction exposed by the Third Party termination before Step 26.
+functional correction exposed by the Third Party termination before Step 35.
 
 Proposed commit message: `Index hot DSP snapshot lookups`
 
@@ -3077,7 +3080,636 @@ amendment; do not expand these implementation steps retrospectively.
 
 Proposed commit message: `Reuse unchanged lifecycle snapshots`
 
-## Step 26: Regression, External Dataset Run, Review, And Closure
+### Static-audit scope boundary for Steps 26-34
+
+The audit also found list publication in transport/station queues, temporary values in controller
+snapshots and the five-line planner, and collection construction during startup/report generation.
+Those paths are bounded, low-frequency, or outside the fixed-step bottleneck and remain unchanged.
+`NotionalToteOrder.orderSheetKey()` also remains unchanged: Step 30 removes its repeated upstream
+use, and Step 34 determines whether any residual cost justifies a separately planned model change.
+Do not broaden Steps 26-33 into generic collection pre-sizing, stream removal, queue/controller
+rewrites, model-wide key caching, or the deferred render-integrated engine/simulation review.
+
+## Step 26: Publish Scheduler Snapshots Only After Genuine State Change
+
+### Evidence and scope
+
+The Step 25 static audit found that every `DspSchedulerRuntimeState.snapshot()` call reconstructs
+the complete order-state list, station-admission map, and prepared-line set. The runtime state is
+the authoritative simulation-thread owner and has a small, explicit mutation surface, so make
+snapshot reconstruction proportional to mutation rather than polling frequency.
+
+### Required reading and change surface
+
+Read `DspSchedulerRuntimeState`, `WarehouseSchedulerSnapshot`, all callers of the four runtime
+mutation APIs, and `DspSchedulerRuntimeStateTest`.
+
+Modify production only in `DspSchedulerRuntimeState.java`; extend only
+`DspSchedulerRuntimeStateTest.java`. Do not change `WarehouseSchedulerSnapshot`, scheduler command
+semantics, order transition rules, or any consumer.
+
+### Implementation contract
+
+- Add one nullable, instance-owned lazy `WarehouseSchedulerSnapshot` cache. `snapshot()` builds the
+  existing immutable value on the first read after construction or genuine mutation; unchanged
+  reads return the exact same object.
+- `markReleased(...)` invalidates immediately after its successful list replacement and active-
+  centre update. Preserve validation/exception ordering and all existing partial-failure behavior.
+- `replaceStationAdmission(...)` performs no mutation and retains cache identity when the existing
+  value is equal to the proposed value; a genuine replacement invalidates after `put`.
+- `addPreparedLineKey(...)` and `addPreparedLineKeys(...)` invalidate only when `Set.add` succeeds.
+  Preserve the batch method's current sequential behavior if a later element fails; do not add an
+  eager validation copy or transactional staging collection.
+- Failed calls, duplicate prepared keys, equal station admissions, and reads retain the cache.
+  Historical snapshots remain detached immutable values.
+- Do not use a version wrapper, per-read hash/fingerprint/equality scan, eager rebuild, global
+  cache, synchronization, weak map, or object pool. Do not add a second mutable index alongside the
+  existing collections.
+
+### Decision-complete test contract
+
+Prove identical empty and populated reads; fresh identity and correct value after each genuine
+mutation; stable identity after each named no-op/rejection; detached historical values; several
+mutations before one read cause only one publication; and two runtime owners do not share cache
+state. Include a batch-add case that mutates before a later invalid element and verify the next
+snapshot reflects the existing partial mutation.
+
+### Expected output
+
+Unchanged scheduler state publishes one reusable immutable snapshot without changing scheduler
+behavior or introducing replacement bookkeeping.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeStateTest --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.*
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Reuse unchanged scheduler snapshots`
+
+## Step 27: Publish Indexed AV02 Snapshots Only After Genuine State Change
+
+### Evidence and scope
+
+`Av02PhysicalToteInventory.snapshot()` recopies waiting/departed history on every poll, while
+`Av02InventorySnapshot` reconstructs uniqueness sets and later consumers rebuild all-history
+indexes. Publish one indexed immutable value per inventory state.
+
+### Required reading and change surface
+
+Read `Av02PhysicalToteInventory`, `Av02InventorySnapshot`, `Av02AllocatedTote`, all snapshot lookup
+callers, `Av02PhysicalToteInventoryTest`, `Av02AllocationSnapshotFactoryTest`, and the AV02 portions
+of `P2pServiceCentreWorkSnapshotFactory` and `P2pWorkloadSnapshotFactory`.
+
+Modify `Av02PhysicalToteInventory.java` and `Av02InventorySnapshot.java`; extend
+`Av02PhysicalToteInventoryTest.java` and `Av02AllocationDomainTest.java`. Consumer changes belong
+to Step 31, not this step.
+
+### Implementation contract
+
+- Convert `Av02InventorySnapshot` from a record to a final immutable class while preserving its
+  public three-argument constructor, component-named accessors, validation/exception behavior,
+  encounter order, and record-equivalent `equals`, `hashCode`, and `toString`.
+- During its one defensive construction, retain immutable indexes for all-history physical-tote
+  and order-sheet identity plus waiting-only identity. Existing `findWaiting(...)` methods use the
+  waiting indexes. Add `findTote(PhysicalToteId)` and `findTote(OrderSheetKey)` for waiting-or-
+  departed lookup. The constructor's uniqueness validation must populate these indexes in the
+  existing waiting-then-departed order; do not build separate throwaway uniqueness sets.
+- Add one nullable lazy snapshot cache to `Av02PhysicalToteInventory`. Successful `store(...)` and
+  `recordDeparture(...)` invalidate immediately after their first owner-visible collection
+  mutation. Rejected operations and reads retain identity; multiple mutations before a read cause
+  one rebuild; historical snapshots remain detached.
+- Keep indexes inside the immutable snapshot, not as duplicate mutable inventory state. Do not
+  use per-read list comparison/fingerprints, streams in lookup methods, global caches,
+  synchronization, or pooling.
+
+### Decision-complete test contract
+
+Retain every constructor validation test and add value-semantic/toString compatibility coverage.
+Prove waiting/all-history lookups for both keys, including departed values and
+missing/invalid keys. Prove repeated snapshot identity, invalidation after store/departure,
+identity retention after each rejection, detached historical values, batched mutation behavior,
+and owner isolation. Step 34's code review, rather than test-only production instrumentation, must
+verify that these lookups use the retained indexes and constructor validation does not build
+discarded duplicate indexes.
+
+### Expected output
+
+AV02 history is copied and indexed once per genuine inventory state and reused by all readers.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.av02.* --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotTest
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Index and reuse AV02 inventory snapshots`
+
+## Step 28: Publish Indexed Outbound Snapshots And Reuse Planned-Bag Closure Indexes
+
+### Evidence and scope
+
+`OutboundToteAllocator.snapshot()` rebuilds all open snapshots and republishes complete closed/bag
+history on every poll. `OutboundAllocationSnapshot` then creates validation maps but discards them,
+so callers scan history or rebuild bag-key sets. `closeApplicableOutputs(...)` additionally scans
+the complete day bag plan for every eligible line on every fixed step.
+
+### Required reading and change surface
+
+Read `OutboundToteAllocator`, `OutboundAllocationSnapshot`, `OutboundToteSnapshot`,
+`DspFullDayAnalysisRuntimeFactory.closeApplicableOutputs(...)`, all outbound snapshot lookup
+callers, `OutboundToteAllocatorTest`, `OutboundAllocationSnapshotTest`, and
+`DspFullDayAnalysisRuntimeFactoryTest`.
+
+Modify those two outbound production classes and the runtime factory; extend the three named test
+classes. Do not alter lifecycle transitions, closure criteria/reasons, bag order, capacity rules,
+or line-runtime processing-drained checks.
+
+### Implementation contract
+
+- Convert `OutboundAllocationSnapshot` to a final immutable class preserving its public
+  three-argument constructor, accessors, validations, ordering, and record-equivalent value
+  methods. Retain immutable `totesById` and `allocatedBagsByKey` indexes produced during existing
+  validation. `findTote(...)` and `findAllocatedBag(...)` use them. Add `allocatedBagKeys()` backed
+  by the immutable bag index and an owner lookup that returns the tote's optional service centre.
+- `OutboundToteAllocator` owns one nullable lazy snapshot. Every successful outbound-owned
+  mutation invalidates immediately at the first such mutation: creation after inserting the open
+  tote/line, allocation after `MutableOutboundTote.add(...)`, and closure after adding the closed
+  snapshot. This ordering deliberately preserves visibility if a later existing mutation fails.
+  No-open-tote close calls and rejected operations retain identity. Do not make lifecycle-ledger
+  mutations alone invalidate an outbound snapshot.
+- Pre-index `BagPlanningResult.plannedBags()` once by service centre when composing the full-day
+  runtime. `closeApplicableOutputs(...)` captures one outbound snapshot, uses its stable
+  `allocatedBagKeys()`, and checks only the current open tote's centre-specific planned keys.
+  Continue evaluating every line's live `processingDrained()` state on every invocation; outbound
+  snapshot identity must never be treated as proof that machine state is unchanged.
+- Avoid duplicate mutable indexes in the allocator, equality scans, per-read fingerprints,
+  unbounded identity maps, global state, synchronization, pooling, and a replacement per-poll set
+  or stream pipeline.
+
+### Decision-complete test contract
+
+Preserve all snapshot validation/value-semantic cases. Prove indexed lookups and allocated-key
+encounter order; repeated allocator identity; fresh values after new-open, ordinary allocation,
+capacity closure, explicit closure, and service-centre mismatch closure; stable identity on
+rejection/no-op; partial-failure visibility at each named mutation boundary; detached old values;
+and owner isolation. In the runtime-factory test, use bags from multiple centres to prove centre-
+specific closure, repeated-check stability, and continued closure when only line processing state
+changes. Step 34's code review must prove the whole plan is traversed only during composition.
+
+### Expected output
+
+Outbound state is copied/indexed only after outbound mutation, and fixed-step closure checks no
+longer rebuild or rescan whole-day bag structures.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.outbound.* --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Reuse indexed outbound state`
+
+## Step 29: Share Completion Capture Without Hiding Cutoff Mutations
+
+### Evidence and scope
+
+The cutoff controller and immediately following metrics controller independently request the full
+completion projection in each fixed step. The projection also copies the complete stable inbound
+owner map before overlaying dynamic owners. Eliminate the duplicate normal-step capture and large
+base-map copy while preserving the post-hard-cutoff view.
+
+### Required reading and change surface
+
+Read `DspFullDayCutoffController`, the runtime factory composition order and private
+`CompletionSnapshotSource`, `DspFullDayCompletionEvaluator`, `DspFullDayMetricsCollector`, and
+their tests.
+
+Modify `DspFullDayCutoffController.java`, `DspFullDayAnalysisRuntimeFactory.java`, and only the
+metrics completion-supplier wiring needed there. Extend `DspFullDayCompletionEvaluatorTest`,
+`DspFullDayMetricsCollectorTest`, and `DspFullDayAnalysisRuntimeFactoryTest`. Do not cache the
+public runtime `completionSnapshots()` query or change completion definitions.
+
+### Implementation contract
+
+- The cutoff controller publishes its latest successfully evaluated immutable completion list via
+  `Optional<List<DspServiceCentreCompletionSnapshot>> latestCompletionSnapshots()`. Validate/copy
+  once before publication; a failing/null supplier call publishes nothing new.
+- Each nonterminal update keeps the current ordering: close applicable output, evaluate completion,
+  publish it, then decide early completion. A normal update performs exactly one raw completion
+  evaluation. At hard cutoff, close all applicable assigned line outputs as today, then evaluate
+  and publish exactly once more before terminal publication so metrics observes post-closure
+  state. Do not key reuse only by elapsed time.
+- Runtime-factory metrics wiring reads the cutoff publication when present and calls the raw source
+  only for collector construction before the cutoff's first update. The public completion supplier
+  remains fresh, and metrics remains registered after cutoff.
+- Replace `CompletionSnapshotSource.serviceCentreByPhysicalTote(...)` with a private immutable
+  layered owner lookup. Resolve in the exact existing precedence: active routed tote, outbound,
+  AV02 waiting/departed, then stable inbound owner. Build only the bounded active-route override
+  map per evaluation; use Step 27/28 indexed lookup for other layers. Change helper parameters from
+  a materialized full map to this lookup abstraction.
+- Do not retain dynamic route owners between evaluations, duplicate all owner data in another map,
+  perform a fallback whole-list scan, add synchronization, or move completion mutation to another
+  thread.
+
+### Decision-complete test contract
+
+With counting suppliers, prove one normal raw evaluation and publication reused by metrics; one
+initial raw call before first update; hard cutoff performs exactly the required second post-close
+evaluation; early completion does not; null/failure does not publish partial data; and public
+runtime reads remain fresh. Cover every ownership layer, missing ownership, and conflicting IDs to
+prove precedence. Hold publication identities across metrics reads and prove a later update
+replaces them. Existing completion values/order/first-completion times must remain unchanged.
+
+### Expected output
+
+Normal fixed steps capture completion once, cutoff semantics retain their post-mutation view, and
+owner lookup no longer allocates a whole-day map.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCompletionEvaluatorTest --tests online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsCollectorTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeTest
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Share fixed-step completion capture`
+
+## Step 30: Reuse Operational-Release Validation Indexes
+
+### Evidence and scope
+
+The Step 25 allocation attribution identifies
+`DspOperationalReleaseSnapshotFactory.validateManifestLines` as the largest remaining linked-map
+caller. The factory also repeatedly indexes logical state, validates centre priorities, derives
+pharmacy IDs, and sorts stable manifest pharmacy groups; the AV02 join currently creates the same
+logical index twice.
+
+### Required reading and change surface
+
+Read every `DspOperationalReleaseSnapshotFactory.create(...)` overload,
+`DspOperationalReleaseSnapshot`, `WarehouseSchedulerSnapshot`, `InboundToteManifestCatalog`,
+`DspOperationalReleaseCandidate`, and `DspOperationalReleaseSnapshotFactoryTest`.
+
+Modify only `DspOperationalReleaseSnapshotFactory.java`; add private nested immutable index values
+there and extend only `DspOperationalReleaseSnapshotFactoryTest.java`. Do not alter public overloads,
+snapshot constructors, candidate/group ordering, route-admission behavior, or validation messages
+and precedence.
+
+### Implementation contract
+
+- Keep a single-entry factory-local `LogicalSnapshotIndex` keyed by exact
+  `WarehouseSchedulerSnapshot` identity. It contains the validated sheet-to-state map, one immutable
+  line-reference map and distinct ordered pharmacy list per sheet, and completion of centre-priority
+  validation. Build locally and publish only after every validation succeeds.
+- Keep a single-entry factory-local `ManifestCatalogIndex` keyed by exact
+  `InboundToteManifestCatalog` identity for the sorted manifest-derived pharmacy groups and other
+  manifest-only joins already traversed repeatedly. Build and publish only after complete success.
+- One `create(...)` call obtains each index once. Both OSR and AV02 paths share that logical index;
+  `validateManifestLines(...)` performs lookups in the retained per-sheet line map and never builds
+  a candidate-local map. Candidate-dependent AV02 pharmacy grouping remains dynamic and ordered.
+- Exact identity change always rebuilds and revalidates even when values compare equal. A failed
+  changed input must not poison or evict the prior successful single-entry cache. Do not introduce
+  an unbounded `IdentityHashMap`, value equality/fingerprint scan, global cache, weak references,
+  synchronization, or cached mutable input.
+- Do not optimize `NotionalToteOrder.orderSheetKey()` by changing that model record in this step;
+  the retained logical index must remove repeated hot-path calls at its source.
+
+### Decision-complete test contract
+
+Exercise every public create family with exact repeated inputs, changed identities, and equal-but-
+distinct immutable inputs. Retain representative duplicate logical sheet/line, inconsistent
+priority, manifest contradiction, AV02 identity, null, ordering, and route-admission failures.
+After a failed changed input, prove the earlier valid identities still produce the same snapshot
+value, and prove separate factory instances are isolated. Step 34's code review must prove exact-
+identity reuse bypasses logical line indexing, centre-priority validation, and manifest sorting;
+do not add production counters solely to make this internal detail test-visible.
+
+### Expected output
+
+Operational release reuses stable validated indexes and removes per-candidate manifest-line maps
+without weakening validation on genuinely new snapshots.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotFactoryTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.*
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Reuse operational release indexes`
+
+## Step 31: Reuse P2P Work Validation Across Unchanged Immutable Inputs
+
+### Evidence and scope
+
+`P2pServiceCentreWorkSnapshotFactory.create(...)` rebuilds scheduler uniqueness, AV02, lifecycle,
+and output maps; `P2pWorkloadSnapshotFactory` rebuilds remaining-owner and allocated-bag validation
+structures before Step 24 can reuse equivalent result values. Make validation work proportional to
+the identity of its immutable inputs while preserving Step 24 value reuse.
+
+### Required reading and change surface
+
+Read both factories, `P2pServiceCentreWorkSnapshot`, `P2pWorkloadSnapshot`,
+`P2pWorkloadPlanIndex`, the Step 24 implementation, Step 27/28 indexed APIs, and
+`P2pServiceCentreWorkSnapshotTest`, `P2pWorkloadSnapshotTest`, and
+`P2pWorkloadPlanIndexTest`.
+
+Modify only `P2pServiceCentreWorkSnapshotFactory.java` and
+`P2pWorkloadSnapshotFactory.java`; extend the three named tests. Do not change lifecycle snapshot
+internals, workload cost semantics, service-centre order, or Step 24's equivalent-value reuse.
+
+### Implementation contract
+
+- `P2pServiceCentreWorkSnapshotFactory` keeps one last successful result keyed by exact identity of
+  the order-state list, manifest catalog, AV02 snapshot, lifecycle snapshot, and authorized-EMPTY
+  set. An exact complete match returns that immutable result before constructing collections.
+  Otherwise validate and build locally, then atomically replace the single entry.
+- On rebuild, use Step 27 all-history AV02 lookups/indexes rather than concatenating lists or
+  building two AV02 maps. Build one active lifecycle assignment-by-sheet index for that lifecycle
+  snapshot and reuse it for every EMPTY sheet; do not stream all assignments per order.
+- `P2pWorkloadSnapshotFactory` keeps one validation entry keyed by exact work, manifest, bag-plan,
+  outbound, AV02, and lifecycle snapshot identities. Reuse the retained remaining-owner map and
+  Step 28's immutable allocated-bag keys when identities match. New identities run every existing
+  validation before replacing the entry; cost configuration remains a result-value input, not a
+  validation-index key.
+- Preserve the existing bag-plan index cache and Step 24 per-centre value reuse. Do not replace
+  those mechanisms, add a cache layer per service centre, perform equality/fingerprint scans to
+  find reuse, or retain more than one successful identity tuple. Failed builds leave the prior
+  entry reusable. No global cache, synchronization, weak map, pool, or mutable publication.
+
+### Decision-complete test contract
+
+Prove an exact repeat reuses the service-centre work result identity; each individual identity
+change produces the correct revalidated value; equal-but-distinct values remain correct; cost-only
+changes recompute correct estimates; and failure leaves the prior successful path reusable.
+Preserve all malformed owner, duplicate/null ID, unknown/altered bag, AV02/lifecycle, ordering,
+removed-centre, and aggregate-result cases. Prove independent factories share no state and Step 24
+still reuses unchanged per-centre result identities after a validation-cache hit. Step 34's code
+review must prove the cache hit precedes uniqueness/index construction and cost-only changes reuse
+validation; do not add production counters solely for these assertions.
+
+### Expected output
+
+P2P work factories retain correctness checks while removing repeated map/set construction for the
+same published state.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadPlanIndexTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntimeTest
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Reuse unchanged P2P work validation`
+
+## Step 32: Prevalidate Batch-Stable P2P Allocation Request Inputs
+
+### Evidence and scope
+
+Each sticky P2P candidate constructs `P2pLineAllocationRequest`, whose public compact constructor
+defensively recopies pharmacy IDs, route admissions, elastic line IDs, and correlation requirements.
+The Step 25 profile attributes material map allocation to correlation copying, while line catalog,
+route admissions, elastic allocation, and assignment snapshot are common to one scheduler
+evaluation and catalog-provided requirement sets are already immutable.
+
+### Required reading and change surface
+
+Read `P2pLineAllocationRequest`, `DspOperationalReleaseScheduler.evaluate(...)`,
+`P2pBagCorrelationRequirementCatalog`, both sticky allocation policies, and their scheduler/policy
+tests.
+
+Create `P2pLineAllocationRequestFactory.java` in the `p2p.lease` package. Modify
+`P2pLineAllocationRequest.java`, `DspOperationalReleaseScheduler.java`, and
+`DeadlineAwareElasticStickyP2pLineAllocationPolicy.java`; create
+`P2pLineAllocationRequestFactoryTest.java` and extend
+`DspOperationalReleaseSchedulerTest.java`,
+`DeadlineAwareElasticStickyP2pLineAllocationPolicyTest.java`, and
+`StickyP2pLineAllocationPolicyTest.java`. Keep all existing public request constructors and their
+validation behavior source compatible.
+
+### Implementation contract
+
+- Convert `P2pLineAllocationRequest` from a record to a final immutable class while preserving all
+  public constructors, component-named accessors, validation/exception behavior, and record-
+  equivalent `equals`, `hashCode`, and `toString`. Public constructors continue the current
+  defensive copies.
+- The new final factory is evaluation-scoped. Its public constructor accepts line catalog, route
+  admissions, optional elastic allocation, correlation-assignment snapshot, and
+  `P2pBagCorrelationRequirementCatalog`. It performs the request's existing null,
+  admission-copy/completeness, and elastic-line validation exactly once and stores only immutable
+  defensive values.
+- Its `create(OperationalPhysicalToteSource, PhysicalToteId, OrderSheetKey, String, List<String>,
+  boolean)` obtains the correlation requirement set from the immutable requirement catalog,
+  validates/copies the candidate identity/service centre/pharmacy values, and invokes a package-
+  private trusted request constructor. That constructor accepts only the factory's already
+  validated immutable batch values and catalog-owned requirement set and does not recopy them.
+  Keep the trusted constructor package-private and do not expose a bypass token/flag publicly.
+- `DspOperationalReleaseScheduler.evaluate(...)` captures the correlation-assignment supplier once
+  per evaluation when sticky P2P is enabled, creates one request factory, and uses it for all sticky
+  candidates. If no sticky candidate reaches allocation, preserve lazy supplier behavior and do
+  not create the factory. Use one nullable method-local factory variable; do not add scheduler-
+  instance mutable cache.
+- Remove `Set.copyOf(demand.feedingOwnedLineIds())` from
+  `DeadlineAwareElasticStickyP2pLineAllocationPolicy.allocate(...)`; the demand snapshot already
+  owns an immutable set and must be consumed directly.
+- Public constructors must continue defensive copying for arbitrary callers. Do not expose a
+  public trusted flag/factory method, weaken duplicate/null checks, cache request objects across
+  candidates/evaluations, alter policy ordering, or add global/thread-local state or pooling.
+
+### Decision-complete test contract
+
+Run all existing public-constructor rejection/defensive-copy tests unchanged and add request value-
+semantic/toString compatibility coverage. Direct factory tests prove stable copied batch values,
+candidate-specific values, catalog selection for OSR versus AV02, no aliasing to mutable caller
+collections, and rejection parity with public construction. Scheduler tests use a counting
+assignment supplier to prove one lazy capture for multiple
+candidates, zero capture without reached sticky allocation, and fresh values on the next
+evaluation. Preserve allocation decisions, block order, correlation compatibility, and source
+ordering. Prove two factories/evaluations share no mutable state. Step 34 verifies the trusted path
+contains no candidate-local correlation/admission copy and validates batch values only once.
+
+### Expected output
+
+Candidate requests retain their public safety contract while scheduler-owned immutable batch data
+is validated/copied once per evaluation rather than once per candidate.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSchedulerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationRequestFactoryTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pLineAllocationPolicyTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticStickyP2pLineAllocationPolicyTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspDeadlineAwareElasticLineAllocationScenarioTest
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Reuse P2P allocation request inputs`
+
+## Step 33: Reuse Full-Day Metrics Derived Indexes
+
+### Evidence and scope
+
+Metrics must observe every fixed step for duration accounting, but it currently reconstructs
+scheduler sheet ownership, complete physical-tote ownership, operational block maps, and elastic
+issue groupings even when their immutable source snapshots are unchanged. Optimize only derived
+lookup/projection work; do not reduce observation frequency.
+
+### Required reading and change surface
+
+Read all of `DspFullDayMetricsCollector`, especially `readInputs`, `classifyAndAccumulate`,
+`operationalBlocks`, `physicalToteOwners`, `recordElasticIssues`, and occupancy sampling; read
+`DspFullDayMetricsCollectorTest` and `DspFullDayMetricsScenarioTest`.
+
+Modify only `DspFullDayMetricsCollector.java` and those two tests. Runtime supplier wiring changed
+in Step 29 remains unchanged here.
+
+### Implementation contract
+
+- Add private single-entry derived indexes keyed only by exact immutable snapshot identities:
+  scheduler sheet-to-centre ownership; physical-tote ownership over supply/OSR/AV02/lifecycle/
+  outbound with the existing overwrite precedence; and operational block counts over scheduler plus
+  the exact `DspOperationalReleaseEvaluation` held by `lastEvaluation()` (empty is a separate
+  state). Do not key the latter by the newly created controller-snapshot wrapper. Build locally,
+  validate completely, and publish only after success.
+- Cache the elastic issue grouping/signature projection by exact allocation snapshot identity.
+  Continue comparing it against `lastElasticIssueSignatures` every step so history semantics remain
+  unchanged; reuse only the immutable projection construction.
+- Continue calling `readInputs()` and every supplier once per fixed step, validating monotonic
+  counts, classifying/accumulating block and busy durations, checking capacity blocking, recording
+  completions, and honoring every sampling milestone. Do not throttle, skip, coalesce, or memoize a
+  complete `MetricInputs` frame.
+- Retain `readInputs()`/`listValue(...)` defensive list copies because public `SnapshotSuppliers`
+  accepts arbitrary suppliers. Producer-contract changes and a separate trusted supplier type are
+  outside this step; do not add a heuristic based on concrete collection class.
+- A changed identity rederives even when equal by value; a failed rebuild leaves the prior cache
+  reusable. Retain one entry per projection only. No fingerprints/equality scans, unbounded maps,
+  shared mutable views, global/thread-local state, synchronization, pooling, or cached final report
+  snapshots.
+
+### Decision-complete test contract
+
+Use supplier counters to prove each supplier is still read once per step. Exercise exact repeated
+identities, changing each contributing identity independently, equal-but-distinct inputs, and a
+failure after a successful cache while preserving correct recovery. Preserve exact duration
+totals, block exclusivity/reasons, owner precedence, elastic event transitions, monotonic failures,
+occupancy cadence, completion milestones, report ordering, and snapshot values. Include a test
+that would fail if an unchanged snapshot caused duration accumulation to be skipped. Step 34's code
+review must prove exact hits reuse only the affected derived projections and changed identities
+rebuild them without traversal-based cache keys.
+
+### Expected output
+
+Metrics retains per-step fidelity while allocating high-cardinality owner and block structures only
+when their immutable source state changes.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsCollectorTest --tests online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsScenarioTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest
+```
+
+### User verification
+
+No separate external run is required. Step 34 owns the shared profile gate.
+
+Proposed commit message: `Reuse full-day metrics indexes`
+
+## Step 34: Verify The Static-Audit Optimization Batch
+
+This is a measurement and functional checkpoint, not authorization for opportunistic production
+changes. If it exposes another material avoidable site, amend the plan with measured evidence
+before implementation.
+
+The Step 25 baseline recorded 2,075 execution samples: correlation assignment lookup was 0.48%
+and operational candidate physical-tote lookup was absent. Weighted allocation attribution found
+2,314,593,808 bytes beneath `LinkedHashMap.newNode` and 2,467,845,248 bytes beneath
+`HashMap.resize`. The leading remaining callers included operational manifest validation
+(675,248,720 linked-node bytes), P2P service-centre work creation (428,522,520), remaining-work
+validation (382,879,832), allocation-request correlation copying (195,972,944), and completion
+physical-owner construction (1,487,275,536 resize bytes). Site pressure included map backing-array
+resize at 16.48%, linked-map nodes at 15.46%, object arrays at 13.03%, stream heads at 11.46%, and
+`NotionalToteOrder.orderSheetKey()` at 4.56%. The approximately 43-second recording reported 32
+young and one old collection, a longest 18.1 ms pause, and stable post-GC heap near 197 MB. These
+sampled/weighted values are comparison evidence, not retained-memory totals or hard thresholds.
+
+### Implementation verification
+
+No model-run command is authorized in this step. The implementation model must review the combined
+Steps 26-33 diff and report PASS, FAIL, or UNPROVEN for these anti-regression constraints:
+
+- every cache is single-entry and owned by the state owner/factory/collector named in its step;
+- cache hits use exact object identity and constant-time checks, not value equality, hashing,
+  fingerprints, collection traversal, or freshly constructed cache keys;
+- construction and validation occur in locals, with publication only after complete success;
+- mutation invalidation occurs at each specified first owner-visible mutation, including existing
+  partial-failure paths, while no-op/rejected operations retain identity;
+- immutable snapshots remain detached and no mutable collection escapes;
+- no new global/static mutable cache, thread-local, synchronization, weak map, object pool,
+  background worker, or unbounded history was introduced;
+- no fix merely moves a whole-day/per-candidate traversal or equivalent collection construction to
+  another fixed-step method;
+- public compatibility, deterministic ordering, simulation-thread ownership, completion/metrics
+  cadence, and all deferred boundaries remain intact.
+
+### User verification
+
+Run the combined focused regression:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.runtime.* --tests online.davisfamily.warehouse.sim.dsp.av02.* --tests online.davisfamily.warehouse.sim.dsp.outbound.* --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.* --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.* --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.* --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.* --tests online.davisfamily.warehouse.sim.dsp.analysis.*
+```
+
+Then rebuild the distribution, run the same external day/configuration with
+`progressIntervalSeconds=60`, and capture a 45-second JFR after the completed start block:
+
+```powershell
+.\gradlew :app:installDist
+```
+
+Use a Step 34 filename prefix with the existing JFR extraction and analysis scripts. Retain hot
+methods, allocations, allocation-by-site, GC, execution stacks, and weighted caller attribution
+outside source control. Compare an equivalent simulated-time interval against Step 25 and report:
+
+- PT1M/PT2M wall-clock timings and simulated-time advancement;
+- total samples and the named former lookup percentages;
+- weighted `LinkedHashMap.newNode` and `HashMap.resize` callers;
+- allocation pressure for map nodes/resize, stream construction, object arrays, and
+  `NotionalToteOrder.orderSheetKey()`;
+- young/old collection counts, longest pause, and stable post-GC heap;
+- progress-log advancement and the eventual functional termination/failure point.
+
+Required acceptance is directional, not a brittle wall-clock threshold: the named Step 25 dominant
+callers must disappear or fall materially for equivalent work; no new project-owned method may
+replace them at comparable weight; former Step 16-25 targets must remain controlled; GC/heap must
+not materially regress without explained greater simulated progress; and the run must advance at
+least as far functionally. Percentages alone are insufficient; use weighted bytes and equal-work
+context. If JFR sampling does not capture an event category, report it as unproven rather than zero.
+
+Proposed commit message: none; this step creates no repository change.
+
+## Step 35: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the
 deferred broad engine/simulation optimization review during closure.
@@ -3148,6 +3780,33 @@ class/method/control-flow evidence:
 - operational-release snapshots retain one immutable physical-tote candidate index, reuse it for
   route-admission validation and candidate lookup, and preserve every former record constructor,
   accessor, validation, ordering, and value-semantic contract;
+- scheduler runtime snapshots are rebuilt lazily only after genuine scheduler mutation; equal/no-op
+  updates and rejected operations retain identity, and historical snapshots remain detached;
+- AV02 and outbound snapshots retain their constructor/accessor/value contracts, publish one
+  immutable indexed value per genuine owner mutation, provide constant-time retained-index lookup,
+  and invalidate at every specified first owner-visible partial-mutation boundary;
+- applicable-output closure uses one composition-time service-centre bag index and one published
+  outbound bag-key index while continuing to inspect live line processing state every invocation;
+- normal fixed steps perform one completion-source evaluation shared with metrics, hard cutoff
+  republishes the required post-close evaluation, public ad-hoc completion reads remain fresh, and
+  layered owner lookup preserves active-route/outbound/AV02/inbound precedence without copying the
+  whole inbound owner map;
+- operational-release logical/manifest validation indexes are single-entry, factory-owned, keyed by
+  exact immutable input identity, published only after complete validation, and reused without
+  candidate-local manifest maps or duplicate AV02 logical indexing;
+- P2P service-centre/workload validation indexes are reused only for exact unchanged immutable
+  inputs, preserve Step 24 equivalent-value reuse, and rebuild/revalidate after every changed or
+  equal-but-distinct input;
+- the evaluation-scoped P2P request factory preserves every public request validation/value
+  contract, captures batch-stable values once, uses only catalog-owned immutable correlation
+  requirements on its package-private trusted path, and creates no cross-evaluation cache;
+- metrics continues every fixed-step supplier read and duration/event accumulation while reusing
+  only owner-, block-, scheduler-, and elastic-derived indexes whose exact immutable inputs are
+  unchanged;
+- all Steps 26-33 caches satisfy the Step 34 anti-regression review: single-entry local ownership,
+  constant-time identity hit checks, build-before-publish, exact invalidation, immutable detached
+  values, no global/thread-local/pool/synchronization mechanism, and no moved equivalent hot-loop
+  traversal;
 - each operational candidate batch captures one coherent P2P admission/capacity view lazily,
   reuses it across P2P candidates, refreshes it for the next batch, and obtains aggregate live line
   occupancy without constructing detailed line, activity, outbound, or PRL-map snapshots;
@@ -3217,10 +3876,11 @@ After focused/full tests, the external-data run, and architecture review are gre
   completed full-day plan, record the capacity-bounded prefix/overflow contract, and do not rewrite
   unrelated completed-plan history;
 - record full-day analysis as explicitly uncalibrated and based on provisional P2P output closure;
-- record the measured full-day P2P admission, completion aggregation, OSR snapshot, immutable
-  P2P-workload index, correlation-assignment snapshot, operational-release candidate-index, and
-  evaluation-scoped lightweight P2P station-capacity corrections together with the Step 20,
-  Step 21, and Step 22 profile evidence, without claiming general engine optimization; retain a
+- record the measured full-day P2P admission, completion aggregation, OSR/AV02/outbound/scheduler
+  snapshot publication, immutable P2P-workload and operational-release validation indexes,
+  correlation-assignment snapshot, evaluation-scoped lightweight P2P station-capacity and request
+  capture, and metrics-derived-index corrections together with the Steps 20-25 and Step 34 profile
+  evidence, without claiming general engine optimization; retain a
   broader render-integrated engine/simulation allocation and performance review as explicitly
   deferred work after functional full-day completion;
 - make the next programme feature an explicit user decision between Exception Station Phase 1,
@@ -3251,9 +3911,12 @@ Proposed commit message: `Complete full-day DSP analysis`
   JSON/text rather than routine output.
 - Immutable known and active bag-correlation ID snapshots are reused by full-day P2P candidate
   admission between genuine assignment changes. Completion evaluation captures dynamic state once
-  and aggregates it without per-manifest snapshot construction; OSR snapshots provide indexed
-  lookup and change-bounded publication; immutable P2P workload plan indexes are reused without
-  making dynamic allocation state stale. The complete render-integrated engine/simulation
+  per normal fixed step and aggregates it without per-manifest snapshot construction; OSR, AV02,
+  outbound, scheduler, supply, and lifecycle owners provide indexed or change-bounded immutable
+  publication; operational/P2P factories and metrics reuse derived indexes only while exact inputs
+  remain unchanged; and allocation requests share only evaluation-scoped immutable batch values.
+  These mechanisms do not skip validation after changed inputs or make dynamic allocation,
+  completion, closure, or metric state stale. The complete render-integrated engine/simulation
   allocation profile remains deferred to a separate measured optimization effort.
 - Every output states that timing is `UNCALIBRATED` and completion means
   `P2P_OUTPUT_CLOSED`, not real dispatch or trunker loading.
