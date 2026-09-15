@@ -2,16 +2,21 @@ package online.davisfamily.warehouse.sim.dsp.analysis.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -25,9 +30,19 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayLoadedInput;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocatedTote;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRecord;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteIdentity;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pReleaseAssignmentRequest;
 import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
@@ -90,6 +105,78 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             assertTrue(afterOneFixedStep.stream()
                     .allMatch(snapshot -> snapshot.remainingPlannedBagCount() >= 0
                             && snapshot.remainingPhysicalPackCount() >= 0));
+        }
+    }
+
+    @Test
+    void shouldSharePublishedCompletionCaptureWithMetricsAndKeepPublicReadsFresh(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadSingleFullPack(directory, profile);
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            List<?> firstPublicRead = runtime.completionSnapshots();
+            List<?> secondPublicRead = runtime.completionSnapshots();
+            assertNotSame(firstPublicRead, secondPublicRead);
+            assertTrue(runtime.cutoffController().latestCompletionSnapshots().isEmpty());
+
+            runtime.update(1d);
+            assertEquals(DspFullDayRuntimeState.RUNNING, runtime.state());
+            List<?> firstPublication = runtime.cutoffController()
+                    .latestCompletionSnapshots().orElseThrow();
+
+            runtime.metricsSnapshot();
+            runtime.metricsSnapshot();
+            assertSame(firstPublication,
+                    runtime.cutoffController().latestCompletionSnapshots().orElseThrow());
+
+            List<?> publicReadAfterUpdate = runtime.completionSnapshots();
+            assertNotSame(firstPublication, publicReadAfterUpdate);
+
+            runtime.update(1d);
+            assertEquals(DspFullDayRuntimeState.RUNNING, runtime.state());
+            List<?> secondPublication = runtime.cutoffController()
+                    .latestCompletionSnapshots().orElseThrow();
+            assertNotSame(firstPublication, secondPublication);
+            assertSame(secondPublication,
+                    runtime.cutoffController().latestCompletionSnapshots().orElseThrow());
+        }
+    }
+
+    @Test
+    void shouldResolvePhysicalToteOwnersByLayeredPrecedence(
+            @TempDir Path directory) throws IOException, ReflectiveOperationException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadSingleFullPack(directory, profile);
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            InboundToteManifestCatalog manifests = runtime.manifestCatalog();
+            PhysicalToteId conflictingId = input.data().inboundToteManifests().getFirst()
+                    .physicalToteId();
+            Av02AllocatedTote waiting = av02Tote(conflictingId, "av02-waiting", 1);
+            Av02AllocatedTote departed = av02Tote(conflictingId, "av02-departed", 2);
+            OutboundAllocationSnapshot outbound = outboundTote(conflictingId, "outbound");
+
+            assertEquals("104", resolveOwner(
+                    Map.of(), emptyOutbound(), emptyAv02(), manifests, conflictingId));
+            assertEquals("av02-waiting", resolveOwner(
+                    Map.of(), emptyOutbound(), new Av02InventorySnapshot(1, List.of(waiting), List.of()),
+                    manifests, conflictingId));
+            assertEquals("av02-departed", resolveOwner(
+                    Map.of(), emptyOutbound(), new Av02InventorySnapshot(1, List.of(), List.of(departed)),
+                    manifests, conflictingId));
+            assertEquals("outbound", resolveOwner(
+                    Map.of(), outbound, new Av02InventorySnapshot(1, List.of(waiting), List.of()),
+                    manifests, conflictingId));
+            assertEquals("active", resolveOwner(
+                    Map.of(conflictingId, "active"), outbound,
+                    new Av02InventorySnapshot(1, List.of(waiting), List.of()),
+                    manifests, conflictingId));
+            assertNull(resolveOwner(
+                    Map.of(), emptyOutbound(), emptyAv02(), manifests,
+                    new PhysicalToteId("missing-owner")));
         }
     }
 
@@ -339,6 +426,67 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                         correlationId,
                         new PackDimensions(0.20f, 0.10f, 0.08f))),
                 new BagSpec(0.34f, 0.28f, 0.22f));
+    }
+
+    private static Av02AllocatedTote av02Tote(
+            PhysicalToteId physicalToteId,
+            String serviceCentreId,
+            long sourceSequenceNumber) {
+        return new Av02AllocatedTote(
+                new OperationalPhysicalToteIdentity(
+                        OperationalPhysicalToteSource.AV02,
+                        physicalToteId,
+                        new OrderSheetKey("av02-" + sourceSequenceNumber, 1),
+                        OrderType.EMPTY,
+                        serviceCentreId,
+                        PhysicalToteRole.PRE_P2P,
+                        sourceSequenceNumber),
+                PhysicalToteRecord.preP2p(physicalToteId),
+                "pharmacy-" + serviceCentreId);
+    }
+
+    private static OutboundAllocationSnapshot outboundTote(
+            PhysicalToteId physicalToteId,
+            String serviceCentreId) {
+        OutboundToteSnapshot tote = new OutboundToteSnapshot(
+                physicalToteId,
+                new P2pLineId("owner-test-line"),
+                Optional.of(serviceCentreId),
+                Optional.of("pharmacy-" + serviceCentreId),
+                1,
+                List.of(),
+                Optional.empty());
+        return new OutboundAllocationSnapshot(
+                Map.of(tote.p2pLineId(), tote), List.of(), List.of());
+    }
+
+    private static OutboundAllocationSnapshot emptyOutbound() {
+        return new OutboundAllocationSnapshot(Map.of(), List.of(), List.of());
+    }
+
+    private static Av02InventorySnapshot emptyAv02() {
+        return new Av02InventorySnapshot(1, List.of(), List.of());
+    }
+
+    private static String resolveOwner(
+            Map<PhysicalToteId, String> activeRouteOwners,
+            OutboundAllocationSnapshot outbound,
+            Av02InventorySnapshot av02,
+            InboundToteManifestCatalog manifests,
+            PhysicalToteId physicalToteId) throws ReflectiveOperationException {
+        Class<?> lookupClass = Class.forName(
+                DspFullDayAnalysisRuntimeFactory.class.getName()
+                        + "$CompletionSnapshotSource$LayeredPhysicalToteOwnerLookup");
+        Constructor<?> constructor = lookupClass.getDeclaredConstructor(
+                Map.class,
+                OutboundAllocationSnapshot.class,
+                Av02InventorySnapshot.class,
+                InboundToteManifestCatalog.class);
+        constructor.setAccessible(true);
+        Object lookup = constructor.newInstance(activeRouteOwners, outbound, av02, manifests);
+        Method ownerFor = lookupClass.getDeclaredMethod("ownerFor", PhysicalToteId.class);
+        ownerFor.setAccessible(true);
+        return (String) ownerFor.invoke(lookup, physicalToteId);
     }
 
     private static final class RecordingWorld extends SimulationWorld {

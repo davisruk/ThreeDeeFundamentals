@@ -30,6 +30,7 @@ public final class DspFullDayCutoffController implements SimulationController {
     private boolean acted;
     private Optional<Duration> terminalElapsedTime = Optional.empty();
     private final List<OutboundToteSnapshot> hardCutoffClosedTotes = new ArrayList<>();
+    private Optional<List<DspServiceCentreCompletionSnapshot>> latestCompletionSnapshots = Optional.empty();
     private String diagnostic = "";
 
     public DspFullDayCutoffController(
@@ -86,10 +87,7 @@ public final class DspFullDayCutoffController implements SimulationController {
         }
 
         closeApplicableOutputs.run();
-        List<DspServiceCentreCompletionSnapshot> completions = completionSnapshotSupplier.get();
-        if (completions == null) {
-            throw new IllegalStateException("completionSnapshotSupplier returned null");
-        }
+        List<DspServiceCentreCompletionSnapshot> completions = evaluateAndPublishCompletions();
         if (!completions.isEmpty() && completions.stream()
                 .allMatch(DspServiceCentreCompletionSnapshot::complete)) {
             terminal(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, clockSnapshot);
@@ -102,6 +100,7 @@ public final class DspFullDayCutoffController implements SimulationController {
                         .closeOutboundToteForHardCutoff(clockSnapshot.elapsedSimulationTime());
                 closedTote.ifPresent(hardCutoffClosedTotes::add);
             }
+            evaluateAndPublishCompletions();
             terminal(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, clockSnapshot);
         }
     }
@@ -112,6 +111,10 @@ public final class DspFullDayCutoffController implements SimulationController {
 
     public boolean acted() {
         return acted;
+    }
+
+    public Optional<List<DspServiceCentreCompletionSnapshot>> latestCompletionSnapshots() {
+        return latestCompletionSnapshots;
     }
 
     public DspFullDayCutoffSnapshot snapshot() {
@@ -133,5 +136,22 @@ public final class DspFullDayCutoffController implements SimulationController {
         acted = true;
         terminalElapsedTime = Optional.of(clockSnapshot.elapsedSimulationTime());
         stateConsumer.accept(terminalState);
+    }
+
+    private List<DspServiceCentreCompletionSnapshot> evaluateAndPublishCompletions() {
+        List<DspServiceCentreCompletionSnapshot> completions = completionSnapshotSupplier.get();
+        if (completions == null) {
+            throw new IllegalStateException(
+                    "completionSnapshotSupplier returned null");
+        }
+        List<DspServiceCentreCompletionSnapshot> immutableCompletions;
+        try {
+            immutableCompletions = List.copyOf(completions);
+        } catch (NullPointerException exception) {
+            throw new IllegalStateException(
+                    "completionSnapshotSupplier returned a null completion snapshot", exception);
+        }
+        latestCompletionSnapshots = Optional.of(immutableCompletions);
+        return immutableCompletions;
     }
 }

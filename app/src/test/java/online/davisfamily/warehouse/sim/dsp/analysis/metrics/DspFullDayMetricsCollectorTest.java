@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -22,6 +23,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntime;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspHeadlessP2pLineRuntime;
 
 class DspFullDayMetricsCollectorTest {
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
@@ -103,6 +105,62 @@ class DspFullDayMetricsCollectorTest {
             assertTrue(terminal.occupancySamples().size() > initial.occupancySamples().size());
             assertEquals(Duration.ZERO, initial.observedSimulationDuration());
             assertEquals(DspFullDayRuntimeState.RUNNING, initial.state());
+        }
+    }
+
+    @Test
+    void shouldReadTheCompletionSupplierOnceAtConstructionAndOncePerSnapshot(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadInput(directory, profile);
+
+        try (DspFullDayAnalysisRuntime runtime = new DspFullDayAnalysisRuntimeFactory()
+                .create(input, profile)) {
+            AtomicInteger completionReads = new AtomicInteger();
+            DspFullDayMetricsCollector collector = new DspFullDayMetricsCollector(
+                    profile.profileId(),
+                    profile.serviceCentreSupplyPolicyId(),
+                    profile.orderEligibilityPolicyId(),
+                    profile.candidateRankingPolicyId(),
+                    profile.p2pLineAllocationPolicyId(),
+                    profile.outboundAllocationPolicyId(),
+                    profile.calibrationStatus(),
+                    profile.completionMilestone(),
+                    profile.inboundToteArrivalPolicy().interval(),
+                    profile.metricSampleInterval(),
+                    profile.serviceCentreSupplyConfig().lowWaterMark(),
+                    input.report(),
+                    new DspFullDayMetricsCollector.SnapshotSuppliers(
+                            runtime.clockController()::snapshot,
+                            runtime.supplyController()::snapshot,
+                            runtime.osrInventory()::snapshot,
+                            runtime.av02Inventory()::snapshot,
+                            runtime.lifecycleLedger()::snapshot,
+                            runtime.elasticRuntime()::operationalSnapshot,
+                            () -> runtime.lineRuntimes().stream()
+                                    .map(DspHeadlessP2pLineRuntime::snapshot)
+                                    .toList(),
+                            runtime.operationalReleaseRuntime().controller()::snapshot,
+                            runtime.transportRuntime()::inFlightSnapshot,
+                            () -> runtime.transportRuntime().ingressController().snapshot(),
+                            () -> runtime.transportRuntime().arrivalController().snapshot(),
+                            runtime.transportRuntime()::outboundTransportSnapshot,
+                            runtime.transportRuntime()::stationArrivalSnapshots,
+                            runtime.stationProcessingRuntime()::coordinatorSnapshot,
+                            runtime.stationProcessingRuntime()::claimantSnapshots,
+                            runtime.outboundToteAllocator()::snapshot,
+                            runtime.schedulerRuntimeState()::snapshot,
+                            () -> {
+                                completionReads.incrementAndGet();
+                                return runtime.completionSnapshots();
+                            },
+                            runtime::state));
+
+            assertEquals(1, completionReads.get());
+
+            collector.snapshot();
+
+            assertEquals(2, completionReads.get());
         }
     }
 

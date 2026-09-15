@@ -2,16 +2,22 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspOperationalSchedulingBaselineFactory;
 import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClock;
 import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockConfig;
@@ -119,6 +125,118 @@ class DspFullDayCompletionEvaluatorTest {
                 evaluator.evaluate(observation(
                         lateClock.snapshotAtSimulationSeconds(Duration.ofHours(24).toSeconds()),
                         false, 0, List.of(), Optional.empty())).outcome());
+    }
+
+    @Test
+    void shouldPublishOneNormalEvaluationAndReplaceItOnTheNextUpdate() {
+        DspServiceCentreCompletionSnapshot incomplete = evaluator.evaluate(observation(
+                clock.initialSnapshot(), false, 0, List.of(), Optional.empty()));
+        AtomicInteger evaluationCount = new AtomicInteger();
+        DspFullDayCutoffController controller = new DspFullDayCutoffController(
+                clock::initialSnapshot,
+                () -> {
+                    evaluationCount.incrementAndGet();
+                    return new ArrayList<>(List.of(incomplete));
+                },
+                List.of(),
+                ignored -> { });
+
+        assertTrue(controller.latestCompletionSnapshots().isEmpty());
+
+        controller.update(new SimulationContext(), 0d);
+
+        List<DspServiceCentreCompletionSnapshot> firstPublication = controller
+                .latestCompletionSnapshots().orElseThrow();
+        assertEquals(1, evaluationCount.get());
+        assertSame(firstPublication, controller.latestCompletionSnapshots().orElseThrow());
+        assertThrows(UnsupportedOperationException.class,
+                () -> firstPublication.add(incomplete));
+
+        controller.update(new SimulationContext(), 0d);
+
+        assertEquals(2, evaluationCount.get());
+        assertNotSame(firstPublication, controller.latestCompletionSnapshots().orElseThrow());
+    }
+
+    @Test
+    void shouldEvaluateAfterHardCutoffOutputClosureBeforeTerminalPublication() {
+        DspServiceCentreCompletionSnapshot incomplete = evaluator.evaluate(observation(
+                lateClock.snapshotAtSimulationSeconds(Duration.ofHours(24).toSeconds()),
+                false, 0, List.of(), Optional.empty()));
+        AtomicInteger evaluationCount = new AtomicInteger();
+        AtomicInteger closeCount = new AtomicInteger();
+        DspFullDayCutoffController controller = new DspFullDayCutoffController(
+                () -> lateClock.snapshotAtSimulationSeconds(Duration.ofHours(24).toSeconds()),
+                () -> {
+                    int evaluation = evaluationCount.incrementAndGet();
+                    if (evaluation == 2) {
+                        assertEquals(1, closeCount.get());
+                    }
+                    return new ArrayList<>(List.of(incomplete));
+                },
+                closeCount::incrementAndGet,
+                List.of(),
+                ignored -> { });
+
+        controller.update(new SimulationContext(), 0d);
+
+        assertEquals(2, evaluationCount.get());
+        assertEquals(1, closeCount.get());
+        assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, controller.state());
+        assertEquals(incomplete,
+                controller.latestCompletionSnapshots().orElseThrow().getFirst());
+    }
+
+    @Test
+    void shouldNotPerformHardCutoffReevaluationAfterEarlyCompletion() {
+        DspServiceCentreCompletionSnapshot complete = evaluator.evaluate(observation(
+                clock.initialSnapshot(), true, 0, List.of(), Optional.empty()));
+        AtomicInteger evaluationCount = new AtomicInteger();
+        DspFullDayCutoffController controller = new DspFullDayCutoffController(
+                () -> lateClock.snapshotAtSimulationSeconds(Duration.ofHours(24).toSeconds()),
+                () -> {
+                    evaluationCount.incrementAndGet();
+                    return new ArrayList<>(List.of(complete));
+                },
+                List.of(),
+                ignored -> { });
+
+        controller.update(new SimulationContext(), 0d);
+
+        assertEquals(1, evaluationCount.get());
+        assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, controller.state());
+    }
+
+    @Test
+    void shouldRetainTheLastPublicationWhenEvaluationReturnsNullOrFails() {
+        DspServiceCentreCompletionSnapshot incomplete = evaluator.evaluate(observation(
+                clock.initialSnapshot(), false, 0, List.of(), Optional.empty()));
+        AtomicInteger evaluationCount = new AtomicInteger();
+        DspFullDayCutoffController controller = new DspFullDayCutoffController(
+                clock::initialSnapshot,
+                () -> {
+                    int evaluation = evaluationCount.incrementAndGet();
+                    if (evaluation == 1) {
+                        return new ArrayList<>(List.of(incomplete));
+                    }
+                    if (evaluation == 2) {
+                        return null;
+                    }
+                    throw new IllegalStateException("completion evaluation failed");
+                },
+                List.of(),
+                ignored -> { });
+
+        controller.update(new SimulationContext(), 0d);
+        List<DspServiceCentreCompletionSnapshot> firstPublication = controller
+                .latestCompletionSnapshots().orElseThrow();
+
+        assertThrows(IllegalStateException.class,
+                () -> controller.update(new SimulationContext(), 0d));
+        assertSame(firstPublication, controller.latestCompletionSnapshots().orElseThrow());
+        assertThrows(IllegalStateException.class,
+                () -> controller.update(new SimulationContext(), 0d));
+        assertSame(firstPublication, controller.latestCompletionSnapshots().orElseThrow());
     }
 
     private static DspFullDayCompletionEvaluator.Observation observation(

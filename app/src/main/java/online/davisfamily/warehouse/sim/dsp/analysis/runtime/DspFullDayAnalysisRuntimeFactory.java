@@ -482,7 +482,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             stationRuntime::claimantSnapshots,
                             outboundAllocator::snapshot,
                             schedulerState::snapshot,
-                            completionSource::get,
+                            () -> cutoffController.latestCompletionSnapshots()
+                                    .orElseGet(completionSource::get),
                             runtimeState::get));
             simulationWorld.addController(metricsCollector);
 
@@ -898,7 +899,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
         private final Map<String, List<InboundToteManifest>> manifestsByServiceCentre;
         private final Map<String, List<PlannedBag>> plannedBagsByServiceCentre;
         private final Map<String, PlannedBag> plannedBagsByCorrelationId;
-        private final Map<PhysicalToteId, String> inboundServiceCentreByPhysicalTote;
+        private final InboundToteManifestCatalog manifestCatalog;
         private final Map<String, List<String>> unsupportedByServiceCentre;
         private final List<String> globalUnsupportedWork;
         private final Av02PhysicalToteInventory av02Inventory;
@@ -934,8 +935,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
             this.plannedBagsByServiceCentre = indexPlannedBags(input.bagPlan().plannedBags());
             this.plannedBagsByCorrelationId = indexPlannedBagsByCorrelationId(
                     input.bagPlan().plannedBags());
-            this.inboundServiceCentreByPhysicalTote = indexInboundOwners(
-                    manifestCatalog.manifests());
+            this.manifestCatalog = manifestCatalog;
             UnsupportedWorkIndex unsupportedWork = indexUnsupportedWork(input);
             this.unsupportedByServiceCentre = unsupportedWork.byServiceCentre();
             this.globalUnsupportedWork = unsupportedWork.global();
@@ -975,12 +975,12 @@ public final class DspFullDayAnalysisRuntimeFactory {
             List<StationRoutedToteArrivalQueueSnapshot> stationArrivalSnapshots = List.copyOf(
                     transportRuntime.stationArrivalSnapshots());
 
-            Map<PhysicalToteId, String> serviceCentreByPhysicalTote = serviceCentreByPhysicalTote(
+            PhysicalToteOwnerLookup physicalToteOwnerLookup = physicalToteOwnerLookup(
                     av02, outbound, activeRoutedTotes);
             Set<BagKey> allocatedBags = outbound.allocatedBagKeys();
             Map<String, Integer> nonTerminalInbound = nonTerminalInboundCounts(lifecycle);
             Map<String, Integer> remainingPhysicalTotes = remainingPhysicalToteCounts(
-                    lifecycle, serviceCentreByPhysicalTote);
+                    lifecycle, physicalToteOwnerLookup);
             Map<String, Integer> osrWaiting = countByServiceCentre(
                     osr.storedTotes(), InboundToteManifest::serviceCentreId);
             Map<String, Integer> av02Waiting = countByServiceCentre(
@@ -988,19 +988,19 @@ public final class DspFullDayAnalysisRuntimeFactory {
             Map<String, Integer> activeClaims = conservativePhysicalToteCounts(
                     station.activeClaims(),
                     StationProcessingSnapshot.ActiveClaim::physicalToteId,
-                    serviceCentreByPhysicalTote,
+                    physicalToteOwnerLookup,
                     serviceCentreIds);
             Map<String, Integer> pendingDispositions = conservativePhysicalToteCounts(
                     station.pendingDispositions(),
                     StationProcessingSnapshot.PendingDisposition::physicalToteId,
-                    serviceCentreByPhysicalTote,
+                    physicalToteOwnerLookup,
                     serviceCentreIds);
             Map<String, Integer> transportEnvelopes = transportEnvelopeCounts(
                     activeRoutedTotes,
                     launchQueueSnapshot,
                     outboundTransportSnapshot,
                     stationArrivalSnapshots,
-                    serviceCentreByPhysicalTote,
+                    physicalToteOwnerLookup,
                     serviceCentreIds);
             Map<String, Integer> tipperInput = tipperInputCounts(
                     lineCaptures, serviceCentreIds);
@@ -1056,6 +1056,50 @@ public final class DspFullDayAnalysisRuntimeFactory {
             return List.copyOf(result);
         }
 
+        private interface PhysicalToteOwnerLookup {
+            String ownerFor(PhysicalToteId physicalToteId);
+        }
+
+        private static final class LayeredPhysicalToteOwnerLookup
+                implements PhysicalToteOwnerLookup {
+            private final Map<PhysicalToteId, String> activeRouteOwners;
+            private final OutboundAllocationSnapshot outbound;
+            private final Av02InventorySnapshot av02;
+            private final InboundToteManifestCatalog manifestCatalog;
+
+            private LayeredPhysicalToteOwnerLookup(
+                    Map<PhysicalToteId, String> activeRouteOwners,
+                    OutboundAllocationSnapshot outbound,
+                    Av02InventorySnapshot av02,
+                    InboundToteManifestCatalog manifestCatalog) {
+                this.activeRouteOwners = activeRouteOwners;
+                this.outbound = outbound;
+                this.av02 = av02;
+                this.manifestCatalog = manifestCatalog;
+            }
+
+            @Override
+            public String ownerFor(PhysicalToteId physicalToteId) {
+                String owner = activeRouteOwners.get(physicalToteId);
+                if (owner != null) {
+                    return owner;
+                }
+                owner = outbound.ownerFor(physicalToteId).orElse(null);
+                if (owner != null) {
+                    return owner;
+                }
+                owner = av02.findTote(physicalToteId)
+                        .map(Av02AllocatedTote::serviceCentreId)
+                        .orElse(null);
+                if (owner != null) {
+                    return owner;
+                }
+                return manifestCatalog.findByPhysicalToteId(physicalToteId)
+                        .map(InboundToteManifest::serviceCentreId)
+                        .orElse(null);
+            }
+        }
+
         private List<P2pLineCompletionCapture> lineCaptures(
                 P2pLineLeaseCatalogSnapshot leases) {
             Map<P2pLineId, P2pLineLeaseSnapshot> leaseByLine = new HashMap<>();
@@ -1081,22 +1125,17 @@ public final class DspFullDayAnalysisRuntimeFactory {
             return snapshot;
         }
 
-        private Map<PhysicalToteId, String> serviceCentreByPhysicalTote(
+        private PhysicalToteOwnerLookup physicalToteOwnerLookup(
                 Av02InventorySnapshot av02,
                 OutboundAllocationSnapshot outbound,
                 List<RoutedPhysicalTote> activeRoutedTotes) {
-            Map<PhysicalToteId, String> result = new HashMap<>();
-            result.putAll(inboundServiceCentreByPhysicalTote);
-            av02.waitingTotes().forEach(tote -> result.put(tote.physicalToteId(), tote.serviceCentreId()));
-            av02.departedTotes().forEach(tote -> result.put(tote.physicalToteId(), tote.serviceCentreId()));
-            outbound.openTotesByLine().values().forEach(tote -> tote.serviceCentreId()
-                    .ifPresent(id -> result.put(tote.physicalToteId(), id)));
-            outbound.closedTotes().forEach(tote -> tote.serviceCentreId()
-                    .ifPresent(id -> result.put(tote.physicalToteId(), id)));
+            Map<PhysicalToteId, String> activeRouteOwners = new LinkedHashMap<>();
             for (RoutedPhysicalTote tote : activeRoutedTotes) {
-                result.put(tote.physicalToteId(), tote.launchRequest().serviceCentreId());
+                activeRouteOwners.put(
+                        tote.physicalToteId(), tote.launchRequest().serviceCentreId());
             }
-            return result;
+            return new LayeredPhysicalToteOwnerLookup(
+                    Map.copyOf(activeRouteOwners), outbound, av02, manifestCatalog);
         }
 
         private Map<String, Integer> nonTerminalInboundCounts(
@@ -1115,11 +1154,11 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
         private static Map<String, Integer> remainingPhysicalToteCounts(
                 PhysicalToteLifecycleSnapshot lifecycle,
-                Map<PhysicalToteId, String> serviceCentreByPhysicalTote) {
+                PhysicalToteOwnerLookup physicalToteOwnerLookup) {
             Map<String, Integer> counts = new HashMap<>();
             for (PhysicalToteRecord tote : lifecycle.totes().values()) {
                 if (!tote.terminal()) {
-                    String serviceCentreId = serviceCentreByPhysicalTote.get(tote.id());
+                    String serviceCentreId = physicalToteOwnerLookup.ownerFor(tote.id());
                     if (serviceCentreId != null) {
                         counts.merge(serviceCentreId, 1, Integer::sum);
                     }
@@ -1141,11 +1180,11 @@ public final class DspFullDayAnalysisRuntimeFactory {
         private static <T> Map<String, Integer> conservativePhysicalToteCounts(
                 Iterable<T> values,
                 Function<T, PhysicalToteId> physicalToteId,
-                Map<PhysicalToteId, String> serviceCentreByPhysicalTote,
+                PhysicalToteOwnerLookup physicalToteOwnerLookup,
                 List<String> serviceCentreIds) {
             Map<String, Integer> counts = new HashMap<>();
             for (T value : values) {
-                String owner = serviceCentreByPhysicalTote.get(physicalToteId.apply(value));
+                String owner = physicalToteOwnerLookup.ownerFor(physicalToteId.apply(value));
                 if (owner == null) {
                     for (String serviceCentreId : serviceCentreIds) {
                         counts.merge(serviceCentreId, 1, Integer::sum);
@@ -1162,24 +1201,24 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 OsrOutboundRouteLaunchQueueSnapshot launchQueueSnapshot,
                 OsrOutboundTransportQueueSnapshot outboundTransportSnapshot,
                 List<StationRoutedToteArrivalQueueSnapshot> stationArrivalSnapshots,
-                Map<PhysicalToteId, String> serviceCentreByPhysicalTote,
+                PhysicalToteOwnerLookup physicalToteOwnerLookup,
                 List<String> serviceCentreIds) {
             Map<String, Set<PhysicalToteId>> idsByServiceCentre = new HashMap<>();
             for (RoutedPhysicalTote tote : activeRoutedTotes) {
-                addTransportEnvelope(tote.physicalToteId(), serviceCentreByPhysicalTote,
+                addTransportEnvelope(tote.physicalToteId(), physicalToteOwnerLookup,
                         serviceCentreIds, idsByServiceCentre);
             }
             for (OsrOutboundRouteLaunchQueueSnapshot.Entry entry : launchQueueSnapshot.entries()) {
-                addTransportEnvelope(entry.physicalToteId(), serviceCentreByPhysicalTote,
+                addTransportEnvelope(entry.physicalToteId(), physicalToteOwnerLookup,
                         serviceCentreIds, idsByServiceCentre);
             }
             for (OsrOutboundTransportQueueSnapshot.Entry entry : outboundTransportSnapshot.entries()) {
-                addTransportEnvelope(entry.physicalToteId(), serviceCentreByPhysicalTote,
+                addTransportEnvelope(entry.physicalToteId(), physicalToteOwnerLookup,
                         serviceCentreIds, idsByServiceCentre);
             }
             for (StationRoutedToteArrivalQueueSnapshot queue : stationArrivalSnapshots) {
                 for (StationRoutedToteArrivalQueueSnapshot.Entry entry : queue.entries()) {
-                    addTransportEnvelope(entry.physicalToteId(), serviceCentreByPhysicalTote,
+                    addTransportEnvelope(entry.physicalToteId(), physicalToteOwnerLookup,
                             serviceCentreIds, idsByServiceCentre);
                 }
             }
@@ -1190,10 +1229,10 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
         private static void addTransportEnvelope(
                 PhysicalToteId physicalToteId,
-                Map<PhysicalToteId, String> serviceCentreByPhysicalTote,
+                PhysicalToteOwnerLookup physicalToteOwnerLookup,
                 List<String> serviceCentreIds,
                 Map<String, Set<PhysicalToteId>> idsByServiceCentre) {
-            String owner = serviceCentreByPhysicalTote.get(physicalToteId);
+            String owner = physicalToteOwnerLookup.ownerFor(physicalToteId);
             if (owner == null) {
                 for (String serviceCentreId : serviceCentreIds) {
                     idsByServiceCentre.computeIfAbsent(serviceCentreId,
@@ -1307,15 +1346,6 @@ public final class DspFullDayAnalysisRuntimeFactory {
             Map<String, PlannedBag> indexed = new LinkedHashMap<>();
             for (PlannedBag plannedBag : plannedBags) {
                 indexed.put(plannedBag.bagKey().correlationId(), plannedBag);
-            }
-            return Map.copyOf(indexed);
-        }
-
-        private static Map<PhysicalToteId, String> indexInboundOwners(
-                List<InboundToteManifest> manifests) {
-            Map<PhysicalToteId, String> indexed = new LinkedHashMap<>();
-            for (InboundToteManifest manifest : manifests) {
-                indexed.put(manifest.physicalToteId(), manifest.serviceCentreId());
             }
             return Map.copyOf(indexed);
         }
