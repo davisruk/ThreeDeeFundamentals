@@ -40,6 +40,7 @@ import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntimeSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationIssue;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationIssueType;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreLineDemandSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseControllerSnapshot;
@@ -104,6 +105,22 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             elasticInfeasibilityHistory = new ArrayList<>();
     private final Map<String, String> lastElasticIssueSignatures = new LinkedHashMap<>();
     private final Set<String> previouslyCompletedCentres = new HashSet<>();
+
+    private WarehouseSchedulerSnapshot sheetOwnersSchedulerSnapshot;
+    private Map<OrderSheetKey, String> cachedSheetOwners;
+    private WarehouseSchedulerSnapshot physicalOwnersSchedulerSnapshot;
+    private DspSupplySnapshot physicalOwnersSupplySnapshot;
+    private OsrInventorySnapshot physicalOwnersOsrSnapshot;
+    private Av02InventorySnapshot physicalOwnersAv02Snapshot;
+    private PhysicalToteLifecycleSnapshot physicalOwnersLifecycleSnapshot;
+    private OutboundAllocationSnapshot physicalOwnersOutboundSnapshot;
+    private Map<String, String> cachedPhysicalToteOwners;
+    private WarehouseSchedulerSnapshot operationalBlocksSchedulerSnapshot;
+    private DspOperationalReleaseEvaluation operationalBlocksEvaluation;
+    private boolean operationalBlocksEmptyEvaluation;
+    private Map<String, OperationalBlockCounts> cachedOperationalBlocks;
+    private P2pElasticAllocationSnapshot elasticIssueAllocationSnapshot;
+    private ElasticIssueProjection cachedElasticIssueProjection;
 
     private Duration observedSimulationDuration = Duration.ZERO;
     private Duration nextMetricSampleElapsedTime;
@@ -312,6 +329,8 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                         LinkedHashMap::new));
         List<DspServiceCentreCompletionSnapshot> completions =
                 current.completions().stream().sorted(CENTRE_ORDER).toList();
+        ElasticIssueProjection elasticIssues = elasticIssueProjection(
+                current.elastic().allocation());
         List<DspServiceCentreMetricsSnapshot> result = new ArrayList<>(completions.size());
         for (DspServiceCentreCompletionSnapshot completion : completions) {
             String serviceCentreId = completion.serviceCentreId();
@@ -322,10 +341,8 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             }
             P2pServiceCentreLineDemandSnapshot demand = current.elastic().allocation()
                     .find(serviceCentreId).orElse(null);
-            List<P2pElasticAllocationIssue> serviceIssues = current.elastic().allocation().issues()
-                    .stream()
-                    .filter(issue -> issue.serviceCentreId().equals(serviceCentreId))
-                    .toList();
+            List<P2pElasticAllocationIssue> serviceIssues = elasticIssues.issuesByCentre()
+                    .getOrDefault(serviceCentreId, List.of());
             List<P2pElasticAllocationIssue> metricIssues = serviceIssues.isEmpty()
                     ? demand == null ? List.of() : demand.issues().stream()
                             .map(issue -> new P2pElasticAllocationIssue(
@@ -578,34 +595,63 @@ public final class DspFullDayMetricsCollector implements SimulationController {
     }
 
     private Map<String, OperationalBlockCounts> operationalBlocks(MetricInputs current) {
-        Map<String, String> serviceBySheet = new HashMap<>();
-        for (DspSchedulerOrderState state : current.scheduler().orderStates()) {
-            serviceBySheet.put(state.order().orderSheetKey().toString(), state.order().serviceCentreId());
-        }
-        Map<String, OperationalBlockCounts> result = new LinkedHashMap<>();
         Optional<DspOperationalReleaseEvaluation> evaluation = current.operationalRelease()
                 .lastEvaluation();
-        if (evaluation.isEmpty()) {
-            return result;
+        DspOperationalReleaseEvaluation evaluationValue = evaluation.orElse(null);
+        if (cachedOperationalBlocks != null
+                && operationalBlocksSchedulerSnapshot == current.scheduler()
+                && (evaluationValue == null
+                        ? operationalBlocksEmptyEvaluation
+                        : !operationalBlocksEmptyEvaluation
+                                && operationalBlocksEvaluation == evaluationValue)) {
+            return cachedOperationalBlocks;
         }
-        for (OperationalBlockedCandidate candidate : evaluation.orElseThrow().blockedCandidates()) {
-            String serviceCentreId = serviceBySheet.get(candidate.orderSheetKey().toString());
-            if (serviceCentreId == null) {
-                continue;
-            }
-            OperationalBlockCounts counts = result.computeIfAbsent(
-                    serviceCentreId, ignored -> new OperationalBlockCounts());
-            Set<OperationalReleaseBlockType> candidateBlockTypes = new HashSet<>();
-            for (OperationalReleaseBlock block : candidate.blocks()) {
-                if (candidateBlockTypes.add(block.type())) {
-                    counts.add(block);
+
+        Map<String, OperationalBlockCounts> result;
+        if (evaluationValue == null) {
+            result = Map.of();
+        } else {
+            Map<OrderSheetKey, String> serviceBySheet = sheetOwners(current.scheduler());
+            Map<String, MutableOperationalBlockCounts> mutableResult = new LinkedHashMap<>();
+            for (OperationalBlockedCandidate candidate : evaluationValue.blockedCandidates()) {
+                String serviceCentreId = serviceBySheet.get(candidate.orderSheetKey());
+                if (serviceCentreId == null) {
+                    continue;
+                }
+                MutableOperationalBlockCounts counts = mutableResult.computeIfAbsent(
+                        serviceCentreId, ignored -> new MutableOperationalBlockCounts());
+                Set<OperationalReleaseBlockType> candidateBlockTypes = new HashSet<>();
+                for (OperationalReleaseBlock block : candidate.blocks()) {
+                    if (candidateBlockTypes.add(block.type())) {
+                        counts.add(block);
+                    }
                 }
             }
+            Map<String, OperationalBlockCounts> immutableResult = new LinkedHashMap<>();
+            for (Map.Entry<String, MutableOperationalBlockCounts> entry : mutableResult.entrySet()) {
+                immutableResult.put(entry.getKey(), entry.getValue().snapshot());
+            }
+            result = Collections.unmodifiableMap(immutableResult);
         }
+
+        cachedOperationalBlocks = result;
+        operationalBlocksSchedulerSnapshot = current.scheduler();
+        operationalBlocksEvaluation = evaluationValue;
+        operationalBlocksEmptyEvaluation = evaluationValue == null;
         return result;
     }
 
     private Map<String, String> physicalToteOwners(MetricInputs current) {
+        if (cachedPhysicalToteOwners != null
+                && physicalOwnersSchedulerSnapshot == current.scheduler()
+                && physicalOwnersSupplySnapshot == current.supply()
+                && physicalOwnersOsrSnapshot == current.osr()
+                && physicalOwnersAv02Snapshot == current.av02()
+                && physicalOwnersLifecycleSnapshot == current.lifecycle()
+                && physicalOwnersOutboundSnapshot == current.outbound()) {
+            return cachedPhysicalToteOwners;
+        }
+
         Map<String, String> result = new HashMap<>();
         for (ServiceCentreSupplySnapshot centre : current.supply().serviceCentres()) {
             for (PhysicalToteSupplySnapshot tote : centre.physicalTotes()) {
@@ -624,10 +670,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         for (Av02AllocatedTote tote : current.av02().departedTotes()) {
             result.put(tote.physicalToteId().value(), tote.serviceCentreId());
         }
-        Map<OrderSheetKey, String> serviceBySheet = new HashMap<>();
-        for (DspSchedulerOrderState state : current.scheduler().orderStates()) {
-            serviceBySheet.put(state.order().orderSheetKey(), state.order().serviceCentreId());
-        }
+        Map<OrderSheetKey, String> serviceBySheet = sheetOwners(current.scheduler());
         for (var assignment : current.lifecycle().assignments()) {
             String serviceCentreId = serviceBySheet.get(assignment.orderSheetKey());
             if (serviceCentreId != null) {
@@ -644,7 +687,29 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         current.outbound().closedTotes().forEach(tote ->
                 tote.serviceCentreId().ifPresent(serviceCentreId ->
                         result.put(tote.physicalToteId().value(), serviceCentreId)));
-        return result;
+        Map<String, String> immutableResult = Map.copyOf(result);
+        cachedPhysicalToteOwners = immutableResult;
+        physicalOwnersSchedulerSnapshot = current.scheduler();
+        physicalOwnersSupplySnapshot = current.supply();
+        physicalOwnersOsrSnapshot = current.osr();
+        physicalOwnersAv02Snapshot = current.av02();
+        physicalOwnersLifecycleSnapshot = current.lifecycle();
+        physicalOwnersOutboundSnapshot = current.outbound();
+        return immutableResult;
+    }
+
+    private Map<OrderSheetKey, String> sheetOwners(WarehouseSchedulerSnapshot scheduler) {
+        if (cachedSheetOwners != null && sheetOwnersSchedulerSnapshot == scheduler) {
+            return cachedSheetOwners;
+        }
+        Map<OrderSheetKey, String> result = new HashMap<>();
+        for (DspSchedulerOrderState state : scheduler.orderStates()) {
+            result.put(state.order().orderSheetKey(), state.order().serviceCentreId());
+        }
+        Map<OrderSheetKey, String> immutableResult = Map.copyOf(result);
+        cachedSheetOwners = immutableResult;
+        sheetOwnersSchedulerSnapshot = scheduler;
+        return immutableResult;
     }
 
     private void accumulateLineBusyTime(MetricInputs current, Duration stepDuration) {
@@ -679,23 +744,11 @@ public final class DspFullDayMetricsCollector implements SimulationController {
     }
 
     private void recordElasticIssues(MetricInputs current, boolean initial) {
-        Map<String, List<P2pElasticAllocationIssue>> issuesByCentre = current.elastic()
-                .allocation()
-                .issues()
-                .stream()
-                .collect(java.util.stream.Collectors.groupingBy(
-                        P2pElasticAllocationIssue::serviceCentreId,
-                        LinkedHashMap::new,
-                        java.util.stream.Collectors.toList()));
-        Set<String> serviceCentreIds = new LinkedHashSet<>(issuesByCentre.keySet());
-        current.elastic().allocation().serviceCentres()
-                .forEach(demand -> serviceCentreIds.add(demand.serviceCentreId()));
-        for (String serviceCentreId : serviceCentreIds) {
-            List<P2pElasticAllocationIssue> issues = issuesByCentre.getOrDefault(
+        ElasticIssueProjection projection = elasticIssueProjection(current.elastic().allocation());
+        for (String serviceCentreId : projection.serviceCentreIds()) {
+            List<P2pElasticAllocationIssue> issues = projection.issuesByCentre().getOrDefault(
                     serviceCentreId, List.of());
-            String signature = issues.stream()
-                    .map(issue -> issue.type() + "=" + issue.detail())
-                    .collect(java.util.stream.Collectors.joining("|"));
+            String signature = projection.signaturesByCentre().get(serviceCentreId);
             String previous = lastElasticIssueSignatures.put(serviceCentreId, signature);
             if ((initial && !issues.isEmpty())
                     || (!initial && !signature.equals(previous) && !issues.isEmpty())) {
@@ -706,6 +759,40 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                 }
             }
         }
+    }
+
+    private ElasticIssueProjection elasticIssueProjection(P2pElasticAllocationSnapshot allocation) {
+        if (cachedElasticIssueProjection != null
+                && elasticIssueAllocationSnapshot == allocation) {
+            return cachedElasticIssueProjection;
+        }
+
+        Map<String, List<P2pElasticAllocationIssue>> mutableIssuesByCentre = allocation.issues()
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        P2pElasticAllocationIssue::serviceCentreId,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()));
+        Map<String, List<P2pElasticAllocationIssue>> issuesByCentre = new LinkedHashMap<>();
+        mutableIssuesByCentre.forEach((serviceCentreId, issues) ->
+                issuesByCentre.put(serviceCentreId, List.copyOf(issues)));
+        Set<String> serviceCentreIds = new LinkedHashSet<>(issuesByCentre.keySet());
+        allocation.serviceCentres().forEach(demand ->
+                serviceCentreIds.add(demand.serviceCentreId()));
+        Map<String, String> signaturesByCentre = new LinkedHashMap<>();
+        for (String serviceCentreId : serviceCentreIds) {
+            String signature = issuesByCentre.getOrDefault(serviceCentreId, List.of()).stream()
+                    .map(issue -> issue.type() + "=" + issue.detail())
+                    .collect(java.util.stream.Collectors.joining("|"));
+            signaturesByCentre.put(serviceCentreId, signature);
+        }
+        ElasticIssueProjection projection = new ElasticIssueProjection(
+                Collections.unmodifiableMap(issuesByCentre),
+                List.copyOf(serviceCentreIds),
+                Collections.unmodifiableMap(signaturesByCentre));
+        cachedElasticIssueProjection = projection;
+        elasticIssueAllocationSnapshot = allocation;
+        return projection;
     }
 
     private void captureOccupancySample(MetricInputs current) {
@@ -943,6 +1030,11 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             long count,
             String reason) { }
 
+    private record ElasticIssueProjection(
+            Map<String, List<P2pElasticAllocationIssue>> issuesByCentre,
+            List<String> serviceCentreIds,
+            Map<String, String> signaturesByCentre) { }
+
     private record MetricInputs(
             DspOperationalClockSnapshot clock,
             DspSupplySnapshot supply,
@@ -995,7 +1087,24 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         }
     }
 
-    private static final class OperationalBlockCounts {
+    private record OperationalBlockCounts(
+            long dependencyCount,
+            long stationCount,
+            long p2pCount,
+            String dependencyReason,
+            String stationReason,
+            String p2pReason) {
+
+        private OperationalBlockCounts {
+            dependencyReason = dependencyReason == null
+                    ? "operational dependency is not terminal" : dependencyReason;
+            stationReason = stationReason == null
+                    ? "station or route-entry admission is blocked" : stationReason;
+            p2pReason = p2pReason == null ? "P2P assignment is blocked" : p2pReason;
+        }
+    }
+
+    private static final class MutableOperationalBlockCounts {
         private long dependencyCount;
         private long stationCount;
         private long p2pCount;
@@ -1021,28 +1130,14 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             }
         }
 
-        private long dependencyCount() {
-            return dependencyCount;
-        }
-
-        private long stationCount() {
-            return stationCount;
-        }
-
-        private long p2pCount() {
-            return p2pCount;
-        }
-
-        private String dependencyReason() {
-            return dependencyReason == null ? "operational dependency is not terminal" : dependencyReason;
-        }
-
-        private String stationReason() {
-            return stationReason == null ? "station or route-entry admission is blocked" : stationReason;
-        }
-
-        private String p2pReason() {
-            return p2pReason == null ? "P2P assignment is blocked" : p2pReason;
+        private OperationalBlockCounts snapshot() {
+            return new OperationalBlockCounts(
+                    dependencyCount,
+                    stationCount,
+                    p2pCount,
+                    dependencyReason,
+                    stationReason,
+                    p2pReason);
         }
     }
 
