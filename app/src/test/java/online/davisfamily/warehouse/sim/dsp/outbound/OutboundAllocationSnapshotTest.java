@@ -84,6 +84,46 @@ class OutboundAllocationSnapshotTest {
     }
 
     @Test
+    void shouldIndexBagKeysAndOwnersAndRetainRecordValueSemantics() {
+        P2pLineId openLine = new P2pLineId("p2p-1");
+        P2pLineId closedLine = new P2pLineId("p2p-2");
+        AllocatedOutboundBag openBag = allocatedBag("rx-1", "patient-1", "outbound-1", "order-1");
+        AllocatedOutboundBag closedBag = allocatedBag("rx-2", "patient-2", "outbound-2", "order-2");
+        OutboundToteSnapshot openTote = tote(
+                openLine, "outbound-1", List.of(openBag), Optional.empty(), 3);
+        OutboundToteSnapshot closedTote = tote(
+                closedLine,
+                "outbound-2",
+                List.of(closedBag),
+                Optional.of(OutboundToteClosureReason.HARD_CUTOFF),
+                3);
+        OutboundAllocationSnapshot snapshot = new OutboundAllocationSnapshot(
+                Map.of(openLine, openTote),
+                List.of(closedTote),
+                List.of(openBag, closedBag));
+        OutboundAllocationSnapshot equivalent = new OutboundAllocationSnapshot(
+                Map.of(openLine, openTote),
+                List.of(closedTote),
+                List.of(openBag, closedBag));
+
+        assertEquals(List.of(openBag.bagKey(), closedBag.bagKey()),
+                List.copyOf(snapshot.allocatedBagKeys()));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.allocatedBagKeys().clear());
+        assertEquals(Optional.of("SC-1"), snapshot.ownerFor(openTote.physicalToteId()));
+        assertEquals(Optional.of("SC-1"), snapshot.ownerFor(closedTote.physicalToteId()));
+        assertTrue(snapshot.ownerFor(new PhysicalToteId("missing")).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> snapshot.ownerFor(null));
+
+        assertEquals(snapshot, equivalent);
+        assertEquals(snapshot.hashCode(), equivalent.hashCode());
+        assertEquals(
+                "OutboundAllocationSnapshot[openTotesByLine=" + snapshot.openTotesByLine()
+                        + ", closedTotes=" + snapshot.closedTotes()
+                        + ", allocatedBags=" + snapshot.allocatedBags() + "]",
+                snapshot.toString());
+    }
+
+    @Test
     void shouldRejectPurityCapacityOrDuplicateIdentityViolations() {
         P2pLineId lineId = new P2pLineId("p2p-1");
         AllocatedOutboundBag matching = allocatedBag("rx-1", "patient-1", "outbound-1", "order-1");

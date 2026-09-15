@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.analysis.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,12 +17,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.threedee.sim.framework.SimulationController;
+import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInputLoader;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInputPaths;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayLoadedInput;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pReleaseAssignmentRequest;
+import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
+import online.davisfamily.warehouse.sim.totebag.bag.Bag;
+import online.davisfamily.warehouse.sim.totebag.plan.BagSpec;
+import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
+import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class DspFullDayAnalysisRuntimeFactoryTest {
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
@@ -114,6 +127,70 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                         lineSnapshot.activity().input().stationArrivalCount(),
                         lineRuntime.stationArrivalCount());
             }
+        }
+    }
+
+    @Test
+    void shouldCloseOnlyTheAllocatedCentreAndRecheckLiveProcessingState(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadSingleFullPack(directory, profile);
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            PlannedBag centre104Bag = input.bagPlan().plannedBags().stream()
+                    .filter(bag -> bag.serviceCentreId().equals("104"))
+                    .findFirst()
+                    .orElseThrow();
+            assertTrue(input.bagPlan().plannedBags().stream()
+                    .anyMatch(bag -> bag.serviceCentreId().equals("108")));
+
+            var line = runtime.lineRuntimes().getFirst();
+            OrderSheetKey sourceSheet = centre104Bag.owningOrderSheetKeys().getFirst();
+            var manifest = input.data().inboundToteManifests().stream()
+                    .filter(candidate -> candidate.orderSheetKey().equals(sourceSheet))
+                    .findFirst()
+                    .orElseThrow();
+            P2pPhysicalToteAssignment assignment = new P2pPhysicalToteAssignment(
+                    manifest.physicalToteId(),
+                    centre104Bag.serviceCentreId(),
+                    line.lineDefinition().lineId(),
+                    line.lineDefinition().destination());
+            runtime.elasticRuntime().operationalReleaseAssignmentCommitter()
+                    .prepare(new P2pReleaseAssignmentRequest(
+                            manifest.physicalToteId(),
+                            sourceSheet,
+                            centre104Bag.serviceCentreId(),
+                            line.lineDefinition().destination().targetId(),
+                            OperationalPhysicalToteSource.OSR,
+                            java.util.Optional.of(assignment)))
+                    .commit();
+            runtime.outboundToteAllocator().allocate(
+                    line.lineDefinition().lineId(), centre104Bag, Duration.ZERO);
+            Bag probeBag = probeBag();
+            BagReservation reservation = line.bagReceiver().reserveIncomingBag(probeBag);
+            line.bagReceiver().beginReceiving(reservation);
+
+            OutboundAllocationSnapshot beforeProcessingCheck =
+                    runtime.outboundToteAllocator().snapshot();
+            runtime.cutoffController().update(new SimulationContext(), 0d);
+
+            assertSame(beforeProcessingCheck, runtime.outboundToteAllocator().snapshot());
+            assertEquals(1, runtime.outboundToteAllocator().snapshot().openTotesByLine().size());
+
+            line.bagReceiver().completeReceiving(reservation);
+            assertTrue(line.bagReceiver().removeReceivedBag(probeBag));
+            runtime.cutoffController().update(new SimulationContext(), 0d);
+
+            OutboundAllocationSnapshot afterClosure = runtime.outboundToteAllocator().snapshot();
+            assertNotSame(beforeProcessingCheck, afterClosure);
+            assertEquals(1, afterClosure.closedTotes().size());
+            assertEquals("104", afterClosure.closedTotes().getFirst().serviceCentreId().orElseThrow());
+            assertTrue(afterClosure.openTotesByLine().isEmpty());
+            assertSame(afterClosure, runtime.outboundToteAllocator().snapshot());
+
+            runtime.cutoffController().update(new SimulationContext(), 0d);
+            assertSame(afterClosure, runtime.outboundToteAllocator().snapshot());
         }
     }
 
@@ -250,6 +327,18 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                   }
                 }
                 """.formatted(orderId, physicalToteId, priority, serviceCentreId, orderId, orderId);
+    }
+
+    private static Bag probeBag() {
+        String correlationId = "probe-correlation";
+        return new Bag(
+                "probe-bag",
+                correlationId,
+                List.of(new PackPlan(
+                        "probe-pack",
+                        correlationId,
+                        new PackDimensions(0.20f, 0.10f, 0.08f))),
+                new BagSpec(0.34f, 0.28f, 0.22f));
     }
 
     private static final class RecordingWorld extends SimulationWorld {

@@ -30,6 +30,7 @@ public final class OutboundToteAllocator {
     private final List<AllocatedOutboundBag> allocatedBags = new ArrayList<>();
     private final Set<BagKey> allocatedBagKeys = new LinkedHashSet<>();
     private final Map<P2pLineId, Duration> lastMutationTimeByLine = new LinkedHashMap<>();
+    private OutboundAllocationSnapshot cachedSnapshot;
 
     public OutboundToteAllocator(
             PhysicalToteLifecycleLedger lifecycleLedger,
@@ -79,6 +80,7 @@ public final class OutboundToteAllocator {
             currentTote = new MutableOutboundTote(toteId, lineId, config.maximumBagCount());
             openTotesByLine.put(lineId, currentTote);
             lineOrder.add(lineId);
+            cachedSnapshot = null;
             return completeAllocation(currentTote, bag, outputSheets, allocationTime);
         }
 
@@ -104,6 +106,9 @@ public final class OutboundToteAllocator {
     }
 
     public OutboundAllocationSnapshot snapshot() {
+        if (cachedSnapshot != null) {
+            return cachedSnapshot;
+        }
         Map<P2pLineId, OutboundToteSnapshot> openSnapshots = new LinkedHashMap<>();
         for (P2pLineId lineId : lineOrder) {
             MutableOutboundTote tote = openTotesByLine.get(lineId);
@@ -111,7 +116,8 @@ public final class OutboundToteAllocator {
                 openSnapshots.put(lineId, tote.snapshot(Optional.empty()));
             }
         }
-        return new OutboundAllocationSnapshot(openSnapshots, closedTotes, allocatedBags);
+        cachedSnapshot = new OutboundAllocationSnapshot(openSnapshots, closedTotes, allocatedBags);
+        return cachedSnapshot;
     }
 
     private AllocatedOutboundBag completeAllocation(
@@ -135,6 +141,7 @@ public final class OutboundToteAllocator {
                 currentTote.physicalToteId,
                 outputSheets);
         currentTote.add(allocatedBag);
+        cachedSnapshot = null;
         allocatedBags.add(allocatedBag);
         allocatedBagKeys.add(bag.bagKey());
         lastMutationTimeByLine.put(currentTote.p2pLineId, allocationTime);
@@ -194,6 +201,7 @@ public final class OutboundToteAllocator {
 
         OutboundToteSnapshot closedSnapshot = tote.snapshot(Optional.of(reason));
         closedTotes.add(closedSnapshot);
+        cachedSnapshot = null;
         openTotesByLine.remove(lineId);
         lastMutationTimeByLine.put(lineId, time);
         return closedSnapshot;

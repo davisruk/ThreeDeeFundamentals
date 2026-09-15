@@ -3,7 +3,9 @@ package online.davisfamily.warehouse.sim.dsp.outbound;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentEndReason;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
@@ -99,16 +102,20 @@ class OutboundToteAllocatorTest {
                 LINE,
                 bag("rx-1", 1, "SC-1", "pharmacy-1", "patient-1", firstSheet),
                 seconds(1));
+        OutboundAllocationSnapshot afterFirstAllocation = fixture.allocator().snapshot();
         fixture.allocator().allocate(
                 LINE,
                 bag("rx-2", 1, "SC-1", "pharmacy-2", "patient-2", secondSheet),
                 seconds(2));
+        OutboundAllocationSnapshot afterPharmacyChange = fixture.allocator().snapshot();
         fixture.allocator().allocate(
                 LINE,
                 bag("rx-3", 1, "SC-2", "pharmacy-2", "patient-3", thirdSheet),
                 seconds(3));
 
         OutboundAllocationSnapshot snapshot = fixture.allocator().snapshot();
+        assertNotSame(afterFirstAllocation, afterPharmacyChange);
+        assertNotSame(afterPharmacyChange, snapshot);
         assertEquals(
                 List.of(
                         OutboundToteClosureReason.PHARMACY_CHANGED,
@@ -200,15 +207,150 @@ class OutboundToteAllocatorTest {
         OrderSheetKey sourceSheet = sheet("order-1", 1);
         Fixture fixture = fixture(3, sourceSheet);
         fixture.allocator().allocate(LINE, bag("rx-1", sourceSheet), seconds(1));
+        OutboundAllocationSnapshot beforeClose = fixture.allocator().snapshot();
 
         OutboundToteSnapshot closed = fixture.allocator()
                 .closeForApplicableWorkCompletion(LINE, seconds(2))
                 .orElseThrow();
+        OutboundAllocationSnapshot afterClose = fixture.allocator().snapshot();
 
         assertEquals(OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE,
                 closed.closureReason().orElseThrow());
+        assertNotSame(beforeClose, afterClose);
+        assertSame(afterClose, fixture.allocator().snapshot());
         assertFalse(fixture.allocator().closeForHardCutoff(LINE, seconds(3)).isPresent());
         assertFalse(fixture.allocator().closeForServiceCentreChange(LINE, seconds(3)).isPresent());
+        assertSame(afterClose, fixture.allocator().snapshot());
+    }
+
+    @Test
+    void shouldReuseSnapshotsUntilEachGenuineOutboundMutation() {
+        OrderSheetKey firstSheet = sheet("order-1", 1);
+        OrderSheetKey secondSheet = sheet("order-2", 1);
+        OrderSheetKey thirdSheet = sheet("order-3", 1);
+        Fixture fixture = fixture(3, firstSheet, secondSheet, thirdSheet);
+
+        OutboundAllocationSnapshot initial = fixture.allocator().snapshot();
+        assertSame(initial, fixture.allocator().snapshot());
+
+        fixture.allocator().allocate(LINE, bag("rx-1", firstSheet), seconds(1));
+        OutboundAllocationSnapshot afterFirstAllocation = fixture.allocator().snapshot();
+        assertNotSame(initial, afterFirstAllocation);
+        assertSame(afterFirstAllocation, fixture.allocator().snapshot());
+
+        fixture.allocator().allocate(LINE, bag("rx-2", secondSheet), seconds(2));
+        OutboundAllocationSnapshot afterOrdinaryAllocation = fixture.allocator().snapshot();
+        assertNotSame(afterFirstAllocation, afterOrdinaryAllocation);
+
+        fixture.allocator().closeForApplicableWorkCompletion(LINE, seconds(3));
+        OutboundAllocationSnapshot afterExplicitClosure = fixture.allocator().snapshot();
+        assertNotSame(afterOrdinaryAllocation, afterExplicitClosure);
+
+        fixture.allocator().allocate(LINE, bag("rx-3", thirdSheet), seconds(4));
+        OutboundAllocationSnapshot afterNewOpen = fixture.allocator().snapshot();
+        assertNotSame(afterExplicitClosure, afterNewOpen);
+        assertEquals(1, afterNewOpen.openToteFor(LINE).orElseThrow().bagCount());
+        assertEquals(1, afterFirstAllocation.openToteFor(LINE).orElseThrow().bagCount());
+        assertEquals(1, afterFirstAllocation.allocatedBags().size());
+
+        assertThrows(IllegalStateException.class,
+                () -> fixture.allocator().allocate(LINE, bag("rx-3", thirdSheet), seconds(5)));
+        assertSame(afterNewOpen, fixture.allocator().snapshot());
+
+        Fixture other = fixture(3, firstSheet);
+        assertNotSame(afterNewOpen, other.allocator().snapshot());
+    }
+
+    @Test
+    void shouldRefreshSnapshotsAfterCapacityClosureAndRetainPartialAllocationOnLaterFailure() {
+        OrderSheetKey firstSheet = sheet("order-1", 1);
+        OrderSheetKey secondSheet = sheet("order-2", 1);
+        Fixture fixture = fixture(1, firstSheet, secondSheet);
+
+        OutboundAllocationSnapshot initial = fixture.allocator().snapshot();
+        fixture.allocator().allocate(LINE, bag("rx-1", firstSheet), seconds(1));
+        OutboundAllocationSnapshot afterCapacityClosure = fixture.allocator().snapshot();
+
+        assertNotSame(initial, afterCapacityClosure);
+        assertEquals(1, afterCapacityClosure.closedTotes().size());
+        assertTrue(afterCapacityClosure.openToteFor(LINE).isEmpty());
+        assertSame(afterCapacityClosure, fixture.allocator().snapshot());
+
+        FailingLifecycleLedger ledger = new FailingLifecycleLedger();
+        ledger.failOnTransition = true;
+        OutboundToteAllocator failingAllocator = new OutboundToteAllocator(
+                ledger,
+                new DeterministicOutboundToteIdSource(),
+                new OutputSheetAllocator(List.of(firstSheet)),
+                new OutboundToteConfig(1));
+        OutboundAllocationSnapshot beforeAllocation = failingAllocator.snapshot();
+
+        assertThrows(IllegalStateException.class,
+                () -> failingAllocator.allocate(LINE, bag("rx-2", firstSheet), seconds(1)));
+        OutboundAllocationSnapshot afterPartialAllocation = failingAllocator.snapshot();
+
+        assertNotSame(beforeAllocation, afterPartialAllocation);
+        assertEquals(1, afterPartialAllocation.allocatedBags().size());
+        assertEquals(1, afterPartialAllocation.openToteFor(LINE).orElseThrow().bagCount());
+        assertTrue(afterPartialAllocation.closedTotes().isEmpty());
+    }
+
+    @Test
+    void shouldPublishClosedToteBeforeALaterNewToteFailure() {
+        OrderSheetKey firstSheet = sheet("order-1", 1);
+        OrderSheetKey secondSheet = sheet("order-2", 1);
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                ledger,
+                new OutboundToteIdSource() {
+                    private int calls;
+
+                    @Override
+                    public PhysicalToteId nextId(P2pLineId lineId) {
+                        if (++calls > 1) {
+                            throw new IllegalStateException("injected tote ID failure");
+                        }
+                        return new PhysicalToteId("outbound-first");
+                    }
+                },
+                new OutputSheetAllocator(List.of(firstSheet, secondSheet)),
+                new OutboundToteConfig(3));
+        allocator.allocate(LINE, bag("rx-1", firstSheet), seconds(1));
+        OutboundAllocationSnapshot beforeMismatch = allocator.snapshot();
+
+        assertThrows(IllegalStateException.class,
+                () -> allocator.allocate(
+                        LINE,
+                        bag("rx-2", 1, "SC-2", "pharmacy-2", "patient-2", secondSheet),
+                        seconds(2)));
+        OutboundAllocationSnapshot afterPartialClosure = allocator.snapshot();
+
+        assertNotSame(beforeMismatch, afterPartialClosure);
+        assertEquals(1, afterPartialClosure.closedTotes().size());
+        assertTrue(afterPartialClosure.openTotesByLine().isEmpty());
+        assertEquals(1, afterPartialClosure.allocatedBags().size());
+    }
+
+    @Test
+    void shouldPublishCreatedOpenToteBeforeALaterAssignmentFailure() {
+        OrderSheetKey sourceSheet = sheet("order-1", 1);
+        FailingLifecycleLedger ledger = new FailingLifecycleLedger();
+        ledger.failOnAssign = true;
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                ledger,
+                new DeterministicOutboundToteIdSource(),
+                new OutputSheetAllocator(List.of(sourceSheet)),
+                new OutboundToteConfig(3));
+        OutboundAllocationSnapshot beforeAllocation = allocator.snapshot();
+
+        assertThrows(IllegalStateException.class,
+                () -> allocator.allocate(LINE, bag("rx-1", sourceSheet), seconds(1)));
+        OutboundAllocationSnapshot afterPartialCreation = allocator.snapshot();
+
+        assertNotSame(beforeAllocation, afterPartialCreation);
+        OutboundToteSnapshot open = afterPartialCreation.openToteFor(LINE).orElseThrow();
+        assertFalse(open.assigned());
+        assertTrue(afterPartialCreation.allocatedBags().isEmpty());
     }
 
     private static Fixture fixture(int capacity, OrderSheetKey... knownSheets) {
@@ -254,5 +396,32 @@ class OutboundToteAllocatorTest {
     private record Fixture(
             PhysicalToteLifecycleLedger ledger,
             OutboundToteAllocator allocator) {
+    }
+
+    private static final class FailingLifecycleLedger extends PhysicalToteLifecycleLedger {
+        private boolean failOnAssign;
+        private boolean failOnTransition;
+
+        @Override
+        public PhysicalToteAssignment assign(
+                OrderSheetKey orderSheetKey,
+                PhysicalToteId toteId,
+                PhysicalToteAssignmentStage stage,
+                Duration activationTime) {
+            if (failOnAssign) {
+                throw new IllegalStateException("injected assignment failure");
+            }
+            return super.assign(orderSheetKey, toteId, stage, activationTime);
+        }
+
+        @Override
+        public PhysicalToteRecord transitionTote(
+                PhysicalToteId toteId,
+                PhysicalToteLifecycleState nextState) {
+            if (failOnTransition) {
+                throw new IllegalStateException("injected transition failure");
+            }
+            return super.transitionTote(toteId, nextState);
+        }
     }
 }

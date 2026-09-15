@@ -4,17 +4,24 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
-public record OutboundAllocationSnapshot(
-        Map<P2pLineId, OutboundToteSnapshot> openTotesByLine,
-        List<OutboundToteSnapshot> closedTotes,
-        List<AllocatedOutboundBag> allocatedBags) {
+public final class OutboundAllocationSnapshot {
+    private final Map<P2pLineId, OutboundToteSnapshot> openTotesByLine;
+    private final List<OutboundToteSnapshot> closedTotes;
+    private final List<AllocatedOutboundBag> allocatedBags;
+    private final Map<PhysicalToteId, OutboundToteSnapshot> totesById;
+    private final Map<BagKey, AllocatedOutboundBag> allocatedBagsByKey;
 
-    public OutboundAllocationSnapshot {
+    public OutboundAllocationSnapshot(
+            Map<P2pLineId, OutboundToteSnapshot> openTotesByLine,
+            List<OutboundToteSnapshot> closedTotes,
+            List<AllocatedOutboundBag> allocatedBags) {
         if (openTotesByLine == null) {
             throw new IllegalArgumentException("openTotesByLine must not be null");
         }
@@ -40,18 +47,19 @@ public record OutboundAllocationSnapshot(
             }
             openCopy.put(lineId, tote);
         }
-        openTotesByLine = Collections.unmodifiableMap(openCopy);
-        closedTotes = copyAndRejectNull(closedTotes, "closedTotes");
-        allocatedBags = copyAndRejectNull(allocatedBags, "allocatedBags");
-        if (closedTotes.stream().anyMatch(OutboundToteSnapshot::open)) {
+        this.openTotesByLine = Collections.unmodifiableMap(openCopy);
+        this.closedTotes = copyAndRejectNull(closedTotes, "closedTotes");
+        this.allocatedBags = copyAndRejectNull(allocatedBags, "allocatedBags");
+        if (this.closedTotes.stream().anyMatch(OutboundToteSnapshot::open)) {
             throw new IllegalArgumentException("closedTotes must contain only closed totes");
         }
 
         Map<PhysicalToteId, OutboundToteSnapshot> totesById = new LinkedHashMap<>();
-        openTotesByLine.values().forEach(tote -> putUniqueTote(totesById, tote));
-        closedTotes.forEach(tote -> putUniqueTote(totesById, tote));
+        this.openTotesByLine.values().forEach(tote -> putUniqueTote(totesById, tote));
+        this.closedTotes.forEach(tote -> putUniqueTote(totesById, tote));
 
-        Map<BagKey, AllocatedOutboundBag> historyByBagKey = uniqueBags(allocatedBags, "allocatedBags");
+        Map<BagKey, AllocatedOutboundBag> historyByBagKey = uniqueBags(
+                this.allocatedBags, "allocatedBags");
         Map<BagKey, AllocatedOutboundBag> toteContentsByBagKey = new LinkedHashMap<>();
         for (OutboundToteSnapshot tote : totesById.values()) {
             for (AllocatedOutboundBag bag : tote.allocatedBags()) {
@@ -63,6 +71,20 @@ public record OutboundAllocationSnapshot(
         if (!historyByBagKey.equals(toteContentsByBagKey)) {
             throw new IllegalArgumentException("allocatedBags must match outbound tote contents");
         }
+        this.totesById = Collections.unmodifiableMap(totesById);
+        this.allocatedBagsByKey = Collections.unmodifiableMap(historyByBagKey);
+    }
+
+    public Map<P2pLineId, OutboundToteSnapshot> openTotesByLine() {
+        return openTotesByLine;
+    }
+
+    public List<OutboundToteSnapshot> closedTotes() {
+        return closedTotes;
+    }
+
+    public List<AllocatedOutboundBag> allocatedBags() {
+        return allocatedBags;
     }
 
     public Optional<OutboundToteSnapshot> openToteFor(P2pLineId lineId) {
@@ -76,21 +98,51 @@ public record OutboundAllocationSnapshot(
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");
         }
-        Optional<OutboundToteSnapshot> openTote = openTotesByLine.values().stream()
-                .filter(tote -> tote.physicalToteId().equals(physicalToteId))
-                .findFirst();
-        return openTote.isPresent()
-                ? openTote
-                : closedTotes.stream()
-                        .filter(tote -> tote.physicalToteId().equals(physicalToteId))
-                        .findFirst();
+        return Optional.ofNullable(totesById.get(physicalToteId));
     }
 
     public Optional<AllocatedOutboundBag> findAllocatedBag(BagKey bagKey) {
         if (bagKey == null) {
             throw new IllegalArgumentException("bagKey must not be null");
         }
-        return allocatedBags.stream().filter(bag -> bag.bagKey().equals(bagKey)).findFirst();
+        return Optional.ofNullable(allocatedBagsByKey.get(bagKey));
+    }
+
+    public Set<BagKey> allocatedBagKeys() {
+        return allocatedBagsByKey.keySet();
+    }
+
+    public Optional<String> ownerFor(PhysicalToteId physicalToteId) {
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
+        }
+        OutboundToteSnapshot tote = totesById.get(physicalToteId);
+        return tote == null ? Optional.empty() : tote.serviceCentreId();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (!(other instanceof OutboundAllocationSnapshot that)) {
+            return false;
+        }
+        return openTotesByLine.equals(that.openTotesByLine)
+                && closedTotes.equals(that.closedTotes)
+                && allocatedBags.equals(that.allocatedBags);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(openTotesByLine, closedTotes, allocatedBags);
+    }
+
+    @Override
+    public String toString() {
+        return "OutboundAllocationSnapshot[openTotesByLine=" + openTotesByLine
+                + ", closedTotes=" + closedTotes
+                + ", allocatedBags=" + allocatedBags + "]";
     }
 
     private static void putUniqueTote(

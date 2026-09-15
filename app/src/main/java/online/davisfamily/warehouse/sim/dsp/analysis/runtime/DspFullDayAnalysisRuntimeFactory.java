@@ -437,7 +437,10 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     completionEvaluator,
                     clockController::snapshot);
             Runnable closeApplicableOutputs = () -> closeApplicableOutputs(
-                    lineRuntimes, bagPlan, outboundAllocator, clockController.snapshot());
+                    lineRuntimes,
+                    completionSource.plannedBagsByServiceCentre,
+                    outboundAllocator,
+                    clockController.snapshot());
             DspFullDayCutoffController cutoffController = new DspFullDayCutoffController(
                     clockController::snapshot,
                     completionSource,
@@ -768,12 +771,10 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
     private static void closeApplicableOutputs(
             List<DspHeadlessP2pLineRuntime> lineRuntimes,
-            BagPlanningResult bagPlan,
+            Map<String, List<PlannedBag>> plannedBagsByServiceCentre,
             OutboundToteAllocator outboundAllocator,
             DspOperationalClockSnapshot clockSnapshot) {
-        Set<BagKey> allocatedBagKeys = outboundAllocator.snapshot().allocatedBags().stream()
-                .map(AllocatedOutboundBag::bagKey)
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        Set<BagKey> allocatedBagKeys = outboundAllocator.snapshot().allocatedBagKeys();
         for (DspHeadlessP2pLineRuntime lineRuntime : lineRuntimes) {
             DspHeadlessP2pLineRuntimeSnapshot snapshot = lineRuntime.snapshot();
             Optional<OutboundToteSnapshot> open = snapshot.activity().openOutboundTote();
@@ -781,9 +782,14 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 continue;
             }
             String serviceCentreId = open.orElseThrow().serviceCentreId().orElseThrow();
-            boolean allBagsAllocated = bagPlan.plannedBags().stream()
-                    .filter(bag -> bag.serviceCentreId().equals(serviceCentreId))
-                    .allMatch(bag -> allocatedBagKeys.contains(bag.bagKey()));
+            boolean allBagsAllocated = true;
+            for (PlannedBag plannedBag : plannedBagsByServiceCentre
+                    .getOrDefault(serviceCentreId, List.of())) {
+                if (!allocatedBagKeys.contains(plannedBag.bagKey())) {
+                    allBagsAllocated = false;
+                    break;
+                }
+            }
             if (allBagsAllocated) {
                 lineRuntime.closeOutboundToteForApplicableWorkCompletion(
                         clockSnapshot.elapsedSimulationTime());
@@ -971,7 +977,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
             Map<PhysicalToteId, String> serviceCentreByPhysicalTote = serviceCentreByPhysicalTote(
                     av02, outbound, activeRoutedTotes);
-            Set<BagKey> allocatedBags = allocatedBagKeys(outbound);
+            Set<BagKey> allocatedBags = outbound.allocatedBagKeys();
             Map<String, Integer> nonTerminalInbound = nonTerminalInboundCounts(lifecycle);
             Map<String, Integer> remainingPhysicalTotes = remainingPhysicalToteCounts(
                     lifecycle, serviceCentreByPhysicalTote);
@@ -1120,14 +1126,6 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 }
             }
             return counts;
-        }
-
-        private static Set<BagKey> allocatedBagKeys(OutboundAllocationSnapshot outbound) {
-            Set<BagKey> allocatedBags = new LinkedHashSet<>();
-            for (AllocatedOutboundBag bag : outbound.allocatedBags()) {
-                allocatedBags.add(bag.bagKey());
-            }
-            return allocatedBags;
         }
 
         private static <T> Map<String, Integer> countByServiceCentre(
