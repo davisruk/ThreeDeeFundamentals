@@ -114,6 +114,45 @@ class Av02AllocationDomainTest {
     }
 
     @Test
+    void shouldIndexWaitingAndAllHistoryLookupsAndRetainRecordValueSemantics() {
+        Av02AllocatedTote waiting = allocatedTote("av02-000001", "empty-1", 0);
+        Av02AllocatedTote departed = allocatedTote("av02-000002", "empty-2", 1);
+        Av02InventorySnapshot snapshot = new Av02InventorySnapshot(
+                2, List.of(waiting), List.of(departed));
+        Av02InventorySnapshot equivalent = new Av02InventorySnapshot(
+                2, List.of(waiting), List.of(departed));
+
+        assertEquals(waiting, snapshot.findWaiting(waiting.physicalToteId()).orElseThrow());
+        assertEquals(waiting, snapshot.findWaiting(waiting.orderSheetKey()).orElseThrow());
+        assertTrue(snapshot.findWaiting(departed.physicalToteId()).isEmpty());
+        assertTrue(snapshot.findWaiting(departed.orderSheetKey()).isEmpty());
+        assertThrows(IllegalArgumentException.class,
+                () -> snapshot.findWaiting((PhysicalToteId) null));
+        assertThrows(IllegalArgumentException.class,
+                () -> snapshot.findWaiting((OrderSheetKey) null));
+        assertEquals(waiting, snapshot.findTote(waiting.physicalToteId()).orElseThrow());
+        assertEquals(waiting, snapshot.findTote(waiting.orderSheetKey()).orElseThrow());
+        assertEquals(departed, snapshot.findTote(departed.physicalToteId()).orElseThrow());
+        assertEquals(departed, snapshot.findTote(departed.orderSheetKey()).orElseThrow());
+        assertTrue(snapshot.findTote(new PhysicalToteId("missing")).isEmpty());
+        assertTrue(snapshot.findTote(new OrderSheetKey("missing", 1)).isEmpty());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> snapshot.findTote((PhysicalToteId) null));
+        assertThrows(IllegalArgumentException.class,
+                () -> snapshot.findTote((OrderSheetKey) null));
+
+        assertEquals(snapshot, equivalent);
+        assertEquals(snapshot.hashCode(), equivalent.hashCode());
+        assertEquals(
+                "Av02InventorySnapshot[capacity=2, waitingTotes="
+                        + List.of(waiting)
+                        + ", departedTotes=" + List.of(departed) + "]",
+                snapshot.toString());
+        assertEquals(snapshot.toString(), equivalent.toString());
+    }
+
+    @Test
     void shouldUsePositiveBaselineCapacityAndStableMonotonicIds() {
         assertEquals(1, Av02AllocationConfig.productionBaseline().capacity());
         assertThrows(IllegalArgumentException.class, () -> new Av02AllocationConfig(0));

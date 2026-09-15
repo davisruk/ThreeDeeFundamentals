@@ -17,6 +17,7 @@ public final class Av02PhysicalToteInventory {
     private final Set<PhysicalToteId> seenPhysicalToteIds = new LinkedHashSet<>();
     private final Set<OrderSheetKey> seenOrderSheetKeys = new LinkedHashSet<>();
     private final List<Av02AllocatedTote> departedTotes = new ArrayList<>();
+    private Av02InventorySnapshot currentSnapshot;
 
     public Av02PhysicalToteInventory(Av02AllocationConfig config) {
         if (config == null) {
@@ -45,6 +46,7 @@ public final class Av02PhysicalToteInventory {
         }
 
         waitingTotes.put(tote.physicalToteId(), tote);
+        currentSnapshot = null;
         seenPhysicalToteIds.add(tote.physicalToteId());
         seenOrderSheetKeys.add(tote.orderSheetKey());
     }
@@ -63,6 +65,7 @@ public final class Av02PhysicalToteInventory {
         }
 
         waitingTotes.remove(physicalToteId);
+        currentSnapshot = null;
         departedTotes.add(requested);
         return requested;
     }
@@ -102,10 +105,13 @@ public final class Av02PhysicalToteInventory {
     }
 
     public Av02InventorySnapshot snapshot() {
-        return new Av02InventorySnapshot(
-                config.capacity(),
-                List.copyOf(waitingTotes.values()),
-                departedTotes);
+        if (currentSnapshot == null) {
+            currentSnapshot = new Av02InventorySnapshot(
+                    config.capacity(),
+                    List.copyOf(waitingTotes.values()),
+                    departedTotes);
+        }
+        return currentSnapshot;
     }
 
     private static void requirePhysicalToteId(PhysicalToteId physicalToteId) {

@@ -2,6 +2,8 @@ package online.davisfamily.warehouse.sim.dsp.av02;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,14 +66,14 @@ class Av02PhysicalToteInventoryTest {
         Av02InventorySnapshot fullSnapshot = inventory.snapshot();
 
         assertThrows(IllegalStateException.class, () -> inventory.store(overflow));
-        assertEquals(fullSnapshot, inventory.snapshot());
+        assertSame(fullSnapshot, inventory.snapshot());
 
         inventory.recordDeparture(existing.physicalToteId());
         Av02InventorySnapshot departedSnapshot = inventory.snapshot();
         assertThrows(IllegalStateException.class, () -> inventory.store(existing));
         assertThrows(IllegalStateException.class,
                 () -> inventory.store(tote("av02-000003", "empty-1", 2)));
-        assertEquals(departedSnapshot, inventory.snapshot());
+        assertSame(departedSnapshot, inventory.snapshot());
     }
 
     @Test
@@ -88,13 +90,13 @@ class Av02PhysicalToteInventoryTest {
                 () -> inventory.recordDeparture(new PhysicalToteId("unknown")));
         assertThrows(IllegalStateException.class,
                 () -> inventory.recordDeparture(second.physicalToteId()));
-        assertEquals(before, inventory.snapshot());
+        assertSame(before, inventory.snapshot());
 
         inventory.recordDeparture(first.physicalToteId());
         Av02InventorySnapshot after = inventory.snapshot();
         assertThrows(IllegalStateException.class,
                 () -> inventory.recordDeparture(first.physicalToteId()));
-        assertEquals(after, inventory.snapshot());
+        assertSame(after, inventory.snapshot());
     }
 
     @Test
@@ -142,6 +144,54 @@ class Av02PhysicalToteInventoryTest {
                 PhysicalToteRole.OUTBOUND_BAG,
                 0));
         assertTrue(inventory.snapshot().waitingTotes().isEmpty());
+    }
+
+    @Test
+    void shouldReuseSnapshotsUntilARealInventoryMutation() {
+        Av02PhysicalToteInventory inventory = inventory(2);
+        Av02AllocatedTote first = tote("av02-000001", "empty-1", 0);
+        Av02AllocatedTote second = tote("av02-000002", "empty-2", 1);
+
+        Av02InventorySnapshot initial = inventory.snapshot();
+        assertSame(initial, inventory.snapshot());
+
+        assertSame(initial, inventory.snapshot());
+
+        inventory.store(first);
+        Av02InventorySnapshot afterFirstStore = inventory.snapshot();
+        assertNotSame(initial, afterFirstStore);
+        assertSame(afterFirstStore, inventory.snapshot());
+
+        assertThrows(IllegalStateException.class, () -> inventory.store(first));
+        assertSame(afterFirstStore, inventory.snapshot());
+
+        inventory.store(second);
+        Av02InventorySnapshot afterSecondStore = inventory.snapshot();
+        assertNotSame(afterFirstStore, afterSecondStore);
+        assertSame(afterSecondStore, inventory.snapshot());
+
+        assertThrows(IllegalStateException.class, () -> inventory.store(second));
+        assertSame(afterSecondStore, inventory.snapshot());
+
+        inventory.recordDeparture(first.physicalToteId());
+        Av02InventorySnapshot afterDeparture = inventory.snapshot();
+        assertNotSame(afterSecondStore, afterDeparture);
+        assertSame(afterDeparture, inventory.snapshot());
+
+        assertThrows(IllegalStateException.class,
+                () -> inventory.recordDeparture(first.physicalToteId()));
+        assertSame(afterDeparture, inventory.snapshot());
+
+        Av02PhysicalToteInventory otherInventory = inventory(2);
+        assertNotSame(initial, otherInventory.snapshot());
+
+        Av02PhysicalToteInventory consecutiveMutations = inventory(2);
+        Av02InventorySnapshot beforeConsecutiveMutations = consecutiveMutations.snapshot();
+        consecutiveMutations.store(tote("av02-000004", "empty-4", 3));
+        consecutiveMutations.store(tote("av02-000005", "empty-5", 4));
+        Av02InventorySnapshot afterConsecutiveMutations = consecutiveMutations.snapshot();
+        assertNotSame(beforeConsecutiveMutations, afterConsecutiveMutations);
+        assertEquals(2, afterConsecutiveMutations.occupancy());
     }
 
     private static Av02PhysicalToteInventory inventory(int capacity) {
