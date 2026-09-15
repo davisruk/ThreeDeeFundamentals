@@ -1,10 +1,12 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -514,6 +516,251 @@ class DspOperationalReleaseSnapshotFactoryTest {
                         new InboundToteManifestCatalog(List.of()),
                         logicalSnapshot(List.of()),
                         null));
+    }
+
+    @Test
+    void shouldReuseExactIdentityIndexesAcrossEveryCreateFamily() {
+        DspOrderItem item = adaptedItem("line-1", "product-1", "pharmacy-1", "reference-1");
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.ADAPTED, "sc-1", List.of(item), 1);
+        OsrProcessingReleaseSnapshot physicalSnapshot = new OsrProcessingReleaseSnapshot(
+                List.of(physicalCandidate(manifest)));
+        InboundToteManifestCatalog manifestCatalog = new InboundToteManifestCatalog(
+                List.of(manifest));
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.ADAPTED, "sc-1", List.of(item), 999,
+                DspOrderStatus.BLOCKED);
+        WarehouseSchedulerSnapshot logicalSnapshot = logicalSnapshot(List.of(logicalState));
+        Av02InventorySnapshot emptyAv02 = new Av02InventorySnapshot(2, List.of(), List.of());
+        OperationalCandidateRouteAdmissionFactory admissionFactory = noResolutionAdmissionFactory();
+        P2pLineLeaseCatalogSnapshot leases = singleLineLeases();
+        List<OperationalRouteTargetAdmissionSnapshot> targetAdmissions = List.of(
+                new OperationalRouteTargetAdmissionSnapshot(
+                        StationType.P2P, "p2p-line-1", 1, 0));
+        P2pElasticAllocationSnapshot elasticAllocation = singleLineElasticAllocation();
+
+        DspOperationalReleaseSnapshot basic = factory.create(
+                physicalSnapshot, manifestCatalog, logicalSnapshot);
+        assertEquals(
+                basic,
+                factory.create(physicalSnapshot, manifestCatalog, logicalSnapshot));
+
+        DspOperationalReleaseSnapshot av02 = factory.create(
+                physicalSnapshot, manifestCatalog, emptyAv02, logicalSnapshot);
+        assertEquals(
+                av02,
+                factory.create(physicalSnapshot, manifestCatalog, emptyAv02, logicalSnapshot));
+
+        DspOperationalReleaseSnapshot routed = factory.create(
+                physicalSnapshot, manifestCatalog, logicalSnapshot, admissionFactory);
+        assertEquals(
+                routed,
+                factory.create(physicalSnapshot, manifestCatalog, logicalSnapshot, admissionFactory));
+
+        DspOperationalReleaseSnapshot leased = factory.create(
+                physicalSnapshot,
+                manifestCatalog,
+                logicalSnapshot,
+                admissionFactory,
+                leases,
+                targetAdmissions);
+        assertEquals(
+                leased,
+                factory.create(
+                        physicalSnapshot,
+                        manifestCatalog,
+                        logicalSnapshot,
+                        admissionFactory,
+                        leases,
+                        targetAdmissions));
+
+        DspOperationalReleaseSnapshot elastic = factory.create(
+                physicalSnapshot,
+                manifestCatalog,
+                logicalSnapshot,
+                admissionFactory,
+                leases,
+                targetAdmissions,
+                elasticAllocation);
+        assertEquals(
+                elastic,
+                factory.create(
+                        physicalSnapshot,
+                        manifestCatalog,
+                        logicalSnapshot,
+                        admissionFactory,
+                        leases,
+                        targetAdmissions,
+                        elasticAllocation));
+
+        DspOperationalReleaseSnapshot av02Elastic = factory.create(
+                physicalSnapshot,
+                manifestCatalog,
+                emptyAv02,
+                logicalSnapshot,
+                admissionFactory,
+                leases,
+                targetAdmissions,
+                elasticAllocation);
+        assertEquals(
+                av02Elastic,
+                factory.create(
+                        physicalSnapshot,
+                        manifestCatalog,
+                        emptyAv02,
+                        logicalSnapshot,
+                        admissionFactory,
+                        leases,
+                        targetAdmissions,
+                        elasticAllocation));
+
+        Object initialLogicalIndex = privateField(factory, "cachedLogicalSnapshotIndex");
+        Object initialManifestIndex = privateField(factory, "cachedManifestCatalogIndex");
+        assertSame(initialLogicalIndex, privateField(factory, "cachedLogicalSnapshotIndex"));
+        assertSame(initialManifestIndex, privateField(factory, "cachedManifestCatalogIndex"));
+
+        WarehouseSchedulerSnapshot equalButDistinctLogical = logicalSnapshot(
+                List.of(logicalState));
+        InboundToteManifestCatalog equalButDistinctCatalog = new InboundToteManifestCatalog(
+                List.of(manifest));
+        DspOperationalReleaseSnapshot equalButDistinct = factory.create(
+                physicalSnapshot, equalButDistinctCatalog, equalButDistinctLogical);
+        assertEquals(basic, equalButDistinct);
+        Object rebuiltLogicalIndex = privateField(factory, "cachedLogicalSnapshotIndex");
+        Object rebuiltManifestIndex = privateField(factory, "cachedManifestCatalogIndex");
+        assertNotSame(initialLogicalIndex, rebuiltLogicalIndex);
+        assertNotSame(initialManifestIndex, rebuiltManifestIndex);
+
+        DspOrderItem secondItem = adaptedItem(
+                "line-2", "product-2", "pharmacy-1", "reference-2");
+        DspSchedulerOrderState inconsistentPriority = logicalState(
+                "order-2", OrderType.ADAPTED, "sc-1", List.of(secondItem), 998,
+                DspOrderStatus.BLOCKED);
+        WarehouseSchedulerSnapshot invalidChangedLogical = logicalSnapshot(
+                List.of(logicalState, inconsistentPriority));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        physicalSnapshot, equalButDistinctCatalog, invalidChangedLogical));
+        assertSame(rebuiltLogicalIndex, privateField(factory, "cachedLogicalSnapshotIndex"));
+        assertSame(rebuiltManifestIndex, privateField(factory, "cachedManifestCatalogIndex"));
+        assertEquals(
+                equalButDistinct,
+                factory.create(
+                        physicalSnapshot,
+                        equalButDistinctCatalog,
+                        equalButDistinctLogical));
+
+        DspOperationalReleaseSnapshotFactory separateFactory =
+                new DspOperationalReleaseSnapshotFactory();
+        DspOperationalReleaseSnapshot separate = separateFactory.create(
+                physicalSnapshot, equalButDistinctCatalog, equalButDistinctLogical);
+        assertEquals(equalButDistinct, separate);
+        assertNotSame(
+                privateField(factory, "cachedLogicalSnapshotIndex"),
+                privateField(separateFactory, "cachedLogicalSnapshotIndex"));
+        assertNotSame(
+                privateField(factory, "cachedManifestCatalogIndex"),
+                privateField(separateFactory, "cachedManifestCatalogIndex"));
+    }
+
+    @Test
+    void shouldRejectDuplicateLogicalLinesFromTheValidatedIndex() {
+        DspOrderItem first = item("line-1", "product-1", "pharmacy-1");
+        DspOrderItem duplicate = item("line-1", "product-2", "pharmacy-1");
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.FULL_PACK, "sc-1", List.of(first), 1);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        new OsrProcessingReleaseSnapshot(List.of(physicalCandidate(manifest))),
+                        new InboundToteManifestCatalog(List.of(manifest)),
+                        logicalSnapshot(List.of(logicalState(
+                                "order-1",
+                                OrderType.FULL_PACK,
+                                "sc-1",
+                                List.of(first, duplicate),
+                                999,
+                                DspOrderStatus.WAITING)))));
+    }
+
+    @Test
+    void shouldRejectAv02IdentityMismatchAfterLogicalIndexValidation() {
+        DspOrderItem emptyItem = item("line-empty", "product-empty", "pharmacy-empty");
+        NotionalToteOrder emptyOrder = new NotionalToteOrder(
+                "order-empty",
+                "notional-order-empty",
+                "sc-1",
+                1,
+                OrderType.EMPTY,
+                List.of(emptyItem),
+                999,
+                1);
+        DspSchedulerOrderState emptyState = new DspSchedulerOrderState(
+                emptyOrder,
+                new RouteRequirements(false, false, false, true, false, StartLocation.AV02),
+                DspOrderStatus.WAITING);
+        PhysicalToteId av02PhysicalId = new PhysicalToteId("av02-000001");
+        Av02AllocatedTote mismatchedServiceCentre = new Av02AllocatedTote(
+                new OperationalPhysicalToteIdentity(
+                        OperationalPhysicalToteSource.AV02,
+                        av02PhysicalId,
+                        emptyOrder.orderSheetKey(),
+                        OrderType.EMPTY,
+                        "sc-2",
+                        PhysicalToteRole.PRE_P2P,
+                        1),
+                PhysicalToteRecord.preP2p(av02PhysicalId),
+                emptyItem.pharmacyId());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        new OsrProcessingReleaseSnapshot(List.of()),
+                        new InboundToteManifestCatalog(List.of()),
+                        new Av02InventorySnapshot(1, List.of(mismatchedServiceCentre), List.of()),
+                        logicalSnapshot(List.of(emptyState))));
+    }
+
+    private static Object privateField(Object target, String fieldName) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private static OperationalCandidateRouteAdmissionFactory noResolutionAdmissionFactory() {
+        OperationalRouteEntryQueue queue = new OperationalRouteEntryQueue(
+                new OperationalRouteTargetDefinition(StationType.P2P, "p2p-line-1", 1));
+        return new OperationalCandidateRouteAdmissionFactory(
+                new OperationalRouteEntrySelector(),
+                (stationType, candidate, snapshot) -> null,
+                new OperationalRouteTargetRegistry(List.of(queue)));
+    }
+
+    private static P2pLineLeaseCatalogSnapshot singleLineLeases() {
+        OperationalRouteDestination destination = new OperationalRouteDestination(
+                StationType.P2P, "p2p-line-1");
+        return new P2pLineLeaseCatalogSnapshot(List.of(
+                new P2pLineLeaseSnapshot(
+                        new P2pLineDefinition(new P2pLineId("line-1"), destination),
+                        Optional.empty(),
+                        P2pLineActivitySnapshot.idle(),
+                        List.of())));
+    }
+
+    private static P2pElasticAllocationSnapshot singleLineElasticAllocation() {
+        return new P2pElasticAllocationSnapshot(
+                P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                P2pElasticAllocationCalibrationStatus.UNCALIBRATED,
+                LocalDateTime.of(2026, 8, 24, 6, 0),
+                List.of(new P2pLineId("line-1")),
+                1,
+                List.of(),
+                List.of());
     }
 
     private static WarehouseSchedulerSnapshot logicalSnapshot(

@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -15,7 +16,6 @@ import online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalPhysicalToteCand
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
-import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
@@ -32,17 +32,27 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot
 
 public final class DspOperationalReleaseSnapshotFactory {
 
+    private WarehouseSchedulerSnapshot cachedLogicalSnapshot;
+    private LogicalSnapshotIndex cachedLogicalSnapshotIndex;
+    private InboundToteManifestCatalog cachedManifestCatalog;
+    private ManifestCatalogIndex cachedManifestCatalogIndex;
+
     public DspOperationalReleaseSnapshot create(
             OsrProcessingReleaseSnapshot physicalSnapshot,
             InboundToteManifestCatalog manifestCatalog,
             WarehouseSchedulerSnapshot logicalSnapshot) {
+        validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
+        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
         List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalSnapshot);
-        return createSnapshot(
+                physicalSnapshot, manifestCatalog, logicalIndex.index());
+        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+        DspOperationalReleaseSnapshot snapshot = createSnapshot(
                 joinedCandidates,
-                buildPharmacyGroups(manifestCatalog),
+                manifestIndex.index().pharmacyGroups(),
                 logicalSnapshot,
                 deriveCompatibilityAdmissions(joinedCandidates, logicalSnapshot));
+        publish(logicalIndex, manifestIndex);
+        return snapshot;
     }
 
     public DspOperationalReleaseSnapshot create(
@@ -50,13 +60,23 @@ public final class DspOperationalReleaseSnapshotFactory {
             InboundToteManifestCatalog manifestCatalog,
             Av02InventorySnapshot av02InventorySnapshot,
             WarehouseSchedulerSnapshot logicalSnapshot) {
+        if (av02InventorySnapshot == null) {
+            throw new IllegalArgumentException("av02InventorySnapshot must not be null");
+        }
+        validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
+        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
         List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, av02InventorySnapshot, logicalSnapshot);
-        return createSnapshot(
+                physicalSnapshot,
+                manifestCatalog,
+                av02InventorySnapshot,
+                logicalIndex.index());
+        DspOperationalReleaseSnapshot snapshot = createSnapshot(
                 joinedCandidates,
                 buildPharmacyGroups(joinedCandidates),
                 logicalSnapshot,
                 deriveCompatibilityAdmissions(joinedCandidates, logicalSnapshot));
+        publish(logicalIndex);
+        return snapshot;
     }
 
     public DspOperationalReleaseSnapshot create(
@@ -67,15 +87,20 @@ public final class DspOperationalReleaseSnapshotFactory {
         if (routeAdmissionFactory == null) {
             throw new IllegalArgumentException("routeAdmissionFactory must not be null");
         }
+        validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
+        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
         List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalSnapshot);
+                physicalSnapshot, manifestCatalog, logicalIndex.index());
         List<OperationalCandidateRouteAdmission> routeAdmissions =
                 routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
-        return createSnapshot(
+        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+        DspOperationalReleaseSnapshot snapshot = createSnapshot(
                 joinedCandidates,
-                buildPharmacyGroups(manifestCatalog),
+                manifestIndex.index().pharmacyGroups(),
                 logicalSnapshot,
                 routeAdmissions);
+        publish(logicalIndex, manifestIndex);
+        return snapshot;
     }
 
     public DspOperationalReleaseSnapshot create(
@@ -91,17 +116,22 @@ public final class DspOperationalReleaseSnapshotFactory {
         if (p2pLineLeases == null || p2pTargetAdmissions == null) {
             throw new IllegalArgumentException("P2P operational snapshot inputs must not be null");
         }
+        validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
+        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
         List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalSnapshot);
+                physicalSnapshot, manifestCatalog, logicalIndex.index());
         List<OperationalCandidateRouteAdmission> routeAdmissions =
                 routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
-        return createSnapshot(
+        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+        DspOperationalReleaseSnapshot snapshot = createSnapshot(
                 joinedCandidates,
-                buildPharmacyGroups(manifestCatalog),
+                manifestIndex.index().pharmacyGroups(),
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
                 p2pTargetAdmissions);
+        publish(logicalIndex, manifestIndex);
+        return snapshot;
     }
 
     public DspOperationalReleaseSnapshot create(
@@ -116,18 +146,23 @@ public final class DspOperationalReleaseSnapshotFactory {
                 || p2pTargetAdmissions == null || elasticAllocation == null) {
             throw new IllegalArgumentException("elastic operational snapshot inputs must not be null");
         }
+        validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
+        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
         List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalSnapshot);
+                physicalSnapshot, manifestCatalog, logicalIndex.index());
         List<OperationalCandidateRouteAdmission> routeAdmissions =
                 routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
-        return createSnapshot(
+        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+        DspOperationalReleaseSnapshot snapshot = createSnapshot(
                 joinedCandidates,
-                buildPharmacyGroups(manifestCatalog),
+                manifestIndex.index().pharmacyGroups(),
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
                 p2pTargetAdmissions,
                 Optional.of(elasticAllocation));
+        publish(logicalIndex, manifestIndex);
+        return snapshot;
     }
 
     public DspOperationalReleaseSnapshot create(
@@ -143,11 +178,19 @@ public final class DspOperationalReleaseSnapshotFactory {
                 || p2pTargetAdmissions == null || elasticAllocation == null) {
             throw new IllegalArgumentException("elastic operational snapshot inputs must not be null");
         }
+        if (av02InventorySnapshot == null) {
+            throw new IllegalArgumentException("av02InventorySnapshot must not be null");
+        }
+        validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
+        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
         List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, av02InventorySnapshot, logicalSnapshot);
+                physicalSnapshot,
+                manifestCatalog,
+                av02InventorySnapshot,
+                logicalIndex.index());
         List<OperationalCandidateRouteAdmission> routeAdmissions =
                 routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
-        return createSnapshot(
+        DspOperationalReleaseSnapshot snapshot = createSnapshot(
                 joinedCandidates,
                 buildPharmacyGroups(joinedCandidates),
                 logicalSnapshot,
@@ -155,25 +198,14 @@ public final class DspOperationalReleaseSnapshotFactory {
                 p2pLineLeases,
                 p2pTargetAdmissions,
                 Optional.of(elasticAllocation));
+        publish(logicalIndex);
+        return snapshot;
     }
 
     private static List<DspOperationalReleaseCandidate> joinCandidates(
             OsrProcessingReleaseSnapshot physicalSnapshot,
             InboundToteManifestCatalog manifestCatalog,
-            WarehouseSchedulerSnapshot logicalSnapshot) {
-        if (physicalSnapshot == null) {
-            throw new IllegalArgumentException("physicalSnapshot must not be null");
-        }
-        if (manifestCatalog == null) {
-            throw new IllegalArgumentException("manifestCatalog must not be null");
-        }
-        if (logicalSnapshot == null) {
-            throw new IllegalArgumentException("logicalSnapshot must not be null");
-        }
-
-        Map<OrderSheetKey, DspSchedulerOrderState> logicalStatesBySheet =
-                indexLogicalStates(logicalSnapshot.orderStates());
-        validateServiceCentrePriorities(logicalSnapshot.orderStates());
+            LogicalSnapshotIndex logicalIndex) {
         List<DspOperationalReleaseCandidate> joinedCandidates = new ArrayList<>();
         for (OperationalPhysicalToteCandidate physicalCandidate : physicalSnapshot.candidates()) {
             InboundToteManifest manifest = manifestCatalog
@@ -181,16 +213,20 @@ public final class DspOperationalReleaseSnapshotFactory {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No inbound manifest for physical tote "
                                     + physicalCandidate.physicalToteId().value()));
-            DspSchedulerOrderState logicalState = logicalStatesBySheet.get(
-                    physicalCandidate.orderSheetKey());
+            OrderSheetKey orderSheetKey = physicalCandidate.orderSheetKey();
+            DspSchedulerOrderState logicalState = logicalIndex.statesBySheet().get(orderSheetKey);
             if (logicalState == null) {
                 throw new IllegalArgumentException(
-                        "No logical order state for sheet " + physicalCandidate.orderSheetKey());
+                        "No logical order state for sheet " + orderSheetKey);
             }
 
-            validateJoinedIdentity(physicalCandidate, manifest, logicalState);
+            validateJoinedIdentity(
+                    physicalCandidate, manifest, logicalState, orderSheetKey);
             validateLogicalStatus(logicalState, physicalCandidate.physicalToteId());
-            validateManifestLines(manifest, logicalState);
+            validateManifestLines(
+                    manifest,
+                    logicalIndex.lineItemsBySheet().get(orderSheetKey),
+                    orderSheetKey);
             joinedCandidates.add(new DspOperationalReleaseCandidate(
                     physicalCandidate,
                     logicalState,
@@ -204,31 +240,25 @@ public final class DspOperationalReleaseSnapshotFactory {
             OsrProcessingReleaseSnapshot physicalSnapshot,
             InboundToteManifestCatalog manifestCatalog,
             Av02InventorySnapshot av02InventorySnapshot,
-            WarehouseSchedulerSnapshot logicalSnapshot) {
-        if (av02InventorySnapshot == null) {
-            throw new IllegalArgumentException("av02InventorySnapshot must not be null");
-        }
+            LogicalSnapshotIndex logicalIndex) {
         List<DspOperationalReleaseCandidate> joinedCandidates = new ArrayList<>(
-                joinCandidates(physicalSnapshot, manifestCatalog, logicalSnapshot));
-        Map<OrderSheetKey, DspSchedulerOrderState> logicalStatesBySheet =
-                indexLogicalStates(logicalSnapshot.orderStates());
+                joinCandidates(physicalSnapshot, manifestCatalog, logicalIndex));
         for (Av02AllocatedTote allocatedTote : av02InventorySnapshot.waitingTotes()) {
             OperationalPhysicalToteCandidate physicalCandidate =
                     new Av02OperationalPhysicalToteCandidate(allocatedTote.identity());
-            DspSchedulerOrderState logicalState = logicalStatesBySheet.get(
-                    physicalCandidate.orderSheetKey());
+            OrderSheetKey orderSheetKey = physicalCandidate.orderSheetKey();
+            DspSchedulerOrderState logicalState = logicalIndex.statesBySheet().get(orderSheetKey);
             if (logicalState == null) {
                 throw new IllegalArgumentException(
                         "No logical order state for AV02 sheet "
-                                + physicalCandidate.orderSheetKey());
+                                + orderSheetKey);
             }
-            validateAv02Identity(physicalCandidate, logicalState);
+            validateAv02Identity(physicalCandidate, logicalState, orderSheetKey);
             validateLogicalStatus(logicalState, physicalCandidate.physicalToteId());
-            NotionalToteOrder logicalOrder = logicalState.order();
             joinedCandidates.add(new DspOperationalReleaseCandidate(
                     physicalCandidate,
                     logicalState,
-                    distinctPharmacyIds(logicalOrder.items())));
+                    logicalIndex.pharmacyIdsBySheet().get(orderSheetKey)));
         }
         return List.copyOf(joinedCandidates);
     }
@@ -313,8 +343,63 @@ public final class DspOperationalReleaseSnapshotFactory {
         return List.copyOf(admissions);
     }
 
-    private static Map<OrderSheetKey, DspSchedulerOrderState> indexLogicalStates(
-            List<DspSchedulerOrderState> logicalStates) {
+    private static void validateJoinInputs(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            WarehouseSchedulerSnapshot logicalSnapshot) {
+        if (physicalSnapshot == null) {
+            throw new IllegalArgumentException("physicalSnapshot must not be null");
+        }
+        if (manifestCatalog == null) {
+            throw new IllegalArgumentException("manifestCatalog must not be null");
+        }
+        if (logicalSnapshot == null) {
+            throw new IllegalArgumentException("logicalSnapshot must not be null");
+        }
+    }
+
+    private LogicalIndexLookup logicalIndexFor(WarehouseSchedulerSnapshot logicalSnapshot) {
+        if (logicalSnapshot == cachedLogicalSnapshot) {
+            return new LogicalIndexLookup(
+                    logicalSnapshot, cachedLogicalSnapshotIndex, false);
+        }
+        return new LogicalIndexLookup(
+                logicalSnapshot,
+                buildLogicalSnapshotIndex(logicalSnapshot),
+                true);
+    }
+
+    private ManifestIndexLookup manifestIndexFor(InboundToteManifestCatalog manifestCatalog) {
+        if (manifestCatalog == cachedManifestCatalog) {
+            return new ManifestIndexLookup(
+                    manifestCatalog, cachedManifestCatalogIndex, false);
+        }
+        return new ManifestIndexLookup(
+                manifestCatalog,
+                buildManifestCatalogIndex(manifestCatalog),
+                true);
+    }
+
+    private void publish(LogicalIndexLookup logicalIndex) {
+        publish(logicalIndex, null);
+    }
+
+    private void publish(
+            LogicalIndexLookup logicalIndex,
+            ManifestIndexLookup manifestIndex) {
+        if (logicalIndex.publish()) {
+            cachedLogicalSnapshot = logicalIndex.snapshot();
+            cachedLogicalSnapshotIndex = logicalIndex.index();
+        }
+        if (manifestIndex != null && manifestIndex.publish()) {
+            cachedManifestCatalog = manifestIndex.catalog();
+            cachedManifestCatalogIndex = manifestIndex.index();
+        }
+    }
+
+    private static LogicalSnapshotIndex buildLogicalSnapshotIndex(
+            WarehouseSchedulerSnapshot logicalSnapshot) {
+        List<DspSchedulerOrderState> logicalStates = logicalSnapshot.orderStates();
         Map<OrderSheetKey, DspSchedulerOrderState> statesBySheet = new LinkedHashMap<>();
         for (DspSchedulerOrderState logicalState : logicalStates) {
             if (logicalState == null) {
@@ -326,7 +411,38 @@ public final class DspOperationalReleaseSnapshotFactory {
                         "Duplicate logical order state for sheet " + orderSheetKey);
             }
         }
-        return statesBySheet;
+        validateServiceCentrePriorities(logicalStates);
+
+        Map<OrderSheetKey, Map<String, DspOrderItem>> lineItemsBySheet = new LinkedHashMap<>();
+        Map<OrderSheetKey, List<String>> pharmacyIdsBySheet = new LinkedHashMap<>();
+        for (Map.Entry<OrderSheetKey, DspSchedulerOrderState> entry : statesBySheet.entrySet()) {
+            OrderSheetKey orderSheetKey = entry.getKey();
+            DspSchedulerOrderState logicalState = entry.getValue();
+            Map<String, DspOrderItem> lineItemsByReference = new LinkedHashMap<>();
+            Set<String> pharmacyIds = new LinkedHashSet<>();
+            for (DspOrderItem item : logicalState.order().items()) {
+                if (lineItemsByReference.putIfAbsent(item.lineReference(), item) != null) {
+                    throw new IllegalArgumentException(
+                            "Duplicate logical line reference " + item.lineReference()
+                                    + " for sheet " + orderSheetKey);
+                }
+                pharmacyIds.add(item.pharmacyId());
+            }
+            lineItemsBySheet.put(
+                    orderSheetKey,
+                    Collections.unmodifiableMap(lineItemsByReference));
+            pharmacyIdsBySheet.put(orderSheetKey, List.copyOf(pharmacyIds));
+        }
+
+        return new LogicalSnapshotIndex(
+                Collections.unmodifiableMap(statesBySheet),
+                Collections.unmodifiableMap(lineItemsBySheet),
+                Collections.unmodifiableMap(pharmacyIdsBySheet));
+    }
+
+    private static ManifestCatalogIndex buildManifestCatalogIndex(
+            InboundToteManifestCatalog manifestCatalog) {
+        return new ManifestCatalogIndex(buildPharmacyGroups(manifestCatalog));
     }
 
     private static void validateServiceCentrePriorities(
@@ -420,13 +536,14 @@ public final class DspOperationalReleaseSnapshotFactory {
 
     private static void validateAv02Identity(
             OperationalPhysicalToteCandidate physicalCandidate,
-            DspSchedulerOrderState logicalState) {
+            DspSchedulerOrderState logicalState,
+            OrderSheetKey logicalSheetKey) {
         if (physicalCandidate.orderType() != logicalState.order().orderType()
                 || physicalCandidate.orderType() != OrderType.EMPTY) {
             throw new IllegalArgumentException(
                     "AV02 physical and logical order type must be EMPTY and match");
         }
-        if (!physicalCandidate.orderSheetKey().equals(logicalState.order().orderSheetKey())) {
+        if (!physicalCandidate.orderSheetKey().equals(logicalSheetKey)) {
             throw new IllegalArgumentException("AV02 physical and logical order sheet must match");
         }
         if (!physicalCandidate.serviceCentreId()
@@ -439,7 +556,8 @@ public final class DspOperationalReleaseSnapshotFactory {
     private static void validateJoinedIdentity(
             OperationalPhysicalToteCandidate physicalCandidate,
             InboundToteManifest manifest,
-            DspSchedulerOrderState logicalState) {
+            DspSchedulerOrderState logicalState,
+            OrderSheetKey logicalSheetKey) {
         if (!physicalCandidate.physicalToteId().equals(manifest.physicalToteId())) {
             throw new IllegalArgumentException("Physical candidate and manifest tote ID must match");
         }
@@ -454,7 +572,7 @@ public final class DspOperationalReleaseSnapshotFactory {
                     "Physical candidate and manifest service centre must match");
         }
 
-        if (!manifest.orderSheetKey().equals(logicalState.order().orderSheetKey())) {
+        if (!manifest.orderSheetKey().equals(logicalSheetKey)) {
             throw new IllegalArgumentException("Manifest and logical order sheet must match");
         }
         if (manifest.orderType() != logicalState.order().orderType()) {
@@ -478,16 +596,8 @@ public final class DspOperationalReleaseSnapshotFactory {
 
     private static void validateManifestLines(
             InboundToteManifest manifest,
-            DspSchedulerOrderState logicalState) {
-        Map<String, DspOrderItem> logicalItemsByLineReference = new LinkedHashMap<>();
-        for (DspOrderItem logicalItem : logicalState.order().items()) {
-            if (logicalItemsByLineReference.putIfAbsent(
-                    logicalItem.lineReference(), logicalItem) != null) {
-                throw new IllegalArgumentException(
-                        "Duplicate logical line reference " + logicalItem.lineReference()
-                                + " for sheet " + logicalState.order().orderSheetKey());
-            }
-        }
+            Map<String, DspOrderItem> logicalItemsByLineReference,
+            OrderSheetKey logicalSheetKey) {
         for (DspOrderItem manifestItem : manifest.items()) {
             DspOrderItem logicalItem = logicalItemsByLineReference.get(
                     manifestItem.lineReference());
@@ -495,13 +605,13 @@ public final class DspOperationalReleaseSnapshotFactory {
                 throw new IllegalArgumentException(
                         "Manifest line " + manifestItem.lineReference()
                                 + " is absent from logical sheet "
-                                + logicalState.order().orderSheetKey());
+                                + logicalSheetKey);
             }
             if (!manifestItem.equals(logicalItem)) {
                 throw new IllegalArgumentException(
                         "Manifest line " + manifestItem.lineReference()
                                 + " contradicts logical sheet "
-                                + logicalState.order().orderSheetKey());
+                                + logicalSheetKey);
             }
         }
     }
@@ -512,6 +622,27 @@ public final class DspOperationalReleaseSnapshotFactory {
             pharmacyIds.add(item.pharmacyId());
         }
         return List.copyOf(pharmacyIds);
+    }
+
+    private record LogicalIndexLookup(
+            WarehouseSchedulerSnapshot snapshot,
+            LogicalSnapshotIndex index,
+            boolean publish) {
+    }
+
+    private record ManifestIndexLookup(
+            InboundToteManifestCatalog catalog,
+            ManifestCatalogIndex index,
+            boolean publish) {
+    }
+
+    private record LogicalSnapshotIndex(
+            Map<OrderSheetKey, DspSchedulerOrderState> statesBySheet,
+            Map<OrderSheetKey, Map<String, DspOrderItem>> lineItemsBySheet,
+            Map<OrderSheetKey, List<String>> pharmacyIdsBySheet) {
+    }
+
+    private record ManifestCatalogIndex(List<ServiceCentrePharmacyGroup> pharmacyGroups) {
     }
 
     private record IndexedManifest(int catalogIndex, InboundToteManifest manifest) {}
