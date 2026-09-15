@@ -20,6 +20,7 @@ public class DspSchedulerRuntimeState {
     private final Map<StationType, StationAdmissionSnapshot> stationAdmissions;
     private final Set<PreparedLineKey> preparedLineKeys;
     private Optional<String> activeServiceCentreId;
+    private WarehouseSchedulerSnapshot cachedSnapshot;
 
     public DspSchedulerRuntimeState(WarehouseSchedulerSnapshot initialSnapshot) {
         if (initialSnapshot == null) {
@@ -32,11 +33,14 @@ public class DspSchedulerRuntimeState {
     }
 
     public WarehouseSchedulerSnapshot snapshot() {
-        return new WarehouseSchedulerSnapshot(
-                orderStates,
-                stationAdmissions,
-                preparedLineKeys,
-                activeServiceCentreId);
+        if (cachedSnapshot == null) {
+            cachedSnapshot = new WarehouseSchedulerSnapshot(
+                    orderStates,
+                    stationAdmissions,
+                    preparedLineKeys,
+                    activeServiceCentreId);
+        }
+        return cachedSnapshot;
     }
 
     public void markReleased(String orderId) {
@@ -58,6 +62,7 @@ public class DspSchedulerRuntimeState {
 
             orderStates.set(i, orderState.withStatus(DspOrderStatus.RELEASED));
             activeServiceCentreId = Optional.of(orderState.order().serviceCentreId());
+            invalidateSnapshot();
             return;
         }
 
@@ -68,14 +73,20 @@ public class DspSchedulerRuntimeState {
         if (stationAdmission == null) {
             throw new IllegalArgumentException("stationAdmission must not be null");
         }
+        if (stationAdmission.equals(stationAdmissions.get(stationAdmission.stationType()))) {
+            return;
+        }
         stationAdmissions.put(stationAdmission.stationType(), stationAdmission);
+        invalidateSnapshot();
     }
 
     public void addPreparedLineKey(PreparedLineKey preparedLineKey) {
         if (preparedLineKey == null) {
             throw new IllegalArgumentException("preparedLineKey must not be null");
         }
-        preparedLineKeys.add(preparedLineKey);
+        if (preparedLineKeys.add(preparedLineKey)) {
+            invalidateSnapshot();
+        }
     }
 
     public void addPreparedLineKeys(Set<PreparedLineKey> preparedLineKeys) {
@@ -85,5 +96,9 @@ public class DspSchedulerRuntimeState {
         for (PreparedLineKey preparedLineKey : preparedLineKeys) {
             addPreparedLineKey(preparedLineKey);
         }
+    }
+
+    private void invalidateSnapshot() {
+        cachedSnapshot = null;
     }
 }
