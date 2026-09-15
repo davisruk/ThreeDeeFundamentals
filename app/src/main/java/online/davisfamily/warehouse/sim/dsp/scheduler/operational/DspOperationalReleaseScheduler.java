@@ -13,7 +13,7 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteR
 import online.davisfamily.warehouse.sim.dsp.osr.release.ReleasePhysicalToteFromOsrCommand;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationDecision;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationPolicy;
-import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationRequest;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationRequestFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pLineAllocationPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
@@ -110,6 +110,7 @@ public final class DspOperationalReleaseScheduler {
 
         List<OperationalBlockedCandidate> blockedCandidates = new ArrayList<>();
         List<OperationalReleaseSelection> eligibleCandidates = new ArrayList<>();
+        P2pLineAllocationRequestFactory requestFactory = null;
         for (DspOperationalReleaseCandidate candidate : snapshot.candidates()) {
             List<OperationalReleaseBlock> dependencyBlocks =
                     dependencyReadinessPolicy.findBlocks(candidate, snapshot);
@@ -143,26 +144,28 @@ public final class DspOperationalReleaseScheduler {
             Optional<P2pPhysicalToteAssignment> assignment = Optional.empty();
             boolean activePharmacyAffinity = false;
             if (stickyP2pCandidate) {
-                P2pBagCorrelationAssignmentSnapshot correlationAssignments =
-                        correlationAssignmentSnapshotSupplier.get();
-                if (correlationAssignments == null) {
-                    throw new IllegalStateException(
-                            "correlationAssignmentSnapshotSupplier returned null");
+                if (requestFactory == null) {
+                    P2pBagCorrelationAssignmentSnapshot correlationAssignments =
+                            correlationAssignmentSnapshotSupplier.get();
+                    if (correlationAssignments == null) {
+                        throw new IllegalStateException(
+                                "correlationAssignmentSnapshotSupplier returned null");
+                    }
+                    requestFactory = new P2pLineAllocationRequestFactory(
+                            snapshot.p2pLineLeases(),
+                            snapshot.p2pRouteAdmissions(),
+                            snapshot.elasticP2pAllocation(),
+                            correlationAssignments,
+                            correlationRequirementCatalog);
                 }
                 P2pLineAllocationDecision allocation = p2pLineAllocationPolicy.allocate(
-                        new P2pLineAllocationRequest(
+                        requestFactory.create(
+                                candidate.physicalCandidate().source(),
                                 candidate.physicalCandidate().physicalToteId(),
+                                candidate.physicalCandidate().orderSheetKey(),
                                 candidate.physicalCandidate().serviceCentreId(),
                                 candidate.pharmacyIds(),
-                                directP2p,
-                                snapshot.p2pLineLeases(),
-                                snapshot.p2pRouteAdmissions(),
-                                snapshot.elasticP2pAllocation(),
-                                correlationRequirementCatalog.requirementsFor(
-                                        candidate.physicalCandidate().source(),
-                                        candidate.physicalCandidate().physicalToteId(),
-                                        candidate.physicalCandidate().orderSheetKey()),
-                                correlationAssignments));
+                                directP2p));
                 if (allocation == null) {
                     throw new IllegalStateException("P2P line allocation policy returned null");
                 }

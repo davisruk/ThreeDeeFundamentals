@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -29,10 +30,13 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteD
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pBaggingActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.StickyP2pLineAllocationPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticStickyP2pLineAllocationPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationCalibrationStatus;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreLineDemandSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreWorkloadSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pInputActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
@@ -562,6 +566,83 @@ class DspOperationalReleaseSchedulerTest {
         assertSame(admission, snapshot.stationAdmissions().get(StationType.P2P));
         assertEquals(DspOrderStatus.WAITING, candidate.logicalOrderState().status());
         assertFalse(snapshot.candidates().isEmpty());
+    }
+
+    @Test
+    void shouldCaptureCorrelationAssignmentsOncePerEvaluationAndRefreshNextEvaluation() {
+        AtomicInteger supplierCalls = new AtomicInteger();
+        DspOperationalReleaseScheduler countingScheduler =
+                newSchedulerWithAssignmentSupplier(supplierCalls);
+        P2pLineLeaseSnapshot line = leasedLine("line-1", "sc-1", Optional.empty());
+        P2pLineLeaseCatalogSnapshot lineCatalog = new P2pLineLeaseCatalogSnapshot(List.of(line));
+        DspOperationalReleaseSnapshot snapshot = stickySnapshot(
+                List.of(
+                        candidate(
+                                "tote-1",
+                                logicalState(
+                                        "order-1", 1, OrderType.FULL_PACK, "sc-1", 999,
+                                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                                1,
+                                OsrProcessingReleaseAvailability.AVAILABLE,
+                                Optional.empty()),
+                        candidate(
+                                "tote-2",
+                                logicalState(
+                                        "order-2", 1, OrderType.FULL_PACK, "sc-1", 999,
+                                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                                2,
+                                OsrProcessingReleaseAvailability.AVAILABLE,
+                                Optional.empty())),
+                Map.of(StationType.P2P, openAdmission(StationType.P2P, "target-line-1")),
+                Set.of(),
+                lineCatalog,
+                Map.of(line.definition().destination(), true));
+
+        assertTrue(countingScheduler.evaluate(snapshot).releaseDecision().isPresent());
+        assertEquals(1, supplierCalls.get());
+
+        assertTrue(countingScheduler.evaluate(snapshot).releaseDecision().isPresent());
+        assertEquals(2, supplierCalls.get());
+    }
+
+    @Test
+    void shouldKeepCorrelationSupplierLazyWhenNoStickyCandidateReachesAllocation() {
+        AtomicInteger supplierCalls = new AtomicInteger();
+        DspOperationalReleaseScheduler countingScheduler =
+                newSchedulerWithAssignmentSupplier(supplierCalls);
+        P2pLineLeaseSnapshot line = leasedLine("line-1", "sc-1", Optional.empty());
+        DspOperationalReleaseEvaluation evaluation = countingScheduler.evaluate(stickySnapshot(
+                List.of(candidate(
+                        "associated-tote",
+                        logicalState(
+                                "associated-order", 1, OrderType.ASSOCIATED, "sc-1", 999,
+                                DspOrderLineType.ADAPTED, p2pRoute()),
+                        1,
+                        OsrProcessingReleaseAvailability.AVAILABLE,
+                        Optional.empty())),
+                Map.of(StationType.P2P, openAdmission(StationType.P2P, "target-line-1")),
+                Set.of(),
+                new P2pLineLeaseCatalogSnapshot(List.of(line)),
+                Map.of(line.definition().destination(), true)));
+
+        assertTrue(evaluation.releaseDecision().isEmpty());
+        assertEquals(OperationalReleaseBlockType.ADAPTED_DEPENDENCY,
+                evaluation.blockedCandidates().getFirst().blocks().getFirst().type());
+        assertEquals(0, supplierCalls.get());
+    }
+
+    private static DspOperationalReleaseScheduler newSchedulerWithAssignmentSupplier(
+            AtomicInteger supplierCalls) {
+        return new DspOperationalReleaseScheduler(
+                new OperationalDependencyReadinessPolicy(),
+                new OperationalRouteEntryAdmissionPolicy(),
+                new PharmacyGroupedSourceSequenceRankingPolicy(),
+                new StickyP2pLineAllocationPolicy(),
+                P2pBagCorrelationRequirementCatalog.empty(),
+                () -> {
+                    supplierCalls.incrementAndGet();
+                    return new P2pBagCorrelationAssignmentSnapshot(List.of());
+                });
     }
 
     private static DspOperationalReleaseSnapshot snapshot(

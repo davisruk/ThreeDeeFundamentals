@@ -1,7 +1,5 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.allocation;
 
-import java.util.Set;
-
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationBlockReason;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationDecision;
@@ -38,11 +36,10 @@ public final class DeadlineAwareElasticStickyP2pLineAllocationPolicy
                     P2pLineAllocationBlockReason.NO_ELASTIC_LINE_BUDGET);
         }
 
-        Set<P2pLineId> feedingLineIds = Set.copyOf(demand.feedingOwnedLineIds());
         P2pLineLeaseSnapshot selected = null;
         int selectedTier = Integer.MAX_VALUE;
         for (P2pLineLeaseSnapshot line : request.lineCatalog().lines()) {
-            int tier = compatibilityTier(line, request, demand, feedingLineIds);
+            int tier = compatibilityTier(line, request, demand);
             if (tier < selectedTier) {
                 selected = line;
                 selectedTier = tier;
@@ -68,8 +65,7 @@ public final class DeadlineAwareElasticStickyP2pLineAllocationPolicy
     private static int compatibilityTier(
             P2pLineLeaseSnapshot line,
             P2pLineAllocationRequest request,
-            P2pServiceCentreLineDemandSnapshot demand,
-            Set<P2pLineId> feedingLineIds) {
+            P2pServiceCentreLineDemandSnapshot demand) {
         if (!request.bagCorrelationsCompatibleWith(line.definition().lineId())) {
             return Integer.MAX_VALUE;
         }
@@ -79,7 +75,7 @@ public final class DeadlineAwareElasticStickyP2pLineAllocationPolicy
         }
         if (line.leased()) {
             if (!line.serviceCentreId().orElseThrow().equals(request.serviceCentreId())
-                    || !feedingLineIds.contains(line.definition().lineId())) {
+                    || !demand.feedingOwnedLineIds().contains(line.definition().lineId())) {
                 return Integer.MAX_VALUE;
             }
             boolean matchingPharmacy = line.activePharmacyId()

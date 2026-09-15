@@ -13,14 +13,17 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignment;
 import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirement;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog;
 
 class StickyP2pLineAllocationPolicyTest {
     private final StickyP2pLineAllocationPolicy policy = new StickyP2pLineAllocationPolicy();
@@ -100,6 +103,39 @@ class StickyP2pLineAllocationPolicyTest {
         P2pLineAllocationDecision decision = policy.allocate(request);
 
         assertEquals(pinnedFallback.definition().lineId(), decision.assignment().orElseThrow().lineId());
+    }
+
+    @Test
+    void shouldAllocateFactoryCreatedRequestWithCatalogRequirements() {
+        P2pLineLeaseSnapshot line = leased(
+                "line-1", "SC-104", Optional.of("pharmacy-1"));
+        P2pLineLeaseCatalogSnapshot catalog = catalog(line);
+        OperationalRouteDestination destination = line.definition().destination();
+        PhysicalToteId physicalToteId = new PhysicalToteId("physical-factory");
+        P2pBagCorrelationRequirement requirement =
+                new P2pBagCorrelationRequirement("bag-factory", 2);
+        P2pBagCorrelationRequirementCatalog requirementCatalog =
+                new P2pBagCorrelationRequirementCatalog(
+                        Map.of(physicalToteId, java.util.Set.of(requirement)), Map.of());
+        P2pLineAllocationRequestFactory requestFactory = new P2pLineAllocationRequestFactory(
+                catalog,
+                Map.of(destination, true),
+                Optional.empty(),
+                P2pBagCorrelationAssignmentSnapshot.empty(),
+                requirementCatalog);
+
+        P2pLineAllocationRequest request = requestFactory.create(
+                OperationalPhysicalToteSource.OSR,
+                physicalToteId,
+                new OrderSheetKey("order-factory", 1),
+                "SC-104",
+                List.of("pharmacy-1"),
+                true);
+        P2pLineAllocationDecision decision = policy.allocate(request);
+
+        assertEquals(line.definition().lineId(), decision.assignment().orElseThrow().lineId());
+        assertTrue(decision.activePharmacyAffinity());
+        assertEquals(java.util.Set.of(requirement), request.requiredBagCorrelations());
     }
 
     @Test
