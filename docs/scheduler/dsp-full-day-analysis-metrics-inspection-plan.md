@@ -3282,6 +3282,189 @@ No separate external run is required. Step 34 owns the shared profile gate.
 
 Proposed commit message: `Reuse indexed outbound state`
 
+## Step 4 Remediation: Restore Missing Full-Day Runtime Tests Before Step 29
+
+### Evidence and scope
+
+Step 4 production implementation commit `c06b7e1` created the full-day runtime and AV02 runtime
+controller, but it created only `DspFullDayCompletionEvaluatorTest` and
+`DspFullDayAnalysisRuntimeFactoryTest`. The decision-complete Step 4 contract also named
+`DspAv02AllocationRuntimeControllerTest` and `DspFullDayAnalysisRuntimeTest`; neither test class
+exists in repository history. Later focused and scenario tests cover substantial parts of the
+original behavioral catalogue, but no test directly exercises the AV02 runtime wrapper and no test
+owns the public full-day runtime's complete terminal/no-op/reconstruction contract.
+
+Execute this test-only remediation after Step 28 and before Step 29. It restores the two class names
+assumed by the original Step 4 contract and by Step 29's implementation-verification command. It
+does not reopen Step 4 production design or repeat integration behavior already proved by later
+tests.
+
+### Required reading and change surface
+
+Read the original Step 4 contract, then read:
+
+- `DspAv02AllocationRuntimeController`, `DspAv02AllocationRuntimeSnapshot`,
+  `Av02AllocationSnapshotFactory`, and `Av02AllocationController`;
+- `Av02AllocationSnapshotFactoryTest`, `Av02AllocationControllerTest`, and
+  `DspAv02OperationalAllocationScenarioTest`;
+- `DspFullDayAnalysisRuntime`, `DspFullDayAnalysisRuntimeFactory`, and
+  `DspFullDayAnalysisRuntimeSnapshot`;
+- `DspFullDayAnalysisRuntimeFactoryTest`, `DspFullDayAnalysisScenarioTest`, and
+  `DspFullDayMetricsScenarioTest`.
+
+Create only:
+
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/av02/DspAv02AllocationRuntimeControllerTest.java`;
+- `app/src/test/java/online/davisfamily/warehouse/sim/dsp/analysis/runtime/DspFullDayAnalysisRuntimeTest.java`.
+
+Do not modify production source, an existing test, Gradle configuration, datasets, or another plan
+step. Use private test fixtures and synthetic test-owned input files. If either test exposes a
+production defect or requires a new production seam, stop and report it rather than changing
+production under this remediation.
+
+### Existing coverage ownership
+
+- `Av02AllocationSnapshotFactoryTest` remains the exhaustive owner of candidate ordering,
+  authorization, dependency, capacity, allocation-history, and immutable input validation.
+- `Av02AllocationControllerTest` remains the exhaustive owner of command revalidation, physical-id
+  allocation, lifecycle/load-plan mutation ordering, at-most-one mutation, stale rejection, and
+  reconstruction of the underlying allocation controller.
+- `DspAv02OperationalAllocationScenarioTest` remains the owner of exact AV02 physical identity
+  through mixed release, Third Party/Adapting continuation, P2P completion, backpressure, stale
+  physical-object rejection, and inbound/outbound separation.
+- `DspFullDayAnalysisRuntimeFactoryTest` remains the owner of factory validation, five-line
+  composition, shared authoritative owners, output-closure checks, early completion, and basic hard
+  cutoff/idempotent-close behavior.
+- `DspFullDayAnalysisScenarioTest` remains the owner of deterministic mixed-order full-day
+  execution, all supported order types, supply completion, real station work, P2P processing,
+  outbound allocation/closure, timetable outcomes, and report/inspection integration.
+- `DspFullDayMetricsScenarioTest` remains the owner of terminal metrics capture and absence of
+  post-terminal metric accumulation.
+
+The two new classes must not duplicate those exhaustive matrices. They cover the wrapper and public
+runtime contracts that remain unowned below.
+
+### AV02 runtime-controller test contract
+
+`DspAv02AllocationRuntimeControllerTest` exercises only the public constructor, `update(...)`,
+`snapshot()`, `lastAllocatedTote()`, and the real wrapped allocation boundary. It uses real
+`Av02AllocationSnapshotFactory`, `Av02PhysicalToteInventory`, `PhysicalToteLifecycleLedger`,
+deterministic id allocation, and load-plan registry values. Do not call the exposed underlying
+`allocationController()` to manufacture progress.
+
+Create these exact tests:
+
+1. `shouldPublishMonotonicImmutableSnapshotsAndAllocateAtMostOnePerUpdate`
+   - use two authorized, dependency-ready EMPTY orders and AV02 capacity two;
+   - assert the constructor publishes sequence zero, the selected command uses sequence zero, and
+     repeated pre-update `snapshot()` calls return the exact same immutable runtime snapshot;
+   - update once and assert sequence one, matching selected/revalidation sequences, exactly one new
+     physical tote/lifecycle assignment/load plan, and exact `lastAllocatedTote` continuity;
+   - retain the sequence-zero snapshot and prove it remains unchanged;
+   - update once more and assert sequence two and exactly one additional allocation, proving at
+     most one allocation per wrapper update.
+
+2. `shouldRevalidateLiveInputsBeforeAllocation`
+   - use private invocation-counting suppliers so the allocation snapshot sees an authorized,
+     dependency-ready candidate and the same update's revalidation sees one changed live input;
+   - exercise authorization removal and prepared-dependency removal as separate fresh fixtures;
+     these are the two mutable supplier domains owned by the wrapper;
+   - in both cases assert a selected pre-revalidation command, a same-sequence revalidation
+     snapshot, no id allocation, inventory/lifecycle/load-plan mutation, or `lastAllocatedTote`, and
+     an immutable published runtime snapshot describing the rejected update;
+   - capacity and prior-allocation-history revalidation remain in `Av02AllocationControllerTest`
+     because they use the same wrapped rejection path and require no wrapper-specific branch.
+
+3. `shouldPublishBlockedDiagnosticsAndPreserveTheLastSnapshotOnFailure`
+   - use separate fresh fixtures for initial authorization, dependency, and capacity blocking;
+   - assert no selected command, `blocked == true`, a nonblank deterministic diagnostic containing
+     the first candidate's exact block reason, and no physical mutation;
+   - after one successful published snapshot, make one supplied snapshot null and, separately, make
+     one supplier throw during a later update; each failure must leave the exact previously
+     published runtime snapshot and all physical state unchanged;
+   - restore valid suppliers and assert the next successful sequence is greater than the retained
+     sequence. Do not require failed sequence numbers to be reused.
+
+4. `shouldRejectInvalidConstructionAndUpdatesWithoutAdvancingSequence`
+   - cover each null constructor dependency, null context, one negative `dtSeconds`, and one
+     non-finite `dtSeconds`;
+   - invalid updates must retain the exact latest snapshot, inventory, lifecycle, id-allocation
+     count, and load-plan state. One non-finite value is representative of NaN and infinities.
+
+### Full-day public-runtime test contract
+
+`DspFullDayAnalysisRuntimeTest` exercises runtimes created only through
+`DspFullDayAnalysisRuntimeFactory.create(...)`. It may inspect public runtime components and fresh
+immutable snapshots, but must advance simulation only through `DspFullDayAnalysisRuntime.update(...)`.
+Do not enqueue transport/station work directly, invoke a station target, apply an allocation or
+release command directly, commit a P2P assignment, or allocate/close an outbound tote directly.
+
+Create these exact tests:
+
+1. `shouldExposeEveryConfiguredP2pTargetThroughOnePublicRuntime`
+   - load a small synthetic input containing one manifested OSR FULL_PACK order and one logical AV02
+     EMPTY order for authorized configured service centres;
+   - assert the runtime has exactly the profile's five line definitions in configured order, each
+     with 31 PRLs, five distinct P2P destinations, and the exact shared outbound allocator;
+   - assert station-processing destinations and route-catalog destinations contain each of those
+     exact P2P destinations once, proving all five configured target choices are composed without
+     requiring every line to receive work in this fixture;
+   - assert the EMPTY has no fabricated inbound manifest/OSR entry and that initial runtime reads do
+     not mutate allocation, lifecycle, transport, station, or line state.
+
+2. `shouldStopEveryPublicRuntimeOwnerAfterHardCutoff`
+   - use supported work configured so it remains unfinished at hard cutoff;
+   - advance once to the exact hard-cutoff elapsed time and require runtime state
+     `HARD_CUTOFF_REACHED`;
+   - capture the complete public runtime snapshot plus exact owner snapshots/references, call
+     `update(...)` repeatedly with positive finite steps, and assert clock, scheduler, supply,
+     OSR/AV02, lifecycle, elastic allocation/leases, line activity, transport, station,
+     continuation, cutoff history, completion values, metrics, and outbound state remain equal;
+   - call `close()` twice and assert only the runtime's closed flag changes. Registered owner state
+     and terminal values must remain unchanged.
+
+3. `shouldRejectInvalidUpdatesWithoutMutatingThePublicRuntime`
+   - capture a complete fresh runtime snapshot;
+   - reject one negative and one non-finite `dtSeconds` through `runtime.update(...)`;
+   - assert complete snapshot equality, exact owner references, runtime state, and closed state after
+     each rejection.
+
+4. `shouldReconstructIndependentFreshRuntimeOwners`
+   - create a first runtime, advance it until at least one allocation/release or clock transition is
+     observable, retain immutable snapshots, and close it;
+   - create a second runtime from the same immutable loaded input/profile;
+   - assert distinct runtime, world, mutable inventory, lifecycle, allocator, station coordinator,
+     transport, line-runtime, cutoff, and metrics-owner instances; assert fresh running state,
+     initial clock/sequences/diagnostics, and values equal to a newly composed runtime;
+   - prove retained snapshots from the first runtime remain unchanged after operating the second.
+
+The broad mixed Third Party/Adapting/continuation/P2P/outbound and backpressure/stale matrices remain
+owned by the existing scenario tests listed above. This class must reference those ownership
+boundaries only in its fixture rationale; it must not copy their private fixtures or recreate their
+full behavioral catalogues.
+
+### Expected output
+
+The original Step 4 test surface exists as planned. The AV02 wrapper's own sequencing, revalidation,
+diagnostics, and failure-publication behavior are directly proved, while the public full-day runtime
+has explicit target-composition, terminal no-op, invalid-update, close, and reconstruction coverage.
+Later scenario tests retain ownership of the already-proved end-to-end domain journeys.
+
+### Implementation verification
+
+The implementation model runs exactly:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02AllocationRuntimeControllerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationControllerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02OperationalAllocationScenarioTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisScenarioTest
+```
+
+### User verification
+
+No additional user verification or external-data run is required. After this remediation is green,
+Step 29 may proceed with its existing implementation-verification command unchanged.
+
+Proposed commit message: `Restore full-day runtime test coverage`
+
 ## Step 29: Share Completion Capture Without Hiding Cutoff Mutations
 
 ### Evidence and scope
