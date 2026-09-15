@@ -28,6 +28,7 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRecord;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
@@ -156,6 +157,99 @@ class P2pWorkloadSnapshotTest {
         assertNotSame(afterPlanningReplacement, afterCatalogReplacement);
         assertSame(afterCatalogReplacement, factory.planIndexFor(
                 replacementPlanning, replacementCatalog));
+    }
+
+    @Test
+    void shouldReuseValidationForExactInputsAndRetainItAfterFailure() {
+        LargePlanFixture fixture = fiveThousandBagPlan();
+        P2pServiceCentreWorkSnapshot work = P2pServiceCentreWorkSnapshot.empty();
+        OutboundAllocationSnapshot outbound = emptyOutbound();
+        Av02InventorySnapshot av02 = new Av02InventorySnapshot(1, List.of(), List.of());
+        PhysicalToteLifecycleSnapshot lifecycle = new PhysicalToteLifecycleLedger().snapshot();
+
+        P2pWorkloadSnapshot first = factory.create(
+                work,
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                outbound,
+                COSTS,
+                av02,
+                lifecycle);
+        assertSame(first, factory.create(
+                work,
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                outbound,
+                COSTS,
+                av02,
+                lifecycle));
+
+        P2pServiceCentreWorkSnapshot equalButDistinctWork = new P2pServiceCentreWorkSnapshot(
+                new LinkedHashMap<>(),
+                new LinkedHashMap<>());
+        P2pWorkloadSnapshot equivalent = factory.create(
+                equalButDistinctWork,
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                outbound,
+                COSTS,
+                av02,
+                lifecycle);
+        assertEquals(first, equivalent);
+        assertSame(first.require("104"), equivalent.require("104"));
+
+        P2pServiceCentreWorkSnapshot invalidWork = new P2pServiceCentreWorkSnapshot(
+                Map.of("104", List.of(new PhysicalToteId("missing-104"))),
+                Map.of());
+        assertThrows(IllegalStateException.class, () -> factory.create(
+                invalidWork,
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                outbound,
+                COSTS,
+                av02,
+                lifecycle));
+        assertSame(equivalent, factory.create(
+                equalButDistinctWork,
+                fixture.manifestCatalog(),
+                fixture.planning(),
+                outbound,
+                COSTS,
+                av02,
+                lifecycle));
+    }
+
+    @Test
+    void shouldReuseValidationOnCostOnlyChangeWhileRecomputingChangedValues() {
+        InboundToteManifest input = manifest("input-104", "order-104", "104", 0);
+        PlannedBag bag = plannedBag(
+                "rx-104", "104", "pharmacy-104", input, "pack-104");
+        BagPlanningResult planning = planning(List.of(bag), List.of(input));
+        InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(List.of(input));
+        P2pServiceCentreWorkSnapshot work = new P2pServiceCentreWorkSnapshot(
+                Map.of(),
+                Map.of("108", List.of(new OrderSheetKey("empty-108", 1))));
+        OutboundAllocationSnapshot outbound = emptyOutbound();
+        Av02InventorySnapshot av02 = new Av02InventorySnapshot(1, List.of(), List.of());
+        PhysicalToteLifecycleSnapshot lifecycle = new PhysicalToteLifecycleLedger().snapshot();
+
+        P2pWorkloadSnapshot initial = factory.create(
+                work, catalog, planning, outbound, COSTS, av02, lifecycle);
+        P2pWorkloadCostConfig changedCosts = new P2pWorkloadCostConfig(
+                COSTS.toteHandlingCost(),
+                COSTS.packProcessingCost(),
+                COSTS.baggingCost().plus(Duration.ofSeconds(1)));
+        P2pWorkloadSnapshot changed = factory.create(
+                work, catalog, planning, outbound, changedCosts, av02, lifecycle);
+
+        assertNotSame(initial, changed);
+        assertSame(initial.require("108"), changed.require("108"));
+        assertNotSame(initial.require("104"), changed.require("104"));
+        assertEquals(
+                initial.require("104").estimatedSingleLineWork().plus(Duration.ofSeconds(1)),
+                changed.require("104").estimatedSingleLineWork());
+        assertSame(changed, factory.create(
+                work, catalog, planning, outbound, changedCosts, av02, lifecycle));
     }
 
     @Test

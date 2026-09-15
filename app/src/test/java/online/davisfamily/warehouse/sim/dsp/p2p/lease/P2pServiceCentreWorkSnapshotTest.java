@@ -2,7 +2,9 @@ package online.davisfamily.warehouse.sim.dsp.p2p.lease;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -18,6 +20,7 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleState;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRecord;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
@@ -33,6 +36,58 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 
 class P2pServiceCentreWorkSnapshotTest {
+
+    @Test
+    void shouldReuseExactInputResultAndRetainItAfterChangedInputFailure() {
+        DspSchedulerOrderState waiting = order(
+                "order-1", "SC-104", OrderType.FULL_PACK, DspOrderStatus.WAITING);
+        InboundToteManifest input = manifest("physical-1", waiting, 0);
+        List<DspSchedulerOrderState> orderStates = List.of(waiting);
+        InboundToteManifestCatalog manifestCatalog = new InboundToteManifestCatalog(List.of(input));
+        Av02InventorySnapshot av02InventorySnapshot = new Av02InventorySnapshot(
+                1, List.of(), List.of());
+        PhysicalToteLifecycleSnapshot lifecycleSnapshot = new InboundToteLifecycleController(
+                new PhysicalToteLifecycleLedger(), manifestCatalog).snapshot();
+        Set<OrderSheetKey> authorizedEmptyOrderSheetKeys = Set.of();
+        P2pServiceCentreWorkSnapshotFactory factory = new P2pServiceCentreWorkSnapshotFactory();
+
+        P2pServiceCentreWorkSnapshot first = factory.create(
+                orderStates,
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                authorizedEmptyOrderSheetKeys);
+        assertSame(first, factory.create(
+                orderStates,
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                authorizedEmptyOrderSheetKeys));
+
+        List<DspSchedulerOrderState> equalButDistinctOrderStates = List.copyOf(
+                new java.util.ArrayList<>(orderStates));
+        P2pServiceCentreWorkSnapshot replacement = factory.create(
+                equalButDistinctOrderStates,
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                authorizedEmptyOrderSheetKeys);
+        assertNotSame(first, replacement);
+        assertEquals(first, replacement);
+
+        assertThrows(IllegalArgumentException.class, () -> factory.create(
+                java.util.Collections.singletonList(null),
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                authorizedEmptyOrderSheetKeys));
+        assertSame(replacement, factory.create(
+                equalButDistinctOrderStates,
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                authorizedEmptyOrderSheetKeys));
+    }
 
     @Test
     void shouldRetainEveryPhysicalManifestUntilConsumedRegardlessOfLogicalStatus() {

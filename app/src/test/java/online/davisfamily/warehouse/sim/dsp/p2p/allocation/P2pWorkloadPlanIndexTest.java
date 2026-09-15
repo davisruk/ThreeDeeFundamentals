@@ -98,6 +98,26 @@ class P2pWorkloadPlanIndexTest {
     }
 
     @Test
+    void shouldRetainImmutableIndexesAfterSourceCollectionsChange() {
+        InboundToteManifest input104 = manifest("input-104", "order-104", "104", 0);
+        PlannedBag bag104 = bag("rx-104", "104", input104, "pack-104");
+        List<PlannedBag> bags = new ArrayList<>(List.of(bag104));
+        List<PlannedPackTrace> traces = new ArrayList<>(List.of(
+                trace("pack-104", bag104, input104)));
+        BagPlanningResult planning = new BagPlanningResult(bags, List.of(), traces);
+
+        P2pWorkloadPlanIndex index = P2pWorkloadPlanIndex.from(
+                planning,
+                new InboundToteManifestCatalog(List.of(input104)));
+        bags.clear();
+        traces.clear();
+
+        assertEquals(Map.of(bag104.bagKey(), bag104), index.plannedBagsByKey());
+        assertEquals(List.of(bag104), index.plannedBagsByServiceCentre().get("104"));
+        assertEquals(List.of("104"), index.orderedServiceCentreIds());
+    }
+
+    @Test
     void shouldRejectEveryBagPackTraceAndManifestMismatch() {
         InboundToteManifest input104 = manifest("input-104", "order-104", "104", 0);
         InboundToteManifest input108 = manifest("input-108", "order-108", "108", 1);

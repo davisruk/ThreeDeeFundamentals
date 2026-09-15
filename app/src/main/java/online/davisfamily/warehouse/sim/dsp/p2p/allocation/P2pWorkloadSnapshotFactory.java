@@ -33,6 +33,7 @@ public final class P2pWorkloadSnapshotFactory {
     private P2pWorkloadPlanIndex lastPlanIndex;
     private P2pWorkloadSnapshot lastSnapshot;
     private Map<String, P2pServiceCentreWorkloadSnapshot> lastServiceCentreSnapshots = Map.of();
+    private ValidationCache lastValidationCache;
 
     public P2pWorkloadSnapshot create(
             P2pServiceCentreWorkSnapshot workSnapshot,
@@ -68,14 +69,39 @@ public final class P2pWorkloadSnapshotFactory {
             throw new IllegalArgumentException("workload inputs must not be null");
         }
 
-        Map<PhysicalToteId, String> remainingToteOwners = validateRemainingTotes(
+        Map<PhysicalToteId, String> remainingToteOwners;
+        Set<BagKey> allocatedBagKeys;
+        P2pWorkloadPlanIndex planIndex;
+        ValidationCache replacementValidationCache = null;
+        if (lastValidationCache != null && lastValidationCache.matches(
                 workSnapshot,
                 manifestCatalog,
+                bagPlanningResult,
+                outboundAllocationSnapshot,
                 av02InventorySnapshot,
-                lifecycleSnapshot);
-        P2pWorkloadPlanIndex planIndex = planIndexFor(bagPlanningResult, manifestCatalog);
-        Set<BagKey> allocatedBagKeys = validateAllocatedBags(
-                outboundAllocationSnapshot, planIndex.plannedBagsByKey());
+                lifecycleSnapshot)) {
+            remainingToteOwners = lastValidationCache.remainingToteOwners();
+            allocatedBagKeys = lastValidationCache.allocatedBagKeys();
+            planIndex = planIndexFor(bagPlanningResult, manifestCatalog);
+        } else {
+            remainingToteOwners = validateRemainingTotes(
+                    workSnapshot,
+                    manifestCatalog,
+                    av02InventorySnapshot,
+                    lifecycleSnapshot);
+            planIndex = planIndexFor(bagPlanningResult, manifestCatalog);
+            allocatedBagKeys = validateAllocatedBags(
+                    outboundAllocationSnapshot, planIndex.plannedBagsByKey());
+            replacementValidationCache = new ValidationCache(
+                    workSnapshot,
+                    manifestCatalog,
+                    bagPlanningResult,
+                    outboundAllocationSnapshot,
+                    av02InventorySnapshot,
+                    lifecycleSnapshot,
+                    remainingToteOwners,
+                    allocatedBagKeys);
+        }
 
         LinkedHashSet<String> orderedServiceCentreIds = new LinkedHashSet<>();
         orderedServiceCentreIds.addAll(workSnapshot.remainingToteIdsByServiceCentre().keySet());
@@ -141,6 +167,9 @@ public final class P2pWorkloadSnapshotFactory {
         }
 
         if (sameServiceCentreSequence(serviceCentres)) {
+            if (replacementValidationCache != null) {
+                lastValidationCache = replacementValidationCache;
+            }
             return lastSnapshot;
         }
 
@@ -155,6 +184,9 @@ public final class P2pWorkloadSnapshotFactory {
         lastSnapshot = replacement;
         lastServiceCentreSnapshots = Collections.unmodifiableMap(
                 replacementServiceCentreSnapshots);
+        if (replacementValidationCache != null) {
+            lastValidationCache = replacementValidationCache;
+        }
         return replacement;
     }
 
@@ -180,12 +212,11 @@ public final class P2pWorkloadSnapshotFactory {
             Av02InventorySnapshot av02InventorySnapshot,
             PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
         Map<PhysicalToteId, String> owners = new LinkedHashMap<>();
-        Map<PhysicalToteId, Av02AllocatedTote> av02Totes = indexAv02Totes(av02InventorySnapshot);
         workSnapshot.remainingToteIdsByServiceCentre().forEach((serviceCentreId, toteIds) -> {
             for (PhysicalToteId toteId : toteIds) {
                 InboundToteManifest manifest = manifestCatalog.findByPhysicalToteId(toteId)
                         .orElse(null);
-                Av02AllocatedTote av02Tote = av02Totes.get(toteId);
+                Av02AllocatedTote av02Tote = av02InventorySnapshot.findTote(toteId).orElse(null);
                 if (manifest != null && av02Tote != null) {
                     throw new IllegalStateException(
                             "Remaining P2P tote is present in both OSR and AV02 sources: "
@@ -233,21 +264,6 @@ public final class P2pWorkloadSnapshotFactory {
         return Map.copyOf(owners);
     }
 
-    private static Map<PhysicalToteId, Av02AllocatedTote> indexAv02Totes(
-            Av02InventorySnapshot snapshot) {
-        Map<PhysicalToteId, Av02AllocatedTote> result = new LinkedHashMap<>();
-        List<Av02AllocatedTote> all = new ArrayList<>();
-        all.addAll(snapshot.waitingTotes());
-        all.addAll(snapshot.departedTotes());
-        for (Av02AllocatedTote tote : all) {
-            if (result.putIfAbsent(tote.physicalToteId(), tote) != null) {
-                throw new IllegalStateException(
-                        "Duplicate AV02 physical tote identity: " + tote.physicalToteId().value());
-            }
-        }
-        return result;
-    }
-
     private static PhysicalToteLifecycleSnapshot compatibilityLifecycleSnapshot(
             InboundToteManifestCatalog manifestCatalog) {
         if (manifestCatalog == null) {
@@ -264,7 +280,6 @@ public final class P2pWorkloadSnapshotFactory {
     private static Set<BagKey> validateAllocatedBags(
             OutboundAllocationSnapshot outboundAllocationSnapshot,
             Map<BagKey, PlannedBag> plannedBags) {
-        Set<BagKey> allocatedBagKeys = new LinkedHashSet<>();
         for (AllocatedOutboundBag allocatedBag : outboundAllocationSnapshot.allocatedBags()) {
             PlannedBag plannedBag = plannedBags.get(allocatedBag.bagKey());
             if (plannedBag == null) {
@@ -276,9 +291,8 @@ public final class P2pWorkloadSnapshotFactory {
                 throw new IllegalStateException(
                         "Allocated output bag does not match the original planned bag");
             }
-            allocatedBagKeys.add(allocatedBag.bagKey());
         }
-        return Set.copyOf(allocatedBagKeys);
+        return outboundAllocationSnapshot.allocatedBagKeys();
     }
 
     private static boolean sameWorkloadValues(
@@ -323,6 +337,32 @@ public final class P2pWorkloadSnapshotFactory {
             return Duration.ofNanos(Math.addExact(Math.addExact(toteWork, packWork), bagWork));
         } catch (ArithmeticException exception) {
             throw new IllegalArgumentException("normalized P2P workload overflow", exception);
+        }
+    }
+
+    private record ValidationCache(
+            P2pServiceCentreWorkSnapshot workSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            BagPlanningResult bagPlanningResult,
+            OutboundAllocationSnapshot outboundAllocationSnapshot,
+            Av02InventorySnapshot av02InventorySnapshot,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot,
+            Map<PhysicalToteId, String> remainingToteOwners,
+            Set<BagKey> allocatedBagKeys) {
+
+        private boolean matches(
+                P2pServiceCentreWorkSnapshot workSnapshot,
+                InboundToteManifestCatalog manifestCatalog,
+                BagPlanningResult bagPlanningResult,
+                OutboundAllocationSnapshot outboundAllocationSnapshot,
+                Av02InventorySnapshot av02InventorySnapshot,
+                PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
+            return this.workSnapshot == workSnapshot
+                    && this.manifestCatalog == manifestCatalog
+                    && this.bagPlanningResult == bagPlanningResult
+                    && this.outboundAllocationSnapshot == outboundAllocationSnapshot
+                    && this.av02InventorySnapshot == av02InventorySnapshot
+                    && this.lifecycleSnapshot == lifecycleSnapshot;
         }
     }
 }

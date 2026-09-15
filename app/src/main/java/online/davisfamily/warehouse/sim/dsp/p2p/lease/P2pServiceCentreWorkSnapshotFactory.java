@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.lease;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,6 +26,8 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 
 public final class P2pServiceCentreWorkSnapshotFactory {
 
+    private ValidationCache lastValidationCache;
+
     public P2pServiceCentreWorkSnapshot create(
             List<DspSchedulerOrderState> orderStates,
             InboundToteManifestCatalog manifestCatalog,
@@ -43,6 +46,14 @@ public final class P2pServiceCentreWorkSnapshotFactory {
             Av02InventorySnapshot av02InventorySnapshot,
             PhysicalToteLifecycleSnapshot lifecycleSnapshot,
             Set<OrderSheetKey> authorizedEmptyOrderSheetKeys) {
+        if (lastValidationCache != null && lastValidationCache.matches(
+                orderStates,
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                authorizedEmptyOrderSheetKeys)) {
+            return lastValidationCache.snapshot();
+        }
         if (orderStates == null || manifestCatalog == null || lifecycleSnapshot == null) {
             throw new IllegalArgumentException("P2P work snapshot inputs must not be null");
         }
@@ -54,10 +65,8 @@ public final class P2pServiceCentreWorkSnapshotFactory {
         Map<String, List<PhysicalToteId>> remaining = new LinkedHashMap<>();
         Map<String, List<OrderSheetKey>> emptyDiagnostics = new LinkedHashMap<>();
         Set<OrderSheetKey> seenSheets = new LinkedHashSet<>();
-        Map<OrderSheetKey, List<Av02AllocatedTote>> av02BySheet = indexAv02BySheet(
-                av02InventorySnapshot);
-        Map<PhysicalToteId, Av02AllocatedTote> av02ByPhysicalTote = indexAv02ByPhysicalTote(
-                av02InventorySnapshot);
+        Map<OrderSheetKey, List<PhysicalToteAssignment>> activeAssignmentsBySheet =
+                indexActiveAssignmentsBySheet(lifecycleSnapshot);
         for (DspSchedulerOrderState orderState : orderStates) {
             if (orderState == null) {
                 throw new IllegalArgumentException("orderStates must not contain null");
@@ -72,9 +81,9 @@ public final class P2pServiceCentreWorkSnapshotFactory {
             String serviceCentreId = orderState.order().serviceCentreId();
             if (orderState.order().orderType() == OrderType.EMPTY) {
                 Av02AllocatedTote allocated = allocatedAv02Tote(
-                        av02BySheet, sheet);
+                        av02InventorySnapshot, sheet);
                 if (allocated == null) {
-                    if (!activeAssignmentsForSheet(lifecycleSnapshot, sheet).isEmpty()) {
+                    if (!activeAssignmentsForSheet(activeAssignmentsBySheet, sheet).isEmpty()) {
                         throw new IllegalStateException(
                                 "EMPTY sheet has an active lifecycle assignment without AV02 history: "
                                         + sheet);
@@ -94,8 +103,9 @@ public final class P2pServiceCentreWorkSnapshotFactory {
                 validateAv02Allocation(
                         orderState,
                         allocated,
-                        av02ByPhysicalTote,
+                        av02InventorySnapshot,
                         lifecycleSnapshot,
+                        activeAssignmentsBySheet,
                         sheet);
                 PhysicalToteLifecycleState state = lifecycleSnapshot.totes()
                         .get(allocated.physicalToteId()).state();
@@ -111,7 +121,7 @@ public final class P2pServiceCentreWorkSnapshotFactory {
                 throw new IllegalStateException("P2P-required order has no inbound tote manifest: " + sheet);
             }
             for (InboundToteManifest manifest : manifests) {
-                if (av02ByPhysicalTote.containsKey(manifest.physicalToteId())) {
+                if (av02InventorySnapshot.findTote(manifest.physicalToteId()).isPresent()) {
                     throw new IllegalStateException(
                             "Physical tote is present in both OSR and AV02 sources: "
                                     + manifest.physicalToteId().value());
@@ -135,52 +145,30 @@ public final class P2pServiceCentreWorkSnapshotFactory {
                 }
             }
         }
-        return new P2pServiceCentreWorkSnapshot(remaining, emptyDiagnostics);
-    }
-
-    private static Map<OrderSheetKey, List<Av02AllocatedTote>> indexAv02BySheet(
-            Av02InventorySnapshot snapshot) {
-        Map<OrderSheetKey, List<Av02AllocatedTote>> result = new LinkedHashMap<>();
-        for (Av02AllocatedTote tote : allAv02Totes(snapshot)) {
-            result.computeIfAbsent(tote.orderSheetKey(), ignored -> new ArrayList<>()).add(tote);
-        }
-        return result;
-    }
-
-    private static Map<PhysicalToteId, Av02AllocatedTote> indexAv02ByPhysicalTote(
-            Av02InventorySnapshot snapshot) {
-        Map<PhysicalToteId, Av02AllocatedTote> result = new LinkedHashMap<>();
-        for (Av02AllocatedTote tote : allAv02Totes(snapshot)) {
-            if (result.putIfAbsent(tote.physicalToteId(), tote) != null) {
-                throw new IllegalStateException(
-                        "Duplicate AV02 physical tote identity: " + tote.physicalToteId().value());
-            }
-        }
-        return result;
-    }
-
-    private static List<Av02AllocatedTote> allAv02Totes(Av02InventorySnapshot snapshot) {
-        List<Av02AllocatedTote> totes = new ArrayList<>();
-        totes.addAll(snapshot.waitingTotes());
-        totes.addAll(snapshot.departedTotes());
-        return totes;
+        P2pServiceCentreWorkSnapshot replacement = new P2pServiceCentreWorkSnapshot(
+                remaining, emptyDiagnostics);
+        lastValidationCache = new ValidationCache(
+                orderStates,
+                manifestCatalog,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                authorizedEmptyOrderSheetKeys,
+                replacement);
+        return replacement;
     }
 
     private static Av02AllocatedTote allocatedAv02Tote(
-            Map<OrderSheetKey, List<Av02AllocatedTote>> bySheet,
+            Av02InventorySnapshot snapshot,
             OrderSheetKey sheet) {
-        List<Av02AllocatedTote> matches = bySheet.getOrDefault(sheet, List.of());
-        if (matches.size() > 1) {
-            throw new IllegalStateException("Multiple AV02 identities match EMPTY sheet: " + sheet);
-        }
-        return matches.isEmpty() ? null : matches.getFirst();
+        return snapshot.findTote(sheet).orElse(null);
     }
 
     private static void validateAv02Allocation(
             DspSchedulerOrderState orderState,
             Av02AllocatedTote allocated,
-            Map<PhysicalToteId, Av02AllocatedTote> av02ByPhysicalTote,
+            Av02InventorySnapshot av02InventorySnapshot,
             PhysicalToteLifecycleSnapshot lifecycleSnapshot,
+            Map<OrderSheetKey, List<PhysicalToteAssignment>> activeAssignmentsBySheet,
             OrderSheetKey sheet) {
         if (allocated.identity().source() != OperationalPhysicalToteSource.AV02
                 || allocated.identity().orderType() != OrderType.EMPTY
@@ -189,7 +177,7 @@ public final class P2pServiceCentreWorkSnapshotFactory {
                 || !allocated.serviceCentreId().equals(orderState.order().serviceCentreId())) {
             throw new IllegalStateException("AV02 physical identity does not match EMPTY order state");
         }
-        if (av02ByPhysicalTote.get(allocated.physicalToteId()) != allocated) {
+        if (av02InventorySnapshot.findTote(allocated.physicalToteId()).orElse(null) != allocated) {
             throw new IllegalStateException("AV02 physical identity index is inconsistent");
         }
 
@@ -205,7 +193,7 @@ public final class P2pServiceCentreWorkSnapshotFactory {
         List<PhysicalToteAssignment> activeForPhysical = lifecycleSnapshot
                 .activeAssignmentsFor(allocated.physicalToteId());
         List<PhysicalToteAssignment> activeForSheet = activeAssignmentsForSheet(
-                lifecycleSnapshot, sheet);
+                activeAssignmentsBySheet, sheet);
         if (lifecycleRecord.state() == PhysicalToteLifecycleState.ACTIVE_PRE_P2P) {
             if (activeForPhysical.size() != 1 || activeForSheet.size() != 1) {
                 throw new IllegalStateException(
@@ -233,12 +221,22 @@ public final class P2pServiceCentreWorkSnapshotFactory {
     }
 
     private static List<PhysicalToteAssignment> activeAssignmentsForSheet(
-            PhysicalToteLifecycleSnapshot lifecycleSnapshot,
+            Map<OrderSheetKey, List<PhysicalToteAssignment>> activeAssignmentsBySheet,
             OrderSheetKey sheet) {
-        return lifecycleSnapshot.assignments().stream()
-                .filter(PhysicalToteAssignment::active)
-                .filter(assignment -> assignment.orderSheetKey().equals(sheet))
-                .toList();
+        return activeAssignmentsBySheet.getOrDefault(sheet, List.of());
+    }
+
+    private static Map<OrderSheetKey, List<PhysicalToteAssignment>> indexActiveAssignmentsBySheet(
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
+        Map<OrderSheetKey, List<PhysicalToteAssignment>> result = new LinkedHashMap<>();
+        for (PhysicalToteAssignment assignment : lifecycleSnapshot.assignments()) {
+            if (assignment.active()) {
+                result.computeIfAbsent(assignment.orderSheetKey(), ignored -> new ArrayList<>())
+                        .add(assignment);
+            }
+        }
+        result.replaceAll((sheet, assignments) -> List.copyOf(assignments));
+        return Collections.unmodifiableMap(result);
     }
 
     private static Set<OrderSheetKey> compatibilityAuthorizedEmptyOrderSheetKeys(
@@ -266,6 +264,28 @@ public final class P2pServiceCentreWorkSnapshotFactory {
         }
         if (!manifest.serviceCentreId().equals(orderState.order().serviceCentreId())) {
             throw new IllegalStateException("Inbound manifest service centre does not match scheduler order");
+        }
+    }
+
+    private record ValidationCache(
+            List<DspSchedulerOrderState> orderStates,
+            InboundToteManifestCatalog manifestCatalog,
+            Av02InventorySnapshot av02InventorySnapshot,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot,
+            Set<OrderSheetKey> authorizedEmptyOrderSheetKeys,
+            P2pServiceCentreWorkSnapshot snapshot) {
+
+        private boolean matches(
+                List<DspSchedulerOrderState> orderStates,
+                InboundToteManifestCatalog manifestCatalog,
+                Av02InventorySnapshot av02InventorySnapshot,
+                PhysicalToteLifecycleSnapshot lifecycleSnapshot,
+                Set<OrderSheetKey> authorizedEmptyOrderSheetKeys) {
+            return this.orderStates == orderStates
+                    && this.manifestCatalog == manifestCatalog
+                    && this.av02InventorySnapshot == av02InventorySnapshot
+                    && this.lifecycleSnapshot == lifecycleSnapshot
+                    && this.authorizedEmptyOrderSheetKeys == authorizedEmptyOrderSheetKeys;
         }
     }
 }
