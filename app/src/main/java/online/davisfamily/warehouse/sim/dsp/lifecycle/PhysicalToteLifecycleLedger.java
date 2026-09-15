@@ -14,6 +14,7 @@ public class PhysicalToteLifecycleLedger {
     private final Map<PhysicalToteId, PhysicalToteRecord> totes = new LinkedHashMap<>();
     private final List<PhysicalToteAssignment> assignments = new ArrayList<>();
     private long nextAssignmentSequence;
+    private PhysicalToteLifecycleSnapshot cachedSnapshot;
 
     public void register(PhysicalToteRecord tote) {
         if (tote == null) {
@@ -22,6 +23,7 @@ public class PhysicalToteLifecycleLedger {
         if (totes.putIfAbsent(tote.id(), tote) != null) {
             throw new IllegalArgumentException("Physical tote is already registered: " + tote.id().value());
         }
+        cachedSnapshot = null;
     }
 
     public PhysicalToteRecord transitionTote(
@@ -30,6 +32,7 @@ public class PhysicalToteLifecycleLedger {
         PhysicalToteRecord current = requireTote(toteId);
         PhysicalToteRecord transitioned = current.transitionTo(nextState);
         totes.put(toteId, transitioned);
+        cachedSnapshot = null;
         return transitioned;
     }
 
@@ -69,6 +72,7 @@ public class PhysicalToteLifecycleLedger {
                 stage,
                 activationTime);
         assignments.add(assignment);
+        cachedSnapshot = null;
         nextAssignmentSequence++;
         return assignment;
     }
@@ -88,6 +92,7 @@ public class PhysicalToteLifecycleLedger {
             }
             PhysicalToteAssignment terminated = assignment.terminate(terminationTime, reason);
             assignments.set(i, terminated);
+            cachedSnapshot = null;
             return terminated;
         }
 
@@ -131,7 +136,10 @@ public class PhysicalToteLifecycleLedger {
     }
 
     public PhysicalToteLifecycleSnapshot snapshot() {
-        return new PhysicalToteLifecycleSnapshot(totes, assignments);
+        if (cachedSnapshot == null) {
+            cachedSnapshot = new PhysicalToteLifecycleSnapshot(totes, assignments);
+        }
+        return cachedSnapshot;
     }
 
     private PhysicalToteRecord requireTote(PhysicalToteId toteId) {
