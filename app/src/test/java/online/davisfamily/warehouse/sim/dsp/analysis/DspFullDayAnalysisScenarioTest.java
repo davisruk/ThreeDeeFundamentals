@@ -30,16 +30,22 @@ import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisRe
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriter;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagSequencePosition;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackSlot;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackSlotKey;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleState;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteConfig;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
 import online.davisfamily.warehouse.sim.dsp.supply.PhysicalToteSupplyState;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaConfig;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
+import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 /** Full-day integration proof using only synthetic, test-owned input files. */
 class DspFullDayAnalysisScenarioTest {
@@ -85,8 +91,8 @@ class DspFullDayAnalysisScenarioTest {
                 .get(DspFullDayBlockCategory.OSR_STATE)));
         assertTrue(report.metrics().p2pLines().stream()
                 .anyMatch(line -> line.utilization() > 0d));
-        assertEquals(5, report.metrics().closedOutboundToteCount());
-        assertEquals(5, report.metrics().allocatedBagCount());
+        assertEquals(13, report.metrics().closedOutboundToteCount());
+        assertEquals(13, report.metrics().allocatedBagCount());
 
         Map<String, ?> completions = report.serviceCentres().stream()
                 .collect(Collectors.toMap(result -> result.serviceCentreId(), result -> result.outcome()));
@@ -157,10 +163,85 @@ class DspFullDayAnalysisScenarioTest {
         assertTrue(snapshot.p2pLines().stream()
                 .flatMap(line -> line.outboundAllocation().closedTotes().stream())
                 .allMatch(tote -> tote.allocatedBags().stream()
-                        .allMatch(bag -> bag.plannedBag().serviceCentreId()
+                .allMatch(bag -> bag.plannedBag().serviceCentreId()
                                 .equals(tote.serviceCentreId().orElseThrow())
                                 && bag.plannedBag().pharmacyId()
                                 .equals(tote.pharmacyId().orElseThrow()))));
+    }
+
+    @Test
+    void shouldCarryAnAdaptedThirdPartySlotThroughCollectionIntoP2p(
+            @TempDir Path directory) throws Exception {
+        DspUncalibratedFullDayProfile profile = adaptedThirdPartyProfile();
+        DspFullDayLoadedInput input = loadAdaptedThirdPartyInput(directory, profile);
+        OrderSheetKey sourceSheet = new OrderSheetKey("adapted-integrated", 1);
+        PlannedPackSlot slot = input.bagPlan().requirePlannedPackSlot(new PlannedPackSlotKey(
+                sourceSheet,
+                "000243688425",
+                1));
+        PlannedBag plannedBag = input.bagPlan().requireBag(slot.bagKey());
+
+        assertTrue(slot.initialPhysicalToteId().isEmpty());
+        assertEquals("pack-000243688425-1", slot.reservedPhysicalPackId());
+        assertEquals(3, plannedBag.physicalPackIds().size());
+        assertEquals(new BagSequencePosition(3, 3),
+                input.bagPlan().requireBagSequencePosition(plannedBag.bagKey()));
+        assertEquals(plannedBag.bagKey().correlationId(), slot.bagKey().correlationId());
+        assertEquals(sourceSheet, slot.sourceProvenance().sourceOrderSheetKey());
+        assertEquals("20002460000226956", slot.sourceProvenance().prescriptionId());
+
+        PhysicalToteId associatedToteId = new PhysicalToteId("associated-integrated-tote");
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            assertFalse(loadPlan(runtime, new PhysicalToteId("adapted-integrated-tote"))
+                    .getPackPlans().stream()
+                    .anyMatch(pack -> pack.packId().equals(slot.reservedPhysicalPackId())));
+            assertFalse(loadPlan(runtime, associatedToteId).getPackPlans().stream()
+                    .anyMatch(pack -> pack.packId().equals(slot.reservedPhysicalPackId())));
+
+            boolean collected = false;
+            boolean completed = false;
+            for (int step = 0; step < 2_000; step++) {
+                runtime.update(1d);
+                List<PackPlan> associatedPacks = loadPlan(runtime, associatedToteId).getPackPlans();
+                collected = associatedPacks.stream()
+                        .anyMatch(pack -> pack.packId().equals(slot.reservedPhysicalPackId())
+                                && pack.correlationId().equals(slot.bagKey().correlationId()));
+                completed = runtime.snapshot().p2pLines().stream()
+                        .flatMap(line -> line.completedBagCorrelationIds().stream())
+                        .anyMatch(slot.bagKey().correlationId()::equals);
+                if (completed) {
+                    break;
+                }
+            }
+
+            assertTrue(collected, "the adapted collection must publish its reserved pack");
+            assertTrue(completed, "P2P must close the bag only after all planned packs arrive");
+            assertEquals(3, loadPlan(runtime, associatedToteId).getPackPlans().stream()
+                    .filter(pack -> pack.correlationId().equals(slot.bagKey().correlationId()))
+                    .count());
+            assertTrue(runtime.snapshot().p2pLines().stream()
+                    .flatMap(line -> line.outboundAllocation().allocatedBags().stream())
+                    .anyMatch(allocated -> allocated.plannedBag().equals(plannedBag)));
+        }
+    }
+
+    @Test
+    void shouldPublishStationPendingOnlyPrescriptionBeforePhysicalRealisation(
+            @TempDir Path directory) throws Exception {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadStationPendingOnlyInput(directory, profile);
+        PlannedPackSlot slot = input.bagPlan().requirePlannedPackSlot(new PlannedPackSlotKey(
+                new OrderSheetKey("adapted-integrated", 1),
+                "000243688425",
+                1));
+        PlannedBag bag = input.bagPlan().requireBag(slot.bagKey());
+
+        assertTrue(slot.initialPhysicalToteId().isEmpty());
+        assertEquals(1, bag.physicalPackIds().size());
+        assertEquals(List.of(slot.reservedPhysicalPackId()),
+                bag.physicalPackIds());
+        assertEquals(new BagSequencePosition(1, 1),
+                input.bagPlan().requireBagSequencePosition(bag.bagKey()));
     }
 
     @Test
@@ -518,6 +599,34 @@ class DspFullDayAnalysisScenarioTest {
                 baseline.timetable());
     }
 
+    private static DspUncalibratedFullDayProfile adaptedThirdPartyProfile() {
+        DspUncalibratedFullDayProfile baseline = profile();
+        return new DspUncalibratedFullDayProfile(
+                baseline.operatingDate(),
+                new OsrInventoryConfig(1200, List.of("104")),
+                baseline.serviceCentreSupplyConfig(),
+                baseline.inboundToteArrivalPolicy(),
+                baseline.av02AllocationConfig(),
+                baseline.p2pElasticAllocationConfig(),
+                baseline.outboundToteConfig(),
+                3,
+                baseline.fixedStep(),
+                baseline.maximumStepsPerAdvance(),
+                baseline.metricSampleInterval(),
+                1d,
+                baseline.queueCapacities(),
+                new ThirdPartyAreaConfig(16, 1, 0d),
+                baseline.adaptingStorageConfig(),
+                baseline.adaptingBenchDefinitions().stream()
+                        .map(definition -> new DspUncalibratedFullDayProfile.AdaptingBenchDefinition(
+                                definition.id(), 0d))
+                        .toList(),
+                baseline.p2pPlaceholderDurations(),
+                baseline.p2pLineDefinitions(),
+                baseline.prlCountPerLine(),
+                baseline.timetable());
+    }
+
     private static DspUncalibratedFullDayProfile boundedStartupOverflowProfile() {
         DspUncalibratedFullDayProfile baseline = profile();
         return new DspUncalibratedFullDayProfile(
@@ -607,12 +716,12 @@ class DspFullDayAnalysisScenarioTest {
                         "patient-116", "rx-116", 1, 1)))));
         messages.add(writeMessage(directory, "08-empty-109.json", message(
                 "empty-109", "001", "03", null, "109", "990",
-                List.of(line("empty-109-line", "05", "product-a", "pharmacy-109",
+                List.of(line("empty-109-line", "03", "product-b", "pharmacy-109",
                         "patient-109", "rx-empty-109", 1, 0)))));
         messages.add(writeMessage(directory, "09-full-109-third-party.json", message(
                 "full-109-third-party", "001", "05", "full-109-third-party-tote", "109", "990",
                 List.of(line("full-109-third-party-line", "03", "product-b", "pharmacy-109",
-                        "patient-109", "rx-109-third-party", 2, 1)))));
+                        "patient-109", "rx-109-third-party", 2, 0)))));
         for (int index = 1; index <= 8; index++) {
             messages.add(writeMessage(directory, "10-full-109-" + index + ".json", message(
                     "full-109-" + index, "001", "05", "full-109-tote-" + index, "109", "990",
@@ -621,6 +730,58 @@ class DspFullDayAnalysisScenarioTest {
         }
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, messages), profile);
+    }
+
+    private static DspFullDayLoadedInput loadAdaptedThirdPartyInput(
+            Path directory,
+            DspUncalibratedFullDayProfile profile) throws IOException {
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                third-party-product,Third Party Product,Y74,200,100,80
+                ordinary-product,Ordinary Product,,200,100,80
+                """);
+        Path adapted = writeMessage(directory, "01-adapted-integrated.json", message(
+                "adapted-integrated", "001", "02", "adapted-integrated-tote", "104", "999",
+                List.of(line("000243688425", "02", "third-party-product",
+                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0)))
+                .replace("\"referenceOrderId\":\"adapted-integrated\"",
+                        "\"referenceOrderId\":\"associated-integrated\""));
+        Path associated = writeMessage(directory, "02-associated-integrated.json", message(
+                "associated-integrated", "001", "04", "associated-integrated-tote", "104", "999",
+                List.of(
+                        line("ordinary-integrated-line", "05", "ordinary-product",
+                                "pharmacy-integrated", "patient-integrated", "20002460000226956", 8, 8),
+                        line("000243688425", "02", "third-party-product",
+                                "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0))));
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, List.of(adapted, associated)), profile);
+    }
+
+    private static DspFullDayLoadedInput loadStationPendingOnlyInput(
+            Path directory,
+            DspUncalibratedFullDayProfile profile) throws IOException {
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                third-party-product,Third Party Product,Y74,200,100,80
+                """);
+        Path adapted = writeMessage(directory, "01-adapted-pending.json", message(
+                "adapted-integrated", "001", "02", "adapted-integrated-tote", "104", "999",
+                List.of(line("000243688425", "02", "third-party-product",
+                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0)))
+                .replace("\"referenceOrderId\":\"adapted-integrated\"",
+                        "\"referenceOrderId\":\"associated-integrated\""));
+        Path associated = writeMessage(directory, "02-associated-pending.json", message(
+                "associated-integrated", "001", "04", "associated-integrated-tote", "104", "999",
+                List.of(line("000243688425", "02", "third-party-product",
+                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0))));
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, List.of(adapted, associated)), profile);
+    }
+
+    private static ToteLoadPlan loadPlan(
+            online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntime runtime,
+            online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId physicalToteId) {
+        return runtime.loadPlanRegistry().getLoadPlanFor(physicalToteId);
     }
 
     private static Path writeMessage(Path directory, String name, String content) throws IOException {

@@ -104,7 +104,7 @@ public final class ElasticRuntimeTestFixture {
                 clock::initialSnapshot,
                 supplySnapshotSupplier,
                 timetable(),
-                () -> new BagPlanningResult(List.of(), List.of(), List.of()),
+                () -> new BagPlanningResult(List.of(), List.of(), List.of(), List.of(), List.of()),
                 outboundAllocator,
                 bindings,
                 P2pElasticAllocationConfig.productionBaseline(
@@ -129,7 +129,7 @@ public final class ElasticRuntimeTestFixture {
                 clock::initialSnapshot,
                 supplySnapshotSupplier,
                 timetable(),
-                () -> new BagPlanningResult(List.of(), List.of(), List.of()),
+                () -> new BagPlanningResult(List.of(), List.of(), List.of(), List.of(), List.of()),
                 outboundAllocator,
                 bindings,
                 P2pElasticAllocationConfig.productionBaseline(

@@ -54,6 +54,7 @@ import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingCo
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingTarget;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
 import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
@@ -438,7 +439,7 @@ class DspAv02OperationalAllocationScenarioTest {
                     fixture.physicalToteId,
                     EMPTY_DIRECT_104,
                     plannedBag.bagKey());
-            BagPlanningResult planningResult = new BagPlanningResult(
+            BagPlanningResult planningResult = BagPlanningResultTestFixtures.complete(
                     List.of(plannedBag), List.of(), List.of(packTrace));
             Bag runtimeBag = runtimeBag(plannedBag);
             BagReservation reservation = fixture.bagReceiver.reserveIncomingBag(runtimeBag);

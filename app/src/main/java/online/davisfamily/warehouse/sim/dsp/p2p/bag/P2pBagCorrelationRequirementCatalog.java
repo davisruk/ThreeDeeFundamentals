@@ -83,8 +83,28 @@ public final class P2pBagCorrelationRequirementCatalog {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
         }
-        return requirementsFor(
-                request.source(), request.physicalToteId(), request.orderSheetKey());
+        return requirementsFor(request.physicalToteId(), request.orderSheetKey());
+    }
+
+    /** Returns the stable physical-tote then fulfilment-sheet union for an operational request. */
+    public Set<P2pBagCorrelationRequirement> requirementsFor(
+            PhysicalToteId physicalToteId,
+            OrderSheetKey orderSheetKey) {
+        if (physicalToteId == null || orderSheetKey == null) {
+            throw new IllegalArgumentException("physicalToteId and orderSheetKey must not be null");
+        }
+        Set<P2pBagCorrelationRequirement> physicalRequirements = requirementsFor(physicalToteId);
+        Set<P2pBagCorrelationRequirement> sheetRequirements = requirementsFor(orderSheetKey);
+        if (physicalRequirements.isEmpty()) {
+            return sheetRequirements;
+        }
+        if (sheetRequirements.isEmpty()) {
+            return physicalRequirements;
+        }
+        LinkedHashSet<P2pBagCorrelationRequirement> requirements = new LinkedHashSet<>();
+        requirements.addAll(physicalRequirements);
+        requirements.addAll(sheetRequirements);
+        return Collections.unmodifiableSet(requirements);
     }
 
     public Set<P2pBagCorrelationRequirement> forPhysicalTote(PhysicalToteId physicalToteId) {

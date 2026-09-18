@@ -7,7 +7,7 @@ import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
-import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackSlot;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
@@ -21,62 +21,48 @@ public final class P2pBagCorrelationRequirementCatalogFactory {
 
         Map<String, P2pBagCorrelationRequirement> requirementsByCorrelation =
                 new LinkedHashMap<>();
-        Map<String, PlannedPackTrace> tracesByPackId = new LinkedHashMap<>();
-        for (PlannedPackTrace trace : bagPlanningResult.packTraces()) {
-            if (tracesByPackId.putIfAbsent(trace.physicalPackId(), trace) != null) {
-                throw new IllegalArgumentException(
-                        "Duplicate planned pack trace: " + trace.physicalPackId());
-            }
+        Map<String, Integer> slotCountByCorrelation = new LinkedHashMap<>();
+        for (PlannedPackSlot slot : bagPlanningResult.plannedPackSlots()) {
+            String correlationId = slot.bagKey().correlationId();
+            slotCountByCorrelation.merge(correlationId, 1, Integer::sum);
         }
-
         for (PlannedBag plannedBag : bagPlanningResult.plannedBags()) {
             String correlationId = plannedBag.bagKey().correlationId();
-            P2pBagCorrelationRequirement requirement =
-                    new P2pBagCorrelationRequirement(
-                            correlationId, plannedBag.physicalPackIds().size());
-            if (requirementsByCorrelation.putIfAbsent(correlationId, requirement) != null) {
+            Integer slotCount = slotCountByCorrelation.get(correlationId);
+            if (slotCount == null || slotCount.intValue() != plannedBag.physicalPackIds().size()) {
+                throw new IllegalArgumentException(
+                        "Planned bag does not have a complete slot requirement: "
+                                + correlationId);
+            }
+            if (requirementsByCorrelation.putIfAbsent(
+                    correlationId,
+                    new P2pBagCorrelationRequirement(correlationId, slotCount)) != null) {
                 throw new IllegalArgumentException(
                         "Duplicate planned bag correlation: " + correlationId);
             }
-            for (String physicalPackId : plannedBag.physicalPackIds()) {
-                PlannedPackTrace trace = tracesByPackId.get(physicalPackId);
-                if (trace == null || !trace.bagKey().equals(plannedBag.bagKey())) {
-                    throw new IllegalArgumentException(
-                            "Planned bag pack is missing its matching trace: " + physicalPackId);
-                }
-            }
         }
 
-        if (requirementsByCorrelation.size() != bagPlanningResult.plannedBags().size()) {
-            throw new IllegalArgumentException("Planned bag correlations must be distinct");
+        if (requirementsByCorrelation.size() != slotCountByCorrelation.size()) {
+            throw new IllegalArgumentException("Planned slot correlations must be distinct");
         }
 
-        Set<String> tracedPackIds = new LinkedHashSet<>();
         Map<PhysicalToteId, Set<P2pBagCorrelationRequirement>> byPhysicalToteId =
                 new LinkedHashMap<>();
         Map<OrderSheetKey, Set<P2pBagCorrelationRequirement>> byOrderSheetKey =
                 new LinkedHashMap<>();
-        for (PlannedPackTrace trace : bagPlanningResult.packTraces()) {
+        for (PlannedPackSlot slot : bagPlanningResult.plannedPackSlots()) {
             P2pBagCorrelationRequirement requirement = requirementsByCorrelation.get(
-                    trace.bagKey().correlationId());
+                    slot.bagKey().correlationId());
             if (requirement == null) {
                 throw new IllegalArgumentException(
-                        "Pack trace references an unplanned bag: " + trace.physicalPackId());
+                        "Planned slot references an unplanned bag: " + slot.slotKey());
             }
-            tracedPackIds.add(trace.physicalPackId());
-            byPhysicalToteId.computeIfAbsent(
-                    trace.inputPhysicalToteId(), ignored -> new LinkedHashSet<>())
-                    .add(requirement);
+            slot.initialPhysicalToteId().ifPresent(inputToteId ->
+                    byPhysicalToteId.computeIfAbsent(
+                            inputToteId, ignored -> new LinkedHashSet<>()).add(requirement));
             byOrderSheetKey.computeIfAbsent(
-                    trace.fulfilmentOrderSheetKey(), ignored -> new LinkedHashSet<>())
+                    slot.fulfilmentOrderSheetKey(), ignored -> new LinkedHashSet<>())
                     .add(requirement);
-        }
-
-        Set<String> plannedPackIds = new LinkedHashSet<>();
-        bagPlanningResult.plannedBags().forEach(bag -> plannedPackIds.addAll(bag.physicalPackIds()));
-        if (!plannedPackIds.equals(tracedPackIds)) {
-            throw new IllegalArgumentException(
-                    "Planned pack traces must exactly match planned bag packs");
         }
 
         return new P2pBagCorrelationRequirementCatalog(byPhysicalToteId, byOrderSheetKey);

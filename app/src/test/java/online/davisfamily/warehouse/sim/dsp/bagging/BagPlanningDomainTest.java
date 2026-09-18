@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
@@ -25,22 +26,38 @@ class BagPlanningDomainTest {
         BagPlanningTote second = planningTote("order-2", "tote-2", pack("pack-2"));
         List<BagPlanningTote> source = new ArrayList<>(List.of(first, second));
 
-        BagPlanningRequest request = new BagPlanningRequest(source);
+        List<BagPackDemand> demands = List.of(
+                demand("source-order-1", "line-1", "pack-1", "tote-1"),
+                demand("source-order-2", "line-2", "pack-2", "tote-2"));
+        BagPlanningRequest request = new BagPlanningRequest(demands, source);
         source.clear();
 
+        assertEquals(demands, request.packDemands());
         assertEquals(List.of(first, second), request.planningTotes());
+        assertThrows(UnsupportedOperationException.class, () -> request.packDemands().clear());
         assertThrows(UnsupportedOperationException.class, () -> request.planningTotes().clear());
-        assertThrows(IllegalArgumentException.class, () -> new BagPlanningRequest(List.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new BagPlanningRequest(Arrays.asList(first, null)));
+                () -> new BagPlanningRequest(List.of(), List.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new BagPlanningRequest(List.of(
-                        first,
-                        planningTote("order-2", "tote-1", pack("pack-2")))));
+                () -> new BagPlanningRequest(Arrays.asList(
+                        demands.get(0), null), List.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new BagPlanningRequest(List.of(
-                        first,
-                        planningTote("order-2", "tote-2", pack("pack-1")))));
+                () -> new BagPlanningRequest(
+                        List.of(demands.get(0)),
+                        List.of(first,
+                                planningTote("order-2", "tote-1", pack("pack-2")))));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BagPlanningRequest(
+                        List.of(demands.get(0)),
+                        List.of(first,
+                                planningTote("order-2", "tote-2", pack("pack-1")))));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BagPlanningRequest(
+                        List.of(demands.get(0), demands.get(0)), List.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new BagPlanningRequest(
+                        List.of(demands.get(0), demand("source-order-3", "line-3", "pack-1", "tote-3")),
+                        List.of()));
     }
 
     @Test
@@ -91,24 +108,52 @@ class BagPlanningDomainTest {
                 new PhysicalToteId("input-tote-1"),
                 new OrderSheetKey("fulfilment-order", 1),
                 bagKey);
-        ToteLoadPlan p2pLoadPlan = new ToteLoadPlan("input-tote-1", List.of(pack("pack-1")));
+        PlannedPackSlot slot = new PlannedPackSlot(
+                new PlannedPackSlotKey(
+                        packTrace.sourceProvenance().sourceOrderSheetKey(),
+                        packTrace.sourceProvenance().lineReference(),
+                        1),
+                packTrace.physicalPackId(),
+                DIMENSIONS,
+                packTrace.sourceProvenance(),
+                packTrace.fulfilmentOrderSheetKey(),
+                Optional.of(packTrace.inputPhysicalToteId()),
+                bagKey);
+        ToteLoadPlan p2pLoadPlan = new ToteLoadPlan(
+                "input-tote-1",
+                List.of(pack("pack-1", bagKey.correlationId())));
 
         BagPlanningResult result = new BagPlanningResult(
-                List.of(plannedBag), List.of(p2pLoadPlan), List.of(packTrace));
+                List.of(plannedBag),
+                List.of(p2pLoadPlan),
+                List.of(packTrace),
+                List.of(slot),
+                List.of(new BagSequencePosition(1, 1)));
 
         assertEquals(plannedBag, result.findBag(bagKey).orElseThrow());
         assertEquals(plannedBag, result.findBagByCorrelationId(" prescription-1/bag-1 ").orElseThrow());
         assertEquals(packTrace, result.findPackTrace(" pack-1 ").orElseThrow());
+        assertEquals(slot, result.findPlannedPackSlot(slot.slotKey()).orElseThrow());
+        assertEquals(new BagSequencePosition(1, 1),
+                result.findBagSequencePosition(bagKey).orElseThrow());
         assertFalse(result.findPackTrace("missing-pack").isPresent());
         assertThrows(UnsupportedOperationException.class, () -> result.plannedBags().clear());
         assertThrows(UnsupportedOperationException.class, () -> result.p2pToteLoadPlans().clear());
         assertThrows(UnsupportedOperationException.class, () -> result.packTraces().clear());
         assertThrows(IllegalArgumentException.class,
                 () -> new BagPlanningResult(
-                        List.of(plannedBag, plannedBag), List.of(), List.of(packTrace)));
+                        List.of(plannedBag, plannedBag),
+                        List.of(),
+                        List.of(packTrace),
+                        List.of(slot),
+                        List.of(new BagSequencePosition(1, 1), new BagSequencePosition(1, 1))));
         assertThrows(IllegalArgumentException.class,
                 () -> new BagPlanningResult(
-                        List.of(plannedBag), List.of(), List.of(packTrace, packTrace)));
+                        List.of(plannedBag),
+                        List.of(),
+                        List.of(packTrace, packTrace),
+                        List.of(slot),
+                        List.of(new BagSequencePosition(1, 1))));
     }
 
     private static BagPlanningTote planningTote(String orderId, String toteId, PackPlan... packPlans) {
@@ -130,7 +175,34 @@ class BagPlanningDomainTest {
     }
 
     private static PackPlan pack(String packId) {
-        return new PackPlan(packId, "legacy-correlation", DIMENSIONS);
+        return pack(packId, "legacy-correlation");
+    }
+
+    private static PackPlan pack(String packId, String correlationId) {
+        return new PackPlan(packId, correlationId, DIMENSIONS);
+    }
+
+    private static BagPackDemand demand(
+            String sourceOrderId,
+            String lineReference,
+            String packId,
+            String toteId) {
+        OrderSheetKey sourceSheet = new OrderSheetKey(sourceOrderId, 1);
+        PackSourceProvenance source = new PackSourceProvenance(
+                sourceSheet,
+                lineReference,
+                "product-1",
+                "SC-1",
+                "pharmacy-1",
+                "patient-1",
+                "prescription-1");
+        return new BagPackDemand(
+                new PlannedPackSlotKey(sourceSheet, lineReference, 1),
+                packId,
+                DIMENSIONS,
+                source,
+                sourceSheet,
+                Optional.of(new PhysicalToteId(toteId)));
     }
 
     private static PackSourceProvenance provenance(String sourceOrderId, String prescriptionId) {

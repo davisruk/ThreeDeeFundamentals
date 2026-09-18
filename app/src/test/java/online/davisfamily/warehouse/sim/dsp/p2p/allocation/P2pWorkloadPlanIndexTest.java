@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
@@ -81,7 +82,9 @@ class P2pWorkloadPlanIndexTest {
                 new BagPlanningResult(
                         planning.plannedBags(),
                         planning.p2pToteLoadPlans(),
-                        planning.packTraces()),
+                        planning.packTraces(),
+                        planning.plannedPackSlots(),
+                        planning.bagSequencePositions()),
                 new InboundToteManifestCatalog(catalog.manifests()));
 
         assertNotSame(first, replacement);
@@ -104,7 +107,8 @@ class P2pWorkloadPlanIndexTest {
         List<PlannedBag> bags = new ArrayList<>(List.of(bag104));
         List<PlannedPackTrace> traces = new ArrayList<>(List.of(
                 trace("pack-104", bag104, input104)));
-        BagPlanningResult planning = new BagPlanningResult(bags, List.of(), traces);
+        BagPlanningResult planning = BagPlanningResultTestFixtures.complete(
+                bags, List.of(), traces);
 
         P2pWorkloadPlanIndex index = P2pWorkloadPlanIndex.from(
                 planning,
@@ -126,36 +130,42 @@ class P2pWorkloadPlanIndexTest {
         InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(
                 List.of(input104, input108));
 
-        assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
-                new BagPlanningResult(List.of(bag104), List.of(), List.of()),
+        assertThrows(IllegalArgumentException.class, () -> P2pWorkloadPlanIndex.from(
+                new BagPlanningResult(List.of(bag104), List.of(), List.of(), List.of(), List.of()),
                 catalog));
 
-        assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
+        assertThrows(IllegalArgumentException.class, () -> P2pWorkloadPlanIndex.from(
                 new BagPlanningResult(
                         List.of(bag104, otherBag),
                         List.of(),
-                        List.of(trace("pack-104", bag104, input104))),
+                        List.of(trace("pack-104", bag104, input104)),
+                        List.of(),
+                        List.of()),
                 catalog));
 
-        assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
+        assertThrows(IllegalArgumentException.class, () -> P2pWorkloadPlanIndex.from(
                 new BagPlanningResult(
                         List.of(bag104),
                         List.of(),
-                        List.of(trace("pack-104", otherBag, input104))),
+                        List.of(trace("pack-104", otherBag, input104)),
+                        List.of(),
+                        List.of()),
                 catalog));
 
-        assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
+        assertThrows(IllegalArgumentException.class, () -> P2pWorkloadPlanIndex.from(
                 new BagPlanningResult(
                         List.of(bag104),
                         List.of(),
                         List.of(traceWithServiceCentre(
-                                "pack-104", bag104, input104, "108"))),
+                                "pack-104", bag104, input104, "108")),
+                        List.of(),
+                        List.of()),
                 catalog));
 
         InboundToteManifest missingInput = manifest(
                 "input-missing", "order-missing", "104", 2);
         assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
-                new BagPlanningResult(
+                BagPlanningResultTestFixtures.complete(
                         List.of(bag104),
                         List.of(),
                         List.of(trace("pack-104", bag104, missingInput))),
@@ -163,27 +173,31 @@ class P2pWorkloadPlanIndexTest {
 
         PlannedBag bagWith108Input = bag("rx-108-input", "104", input108, "pack-108-input");
         assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
-                new BagPlanningResult(
+                BagPlanningResultTestFixtures.complete(
                         List.of(bagWith108Input),
                         List.of(),
                         List.of(trace("pack-108-input", bagWith108Input, input108))),
                 catalog));
 
-        assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
+        assertThrows(IllegalArgumentException.class, () -> P2pWorkloadPlanIndex.from(
                 new BagPlanningResult(
                         List.of(bag104),
                         List.of(),
                         List.of(
                                 trace("pack-104", bag104, input104),
-                                trace("pack-extra", bag104, input104))),
+                                trace("pack-extra", bag104, input104)),
+                        List.of(),
+                        List.of()),
                 catalog));
 
         PlannedBag duplicatePackBag = bag("rx-duplicate", "104", input104, "pack-104");
-        assertThrows(IllegalStateException.class, () -> P2pWorkloadPlanIndex.from(
+        assertThrows(IllegalArgumentException.class, () -> P2pWorkloadPlanIndex.from(
                 new BagPlanningResult(
                         List.of(bag104, duplicatePackBag),
                         List.of(),
-                        List.of(trace("pack-104", bag104, input104))),
+                        List.of(trace("pack-104", bag104, input104)),
+                        List.of(),
+                        List.of()),
                 catalog));
     }
 
@@ -198,7 +212,7 @@ class P2pWorkloadPlanIndexTest {
                 traces.add(trace(packId, bag, input));
             }
         }
-        return new BagPlanningResult(bags, List.of(), traces);
+        return BagPlanningResultTestFixtures.complete(bags, List.of(), traces);
     }
 
     private static PlannedBag bag(

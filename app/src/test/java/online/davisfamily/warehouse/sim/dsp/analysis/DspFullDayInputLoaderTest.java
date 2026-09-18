@@ -32,12 +32,14 @@ class DspFullDayInputLoaderTest {
         Path productMaster = write(directory, "products.csv", """
                 dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
                 product-a,Product A,,200,100,80
-                product-b,Product B,Y74,200,100,80
+                product-b,Product B,,200,100,80
                 """);
         Path adapted = write(directory, "01-adapted.json", message(
                 "adapted-order", "001", "02", "adapted-tote", "104", "999",
                 "adapted-line", "02", "product-a", "adapted-pharmacy", "adapted-patient",
-                "adapted-prescription", "0001", "0001"));
+                "adapted-prescription", "0001", "0001")
+                .replace("\"referenceOrderId\":\"adapted-order\"",
+                        "\"referenceOrderId\":\"empty-order\""));
         Path full = write(directory, "02-full.json", message(
                 "full-order", "001", "05", "full-tote", "108", "998",
                 "full-line", "03", "product-b", "full-pharmacy", "full-patient",
@@ -48,8 +50,8 @@ class DspFullDayInputLoaderTest {
                 "associated-prescription", "0001", "0001"));
         Path empty = write(directory, "04-empty.json", message(
                 "empty-order", "001", "03", null, "104", "999",
-                "empty-line", "05", "product-a", "empty-pharmacy", "empty-patient",
-                "empty-prescription", "0001", "0000"));
+                "adapted-line", "02", "product-a", "adapted-pharmacy", "adapted-patient",
+                "adapted-prescription", "0001", "0000"));
         Path manual = write(directory, "05-manual.json", message(
                 "manual-order", "001", "01", null, "104", "999",
                 "manual-line", "01", "product-a", "manual-pharmacy", "manual-patient",
@@ -91,14 +93,14 @@ class DspFullDayInputLoaderTest {
                 data.report().unresolvedProductLines().stream().map(issue -> issue.serviceCentreId()).toList());
 
         BagPlanningResult plan = loaded.bagPlanningResult();
-        assertEquals(4, plan.packTraces().size());
+        assertEquals(3, plan.packTraces().size());
         assertEquals(4, plan.plannedBags().size());
         for (PlannedPackTrace trace : plan.packTraces()) {
             assertTrue(trace.physicalPackId().startsWith("pack-"));
             assertFalse(trace.sourceProvenance().sourceOrderSheetKey().orderId().isBlank());
             assertEquals(trace.sourceProvenance().prescriptionId(), trace.bagKey().prescriptionId());
         }
-        assertEquals(List.of("adapted-tote", "full-tote", "associated-tote", "partial-known-tote"),
+        assertEquals(List.of("full-tote", "associated-tote", "partial-known-tote"),
                 plan.p2pToteLoadPlans().stream().map(loadPlan -> loadPlan.physicalToteId().value()).toList());
         assertEquals(loaded.loadReport(), loaded.loadedData().report());
     }

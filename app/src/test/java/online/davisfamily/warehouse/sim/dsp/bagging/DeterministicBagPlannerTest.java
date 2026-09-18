@@ -4,11 +4,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
@@ -24,7 +29,7 @@ class DeterministicBagPlannerTest {
         register(registry, "pack-2", "source-2", "rx-1", "patient-1", "pharmacy-1", "SC-1");
         DeterministicBagPlanner planner = planner(registry, 3);
 
-        BagPlanningResult result = planner.plan(request(
+        BagPlanningResult result = planner.plan(request(registry,
                 planningTote("fulfilment-1", "tote-1", "SC-1", "pack-1"),
                 planningTote("fulfilment-2", "tote-2", "SC-1", "pack-2")));
 
@@ -47,7 +52,7 @@ class DeterministicBagPlannerTest {
                     "patient-1", "pharmacy-1", "SC-1");
         }
 
-        BagPlanningResult result = planner(registry, 2).plan(request(
+        BagPlanningResult result = planner(registry, 2).plan(request(registry,
                 planningTote("fulfilment-1", "tote-1", "SC-1",
                         "pack-1", "pack-2", "pack-3", "pack-4", "pack-5")));
 
@@ -57,6 +62,10 @@ class DeterministicBagPlannerTest {
         assertEquals(List.of("pack-1", "pack-2"), result.plannedBags().get(0).physicalPackIds());
         assertEquals(List.of("pack-3", "pack-4"), result.plannedBags().get(1).physicalPackIds());
         assertEquals(List.of("pack-5"), result.plannedBags().get(2).physicalPackIds());
+        assertEquals(
+                List.of(new BagSequencePosition(1, 3), new BagSequencePosition(2, 3),
+                        new BagSequencePosition(3, 3)),
+                result.bagSequencePositions());
     }
 
     @Test
@@ -66,7 +75,7 @@ class DeterministicBagPlannerTest {
         register(registry, "pack-a1", "source-a", "rx-a", "patient-a", "pharmacy-a", "SC-1");
         register(registry, "pack-b2", "source-b", "rx-b", "patient-b", "pharmacy-b", "SC-1");
 
-        BagPlanningResult result = planner(registry, 3).plan(request(
+        BagPlanningResult result = planner(registry, 3).plan(request(registry,
                 planningTote("fulfilment-1", "tote-1", "SC-1", "pack-b1", "pack-a1"),
                 planningTote("fulfilment-2", "tote-2", "SC-1", "pack-b2")));
 
@@ -88,15 +97,15 @@ class DeterministicBagPlannerTest {
     }
 
     @Test
-    void shouldFailClearlyWhenPhysicalPackProvenanceIsMissing() {
-        DeterministicBagPlanner planner = planner(new PackProvenanceRegistry(), 2);
+    void shouldRejectPhysicalPackWithoutLogicalDemand() {
+        BagPlanningTote tote = planningTote("fulfilment-1", "tote-1", "SC-1", "missing-pack");
 
-        IllegalStateException exception = assertThrows(
-                IllegalStateException.class,
-                () -> planner.plan(request(
-                        planningTote("fulfilment-1", "tote-1", "SC-1", "missing-pack"))));
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> new DeterministicBagPlanner(new MaximumPackCountBagCapacityPolicy(2))
+                        .plan(new BagPlanningRequest(List.of(), List.of(tote))));
 
-        assertTrue(exception.getMessage().contains("Missing source provenance"));
+        assertTrue(exception.getMessage().contains("no planned demand"));
         assertTrue(exception.getMessage().contains("missing-pack"));
     }
 
@@ -108,10 +117,11 @@ class DeterministicBagPlannerTest {
                 new ToteLoadPlan("tote-1", List.of()));
 
         BagPlanningResult result = planner(new PackProvenanceRegistry(), 2)
-                .plan(request(emptyTote));
+                .plan(new BagPlanningRequest(List.of(), List.of(emptyTote)));
 
         assertTrue(result.plannedBags().isEmpty());
         assertTrue(result.packTraces().isEmpty());
+        assertTrue(result.plannedPackSlots().isEmpty());
         assertEquals(1, result.p2pToteLoadPlans().size());
         assertEquals(emptyTote.toteLoadPlan().physicalToteId(),
                 result.p2pToteLoadPlans().get(0).physicalToteId());
@@ -128,7 +138,7 @@ class DeterministicBagPlannerTest {
         BagPlanningTote inputTote = new BagPlanningTote(
                 new OrderSheetKey("fulfilment-1", 1), "SC-1", inputLoad);
 
-        BagPlanningResult result = planner(registry, 2).plan(request(inputTote));
+        BagPlanningResult result = planner(registry, 2).plan(request(registry, inputTote));
 
         ToteLoadPlan rewrittenLoad = result.p2pToteLoadPlans().get(0);
         PackPlan rewrittenPack = rewrittenLoad.getPackPlans().get(0);
@@ -145,7 +155,7 @@ class DeterministicBagPlannerTest {
         register(registry, "pack-1", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
         register(registry, "pack-2", "source-2", "rx-1", "patient-1", "pharmacy-1", "SC-1");
 
-        BagPlanningResult result = planner(registry, 3).plan(request(
+        BagPlanningResult result = planner(registry, 3).plan(request(registry,
                 planningTote("fulfilment-1", "tote-1", "SC-1", "pack-1"),
                 planningTote("fulfilment-2", "tote-2", "SC-1", "pack-2")));
         ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlans(result.p2pToteLoadPlans());
@@ -166,7 +176,7 @@ class DeterministicBagPlannerTest {
         register(registry, "pack-2", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
         register(registry, "pack-3", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
 
-        BagPlanningResult result = planner(registry, 2).plan(request(
+        BagPlanningResult result = planner(registry, 2).plan(request(registry,
                 planningTote("fulfilment-1", "tote-1", "SC-1", "pack-1", "pack-2", "pack-3")));
         ToteLoadPlan rewrittenLoad = result.p2pToteLoadPlans().get(0);
         ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlans(result.p2pToteLoadPlans());
@@ -184,16 +194,15 @@ class DeterministicBagPlannerTest {
         PackProvenanceRegistry registry = new PackProvenanceRegistry();
         register(registry, "pack-1", "source-1", "rx-1", "patient-1", "pharmacy-1", "SC-1");
         DeterministicBagPlanner planner = new DeterministicBagPlanner(
-                (currentPackPlans, candidatePackPlan) -> false,
-                registry.snapshot());
+                (currentPackCount, candidate) -> false);
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
-                () -> planner.plan(request(
+                () -> planner.plan(request(registry,
                         planningTote("fulfilment-1", "tote-1", "SC-1", "pack-1"))));
 
         assertTrue(exception.getMessage().contains("empty bag"));
-        assertTrue(exception.getMessage().contains("pack-1"));
+        assertTrue(exception.getMessage().contains("line-pack-1"));
     }
 
     private static void assertConflict(
@@ -212,21 +221,45 @@ class DeterministicBagPlannerTest {
 
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
-                () -> planner(registry, 2).plan(request(
+                () -> planner(registry, 2).plan(request(registry,
                         planningTote("fulfilment-1", "tote-1", firstServiceCentre, "pack-1"),
                         planningTote("fulfilment-2", "tote-2", secondServiceCentre, "pack-2"))));
 
-        assertTrue(exception.getMessage().contains(expectedMessage));
+        assertTrue(exception.getMessage().contains("Conflicting pharmacy, patient, or service centre"));
     }
 
-    private static DeterministicBagPlanner planner(PackProvenanceRegistry registry, int maximumPackCount) {
-        return new DeterministicBagPlanner(
-                new MaximumPackCountBagCapacityPolicy(maximumPackCount),
-                registry.snapshot());
+    private static DeterministicBagPlanner planner(
+            PackProvenanceRegistry ignoredRegistry,
+            int maximumPackCount) {
+        return new DeterministicBagPlanner(new MaximumPackCountBagCapacityPolicy(maximumPackCount));
     }
 
-    private static BagPlanningRequest request(BagPlanningTote... planningTotes) {
-        return new BagPlanningRequest(List.of(planningTotes));
+    private static BagPlanningRequest request(
+            PackProvenanceRegistry registry,
+            BagPlanningTote... planningTotes) {
+        PackProvenanceSnapshot snapshot = registry.snapshot();
+        List<BagPackDemand> demands = new ArrayList<>();
+        Map<String, Integer> ordinalsByLine = new LinkedHashMap<>();
+        for (BagPlanningTote planningTote : planningTotes) {
+            for (PackPlan packPlan : planningTote.toteLoadPlan().getPackPlans()) {
+                PackSourceProvenance sourceProvenance = snapshot.find(packPlan.packId()).orElseThrow();
+                String lineKey = sourceProvenance.sourceOrderSheetKey() + ":"
+                        + sourceProvenance.lineReference();
+                int ordinal = ordinalsByLine.merge(lineKey, 1, Integer::sum);
+                demands.add(new BagPackDemand(
+                        new PlannedPackSlotKey(
+                                sourceProvenance.sourceOrderSheetKey(),
+                                sourceProvenance.lineReference(),
+                                ordinal),
+                        packPlan.packId(),
+                        packPlan.dimensions(),
+                        sourceProvenance,
+                        planningTote.fulfilmentOrderSheetKey(),
+                        Optional.of(new PhysicalToteId(
+                                planningTote.toteLoadPlan().physicalToteId().value()))));
+            }
+        }
+        return new BagPlanningRequest(demands, List.of(planningTotes));
     }
 
     private static BagPlanningTote planningTote(

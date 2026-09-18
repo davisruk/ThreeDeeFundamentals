@@ -11,12 +11,12 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 
 public class ProductMasterThirdPartyPackPlanFactory implements ThirdPartyPackPlanFactory {
     private final ProductMasterRepository productMasterRepository;
-    private final BiFunction<ThirdPartyVisit, ThirdPartyLineWork, String> correlationIdResolver;
+    private final ThirdPartyPackCorrelationResolver correlationIdResolver;
     private final DspPackPlanFactory packPlanFactory;
 
     public ProductMasterThirdPartyPackPlanFactory(
             ProductMasterRepository productMasterRepository,
-            BiFunction<ThirdPartyVisit, ThirdPartyLineWork, String> correlationIdResolver,
+            ThirdPartyPackCorrelationResolver correlationIdResolver,
             DspPackPlanFactory packPlanFactory) {
         if (productMasterRepository == null) {
             throw new IllegalArgumentException("productMasterRepository must not be null");
@@ -30,6 +30,17 @@ public class ProductMasterThirdPartyPackPlanFactory implements ThirdPartyPackPla
         this.productMasterRepository = productMasterRepository;
         this.correlationIdResolver = correlationIdResolver;
         this.packPlanFactory = packPlanFactory;
+    }
+
+    /** Convenience constructor for isolated station tests with line-reference correlation. */
+    public ProductMasterThirdPartyPackPlanFactory(
+            ProductMasterRepository productMasterRepository,
+            BiFunction<ThirdPartyVisit, ThirdPartyLineWork, String> correlationIdResolver,
+            DspPackPlanFactory packPlanFactory) {
+        this(
+                productMasterRepository,
+                (visit, lineWork, ignoredPackOrdinal) -> correlationIdResolver.apply(visit, lineWork),
+                packPlanFactory);
     }
 
     @Override
@@ -50,7 +61,7 @@ public class ProductMasterThirdPartyPackPlanFactory implements ThirdPartyPackPla
         PackDimensions dimensions = product.dimensions()
                 .orElseThrow(() -> new IllegalStateException(
                         "Missing pack dimensions for product " + lineWork.productId()));
-        String correlationId = correlationIdResolver.apply(visit, lineWork);
+        String correlationId = correlationIdResolver.resolve(visit, lineWork, packOrdinal);
         if (correlationId == null || correlationId.isBlank()) {
             throw new IllegalStateException("Resolved correlationId must not be blank");
         }

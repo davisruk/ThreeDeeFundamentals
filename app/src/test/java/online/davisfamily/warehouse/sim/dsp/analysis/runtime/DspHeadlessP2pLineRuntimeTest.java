@@ -29,6 +29,7 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
@@ -202,7 +203,7 @@ class DspHeadlessP2pLineRuntimeTest {
                 "rx-1",
                 List.of("pack-1", "pack-2"),
                 List.of(orderSheetKey));
-        BagPlanningResult bagPlanningResult = new BagPlanningResult(
+        BagPlanningResult bagPlanningResult = BagPlanningResultTestFixtures.complete(
                 List.of(plannedBag),
                 List.of(firstPlan, secondPlan),
                 List.of(

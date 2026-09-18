@@ -414,6 +414,7 @@ class DspFullDayAnalysisRuntimeTest {
         Path products = Files.writeString(directory.resolve("products.csv"), """
                 dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
                 product-a,Product A,,200,100,80
+                product-b,Product B,Y74,200,100,80
                 """);
         Path full = Files.writeString(directory.resolve("full-104.json"), message(
                 "full-104", "001", "05", "full-104-tote", "104", "999",
@@ -421,7 +422,7 @@ class DspFullDayAnalysisRuntimeTest {
                         "patient-104", "rx-full-104", 1, 1))));
         Path empty = Files.writeString(directory.resolve("empty-108.json"), message(
                 "empty-108", "001", "03", null, "108", "998",
-                List.of(line("empty-108-line", "05", "product-a", "pharmacy-108",
+                List.of(line("empty-108-line", "05", "product-b", "pharmacy-108",
                         "patient-108", "rx-empty-108", 1, 0))));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, List.of(full, empty)), profile);
@@ -438,7 +439,7 @@ class DspFullDayAnalysisRuntimeTest {
         Path full = Files.writeString(directory.resolve("full-third-party.json"), message(
                 "full-third-party", "001", "05", "full-third-party-tote", "104", "999",
                 List.of(line("full-third-party-line", "03", "product-b", "pharmacy-104",
-                        "patient-104", "rx-third-party", 1, 1))));
+                        "patient-104", "rx-third-party", 1, 0))));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, List.of(full)), profile);
     }

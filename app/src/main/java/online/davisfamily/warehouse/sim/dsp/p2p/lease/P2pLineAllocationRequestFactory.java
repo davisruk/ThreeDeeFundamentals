@@ -53,6 +53,9 @@ public final class P2pLineAllocationRequestFactory {
             String serviceCentreId,
             List<String> pharmacyIds,
             boolean p2pFirstRouteStation) {
+        if (source == null) {
+            throw new IllegalArgumentException("source must not be null");
+        }
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");
         }
@@ -64,7 +67,7 @@ public final class P2pLineAllocationRequestFactory {
             throw new IllegalArgumentException("physical tote already has a P2P line assignment");
         }
         Set<P2pBagCorrelationRequirement> requirements = correlationRequirementCatalog.requirementsFor(
-                        source, physicalToteId, orderSheetKey);
+                physicalToteId, orderSheetKey);
         return new P2pLineAllocationRequest(
                 physicalToteId,
                 normalizedServiceCentreId,

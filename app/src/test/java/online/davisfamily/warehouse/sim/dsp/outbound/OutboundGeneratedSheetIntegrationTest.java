@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
@@ -76,14 +77,29 @@ class OutboundGeneratedSheetIntegrationTest {
                 new PhysicalToteId("inbound-1"),
                 associatedFulfilmentSheet,
                 secondBag.bagKey());
-        BagPlanningResult planningResult = new BagPlanningResult(
-                List.of(secondBag), List.of(), List.of(trace));
+        PlannedBag firstBag = bag("rx-1", 1, associatedFulfilmentSheet);
+        PackSourceProvenance firstSourceProvenance = new PackSourceProvenance(
+                adaptedSourceSheet,
+                "line-1",
+                "product-1",
+                "SC-1",
+                "pharmacy-1",
+                "patient-1",
+                "rx-1");
+        PlannedPackTrace firstTrace = new PlannedPackTrace(
+                firstBag.physicalPackIds().getFirst(),
+                firstSourceProvenance,
+                new PhysicalToteId("inbound-0"),
+                associatedFulfilmentSheet,
+                firstBag.bagKey());
+        BagPlanningResult planningResult = BagPlanningResultTestFixtures.complete(
+                List.of(firstBag, secondBag), List.of(), List.of(firstTrace, trace));
         Fixture fixture = fixture(1, associatedFulfilmentSheet);
         fixture.allocator().allocate(
                 LINE, bag("rx-1", 1, associatedFulfilmentSheet), seconds(1));
 
         AllocatedOutboundBag allocated = fixture.allocator().allocate(
-                LINE, planningResult.plannedBags().getFirst(), seconds(2));
+                LINE, planningResult.plannedBags().get(1), seconds(2));
         PlannedPackTrace retainedTrace = planningResult.findPackTrace(trace.physicalPackId()).orElseThrow();
 
         assertEquals(sheet("associated-order", 2), outputSheet(allocated));

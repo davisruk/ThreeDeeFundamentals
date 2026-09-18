@@ -160,8 +160,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     loadPlans,
                     new ProductMasterThirdPartyPackPlanFactory(
                             new InMemoryProductMasterRepository(data.products()),
-                            (visit, lineWork) -> resolveThirdPartyCorrelation(
-                                    bagPlan, visit, lineWork),
+                            new PlannedSlotThirdPartyPackCorrelationResolver(bagPlan),
                             packPlanFactory));
 
             AdaptingStorageMap storageMap = new AdaptingStorageMap();
@@ -184,7 +183,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     adaptingArea,
                     schedulerState,
                     loadPlans,
-                    new DefaultCollectedPackPlanFactory(packPlanFactory));
+                    new DefaultCollectedPackPlanFactory(
+                            packPlanFactory,
+                            new PlannedSlotCollectedPackCorrelationResolver(bagPlan)));
 
             RouteTopology topology = buildRouteTopology(destinations, profile);
             Map<OperationalRouteDestination, StationRoutedToteArrivalQueue> arrivalQueues =
@@ -741,25 +742,6 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 profile.p2pLineDefinitions().getFirst().destination().targetId());
     }
 
-    private static String resolveThirdPartyCorrelation(
-            BagPlanningResult bagPlan,
-            ThirdPartyVisit visit,
-            ThirdPartyLineWork lineWork) {
-        Set<String> correlations = new LinkedHashSet<>();
-        for (PlannedPackTrace trace : bagPlan.packTraces()) {
-            PackSourceProvenance source = trace.sourceProvenance();
-            if (source.sourceOrderSheetKey().equals(visit.orderSheetKey())
-                    && source.lineReference().equals(lineWork.lineReference())) {
-                correlations.add(trace.bagKey().correlationId());
-            }
-        }
-        if (correlations.size() != 1) {
-            throw new IllegalStateException(
-                    "Third Party line has no unique planned bag correlation: "
-                            + lineWork.lineReference());
-        }
-        return correlations.iterator().next();
-    }
 
     private static DspP2pElasticAllocationRuntime requireElastic(
             AtomicReference<DspP2pElasticAllocationRuntime> reference) {
@@ -828,24 +810,6 @@ public final class DspFullDayAnalysisRuntimeFactory {
             for (PlannedBag bag : bagPlan.plannedBags()) {
                 counts.merge(bag.bagKey().correlationId(), bag.physicalPackIds().size(), Integer::sum);
             }
-            Map<String, Integer> loadPlanCounts = new LinkedHashMap<>();
-            for (ToteLoadPlan plan : bagPlan.p2pToteLoadPlans()) {
-                plan.packPlansByCorrelationId().forEach((correlation, packs) -> {
-                    loadPlanCounts.merge(correlation, packs.size(), Integer::sum);
-                });
-            }
-            loadPlanCounts.forEach((correlation, count) -> {
-                Integer expected = counts.get(correlation);
-                if (expected == null) {
-                    throw new IllegalArgumentException(
-                            "P2P load plan contains an unknown bag correlation " + correlation);
-                }
-                if (expected.intValue() != count) {
-                    throw new IllegalArgumentException(
-                            "P2P load-plan pack count does not match planned bag for correlation "
-                                    + correlation);
-                }
-            });
             expectedPackCounts = Map.copyOf(counts);
         }
 

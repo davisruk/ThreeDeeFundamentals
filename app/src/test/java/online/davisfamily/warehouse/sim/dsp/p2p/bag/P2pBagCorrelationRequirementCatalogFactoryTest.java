@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
@@ -32,7 +33,7 @@ class P2pBagCorrelationRequirementCatalogFactoryTest {
         PhysicalToteId firstTote = new PhysicalToteId("osr-tote-1");
         PhysicalToteId secondTote = new PhysicalToteId("osr-tote-2");
 
-        BagPlanningResult result = new BagPlanningResult(
+        BagPlanningResult result = BagPlanningResultTestFixtures.complete(
                 List.of(
                         plannedBag(bagA, List.of("pack-a-1", "pack-a-2"), SHEET_A),
                         plannedBag(bagB, List.of("pack-b-1"), SHEET_B)),
@@ -64,7 +65,7 @@ class P2pBagCorrelationRequirementCatalogFactoryTest {
         P2pBagCorrelationRequirement expected =
                 new P2pBagCorrelationRequirement(bag.correlationId(), 1);
         PhysicalToteId allocatedPhysicalId = new PhysicalToteId("av02-allocated-1");
-        BagPlanningResult result = new BagPlanningResult(
+        BagPlanningResult result = BagPlanningResultTestFixtures.complete(
                 List.of(plannedBag(bag, List.of("pack-1"), SHEET_A)),
                 List.of(),
                 List.of(trace("pack-1", new PhysicalToteId("planned-source"), SHEET_A, bag)));

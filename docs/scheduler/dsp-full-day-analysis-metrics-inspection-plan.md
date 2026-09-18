@@ -4085,6 +4085,12 @@ Proposed commit message: none; this verification step creates no repository chan
 
 ## Step 35: Regression, External Dataset Run, Review, And Closure
 
+Step 35 is blocked by the functional remediation specified in
+`docs/scheduler/dsp-complete-bag-demand-planning-remediation-plan.md`. Complete that plan and prove
+that the external run advances beyond Third Party line `000243688425` before beginning this closure
+step. The remediation preserves complete logical bag demand and bag `x of y` identity; it does not
+add Exception Station outcomes, empty physical bags, or Not Supplied labels.
+
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the
 deferred broad engine/simulation optimization review during closure.
 

@@ -21,6 +21,7 @@ import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocatedTote;
 import online.davisfamily.warehouse.sim.dsp.av02.Av02InventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
@@ -143,7 +144,9 @@ class P2pWorkloadSnapshotTest {
         BagPlanningResult replacementPlanning = new BagPlanningResult(
                 fixture.planning().plannedBags(),
                 fixture.planning().p2pToteLoadPlans(),
-                fixture.planning().packTraces());
+                fixture.planning().packTraces(),
+                fixture.planning().plannedPackSlots(),
+                fixture.planning().bagSequencePositions());
         P2pWorkloadPlanIndex afterPlanningReplacement = factory.planIndexFor(
                 replacementPlanning, fixture.manifestCatalog());
         assertNotSame(initial, afterPlanningReplacement);
@@ -474,7 +477,7 @@ class P2pWorkloadSnapshotTest {
                         Map.of("104", List.of(physicalToteId)),
                         Map.of()),
                 new InboundToteManifestCatalog(List.of()),
-                new BagPlanningResult(List.of(), List.of(), List.of()),
+                new BagPlanningResult(List.of(), List.of(), List.of(), List.of(), List.of()),
                 emptyOutbound(),
                 COSTS,
                 new Av02InventorySnapshot(1, List.of(), List.of(allocated)),
@@ -494,7 +497,7 @@ class P2pWorkloadSnapshotTest {
                         Map.of("104", List.of(physicalToteId)),
                         Map.of()),
                 new InboundToteManifestCatalog(List.of()),
-                new BagPlanningResult(List.of(), List.of(), List.of()),
+                new BagPlanningResult(List.of(), List.of(), List.of(), List.of(), List.of()),
                 emptyOutbound(),
                 COSTS,
                 new Av02InventorySnapshot(1, List.of(), List.of()),
@@ -517,12 +520,8 @@ class P2pWorkloadSnapshotTest {
                 emptyOutbound(),
                 COSTS));
 
-        assertThrows(IllegalStateException.class, () -> factory.create(
-                P2pServiceCentreWorkSnapshot.empty(),
-                new InboundToteManifestCatalog(List.of(input104)),
-                new BagPlanningResult(List.of(planned), List.of(), List.of()),
-                emptyOutbound(),
-                COSTS));
+        assertThrows(IllegalArgumentException.class, () -> new BagPlanningResult(
+                List.of(planned), List.of(), List.of(), List.of(), List.of()));
 
         PlannedBag unknown = plannedBag(
                 "rx-unknown", "104", "pharmacy-104", input104, "pack-unknown");
@@ -559,10 +558,8 @@ class P2pWorkloadSnapshotTest {
 
         P2pWorkloadPlanIndex initial = factory.planIndexFor(validPlanning, validCatalog);
 
-        BagPlanningResult invalidPlanning = new BagPlanningResult(
-                List.of(bag), List.of(), List.of());
-        assertThrows(IllegalStateException.class, () -> factory.planIndexFor(
-                invalidPlanning, validCatalog));
+        assertThrows(IllegalArgumentException.class, () -> new BagPlanningResult(
+                List.of(bag), List.of(), List.of(), List.of(), List.of()));
 
         assertThrows(IllegalStateException.class, () -> factory.planIndexFor(
                 validPlanning, new InboundToteManifestCatalog(List.of())));
@@ -647,7 +644,7 @@ class P2pWorkloadSnapshotTest {
         assertThrows(IllegalArgumentException.class, () -> factory.create(
                 work,
                 new InboundToteManifestCatalog(List.of(first, second)),
-                new BagPlanningResult(List.of(), List.of(), List.of()),
+                new BagPlanningResult(List.of(), List.of(), List.of(), List.of(), List.of()),
                 emptyOutbound(),
                 overflowingCosts));
         assertThrows(
@@ -685,7 +682,7 @@ class P2pWorkloadSnapshotTest {
                 traces.add(trace(packId, bag, inputTote));
             }
         }
-        return new BagPlanningResult(bags, List.of(), traces);
+        return BagPlanningResultTestFixtures.complete(bags, List.of(), traces);
     }
 
     private static LargePlanFixture fiveThousandBagPlan() {
@@ -716,7 +713,7 @@ class P2pWorkloadSnapshotTest {
             traces.add(trace("pack-large-" + index, bag, input));
         }
         return new LargePlanFixture(
-                new BagPlanningResult(bags, List.of(), traces),
+                BagPlanningResultTestFixtures.complete(bags, List.of(), traces),
                 new InboundToteManifestCatalog(List.of(input104, input108, input109)));
     }
 

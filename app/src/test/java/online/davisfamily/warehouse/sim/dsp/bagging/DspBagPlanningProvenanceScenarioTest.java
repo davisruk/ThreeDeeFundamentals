@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -183,7 +185,7 @@ class DspBagPlanningProvenanceScenarioTest {
         List<PackPlan> collectedPlans = new DefaultCollectedPackPlanFactory(DIMENSIONS, packPlanFactory)
                 .createPackPlans(List.of(adaptedRecord));
 
-        BagPlanningRequest request = new BagPlanningRequest(List.of(
+        List<BagPlanningTote> planningTotes = List.of(
                 new BagPlanningTote(
                         fullPackOrder.orderSheetKey(),
                         SERVICE_CENTRE,
@@ -191,10 +193,11 @@ class DspBagPlanningProvenanceScenarioTest {
                 new BagPlanningTote(
                         new OrderSheetKey("associated-order-1", 1),
                         SERVICE_CENTRE,
-                        new ToteLoadPlan("associated-tote-1", collectedPlans))));
+                        new ToteLoadPlan("associated-tote-1", collectedPlans)));
+        BagPlanningRequest request = new BagPlanningRequest(
+                demandsFor(provenanceRegistry, planningTotes), planningTotes);
         DeterministicBagPlanner planner = new DeterministicBagPlanner(
-                new MaximumPackCountBagCapacityPolicy(2),
-                provenanceRegistry.snapshot());
+                new MaximumPackCountBagCapacityPolicy(2));
 
         return new Scenario(
                 fullPackOrder,
@@ -203,6 +206,33 @@ class DspBagPlanningProvenanceScenarioTest {
                 request,
                 planner,
                 planner.plan(request));
+    }
+
+    private static List<BagPackDemand> demandsFor(
+            PackProvenanceRegistry registry,
+            List<BagPlanningTote> planningTotes) {
+        Map<String, Integer> ordinalsByLine = new LinkedHashMap<>();
+        List<BagPackDemand> demands = new ArrayList<>();
+        PackProvenanceSnapshot snapshot = registry.snapshot();
+        for (BagPlanningTote planningTote : planningTotes) {
+            for (PackPlan packPlan : planningTote.toteLoadPlan().getPackPlans()) {
+                PackSourceProvenance sourceProvenance = snapshot.find(packPlan.packId()).orElseThrow();
+                String lineKey = sourceProvenance.sourceOrderSheetKey() + ":"
+                        + sourceProvenance.lineReference();
+                int ordinal = ordinalsByLine.merge(lineKey, 1, Integer::sum);
+                demands.add(new BagPackDemand(
+                        new PlannedPackSlotKey(
+                                sourceProvenance.sourceOrderSheetKey(),
+                                sourceProvenance.lineReference(),
+                                ordinal),
+                        packPlan.packId(),
+                        packPlan.dimensions(),
+                        sourceProvenance,
+                        planningTote.fulfilmentOrderSheetKey(),
+                        Optional.of(planningTote.toteLoadPlan().physicalToteId())));
+            }
+        }
+        return List.copyOf(demands);
     }
 
     private static PackSourceProvenance provenance(NotionalToteOrder order, DspOrderItem line) {

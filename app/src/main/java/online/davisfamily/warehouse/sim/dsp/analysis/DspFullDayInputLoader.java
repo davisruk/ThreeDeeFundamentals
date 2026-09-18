@@ -3,20 +3,15 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
-import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningRequest;
-import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningTote;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.DeterministicBagPlanner;
-import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.bagging.MaximumPackCountBagCapacityPolicy;
-import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
-import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.io.DspDatasetAssembler;
 import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
 import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
@@ -28,13 +23,11 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderValidator;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
 import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreSchedule;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
-import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
-import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
-import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 /** Loads and validates the logical full-day input without creating runtime or render objects. */
 public final class DspFullDayInputLoader {
@@ -90,7 +83,9 @@ public final class DspFullDayInputLoader {
                 twelveNDatasetLoader.load(inputPaths.twelveNJsonPaths());
         LoadedDspData loadedData = executableData(datasetAssembler.assemble(products, messages));
         validateLoadedData(loadedData, profile.timetable());
-        BagPlanningResult bagPlanningResult = createBagPlan(loadedData, profile.maximumPacksPerBag());
+        BagPlanningResult bagPlanningResult = new DeterministicBagPlanner(
+                new MaximumPackCountBagCapacityPolicy(profile.maximumPacksPerBag()))
+                        .plan(new DspFullDayBagPlanningRequestFactory().create(loadedData));
         DspDatasetLoadReport report = loadedData.report();
         return new DspFullDayLoadedInput(
                 loadedData,
@@ -187,81 +182,6 @@ public final class DspFullDayInputLoader {
         return load(new DspFullDayInputPaths(productMasterCsvPath, twelveNJsonPaths), profile);
     }
 
-    private BagPlanningResult createBagPlan(LoadedDspData data, int maximumPacksPerBag) {
-        PackProvenanceRegistry provenanceRegistry = new PackProvenanceRegistry();
-        DspPackPlanFactory packPlanFactory = new DspPackPlanFactory(provenanceRegistry);
-        Map<String, ProductMasterRecord> productsById = indexProducts(data.products());
-        List<BagPlanningTote> planningTotes = new ArrayList<>();
-        Set<String> generatedPackIds = new LinkedHashSet<>();
-
-        for (InboundToteManifest manifest : data.inboundToteManifests()) {
-            List<PackPlan> packPlans = new ArrayList<>();
-            for (DspOrderItem line : manifest.items()) {
-                if (line.numberOfPacksPicked() > line.quantity()) {
-                    throw new IllegalArgumentException(
-                            "numberOfPacksPicked exceeds quantity for line " + line.lineReference());
-                }
-                if (line.numberOfPacksPicked() == 0) {
-                    continue;
-                }
-                ProductMasterRecord product = productsById.get(line.productId());
-                if (product == null) {
-                    // DspDatasetAssembler has already retained this as an unresolved load issue.
-                    // Do not invent a physical pack for it.
-                    continue;
-                }
-                PackDimensions dimensions = product.dimensions().orElse(null);
-                if (dimensions == null) {
-                    // Missing dimensions are not a reason to fabricate a physical object or pack.
-                    continue;
-                }
-                for (int ordinal = 1; ordinal <= line.numberOfPacksPicked(); ordinal++) {
-                    String packId = packId(manifest, line, ordinal);
-                    if (!generatedPackIds.add(packId)) {
-                        throw new IllegalArgumentException("Duplicate generated physical pack ID: " + packId);
-                    }
-                    packPlans.add(packPlanFactory.createPackPlan(
-                            packId,
-                            line.lineReference(),
-                            dimensions,
-                            new PackSourceProvenance(
-                                    manifest.orderSheetKey(),
-                                    line.lineReference(),
-                                    line.productId(),
-                                    manifest.serviceCentreId(),
-                                    line.pharmacyId(),
-                                    line.patientId(),
-                                    line.prescriptionId())));
-                }
-            }
-            planningTotes.add(new BagPlanningTote(
-                    manifest.orderSheetKey(),
-                    manifest.serviceCentreId(),
-                    new ToteLoadPlan(manifest.physicalToteId(), packPlans)));
-        }
-
-        if (planningTotes.isEmpty()) {
-            return new BagPlanningResult(List.of(), List.of(), List.of());
-        }
-        BagPlanningRequest request = new BagPlanningRequest(planningTotes);
-        return new DeterministicBagPlanner(
-                new MaximumPackCountBagCapacityPolicy(maximumPacksPerBag),
-                provenanceRegistry.snapshot()).plan(request);
-    }
-
-    private static Map<String, ProductMasterRecord> indexProducts(List<ProductMasterRecord> products) {
-        Map<String, ProductMasterRecord> productsById = new LinkedHashMap<>();
-        for (ProductMasterRecord product : products) {
-            if (product == null) {
-                throw new IllegalArgumentException("products must not contain null");
-            }
-            if (productsById.putIfAbsent(product.productId(), product) != null) {
-                throw new IllegalArgumentException("Duplicate productId: " + product.productId());
-            }
-        }
-        return productsById;
-    }
-
     private static void validateLoadedData(
             LoadedDspData data,
             DspServiceCentreTimetable timetable) {
@@ -274,7 +194,12 @@ public final class DspFullDayInputLoader {
         if (timetable == null) {
             throw new IllegalArgumentException("timetable must not be null");
         }
+        Map<OrderSheetKey, NotionalToteOrder> ordersBySheet = new LinkedHashMap<>();
         for (var order : data.orders()) {
+            if (ordersBySheet.putIfAbsent(order.orderSheetKey(), order) != null) {
+                throw new IllegalArgumentException(
+                        "Duplicate logical order sheet: " + order.orderSheetKey());
+            }
             ServiceCentreSchedule schedule = timetable.find(order.serviceCentreId())
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No timetable entry for loaded service centre " + order.serviceCentreId()));
@@ -289,21 +214,18 @@ public final class DspFullDayInputLoader {
             ServiceCentreSchedule schedule = timetable.find(manifest.serviceCentreId())
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No timetable entry for loaded service centre " + manifest.serviceCentreId()));
-            var order = data.orders().stream()
-                    .filter(candidate -> candidate.orderSheetKey().equals(manifest.orderSheetKey()))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Manifest has no matching logical order sheet: " + manifest.orderSheetKey()));
+            NotionalToteOrder order = ordersBySheet.get(manifest.orderSheetKey());
+            if (order == null) {
+                throw new IllegalArgumentException(
+                        "Manifest has no matching logical order sheet: "
+                                + manifest.orderSheetKey());
+            }
             if (schedule.priority() != order.orderPriority()) {
                 throw new IllegalArgumentException(
                         "Manifest timetable priority does not match loaded service centre "
                                 + manifest.serviceCentreId());
             }
         }
-    }
-
-    private static String packId(InboundToteManifest manifest, DspOrderItem line, int ordinal) {
-        return "pack-" + manifest.physicalToteId().value() + "-" + line.lineReference() + "-" + ordinal;
     }
 
     private static void validateReadableRegularFile(Path path, String fieldName) {

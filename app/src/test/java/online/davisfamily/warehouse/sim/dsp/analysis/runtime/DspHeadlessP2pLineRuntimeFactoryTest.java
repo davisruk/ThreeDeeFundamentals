@@ -117,7 +117,7 @@ class DspHeadlessP2pLineRuntimeFactoryTest {
                 payloadFactory,
                 coordinator,
                 workPlanProvider,
-                new BagPlanningResult(List.of(), List.of(), List.of()),
+                new BagPlanningResult(List.of(), List.of(), List.of(), List.of(), List.of()),
                 outboundToteAllocator,
                 online.davisfamily.warehouse.sim.totebag.control.TipperToteCompletedListener.NO_OP,
                 P2pPlaceholderDurations.defaults());

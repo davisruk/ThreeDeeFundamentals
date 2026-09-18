@@ -13,9 +13,13 @@ import org.junit.jupiter.api.Test;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.BagReservation;
 import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
@@ -123,8 +127,24 @@ class OutboundToteAllocationControllerTest {
                         .toList()),
                 new OutboundToteConfig(10));
         StoredBagReceiver receiver = new StoredBagReceiver("completed-bags");
-        BagPlanningResult planningResult = new BagPlanningResult(
-                List.of(plannedBags), List.of(), List.of());
+        List<PlannedPackTrace> traces = Arrays.stream(plannedBags)
+                .flatMap(bag -> bag.physicalPackIds().stream().map(packId ->
+                        new PlannedPackTrace(
+                                packId,
+                                new PackSourceProvenance(
+                                        bag.owningOrderSheetKeys().getFirst(),
+                                        "line-" + packId,
+                                        "product-" + packId,
+                                        bag.serviceCentreId(),
+                                        bag.pharmacyId(),
+                                        bag.patientId(),
+                                        bag.prescriptionId()),
+                                new PhysicalToteId("input-" + packId),
+                                bag.owningOrderSheetKeys().getFirst(),
+                                bag.bagKey())))
+                .toList();
+        BagPlanningResult planningResult = BagPlanningResultTestFixtures.complete(
+                List.of(plannedBags), List.of(), traces);
         return new Fixture(
                 ledger,
                 receiver,

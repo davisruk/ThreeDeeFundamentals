@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
@@ -176,7 +177,7 @@ class DspOutboundToteAllocationScenarioTest {
                 trace(plannedBags.get(1), COMPANION_SHEET, inboundToteIds.get(1), "line-companion-1"),
                 trace(plannedBags.get(2), CAPACITY_SHEET, inboundToteIds.get(0), "line-capacity-2"),
                 trace(plannedBags.get(3), OTHER_PHARMACY_SHEET, inboundToteIds.get(2), "line-other-1"));
-        BagPlanningResult planningResult = new BagPlanningResult(
+        BagPlanningResult planningResult = BagPlanningResultTestFixtures.complete(
                 plannedBags, List.of(), packTraces);
         OutboundToteAllocator allocator = new OutboundToteAllocator(
                 ledger,

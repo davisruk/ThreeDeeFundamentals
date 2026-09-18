@@ -1,9 +1,5 @@
 package online.davisfamily.warehouse.sim.dsp.bagging;
 
-import java.util.List;
-
-import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
-
 public final class MaximumPackCountBagCapacityPolicy implements BagCapacityPolicy {
     private final int maximumPackCount;
 
@@ -15,13 +11,13 @@ public final class MaximumPackCountBagCapacityPolicy implements BagCapacityPolic
     }
 
     @Override
-    public boolean canAdd(List<PackPlan> currentPackPlans, PackPlan candidatePackPlan) {
-        if (currentPackPlans == null) {
-            throw new IllegalArgumentException("currentPackPlans must not be null");
+    public boolean canAdd(int currentPackCount, BagPackDemand candidate) {
+        if (currentPackCount < 0) {
+            throw new IllegalArgumentException("currentPackCount must not be negative");
         }
-        if (candidatePackPlan == null) {
-            throw new IllegalArgumentException("candidatePackPlan must not be null");
+        if (candidate == null) {
+            throw new IllegalArgumentException("candidate must not be null");
         }
-        return currentPackPlans.size() + 1 <= maximumPackCount;
+        return currentPackCount < maximumPackCount;
     }
 }
