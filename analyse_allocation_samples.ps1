@@ -6,12 +6,14 @@ $allocationFile = "C:\misc\cpas-test\scheduler-testing\dsp-$step-object-allocati
     --events jdk.ObjectAllocationSample `
     --stack-depth 16 $recording |
     Out-File -Encoding utf8 $allocationFile
+
 $json = Get-Content $allocationFile -Raw | ConvertFrom-Json
 $samples = $json.recording.events
 
 $targets = @(
     "LinkedHashMap.newNode",
-    "HashMap.resize"
+    "HashMap.resize",
+	"StreamSupport.stream"
 )
 
 foreach ($target in $targets) {

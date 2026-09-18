@@ -3892,6 +3892,197 @@ context. If JFR sampling does not capture an event category, report it as unprov
 
 Proposed commit message: none; this step creates no repository change.
 
+### Step 34 measured result and required remediation
+
+The combined focused regression passed. The Step 25 and Step 34 recordings covered comparable
+simulated-time intervals, but PT1M/PT2M wall-clock timings were not retained, so that comparison
+remains unproven rather than passing or failing.
+
+The Steps 26-33 map targets improved materially. Weighted allocation beneath
+`LinkedHashMap.newNode` fell from 2,314,593,808 to 537,896,288 bytes (76.8%), and allocation
+beneath `HashMap.resize` fell from 2,467,845,248 to 387,733,216 bytes (84.3%). The former
+manifest-line validation, completion physical-owner construction, and correlation-requirement
+copying sites disappeared from the leading callers. `P2pServiceCentreWorkSnapshotFactory.create`
+fell to 11,068,968 linked-node bytes and remaining-tote validation fell to 10,512,632 linked-node
+bytes. The two previously indexed lookup targets remained controlled at 0.60% for
+`P2pBagCorrelationAssignmentSnapshot.lineFor` and 0.07% for
+`DspOperationalReleaseSnapshot.findByPhysicalToteId` over 2,828 execution samples.
+
+The gate nevertheless failed because weighted allocation beneath `StreamSupport.stream` rose from
+approximately 1.72 GB at Step 25 to 2,575,127,400 bytes at Step 34 over comparable work.
+`DspOperationalReleaseSnapshot` accounted for 1,146,161,016 bytes (44.51%) of the Step 34 stream
+weight. Its repeated pharmacy-group ranking path accounted for 940,787,232 bytes:
+
+- `DspOperationalReleaseSnapshot.findGroup`: 556,180,312 bytes;
+- `DspOperationalReleaseSnapshot.groupIndexFor`: 384,606,920 bytes.
+
+This is a new project-owned site at comparable weight to the callers removed by Steps 26-33.
+`groupIndexFor(...)` streams a candidate's pharmacy IDs and invokes `findGroup(...)`, which streams
+the complete immutable pharmacy-group list for every pharmacy. The snapshot already owns both
+inputs, and the result is stable for that snapshot, so the repeated nested scan is avoidable at
+the immutable snapshot boundary.
+
+The recording also contained 13 young and no old collections, compared with 32 young and one old
+collection at Step 25, but its stable post-GC heap was approximately 409 MB rather than 197 MB and
+its longest pause was 63.1 ms rather than 18.1 ms. Subsequent Step 34 pauses were 2.34-4.17 ms.
+The higher retained heap remains unexplained for comparable simulated work and must be rechecked;
+the pharmacy-group correction is not permission to speculate about or change unrelated retention.
+
+Do not begin Step 35 until both remediation steps below are complete. Do not optimize the other
+reported stream callers under this amendment. Their individual weights are materially lower and
+require the repeat profile to establish what remains after the dominant nested scan is removed.
+
+## Step 34 Remediation: Precompute Operational Candidate Pharmacy-Group Indexes
+
+### Evidence and scope
+
+Remove only the measured 940,787,232-byte repeated pharmacy-group stream path. This is an immutable
+snapshot indexing correction, not a new cross-snapshot cache and not a change to candidate ranking.
+
+### Required reading and change surface
+
+Read all of `DspOperationalReleaseSnapshot`, `ServiceCentrePharmacyGroup`, and
+`PharmacyGroupedSourceSequenceRankingPolicy`. Read `DspOperationalReleaseSnapshotTest`,
+`PharmacyGroupedSourceSequenceRankingPolicyTest`, and the snapshot construction/ordering cases in
+`DspOperationalReleaseSnapshotFactoryTest` and `DspOperationalReleaseSchedulerTest`.
+
+Modify production only in `DspOperationalReleaseSnapshot.java`. Extend only
+`DspOperationalReleaseSnapshotTest.java` and
+`PharmacyGroupedSourceSequenceRankingPolicyTest.java`. Do not change the snapshot factory,
+scheduler, ranking policy, candidate/group records, public constructors or accessors, route
+admission, elastic allocation, or another measured caller.
+
+### Implementation contract
+
+- Add one private final immutable `Map<PhysicalToteId, Integer>` to
+  `DspOperationalReleaseSnapshot`, containing the already-defined earliest pharmacy-group index
+  for every snapshot candidate. It is a derived component of one immutable snapshot, not a lazy or
+  cross-snapshot cache. Preserve candidate encounter order in its construction and publish it only
+  as part of a successfully constructed snapshot.
+- Preserve the constructor's exact validation sequence and exception precedence: candidate copy
+  and uniqueness; pharmacy-group copy/validation; station admissions; prepared keys; route
+  admissions; P2P lease and route-admission validation; elastic optional and allocation
+  validation; then candidate-to-pharmacy-group validation. Do not move candidate-group validation
+  ahead of elastic validation.
+- Refactor `copyAndValidateGroups(...)` to return a private immutable construction value containing
+  the existing ordered defensive list plus a construction-time nested lookup keyed first by the
+  normalized service-centre ID and then by normalized pharmacy ID. Populate it in the same pass
+  that currently checks null groups, duplicate service-centre/pharmacy pairs, duplicate group
+  indexes, and contiguous zero-based indexes. Preserve the existing validation messages and
+  encounter-order rules. The nested lookup remains private and must not be exposed as a public
+  accessor or mutable view.
+- At the existing final candidate-group validation point, use ordinary loops and the nested lookup
+  to validate every candidate pharmacy and calculate that candidate's minimum `groupIndex` once.
+  Preserve the exact missing-group message. Freeze the completed physical-tote-to-index map only
+  after all candidates validate; no partially built value may escape if a later candidate fails.
+- `groupIndexFor(...)` must retain the current null rejection and the current requirement that the
+  supplied candidate equal the snapshot candidate with the same physical-tote ID. After that
+  validation it returns the retained integer by physical-tote lookup. It must not stream pharmacy
+  IDs, scan pharmacy groups, construct a composite lookup key, or allocate a per-call collection.
+  Remove the now-unused private `findGroup(...)` method.
+- Keep `groupsForServiceCentre(...)`, public list ordering, `equals`, `hashCode`, `toString`, and
+  all constructor overloads value-compatible. The new derived indexes must not participate in
+  equality, hashing, or string output.
+- Do not pre-rank candidates, cache a ranking result, change the highest-priority cohort or
+  pharmacy/source-sequence comparator, retain history across snapshots, or introduce mutable
+  static state, thread-locals, synchronization, weak maps, pooling, or a second owner.
+
+### Decision-complete test contract
+
+In `DspOperationalReleaseSnapshotTest`:
+
+- retain every existing constructor validation and value-semantic assertion unchanged;
+- construct a large encounter-ordered set of service-centre/pharmacy groups and candidates, then
+  prove repeated `groupIndexFor(...)` calls return the correct value for the first, middle, and
+  last groups without changing the published candidate/group lists;
+- include a multi-pharmacy candidate whose earliest group is not its first pharmacy and assert the
+  minimum group index remains the result;
+- pass an equal-but-distinct candidate with the same physical identity and assert it remains
+  accepted, then reject null, an unknown physical tote, and a same-tote candidate with altered
+  value exactly as before;
+- retain missing-group, duplicate pharmacy, duplicate index, non-contiguous index, null-element,
+  defensive-copy, immutable-publication, constructor-overload, and record-compatible
+  `equals`/`hashCode`/`toString` coverage;
+- construct two snapshots and prove their derived indexes are isolated through differing group
+  values and unchanged historical results.
+
+In `PharmacyGroupedSourceSequenceRankingPolicyTest`, add one large mixed-centre case with repeated
+ranking calls that proves unchanged priority-cohort selection, earliest pharmacy group,
+source-sequence ordering, and deterministic tie behavior. The assertions must fail if the
+candidate index stores a candidate's first pharmacy rather than its minimum group.
+
+Step 34 remediation review, rather than production counters or reflection-based tests, must prove
+that `groupIndexFor(...)` performs only candidate identity/equality validation and one retained-map
+lookup, and that the full pharmacy-group traversal occurs only during snapshot construction.
+
+### Expected output
+
+Operational candidate ranking retains identical values and ordering while the immutable snapshot
+computes candidate pharmacy-group indexes once instead of allocating nested stream pipelines for
+every ranking comparison.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.PharmacyGroupedSourceSequenceRankingPolicyTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotFactoryTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSchedulerTest --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.*
+```
+
+### User verification
+
+No separate external run is required for this implementation step. The following repeat gate owns
+the combined regression and external profile.
+
+Proposed commit message: `Index operational pharmacy groups`
+
+## Step 34 Remediation Verification: Repeat The Failed Profile Gate
+
+This is a measurement and review checkpoint, not authorization for further production changes.
+The implementation model must review the remediation diff against its contract and report PASS,
+FAIL, or UNPROVEN for construction-only traversal, constant-time retained lookup, immutable
+publication, compatibility, ordering, and scope. No model-run command is authorized in this step.
+
+### User verification
+
+Run the Step 34 combined focused regression again:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.runtime.* --tests online.davisfamily.warehouse.sim.dsp.av02.* --tests online.davisfamily.warehouse.sim.dsp.outbound.* --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.* --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.* --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.* --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.* --tests online.davisfamily.warehouse.sim.dsp.analysis.*
+```
+
+Then rebuild the distribution, run the same external day/configuration with
+`progressIntervalSeconds=60`, and capture another 45-second JFR over the same simulated-work
+interval:
+
+```powershell
+.\gradlew :app:installDist
+```
+
+Use a distinct Step 34 remediation filename prefix. Retain hot methods, allocation by class/site,
+GC, execution stacks, weighted `LinkedHashMap.newNode`, weighted `HashMap.resize`, and weighted
+`StreamSupport.stream` caller attribution outside source control. Record PT1M/PT2M wall-clock
+timings for the new run as a future reference; their comparison with Steps 25 and 34 remains
+explicitly unproven because those earlier timings were not retained.
+
+Required acceptance:
+
+- `DspOperationalReleaseSnapshot.findGroup` is absent because the method no longer exists, and
+  `groupIndexFor` contributes no `StreamSupport.stream` allocation;
+- the former combined 940,787,232-byte pharmacy-group ranking path disappears, total weighted
+  stream allocation falls materially for equivalent work, and no new project-owned caller
+  replaces it at comparable weight;
+- the Step 34 map improvements and previously controlled Step 16-25 targets remain controlled;
+- the run advances at least to the same preserved Third Party failure without changing its
+  functional message or earlier progress semantics;
+- young/old collection counts, longest pause, and stable post-GC heap are reported. Stable
+  post-GC heap must either no longer materially exceed the approximately 197 MB Step 25 reference,
+  or the evidence must identify a concrete configuration/capture-state reason for the difference.
+  If it remains near the approximately 409 MB Step 34 value without such evidence, this gate stays
+  failed and a separate retained-heap investigation must be planned before Step 35;
+- a lower stream percentage alone is insufficient: use weighted bytes, equal-work context, and
+  caller attribution. Any uncaptured event category is UNPROVEN rather than zero.
+
+Proposed commit message: none; this verification step creates no repository change.
+
 ## Step 35: Regression, External Dataset Run, Review, And Closure
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the

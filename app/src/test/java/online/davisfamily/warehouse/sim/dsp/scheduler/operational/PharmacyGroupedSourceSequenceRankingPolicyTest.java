@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -198,6 +199,83 @@ class PharmacyGroupedSourceSequenceRankingPolicyTest {
                 List.of(laterGroup, multiPharmacyAdapted), snapshot).stream()
                 .filter(multiPharmacyAdapted::equals)
                 .count());
+    }
+
+    @Test
+    void shouldRetainMixedCentreCohortAndDeterministicGroupOrderingAcrossRepeatedRanking() {
+        OperationalReleaseSelection multiPharmacy = selection(candidate(
+                "high-multi", "high-multi-order", 1, OrderType.ADAPTED,
+                "sc-high", 999, 100,
+                List.of("pharmacy-high-late", "pharmacy-high-early")));
+        OperationalReleaseSelection sourceTwoHundred = selection(candidate(
+                "high-source-200", "high-source-200-order", 1, OrderType.FULL_PACK,
+                "sc-high", 999, 200, List.of("pharmacy-high-early")));
+        OperationalReleaseSelection sourceTwoHundredOne = selection(candidate(
+                "high-source-201", "high-source-201-order", 1, OrderType.FULL_PACK,
+                "sc-high", 999, 201, List.of("pharmacy-high-early")));
+        OperationalReleaseSelection tieB = selection(candidate(
+                "high-tie-b", "high-tie-order", 1, OrderType.FULL_PACK,
+                "sc-high", 999, 300, List.of("pharmacy-high-early")));
+        OperationalReleaseSelection tieA = selection(candidate(
+                "high-tie-a", "high-tie-order", 1, OrderType.FULL_PACK,
+                "sc-high", 999, 300, List.of("pharmacy-high-early")));
+        OperationalReleaseSelection laterGroup = selection(candidate(
+                "high-later-group", "high-later-order", 1, OrderType.FULL_PACK,
+                "sc-high", 999, 1, List.of("pharmacy-high-late")));
+
+        List<OperationalReleaseSelection> selections = new ArrayList<>(List.of(
+                laterGroup,
+                tieB,
+                sourceTwoHundredOne,
+                multiPharmacy,
+                tieA,
+                sourceTwoHundred));
+        List<ServiceCentrePharmacyGroup> groups = new ArrayList<>(List.of(
+                group("sc-high", "pharmacy-high-early", 0, 10),
+                group("sc-high", "pharmacy-high-late", 1, 1)));
+        for (int index = 0; index < 80; index++) {
+            String pharmacyId = "pharmacy-high-noise-" + index;
+            groups.add(group("sc-high", pharmacyId, index + 2, index + 20));
+            selections.add(selection(candidate(
+                    "high-noise-" + index,
+                    "high-noise-order-" + index,
+                    1,
+                    OrderType.FULL_PACK,
+                    "sc-high",
+                    999,
+                    1_000L + index,
+                    List.of(pharmacyId))));
+        }
+        groups.add(group("sc-low", "pharmacy-low", 0, 1));
+        for (int index = 0; index < 20; index++) {
+            selections.add(selection(candidate(
+                    "low-" + index,
+                    "low-order-" + index,
+                    1,
+                    OrderType.FULL_PACK,
+                    "sc-low",
+                    998,
+                    index,
+                    List.of("pharmacy-low"))));
+        }
+
+        DspOperationalReleaseSnapshot snapshot = snapshot(selections, groups);
+        List<OperationalReleaseSelection> expectedPrefix = List.of(
+                multiPharmacy,
+                sourceTwoHundred,
+                sourceTwoHundredOne,
+                tieA,
+                tieB,
+                laterGroup);
+        List<OperationalReleaseSelection> ranked = policy.rank(selections, snapshot);
+
+        assertEquals(86, ranked.size());
+        assertEquals(expectedPrefix, ranked.subList(0, expectedPrefix.size()));
+        assertTrue(ranked.stream().allMatch(selection ->
+                selection.candidate().physicalCandidate().serviceCentreId().equals("sc-high")));
+        for (int attempt = 0; attempt < 4; attempt++) {
+            assertEquals(ranked, policy.rank(selections, snapshot));
+        }
     }
 
     @Test

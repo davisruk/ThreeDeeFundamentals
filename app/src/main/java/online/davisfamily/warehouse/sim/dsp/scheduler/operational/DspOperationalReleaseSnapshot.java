@@ -30,6 +30,7 @@ public final class DspOperationalReleaseSnapshot {
     private final Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation;
     private final Map<PhysicalToteId, DspOperationalReleaseCandidate>
             candidatesByPhysicalToteId;
+    private final Map<PhysicalToteId, Integer> groupIndexByPhysicalToteId;
 
     public DspOperationalReleaseSnapshot(
             List<DspOperationalReleaseCandidate> candidates,
@@ -95,7 +96,8 @@ public final class DspOperationalReleaseSnapshot {
         CandidateCopies candidateCopies = copyCandidates(candidates);
         this.candidates = candidateCopies.candidates();
         this.candidatesByPhysicalToteId = candidateCopies.byPhysicalToteId();
-        this.pharmacyGroups = copyAndValidateGroups(pharmacyGroups);
+        GroupCopies groupCopies = copyAndValidateGroups(pharmacyGroups);
+        this.pharmacyGroups = groupCopies.pharmacyGroups();
         this.stationAdmissions = copyStationAdmissions(stationAdmissions);
         this.preparedLineKeys = copyPreparedLineKeys(preparedLineKeys);
         this.routeAdmissions = copyRouteAdmissions(
@@ -111,7 +113,8 @@ public final class DspOperationalReleaseSnapshot {
         }
         this.elasticP2pAllocation = elasticP2pAllocation;
         validateElasticAllocation(this.candidates, p2pLineLeases, elasticP2pAllocation);
-        validateCandidateGroups(this.candidates, this.pharmacyGroups);
+        this.groupIndexByPhysicalToteId = validateCandidateGroups(
+                this.candidates, groupCopies.byServiceCentreAndPharmacy());
     }
 
     public List<DspOperationalReleaseCandidate> candidates() {
@@ -180,16 +183,12 @@ public final class DspOperationalReleaseSnapshot {
         if (candidate == null) {
             throw new IllegalArgumentException("candidate must not be null");
         }
-        DspOperationalReleaseCandidate storedCandidate = Optional.ofNullable(
-                candidatesByPhysicalToteId.get(candidate.physicalCandidate().physicalToteId()))
-                .filter(candidate::equals)
-                .orElseThrow(() -> new IllegalArgumentException("candidate is not in this snapshot"));
-
-        String serviceCentreId = storedCandidate.physicalCandidate().serviceCentreId();
-        return storedCandidate.pharmacyIds().stream()
-                .mapToInt(pharmacyId -> findGroup(serviceCentreId, pharmacyId).groupIndex())
-                .min()
-                .orElseThrow();
+        DspOperationalReleaseCandidate storedCandidate = candidatesByPhysicalToteId.get(
+                candidate.physicalCandidate().physicalToteId());
+        if (storedCandidate == null || !candidate.equals(storedCandidate)) {
+            throw new IllegalArgumentException("candidate is not in this snapshot");
+        }
+        return groupIndexByPhysicalToteId.get(storedCandidate.physicalCandidate().physicalToteId());
     }
 
     public boolean stickyP2pAllocationEnabled() {
@@ -290,7 +289,7 @@ public final class DspOperationalReleaseSnapshot {
                 List.copyOf(copy), Collections.unmodifiableMap(byPhysicalToteId));
     }
 
-    private static List<ServiceCentrePharmacyGroup> copyAndValidateGroups(
+    private static GroupCopies copyAndValidateGroups(
             List<ServiceCentrePharmacyGroup> pharmacyGroups) {
         if (pharmacyGroups == null) {
             throw new IllegalArgumentException("pharmacyGroups must not be null");
@@ -298,6 +297,8 @@ public final class DspOperationalReleaseSnapshot {
         List<ServiceCentrePharmacyGroup> copy = new ArrayList<>(pharmacyGroups.size());
         Map<String, Set<Integer>> indicesByServiceCentre = new LinkedHashMap<>();
         Map<String, Set<String>> pharmacyIdsByServiceCentre = new LinkedHashMap<>();
+        Map<String, Map<String, ServiceCentrePharmacyGroup>> byServiceCentreAndPharmacy =
+                new LinkedHashMap<>();
         for (ServiceCentrePharmacyGroup group : pharmacyGroups) {
             if (group == null) {
                 throw new IllegalArgumentException("pharmacyGroups must not contain null elements");
@@ -314,6 +315,9 @@ public final class DspOperationalReleaseSnapshot {
                 throw new IllegalArgumentException(
                         "group indices must be unique within a service centre");
             }
+            byServiceCentreAndPharmacy
+                    .computeIfAbsent(group.serviceCentreId(), ignored -> new LinkedHashMap<>())
+                    .put(group.pharmacyId(), group);
             copy.add(group);
         }
         for (Map.Entry<String, Set<Integer>> entry : indicesByServiceCentre.entrySet()) {
@@ -325,7 +329,12 @@ public final class DspOperationalReleaseSnapshot {
                 }
             }
         }
-        return List.copyOf(copy);
+        Map<String, Map<String, ServiceCentrePharmacyGroup>> frozenLookup = new LinkedHashMap<>();
+        byServiceCentreAndPharmacy.forEach((serviceCentreId, groupsByPharmacy) ->
+                frozenLookup.put(serviceCentreId, Collections.unmodifiableMap(
+                        new LinkedHashMap<>(groupsByPharmacy))));
+        return new GroupCopies(
+                List.copyOf(copy), Collections.unmodifiableMap(frozenLookup));
     }
 
     private static Map<StationType, StationAdmissionSnapshot> copyStationAdmissions(
@@ -458,30 +467,34 @@ public final class DspOperationalReleaseSnapshot {
         return List.copyOf(admissions);
     }
 
-    private static void validateCandidateGroups(
+    private static Map<PhysicalToteId, Integer> validateCandidateGroups(
             List<DspOperationalReleaseCandidate> candidates,
-            List<ServiceCentrePharmacyGroup> pharmacyGroups) {
+            Map<String, Map<String, ServiceCentrePharmacyGroup>> byServiceCentreAndPharmacy) {
+        Map<PhysicalToteId, Integer> groupIndexByPhysicalToteId = new LinkedHashMap<>();
         for (DspOperationalReleaseCandidate candidate : candidates) {
             String serviceCentreId = candidate.physicalCandidate().serviceCentreId();
+            Map<String, ServiceCentrePharmacyGroup> groupsByPharmacy =
+                    byServiceCentreAndPharmacy.get(serviceCentreId);
+            int earliestGroupIndex = Integer.MAX_VALUE;
             for (String pharmacyId : candidate.pharmacyIds()) {
-                boolean groupExists = pharmacyGroups.stream().anyMatch(group ->
-                        group.serviceCentreId().equals(serviceCentreId)
-                                && group.pharmacyId().equals(pharmacyId));
-                if (!groupExists) {
+                ServiceCentrePharmacyGroup group = groupsByPharmacy == null
+                        ? null
+                        : groupsByPharmacy.get(pharmacyId);
+                if (group == null) {
                     throw new IllegalArgumentException(
                             "No pharmacy group configured for " + serviceCentreId + "/" + pharmacyId);
                 }
+                earliestGroupIndex = Math.min(earliestGroupIndex, group.groupIndex());
             }
+            groupIndexByPhysicalToteId.put(
+                    candidate.physicalCandidate().physicalToteId(), earliestGroupIndex);
         }
+        return Collections.unmodifiableMap(groupIndexByPhysicalToteId);
     }
 
-    private ServiceCentrePharmacyGroup findGroup(String serviceCentreId, String pharmacyId) {
-        return pharmacyGroups.stream()
-                .filter(group -> group.serviceCentreId().equals(serviceCentreId)
-                        && group.pharmacyId().equals(pharmacyId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "Missing validated pharmacy group for " + serviceCentreId + "/" + pharmacyId));
+    private record GroupCopies(
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            Map<String, Map<String, ServiceCentrePharmacyGroup>> byServiceCentreAndPharmacy) {
     }
 
     private static String requireTrimmed(String value, String fieldName) {

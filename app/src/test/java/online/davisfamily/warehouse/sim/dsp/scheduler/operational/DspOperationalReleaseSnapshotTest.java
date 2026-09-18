@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -83,6 +84,36 @@ class DspOperationalReleaseSnapshotTest {
     }
 
     @Test
+    void shouldResolveRepeatedLargeCandidateGroupIndexesWithoutChangingPublishedValues() {
+        List<DspOperationalReleaseCandidate> candidates = new ArrayList<>();
+        List<ServiceCentrePharmacyGroup> groups = new ArrayList<>();
+        for (int index = 0; index < 512; index++) {
+            String pharmacyId = "pharmacy-large-" + index;
+            DspSchedulerOrderState logicalState = logicalState(
+                    "order-large-" + index,
+                    OrderType.FULL_PACK,
+                    "sc-large",
+                    pharmacyId);
+            candidates.add(candidate(
+                    "tote-large-" + index,
+                    index,
+                    logicalState,
+                    List.of(pharmacyId)));
+            groups.add(group("sc-large", pharmacyId, index, index));
+        }
+
+        DspOperationalReleaseSnapshot snapshot = snapshot(candidates, groups);
+
+        for (int attempt = 0; attempt < 4; attempt++) {
+            assertEquals(0, snapshot.groupIndexFor(candidates.get(0)));
+            assertEquals(256, snapshot.groupIndexFor(candidates.get(256)));
+            assertEquals(511, snapshot.groupIndexFor(candidates.get(511)));
+        }
+        assertEquals(candidates, snapshot.candidates());
+        assertEquals(groups, snapshot.pharmacyGroups());
+    }
+
+    @Test
     void shouldPreserveMultiPharmacyAdaptedCandidateWithoutDuplication() {
         DspSchedulerOrderState logicalState = logicalState(
                 "adapted-1", OrderType.ADAPTED, "sc-1", "pharmacy-2");
@@ -99,6 +130,23 @@ class DspOperationalReleaseSnapshotTest {
         assertEquals(0, snapshot.groupIndexFor(candidate));
         assertEquals(groups, snapshot.groupsForServiceCentre(" sc-1 "));
         assertEquals(List.of(), snapshot.groupsForServiceCentre("sc-2"));
+    }
+
+    @Test
+    void shouldAcceptEqualDistinctCandidateForRetainedGroupIndex() {
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", "pharmacy-1");
+        DspOperationalReleaseCandidate stored = candidate(
+                "tote-1", 1, logicalState, List.of("pharmacy-1"));
+        DspOperationalReleaseCandidate equalDistinct = candidate(
+                "tote-1", 1, logicalState, List.of("pharmacy-1"));
+        DspOperationalReleaseSnapshot snapshot = snapshot(
+                List.of(stored), List.of(group("sc-1", "pharmacy-1", 0, 1)));
+
+        assertNotSame(stored, equalDistinct);
+        assertEquals(stored, equalDistinct);
+        assertEquals(0, snapshot.groupIndexFor(equalDistinct));
+        assertThrows(IllegalArgumentException.class, () -> snapshot.groupIndexFor(null));
     }
 
     @Test
@@ -240,6 +288,32 @@ class DspOperationalReleaseSnapshotTest {
                 IllegalArgumentException.class,
                 () -> snapshot.groupIndexFor(candidate(
                         "tote-1", 99, logicalState, List.of("pharmacy-1"))));
+    }
+
+    @Test
+    void shouldKeepDerivedGroupIndexesIsolatedAcrossSnapshots() {
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", "pharmacy-1");
+        DspOperationalReleaseCandidate candidate = candidate(
+                "tote-1", 1, logicalState, List.of("pharmacy-1"));
+        DspOperationalReleaseSnapshot first = snapshot(
+                List.of(candidate), List.of(
+                        group("sc-1", "pharmacy-1", 0, 1),
+                        group("sc-1", "pharmacy-2", 1, 2)));
+        DspOperationalReleaseSnapshot second = snapshot(
+                List.of(candidate), List.of(
+                        group("sc-1", "pharmacy-2", 0, 2),
+                        group("sc-1", "pharmacy-1", 1, 1)));
+
+        assertEquals(0, first.groupIndexFor(candidate));
+        assertEquals(1, second.groupIndexFor(candidate));
+        assertEquals(0, first.groupIndexFor(candidate));
+        assertEquals(List.of(
+                group("sc-1", "pharmacy-1", 0, 1),
+                group("sc-1", "pharmacy-2", 1, 2)), first.pharmacyGroups());
+        assertEquals(List.of(
+                group("sc-1", "pharmacy-2", 0, 2),
+                group("sc-1", "pharmacy-1", 1, 1)), second.pharmacyGroups());
     }
 
     @Test
