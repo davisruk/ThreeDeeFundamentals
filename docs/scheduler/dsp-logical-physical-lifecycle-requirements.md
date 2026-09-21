@@ -409,6 +409,14 @@ Renderable rules:
 
 This implementation must retain enough provenance and assignment history for future 32R work, but it must not infer or implement 32R physical identifier fields without the applicable interface specification.
 
+The reportable/executable partition defined by
+`docs/scheduler/dsp-recoverable-input-rejection-plan.md` is also part of that future boundary. A
+DSP-visible fulfilment line rejected during input preflight remains available as a terminal
+reporting record but creates no logical slot, pack, bag, station work, or physical tote. If every
+line of a fulfilment order is rejected, future 32R generation must report the terminal order
+without relying on a physical tote or exit-sensor event. Internal rejection reasons are not 32R
+status codes. MANUAL input remains deliberately discarded and is not part of this reporting view.
+
 ## 17. Required Invariants
 
 1. Logical order identity and physical tote identity are distinct.
@@ -427,6 +435,8 @@ This implementation must retain enough provenance and assignment history for fut
 14. Missing lines are logical outcomes, not fake physical packs.
 15. Lifecycle history is sufficient to explain source-to-output containment.
 16. 32R generation remains out of scope.
+17. Reportable malformed input remains separate from executable physical work.
+18. An all-rejected order has no physical DSP tote but retains a future reporting outcome.
 
 ## 18. Completion Criteria For The Lifecycle Programme
 

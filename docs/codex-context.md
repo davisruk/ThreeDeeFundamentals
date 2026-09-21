@@ -100,9 +100,10 @@ Read:
 11. `docs/scheduler/dsp-station-route-continuation-plan.md`
 12. `docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`
 13. `docs/scheduler/dsp-full-day-analysis-metrics-inspection-plan.md`
-14. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
-15. `docs/machines/exceptions-station-requirements.md`
-16. `docs/machines/phase-1-stations-roadmap.md`
+14. `docs/scheduler/dsp-recoverable-input-rejection-plan.md`
+15. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
+16. `docs/machines/exceptions-station-requirements.md`
+17. `docs/machines/phase-1-stations-roadmap.md`
 
 Current scheduler decisions:
 
@@ -264,6 +265,10 @@ Current programme position:
 - station route continuation: complete, verified, and merged to `master`, with detailed plan at `docs/scheduler/dsp-station-route-continuation-plan.md`;
 - operational EMPTY end-to-end proof: complete, verified, and merged to `master` at `afe40f5`, with detailed plan at `docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`; the locked production change surface was empty and the feature created one scenario test class;
 - full-day execution, metrics, and inspection: active planned work on `feature/dsp-full-day-analysis-metrics-inspection`, with detailed plan at `docs/scheduler/dsp-full-day-analysis-metrics-inspection-plan.md`; use headless fixed steps, the explicitly uncalibrated elastic profile, and provisional P2P-output-closed outcomes;
+- recoverable full-day input rejection: active prerequisite work on the same scheduler branch, with
+  detailed plan at `docs/scheduler/dsp-recoverable-input-rejection-plan.md`; preserve a
+  DSP-visible reportable view and a small immutable rejection catalog, project only executable
+  dependency-closed lines into bag/station/runtime work, and keep the bag planner strict;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:
@@ -323,6 +328,8 @@ Planned Phase 1 order:
 - operational EMPTY end-to-end proof: complete, verified, and merged to `master` at `afe40f5`
 - full-day execution, metrics, and inspection: active planned work on
   `feature/dsp-full-day-analysis-metrics-inspection`
+- recoverable malformed-input rejection: active prerequisite on the same scheduler branch; no new
+  branch is required
 - Exception Area: lifecycle foundation is available; implementation remains deferred to its own branch
 - tote lid open/close machines
 
@@ -373,6 +380,13 @@ Data-source split:
 - Product master owns Third Party bin location and physical dimensions.
 - A product may be automatable in general but appear on an ADAPTED line because Columbus made an order-specific labelling decision.
 - MANUAL line type is excluded from active simulation.
+- Successfully mapped DSP-visible fulfilment lines may be reportable without being executable when
+  an attributable input anomaly is quarantined. Rejected lines are retained separately for audit
+  and future 32R, create no physical work, and do not require status checks in scheduler or station
+  hot paths.
+- A fulfilment order whose every line is rejected creates no physical OSR/AV02/transport tote.
+  Future 32R must support that non-physical terminal reporting case; 32R generation and status
+  mapping remain deferred.
 
 ## Renderable Lifecycle / Performance
 

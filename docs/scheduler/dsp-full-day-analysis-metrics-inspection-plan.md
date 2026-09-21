@@ -24,7 +24,8 @@ snapshot allocations, with a shared profile gate after Step 25. The Step 25 prof
 those corrections and exposed a bounded set of remaining polling-driven snapshot, validation,
 completion, request, and metrics allocations. Steps 26-33 apply the static hot-path audit without
 broadening into general engine work, Step 34 owns the shared performance/functional gate, and Step
-35 owns final regression, external verification, review, and closure. A broader engine and
+35 owns final regression, external verification, review, and closure after the recoverable-input
+prerequisite in `docs/scheduler/dsp-recoverable-input-rejection-plan.md`. A broader engine and
 render-integrated simulation allocation review remains deferred until the functional full-day path
 is working end to end.
 
@@ -4095,6 +4096,14 @@ Third Party correlation failure at line `000243688425` and the picked-count reje
 `TOTE0007170945/001` line `000243554437` before beginning this closure step. Together the plans
 preserve complete logical bag demand and bag `x of y` identity; they do not add Exception Station
 outcomes, empty physical bags, or Not Supplied labels.
+
+The corrected external run then exposed a genuine input anomaly at
+`TOTE0007170299/001` line `000243514306`: an ADAPTED fulfilment alias has no ADAPTED source
+instruction. Step 35 is additionally blocked by
+`docs/scheduler/dsp-recoverable-input-rejection-plan.md`. Complete that plan first. The external
+run must retain the line in final rejection reporting, exclude it from executable work, continue
+with later valid input, and create no physical tote when an order has no executable lines. This is
+not Exception Station processing and does not implement 32R or choose a protocol status.
 
 Do not begin Exception Station, calibration, renderer integration, outbound dispatch, 32R, or the
 deferred broad engine/simulation optimization review during closure.

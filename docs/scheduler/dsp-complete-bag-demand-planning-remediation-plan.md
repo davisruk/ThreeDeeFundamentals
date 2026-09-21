@@ -14,6 +14,13 @@ the correction plan referenced below.
 > efficiency, and Exception-deferral decisions. Do not implement or restore the superseded
 > decisions from this historical checkpoint plan.
 
+> **Later malformed-input boundary:** Production-day verification subsequently found an ADAPTED
+> fulfilment alias with no source preparation line. Its treatment is decision-complete in
+> `docs/scheduler/dsp-recoverable-input-rejection-plan.md`: retain the line for reporting, exclude
+> its dependency-closed group before planning, and keep this plan's bag planner checks strict as
+> invariant backstops. Do not invent a slot, pack, bag, station outcome, or Exception outcome for
+> rejected input.
+
 ## Purpose
 
 Correct the full-day bag plan so it is derived from complete executable prescription demand,

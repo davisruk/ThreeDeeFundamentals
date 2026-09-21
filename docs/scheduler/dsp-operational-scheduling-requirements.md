@@ -226,6 +226,13 @@ EMPTY additionally requires AV02 physical tote admission and consumes no OSR phy
 
 The simulator must ensure that all source ADAPTED work needed by retained fulfilment orders exists or has a terminal unresolved outcome. The first profile does not model operationally late preparation arriving after the relevant dispatch work has passed through DSP.
 
+For successfully parsed but malformed input, the pre-runtime partition in
+`docs/scheduler/dsp-recoverable-input-rejection-plan.md` controls this rule. An independently
+attributable fulfilment/source correlation group is retained for reporting but removed from
+executable scheduling before bag planning. That rejected input is terminal for the analysis and is
+not an operational incomplete outcome, station visit, or completion dependency. If no executable
+line remains for an order, no physical OSR or AV02 tote is created.
+
 ## 8. Candidate Ranking
 
 There is no documented rule that ASSOCIATED/EMPTY must be released ahead of FULL_PACK. Remove that assumption from future scheduling profiles.

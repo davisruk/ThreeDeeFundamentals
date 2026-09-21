@@ -2,7 +2,15 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: planned; no correction implementation started.
+Status: Steps 1-3 are implemented with focused verification. Step 4 reached its external-run gate,
+which exposed the separate malformed-correlation case now specified by
+`docs/scheduler/dsp-recoverable-input-rejection-plan.md`; full-suite and successful external-data
+verification remain pending.
+
+> **Follow-on input-rejection boundary:** This plan remains authoritative for one retained
+> executable line/one pack and for ignoring both 12N numeric fields. The follow-on plan above does
+> not weaken those rules: it partitions attributable malformed input before strict bag planning,
+> retains rejected fulfilment lines for reporting, and creates no slot or physical work for them.
 
 ## Purpose
 

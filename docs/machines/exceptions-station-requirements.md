@@ -13,6 +13,12 @@ The fundamental principle is:
 
 > **Exceptions must not stop the DSP flow.**
 
+This document governs operational exceptions after executable work exists. Recoverable malformed
+12N input is a separate pre-runtime reporting concern defined by
+`docs/scheduler/dsp-recoverable-input-rejection-plan.md`; it must not create an Exception Station
+visit, NS label, empty physical bag, or simulated pack. Future 32R status mapping for rejected
+input remains deferred.
+
 An exception may remain unresolved, but the affected order, bag and tote
 shall be appropriately marked and the tote shall continue downstream
 after exception processing. A tote shall never be routed backwards to an

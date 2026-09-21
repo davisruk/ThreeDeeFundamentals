@@ -20,6 +20,8 @@ Always read these documents before starting:
    `docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`
 5. The active full-day analysis plan,
    `docs/scheduler/dsp-full-day-analysis-metrics-inspection-plan.md`
+6. The active recoverable-input correction plan,
+   `docs/scheduler/dsp-recoverable-input-rejection-plan.md`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 
@@ -200,7 +202,7 @@ The adapting station Phase 1 and simulation-reset branches are complete and merg
 
 Third Party Area Phase 1, logical/physical identity, and inbound physical tote lifecycle are complete and merged.
 
-The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete, verified, and merged to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Generic station processing and generic station route continuation are complete, verified, and merged to `master`. The operational EMPTY end-to-end proof is complete, verified, and merged to `master` at `afe40f5`, with no production-code changes. Full-day execution, metrics, and inspection using the explicitly uncalibrated elastic profile are now active planned work on `feature/dsp-full-day-analysis-metrics-inspection`. Station-to-station visual topology, renderer integration, calibrated timing, outbound dispatch/32R, Exception Station behavior, and MANUAL/MANUAL_MERGE handling remain deferred.
+The operational scheduler foundations through deadline-aware elastic P2P allocation are complete, verified, and merged. Eventual P2P assignment remains separate from the first route-entry destination; simulation-thread command application commits leases/assignments; arrival only revalidates; full quiescence and output closure precede release. AV02 operational allocation is complete, verified, and merged to `master`. It introduces inbound `PRE_P2P` totes only for logical EMPTY work, while P2P outbound tote supply and generated output sheets remain independent. Generic station processing and generic station route continuation are complete, verified, and merged to `master`. The operational EMPTY end-to-end proof is complete, verified, and merged to `master` at `afe40f5`, with no production-code changes. Full-day execution, metrics, and inspection using the explicitly uncalibrated elastic profile are active work on `feature/dsp-full-day-analysis-metrics-inspection`. The current prerequisite is `docs/scheduler/dsp-recoverable-input-rejection-plan.md`: attributable malformed 12N input is preserved in an immutable reporting catalog and excluded once from executable work before strict bag planning. It must not become station work or conceal planner/runtime defects. Station-to-station visual topology, renderer integration, calibrated timing, outbound dispatch/32R, Exception Station behavior, and MANUAL/MANUAL_MERGE handling remain deferred.
 
 Completed bag-planning behavior:
 

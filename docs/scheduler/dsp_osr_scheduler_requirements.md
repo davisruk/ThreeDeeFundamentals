@@ -5,6 +5,11 @@ The production-data correction in
 12N pack cardinality: every retained line represents one pack, and `numberOfPacks` and
 `numberOfPacksPicked` do not affect demand, station selection, or physical pack count.
 
+The recoverable-input boundary in
+`docs/scheduler/dsp-recoverable-input-rejection-plan.md` is authoritative when a DSP-visible line
+cannot form a valid executable ADAPTED correlation. Such lines remain reportable but do not enter
+scheduler, station, bag, pack, workload, or physical-tote state. MANUAL exclusion is unchanged.
+
 This document defines the requirements for a simulation of the DSP (Dispensing Support Pharmacy) warehouse, consolidating:
 
 - TDP-182 (logical model)
