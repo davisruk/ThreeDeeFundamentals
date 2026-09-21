@@ -51,8 +51,8 @@ public class ProductMasterThirdPartyPackPlanFactory implements ThirdPartyPackPla
         if (lineWork == null) {
             throw new IllegalArgumentException("lineWork must not be null");
         }
-        if (packOrdinal <= 0 || packOrdinal > lineWork.outstandingQuantity()) {
-            throw new IllegalArgumentException("packOrdinal must identify an outstanding pack");
+        if (packOrdinal != 1) {
+            throw new IllegalArgumentException("packOrdinal must be 1");
         }
 
         ProductMasterRecord product = productMasterRepository.findByProductId(lineWork.productId())

@@ -31,7 +31,7 @@ public record ThirdPartyVisitPlan(
         lineWork = List.copyOf(lineWork);
     }
 
-    public int outstandingPackCount() {
-        return lineWork.stream().mapToInt(ThirdPartyLineWork::outstandingQuantity).sum();
+    public int packCount() {
+        return lineWork.size();
     }
 }

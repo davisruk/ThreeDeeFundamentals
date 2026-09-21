@@ -57,14 +57,10 @@ public final class DspFullDayBagPlanningRequestFactory {
 
             List<PackPlan> physicalPackPlans = new ArrayList<>();
             for (DspOrderItem manifestLine : manifest.items()) {
-                validatePickedCount(manifestLine, manifest.orderSheetKey());
                 DspOrderItem orderLine = orderLinesBySheet.get(manifest.orderSheetKey())
                         .get(manifestLine.lineReference());
                 if (orderLine.lineType() == DspOrderLineType.ADAPTED
                         || order.orderType() == OrderType.ADAPTED) {
-                    continue;
-                }
-                if (manifestLine.numberOfPacksPicked() == 0) {
                     continue;
                 }
                 ProductMasterRecord product = requireProduct(
@@ -72,34 +68,36 @@ public final class DspFullDayBagPlanningRequestFactory {
                         manifestLine.productId(),
                         manifest.orderSheetKey(),
                         manifestLine.lineReference());
+                if (product.thirdParty()) {
+                    continue;
+                }
                 PackDimensions dimensions = requireDimensions(product, manifest.orderSheetKey(),
                         manifestLine.lineReference());
                 PackSourceProvenance sourceProvenance = sourceProvenance(
                         order,
                         manifestLine);
-                for (int ordinal = 1; ordinal <= manifestLine.numberOfPacksPicked(); ordinal++) {
-                    String packId = initialPhysicalPackId(manifest.physicalToteId(), manifestLine, ordinal);
-                    if (!reservedPhysicalPackIds.add(packId)) {
-                        throw new IllegalArgumentException(
-                                "Duplicate reserved physical pack ID: " + packId);
-                    }
-                    ObservationKey slotKey = new ObservationKey(
-                            manifest.orderSheetKey(), manifestLine.lineReference(), ordinal);
-                    if (observationsBySlot.putIfAbsent(
-                            slotKey,
-                            new PhysicalPackObservation(
-                                    packId,
-                                    manifest.physicalToteId(),
-                                    dimensions)) != null) {
-                        throw new IllegalArgumentException(
-                                "Duplicate initial physical observation for " + slotKey);
-                    }
-                    physicalPackPlans.add(packPlanFactory.createPackPlan(
-                            packId,
-                            manifestLine.lineReference(),
-                            dimensions,
-                            sourceProvenance));
+                int ordinal = 1;
+                String packId = initialPhysicalPackId(manifest.physicalToteId(), manifestLine, ordinal);
+                if (!reservedPhysicalPackIds.add(packId)) {
+                    throw new IllegalArgumentException(
+                            "Duplicate reserved physical pack ID: " + packId);
                 }
+                ObservationKey slotKey = new ObservationKey(
+                        manifest.orderSheetKey(), manifestLine.lineReference(), ordinal);
+                if (observationsBySlot.putIfAbsent(
+                        slotKey,
+                        new PhysicalPackObservation(
+                                packId,
+                                manifest.physicalToteId(),
+                                dimensions)) != null) {
+                    throw new IllegalArgumentException(
+                            "Duplicate initial physical observation for " + slotKey);
+                }
+                physicalPackPlans.add(packPlanFactory.createPackPlan(
+                        packId,
+                        manifestLine.lineReference(),
+                        dimensions,
+                        sourceProvenance));
             }
 
             if (manifest.orderType() != OrderType.ADAPTED) {
@@ -123,8 +121,6 @@ public final class DspFullDayBagPlanningRequestFactory {
                                     + fulfilmentOrder.orderSheetKey() + " line "
                                     + fulfilmentLine.lineReference());
                 }
-                validatePickedCount(fulfilmentLine, fulfilmentOrder.orderSheetKey());
-
                 SourceLine sourceLine = resolveSourceLine(
                         fulfilmentOrder,
                         fulfilmentLine,
@@ -148,69 +144,53 @@ public final class DspFullDayBagPlanningRequestFactory {
                         fulfilmentLine.lineReference());
 
                 boolean adaptedCollection = sourceLine != null;
-                if (adaptedCollection) {
-                    if (product.thirdParty() && source.numberOfPacksPicked() != 0) {
-                        throw thirdPartyPickedCountError(sourceOrder, source);
-                    }
-                } else if (product.thirdParty()) {
-                    if (fulfilmentLine.numberOfPacksPicked() != 0) {
-                        throw thirdPartyPickedCountError(fulfilmentOrder, fulfilmentLine);
-                    }
-                } else if (fulfilmentLine.numberOfPacksPicked() != fulfilmentLine.quantity()) {
-                    throw ordinaryPickedCountError(fulfilmentOrder, fulfilmentLine);
-                }
-
                 PackSourceProvenance provenance = sourceProvenance(sourceOrder, source);
-                for (int ordinal = 1; ordinal <= source.quantity(); ordinal++) {
-                    PlannedPackSlotKey slotKey = new PlannedPackSlotKey(
-                            sourceOrder.orderSheetKey(), source.lineReference(), ordinal);
-                    ObservationKey observationKey = new ObservationKey(
-                            fulfilmentOrder.orderSheetKey(), fulfilmentLine.lineReference(), ordinal);
-                    PhysicalPackObservation observation = adaptedCollection
-                            ? null
-                            : observationsBySlot.get(observationKey);
-                    if (!adaptedCollection && product.thirdParty()) {
-                        observation = null;
-                    }
+                int ordinal = 1;
+                PlannedPackSlotKey slotKey = new PlannedPackSlotKey(
+                        sourceOrder.orderSheetKey(), source.lineReference(), ordinal);
+                ObservationKey observationKey = new ObservationKey(
+                        fulfilmentOrder.orderSheetKey(), fulfilmentLine.lineReference(), ordinal);
+                PhysicalPackObservation observation = adaptedCollection || product.thirdParty()
+                        ? null
+                        : observationsBySlot.get(observationKey);
 
-                    String reservedPackId;
-                    java.util.Optional<PhysicalToteId> initialToteId;
-                    if (observation != null) {
-                        if (!claimedObservations.add(observationKey)) {
-                            throw new IllegalArgumentException(
-                                    "Initial physical observation claimed more than once: "
-                                            + observationKey);
-                        }
-                        reservedPackId = observation.physicalPackId();
-                        initialToteId = java.util.Optional.of(observation.physicalToteId());
-                        if (!observation.dimensions().equals(dimensions)) {
-                            throw new IllegalArgumentException(
-                                    "Initial physical dimensions do not match demand for "
-                                            + fulfilmentOrder.orderSheetKey() + " line "
-                                            + fulfilmentLine.lineReference());
-                        }
-                    } else if (!adaptedCollection && !product.thirdParty()) {
+                String reservedPackId;
+                java.util.Optional<PhysicalToteId> initialToteId;
+                if (observation != null) {
+                    if (!claimedObservations.add(observationKey)) {
                         throw new IllegalArgumentException(
-                                "Picked slot has no initial observation for "
-                                        + fulfilmentOrder.orderSheetKey() + " line "
-                                        + fulfilmentLine.lineReference() + " ordinal " + ordinal);
-                    } else {
-                        reservedPackId = stationPendingPackId(source.lineReference(), ordinal);
-                        initialToteId = java.util.Optional.empty();
-                        if (!reservedPhysicalPackIds.add(reservedPackId)) {
-                            throw new IllegalArgumentException(
-                                    "Duplicate reserved physical pack ID: " + reservedPackId);
-                        }
+                                "Initial physical observation claimed more than once: "
+                                        + observationKey);
                     }
-
-                    packDemands.add(new BagPackDemand(
-                            slotKey,
-                            reservedPackId,
-                            dimensions,
-                            provenance,
-                            fulfilmentOrder.orderSheetKey(),
-                            initialToteId));
+                    reservedPackId = observation.physicalPackId();
+                    initialToteId = java.util.Optional.of(observation.physicalToteId());
+                    if (!observation.dimensions().equals(dimensions)) {
+                        throw new IllegalArgumentException(
+                                "Initial physical dimensions do not match demand for "
+                                        + fulfilmentOrder.orderSheetKey() + " line "
+                                        + fulfilmentLine.lineReference());
+                    }
+                } else if (!adaptedCollection && !product.thirdParty()) {
+                    throw new IllegalArgumentException(
+                            "Ordinary line has no initial observation for "
+                                    + fulfilmentOrder.orderSheetKey() + " line "
+                                    + fulfilmentLine.lineReference());
+                } else {
+                    reservedPackId = stationPendingPackId(source.lineReference(), ordinal);
+                    initialToteId = java.util.Optional.empty();
+                    if (!reservedPhysicalPackIds.add(reservedPackId)) {
+                        throw new IllegalArgumentException(
+                                "Duplicate reserved physical pack ID: " + reservedPackId);
+                    }
                 }
+
+                packDemands.add(new BagPackDemand(
+                        slotKey,
+                        reservedPackId,
+                        dimensions,
+                        provenance,
+                        fulfilmentOrder.orderSheetKey(),
+                        initialToteId));
             }
         }
 
@@ -324,7 +304,6 @@ public final class DspFullDayBagPlanningRequestFactory {
             DspOrderItem sourceLine) {
         if (!sourceLine.lineReference().equals(fulfilmentLine.lineReference())
                 || !sourceLine.productId().equals(fulfilmentLine.productId())
-                || sourceLine.quantity() != fulfilmentLine.quantity()
                 || !sourceLine.pharmacyId().equals(fulfilmentLine.pharmacyId())
                 || !sourceLine.patientId().equals(fulfilmentLine.patientId())
                 || !sourceLine.prescriptionId().equals(fulfilmentLine.prescriptionId())
@@ -360,7 +339,6 @@ public final class DspFullDayBagPlanningRequestFactory {
     private static boolean sameLineIdentity(DspOrderItem first, DspOrderItem second) {
         return first.lineReference().equals(second.lineReference())
                 && first.productId().equals(second.productId())
-                && first.quantity() == second.quantity()
                 && first.pharmacyId().equals(second.pharmacyId())
                 && first.patientId().equals(second.patientId())
                 && first.prescriptionId().equals(second.prescriptionId())
@@ -392,35 +370,6 @@ public final class DspFullDayBagPlanningRequestFactory {
                 "Executable line has no pack dimensions for "
                         + orderSheetKey + " line " + lineReference
                         + " product " + product.productId()));
-    }
-
-    private static void validatePickedCount(DspOrderItem line, OrderSheetKey orderSheetKey) {
-        if (line.numberOfPacksPicked() > line.quantity()) {
-            throw new IllegalArgumentException(
-                    "numberOfPacksPicked exceeds quantity for "
-                            + orderSheetKey + " line " + line.lineReference());
-        }
-    }
-
-    private static IllegalArgumentException thirdPartyPickedCountError(
-            NotionalToteOrder order,
-            DspOrderItem line) {
-        return new IllegalArgumentException(
-                "Third Party line must have numberOfPacksPicked == 0 for "
-                        + order.orderSheetKey() + " line " + line.lineReference());
-    }
-
-    private static IllegalArgumentException ordinaryPickedCountError(
-            NotionalToteOrder order,
-            DspOrderItem line) {
-        String reason = line.numberOfPacksPicked() == 0
-                ? "zero-picked"
-                : "positive-partial";
-        return new IllegalArgumentException(
-                "Ordinary fulfilment line has " + reason + " count for "
-                        + order.orderSheetKey() + " line " + line.lineReference()
-                        + " (picked " + line.numberOfPacksPicked()
-                        + " of " + line.quantity() + ")");
     }
 
     private static PackSourceProvenance sourceProvenance(

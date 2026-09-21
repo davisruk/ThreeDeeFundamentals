@@ -101,7 +101,7 @@ public class ThirdPartyArea {
                     visit.orderSheetKey(),
                     visit.physicalToteId(),
                     visit.lineWork().size(),
-                    visit.outstandingPackCount(),
+                    visit.packCount(),
                     remainingProcessingSeconds);
         }
     }

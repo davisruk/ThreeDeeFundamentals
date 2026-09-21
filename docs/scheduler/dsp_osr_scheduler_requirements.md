@@ -1,5 +1,10 @@
 # DSP Simulation Requirements (Consolidated)
 
+The production-data correction in
+`docs/scheduler/dsp-one-retained-line-one-pack-correction-plan.md` is authoritative for executable
+12N pack cardinality: every retained line represents one pack, and `numberOfPacks` and
+`numberOfPacksPicked` do not affect demand, station selection, or physical pack count.
+
 This document defines the requirements for a simulation of the DSP (Dispensing Support Pharmacy) warehouse, consolidating:
 
 - TDP-182 (logical model)
@@ -407,8 +412,8 @@ From KNAPP:
 
 Third Party work is line- and lifecycle-specific:
 
-- an ADAPTED source line requires Third Party when its product has a Third Party location and outstanding quantity;
-- a `FULL_PACK` line in a `FULL_PACK`, `ASSOCIATED`, or `EMPTY` fulfilment order requires a direct Third Party pick when its product has a Third Party location and outstanding quantity;
+- an ADAPTED source line requires one Third Party pick when its product has a Third Party location;
+- a `FULL_PACK` line in a `FULL_PACK`, `ASSOCIATED`, or `EMPTY` fulfilment order requires one direct Third Party pick when its product has a Third Party location;
 - an ADAPTED line in an ASSOCIATED or EMPTY order is collected through Adapting and must not be repicked at Third Party;
 - completed Third Party work must not cause a revisit.
 

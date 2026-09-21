@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,8 +34,9 @@ class AdaptingCollectFlowTest {
     void shouldRegisterCollectedAdaptedPackAgainstOriginalSourceLine() {
         AdaptedLineStore store = new AdaptedLineStore();
         PackProvenanceRegistry provenanceRegistry = new PackProvenanceRegistry();
-        DspOrderItem collectedLine = adaptedPreparedLine("line-1", "dispatch-1", 2);
+        DspOrderItem collectedLine = adaptedPreparedLine("line-1", "dispatch-1", 3, 2);
         store.stage(collectedLine, new OrderSheetKey("adapted-source-1", 1), "SC-1");
+        List<Integer> resolvedOrdinals = new ArrayList<>();
         AdaptingBench bench = new AdaptingBench("bench-1", store, 1d);
         AdaptingArea area = new AdaptingArea(List.of(bench), 0);
         MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();
@@ -46,7 +48,12 @@ class AdaptingCollectFlowTest {
                 emptyRuntimeState(),
                 loadPlans,
                 new DefaultCollectedPackPlanFactory(
-                        testDimensions(), new DspPackPlanFactory(provenanceRegistry)));
+                        testDimensions(),
+                        new DspPackPlanFactory(provenanceRegistry),
+                        (line, ordinal) -> {
+                            resolvedOrdinals.add(ordinal);
+                            return line.line().lineReference();
+                        }));
         AdaptingVisitFactory visitFactory = new AdaptingVisitFactory();
 
         NotionalToteOrder collectingOrder = dispatchOrder(
@@ -60,7 +67,7 @@ class AdaptingCollectFlowTest {
                         DspOrderLineType.ADAPTED,
                         "dispatch-1",
                         1,
-                        0));
+                        1));
 
         area.submitVisit(visitFactory.create(new PhysicalToteId("collect-tote-1"), collectingOrder));
         bench.startProcessing();
@@ -71,11 +78,12 @@ class AdaptingCollectFlowTest {
         assertEquals(1, completion.collectedLines().size());
 
         ToteLoadPlan updatedLoadPlan = loadPlans.getLoadPlanFor("collect-tote-1");
-        assertEquals(3, updatedLoadPlan.getPackPlans().size());
-        assertEquals(List.of("bag-existing", "line-1", "line-1"),
+        assertEquals(2, updatedLoadPlan.getPackPlans().size());
+        assertEquals(List.of("bag-existing", "line-1"),
                 updatedLoadPlan.getPackPlans().stream().map(PackPlan::correlationId).toList());
-        assertEquals(List.of("pack-existing-1", "pack-line-1-1", "pack-line-1-2"),
+        assertEquals(List.of("pack-existing-1", "pack-line-1-1"),
                 updatedLoadPlan.getPackPlans().stream().map(PackPlan::packId).toList());
+        assertEquals(List.of(1), resolvedOrdinals);
         var provenance = provenanceRegistry.find("pack-line-1-1").orElseThrow();
         assertEquals(new OrderSheetKey("adapted-source-1", 1), provenance.sourceOrderSheetKey());
         assertEquals("line-1", provenance.lineReference());
@@ -88,7 +96,7 @@ class AdaptingCollectFlowTest {
     @Test
     void shouldCreateLoadPlanForEmptyCollectingTote() {
         AdaptedLineStore store = new AdaptedLineStore();
-        DspOrderItem collectedLine = adaptedPreparedLine("line-2", "dispatch-2", 1);
+        DspOrderItem collectedLine = adaptedPreparedLine("line-2", "dispatch-2", 3, 2);
         store.stage(collectedLine, new OrderSheetKey("adapted-source-2", 1), "SC-1");
         AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
         AdaptingArea area = new AdaptingArea(List.of(bench), 0);
@@ -108,12 +116,12 @@ class AdaptingCollectFlowTest {
                 new DspOrderItem(
                         "line-2",
                         "product-line-2",
-                        1,
+                        2,
                         "0000310",
                         DspOrderLineType.ADAPTED,
                         "dispatch-2",
                         1,
-                        0));
+                        1));
 
         area.submitVisit(visitFactory.create(new PhysicalToteId("empty-tote-1"), collectingOrder));
         bench.startProcessing();
@@ -168,7 +176,11 @@ class AdaptingCollectFlowTest {
                 0L);
     }
 
-    private static DspOrderItem adaptedPreparedLine(String lineId, String targetOrderId, int quantity) {
+    private static DspOrderItem adaptedPreparedLine(
+            String lineId,
+            String targetOrderId,
+            int quantity,
+            int numberOfPacksPicked) {
         return new DspOrderItem(
                 lineId,
                 "product-" + lineId,
@@ -177,7 +189,7 @@ class AdaptingCollectFlowTest {
                 DspOrderLineType.ADAPTED,
                 targetOrderId,
                 1,
-                0);
+                numberOfPacksPicked);
     }
 
     private static PackDimensions testDimensions() {

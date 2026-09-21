@@ -39,8 +39,7 @@ public class ThirdPartyVisitFactory {
         for (DspOrderItem line : order.items()) {
             ProductMasterRecord product = productMasterRepository.findByProductId(line.productId())
                     .orElseThrow(() -> new IllegalArgumentException("No product master data for " + line.productId()));
-            int outstandingQuantity = line.quantity() - line.numberOfPacksPicked();
-            if (outstandingQuantity <= 0 || !product.thirdParty()) {
+            if (!product.thirdParty()) {
                 continue;
             }
 
@@ -50,7 +49,6 @@ public class ThirdPartyVisitFactory {
             }
             lineWork.add(new ThirdPartyLineWork(
                     line,
-                    outstandingQuantity,
                     product.thirdPartyLocation().orElseThrow(),
                     workType));
         }

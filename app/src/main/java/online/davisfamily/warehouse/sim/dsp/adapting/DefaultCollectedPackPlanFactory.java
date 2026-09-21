@@ -66,25 +66,24 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
             if (collectedLine == null) {
                 throw new IllegalArgumentException("collectedLines must not contain null");
             }
-            for (int packNumber = 1; packNumber <= collectedLine.line().quantity(); packNumber++) {
-                String lineReference = collectedLine.line().lineReference();
-                String correlationId = correlationResolver.resolve(collectedLine, packNumber);
-                if (correlationId == null || correlationId.isBlank()) {
-                    throw new IllegalStateException("Resolved correlationId must not be blank");
-                }
-                packPlans.add(packPlanFactory.createPackPlan(
-                        "pack-" + lineReference + "-" + packNumber,
-                        correlationId.trim(),
-                        packDimensions,
-                        new PackSourceProvenance(
-                                collectedLine.sourceOrderSheetKey(),
-                                lineReference,
-                                collectedLine.line().productId(),
-                                collectedLine.sourceServiceCentreId(),
-                                collectedLine.line().pharmacyId(),
-                                collectedLine.line().patientId(),
-                                collectedLine.line().prescriptionId())));
+            int packOrdinal = 1;
+            String lineReference = collectedLine.line().lineReference();
+            String correlationId = correlationResolver.resolve(collectedLine, packOrdinal);
+            if (correlationId == null || correlationId.isBlank()) {
+                throw new IllegalStateException("Resolved correlationId must not be blank");
             }
+            packPlans.add(packPlanFactory.createPackPlan(
+                    "pack-" + lineReference + "-" + packOrdinal,
+                    correlationId.trim(),
+                    packDimensions,
+                    new PackSourceProvenance(
+                            collectedLine.sourceOrderSheetKey(),
+                            lineReference,
+                            collectedLine.line().productId(),
+                            collectedLine.sourceServiceCentreId(),
+                            collectedLine.line().pharmacyId(),
+                            collectedLine.line().patientId(),
+                            collectedLine.line().prescriptionId())));
         }
         return List.copyOf(packPlans);
     }

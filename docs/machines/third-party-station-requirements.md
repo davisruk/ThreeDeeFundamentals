@@ -2,6 +2,11 @@
 
 Status: agreed requirements baseline for `feature/third-party-station-phase-1`.
 
+The one-retained-line/one-pack correction in
+`docs/scheduler/dsp-one-retained-line-one-pack-correction-plan.md` is authoritative where this
+baseline previously described picked or outstanding quantities. The routing, capacity, lifecycle,
+and exactly-once requirements remain unchanged.
+
 ## 1. Purpose
 
 The Third Party Area supplies products held in manually replenished shelving beside a through-track. A tote stops in the area and an operative picks the required packs from the product's configured bin location.
@@ -110,16 +115,18 @@ Sheet sequencing must operate over retained simulated sheets so an omitted manua
 
 ## 7. Third Party Work Selection
 
-Third Party work is selected from order type, line type, picked quantity, and product master data.
+Third Party work is selected from order type, line type, and product master data. Every qualifying
+retained line represents exactly one pack. `numberOfPacks` and `numberOfPacksPicked` are protocol
+metadata and do not affect selection or pack count.
 
 | Current flow | Qualifying line | Third Party behaviour |
 |---|---|---|
-| `ADAPTED` preparation order | Product has a Third Party location and has outstanding quantity | Pick into the preparation tote, then continue to Adapting |
-| `FULL_PACK`, `ASSOCIATED`, or `EMPTY` | Line type is `FULL_PACK`, product has a Third Party location, and has outstanding quantity | Pick directly into the fulfilment tote |
+| `ADAPTED` preparation order | Product has a Third Party location | Pick the line's one pack into the preparation tote, then continue to Adapting |
+| `FULL_PACK`, `ASSOCIATED`, or `EMPTY` | Line type is `FULL_PACK` and product has a Third Party location | Pick the line's one pack directly into the fulfilment tote |
 | `ASSOCIATED` or `EMPTY` | Line type is `ADAPTED`, even when its product has a Third Party location | Do not repick at Third Party; collect its preparation outcome through Adapting |
 | Any order | Line type is `MANUAL` | Ignore under the active simulation policy |
 
-Outstanding quantity is derived from the ordered pack quantity and `numberOfPacksPicked`. Completed Third Party work must be recorded so the same line is not picked twice or cause a revisit.
+Completed Third Party work must be recorded so the same line is not picked twice or cause a revisit.
 
 An ASSOCIATED order may contain both:
 

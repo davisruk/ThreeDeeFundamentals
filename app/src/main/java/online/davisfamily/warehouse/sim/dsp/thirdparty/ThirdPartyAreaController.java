@@ -83,9 +83,7 @@ public class ThirdPartyAreaController {
 
         List<PackPlan> additionalPackPlans = new ArrayList<>();
         for (ThirdPartyLineWork lineWork : newLineWork) {
-            for (int packOrdinal = 1; packOrdinal <= lineWork.outstandingQuantity(); packOrdinal++) {
-                additionalPackPlans.add(packPlanFactory.createPackPlan(visit, lineWork, packOrdinal));
-            }
+            additionalPackPlans.add(packPlanFactory.createPackPlan(visit, lineWork, 1));
         }
 
         ToteLoadPlan updatedPlan = existingPlan.withAdditionalPackPlans(additionalPackPlans);

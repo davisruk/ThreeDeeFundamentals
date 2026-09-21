@@ -37,21 +37,21 @@ class DspFullDayInputLoaderTest {
         Path adapted = write(directory, "01-adapted.json", message(
                 "adapted-order", "001", "02", "adapted-tote", "104", "999",
                 "adapted-line", "02", "product-a", "adapted-pharmacy", "adapted-patient",
-                "adapted-prescription", "0001", "0001")
+                "adapted-prescription", "0003", "0002")
                 .replace("\"referenceOrderId\":\"adapted-order\"",
                         "\"referenceOrderId\":\"empty-order\""));
         Path full = write(directory, "02-full.json", message(
                 "full-order", "001", "05", "full-tote", "108", "998",
                 "full-line", "03", "product-b", "full-pharmacy", "full-patient",
-                "full-prescription", "0001", "0001"));
+                "full-prescription", "0003", "0000"));
         Path associated = write(directory, "03-associated.json", message(
                 "associated-order", "001", "04", "associated-tote", "104", "999",
                 "associated-line", "05", "product-a", "associated-pharmacy", "associated-patient",
-                "associated-prescription", "0001", "0001"));
+                "associated-prescription", "0002", "0001"));
         Path empty = write(directory, "04-empty.json", message(
                 "empty-order", "001", "03", null, "104", "999",
                 "adapted-line", "02", "product-a", "adapted-pharmacy", "adapted-patient",
-                "adapted-prescription", "0001", "0000"));
+                "adapted-prescription", "0002", "0001"));
         Path manual = write(directory, "05-manual.json", message(
                 "manual-order", "001", "01", null, "104", "999",
                 "manual-line", "01", "product-a", "manual-pharmacy", "manual-patient",
@@ -63,7 +63,7 @@ class DspFullDayInputLoaderTest {
         Path partialKnown = write(directory, "07-partial-known.json", message(
                 "partial-order", "001", "05", "partial-known-tote", "104", "999",
                 "partial-known-line", "05", "product-a", "partial-pharmacy", "partial-patient",
-                "partial-prescription", "0001", "0001"));
+                "partial-prescription", "0003", "0001"));
         Path partialUnresolved = write(directory, "08-partial-unresolved.json", message(
                 "partial-order", "001", "05", "partial-unresolved-tote", "104", "999",
                 "partial-unresolved-line", "03", "missing-partial-product", "partial-pharmacy", "partial-patient",
@@ -83,6 +83,8 @@ class DspFullDayInputLoaderTest {
         assertEquals(List.of("adapted-tote", "full-tote", "associated-tote", "partial-known-tote"),
                 data.inboundToteManifests().stream().map(manifest -> manifest.physicalToteId().value()).toList());
         assertEquals(DspOrderLineType.FULL_PACK, data.orders().get(1).items().getFirst().lineType());
+        assertEquals(3, data.orders().get(1).items().getFirst().quantity());
+        assertEquals(0, data.orders().get(1).items().getFirst().numberOfPacksPicked());
         assertEquals(List.of("partial-known-line"), data.orders().get(4).items().stream()
                 .map(DspOrderItem::lineReference).toList());
         assertEquals(1, data.report().ignoredManualMessageCount());
@@ -94,6 +96,15 @@ class DspFullDayInputLoaderTest {
 
         BagPlanningResult plan = loaded.bagPlanningResult();
         assertEquals(3, plan.packTraces().size());
+        assertEquals(4, plan.plannedPackSlots().size());
+        assertEquals(1, plan.plannedPackSlots().stream()
+                .filter(slot -> slot.slotKey().lineReference().equals("full-line"))
+                .count());
+        assertEquals(1, plan.plannedPackSlots().stream()
+                .filter(slot -> slot.slotKey().lineReference().equals("adapted-line"))
+                .count());
+        assertTrue(plan.packTraces().stream()
+                .anyMatch(trace -> trace.physicalPackId().equals("pack-full-tote-full-line-1")));
         assertEquals(4, plan.plannedBags().size());
         for (PlannedPackTrace trace : plan.packTraces()) {
             assertTrue(trace.physicalPackId().startsWith("pack-"));

@@ -22,8 +22,8 @@ public final class PlannedSlotCollectedPackCorrelationResolver
         if (collectedLine == null) {
             throw new IllegalArgumentException("collectedLine must not be null");
         }
-        if (packOrdinal <= 0 || packOrdinal > collectedLine.line().quantity()) {
-            throw new IllegalArgumentException("packOrdinal must identify a collected pack");
+        if (packOrdinal != 1) {
+            throw new IllegalArgumentException("packOrdinal must be 1");
         }
 
         PlannedPackSlot slot = bagPlanningResult.requirePlannedPackSlot(new PlannedPackSlotKey(

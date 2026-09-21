@@ -4,7 +4,6 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 
 public record ThirdPartyLineWork(
         DspOrderItem line,
-        int outstandingQuantity,
         String binLocation,
         ThirdPartyWorkType workType) {
 
@@ -13,9 +12,6 @@ public record ThirdPartyLineWork(
             throw new IllegalArgumentException("line must not be null");
         }
         binLocation = requireValue(binLocation, "binLocation");
-        if (outstandingQuantity <= 0) {
-            throw new IllegalArgumentException("outstandingQuantity must be positive");
-        }
         if (workType == null) {
             throw new IllegalArgumentException("workType must not be null");
         }

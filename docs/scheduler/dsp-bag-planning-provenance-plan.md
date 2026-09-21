@@ -1,5 +1,12 @@
 # DSP Bag Planning And Provenance Plan
 
+> **Later production-data correction:** Any statement in this completed historical plan that
+> preserves outstanding-quantity behaviour or derives physical pack count from `quantity` or
+> `numberOfPacksPicked` is superseded by
+> `docs/scheduler/dsp-one-retained-line-one-pack-correction-plan.md`. Every retained source line
+> represents one pack. Preserve this plan's bag identity, provenance, correlation, and machine
+> boundaries.
+
 Branch: `feature/dsp-bag-planning-provenance`
 
 Status: implementation complete and verified; pending merge to `master`.

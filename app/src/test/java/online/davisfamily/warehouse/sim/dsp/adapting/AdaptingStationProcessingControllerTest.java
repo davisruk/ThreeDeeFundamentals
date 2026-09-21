@@ -70,7 +70,7 @@ class AdaptingStationProcessingControllerTest {
         assertEquals(StationProcessingDispositionType.CONTINUE, associatedDisposition.type());
         assertSame(associated.routedTote(), associatedDisposition.claim().routedTote());
         assertEquals(associated.routedTote().physicalToteId(), associatedDisposition.physicalToteId());
-        assertTrue(associatedDisposition.currentLoadPlan().getPackPlans().size() > 0);
+        assertEquals(2, associatedDisposition.currentLoadPlan().getPackPlans().size());
         assertTrue(associatedDisposition.currentLoadPlan() != associatedBefore);
         assertEquals(AdaptingBenchState.IDLE,
                 associated.area().bench(new AdaptingBenchId("bench-1")).state());
@@ -91,6 +91,7 @@ class AdaptingStationProcessingControllerTest {
         assertEquals(OperationalPhysicalToteSource.AV02,
                 empty.routedTote().launchRequest().source());
         assertTrue(emptyDisposition.currentLoadPlan() != emptyBefore);
+        assertEquals(1, emptyDisposition.currentLoadPlan().getPackPlans().size());
         assertEquals(empty.routedTote().physicalToteId(), emptyDisposition.currentLoadPlan().physicalToteId());
     }
 
@@ -510,14 +511,14 @@ class AdaptingStationProcessingControllerTest {
                 List.of(new DspOrderItem(
                         "line-" + orderId,
                         "product-1",
-                        1,
+                        3,
                         "pharmacy-1",
                         "patient-" + orderId,
                         "prescription-" + orderId,
                         DspOrderLineType.ADAPTED,
                         orderId,
                         1,
-                        0)),
+                        1)),
                 0,
                 1);
     }

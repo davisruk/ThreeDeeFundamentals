@@ -35,7 +35,7 @@ public record ThirdPartyVisit(
         return plan.lineWork();
     }
 
-    public int outstandingPackCount() {
-        return plan.outstandingPackCount();
+    public int packCount() {
+        return plan.packCount();
     }
 }

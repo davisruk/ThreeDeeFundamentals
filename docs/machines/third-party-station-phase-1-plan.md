@@ -4,6 +4,12 @@ Branch: `feature/third-party-station-phase-1`
 
 Status: implementation complete and verified on 2026-08-17. Pending branch closure and merge to `master`.
 
+> **Later production-data correction:** This completed historical plan modelled outstanding work
+> as `quantity - numberOfPacksPicked`. That interpretation is superseded by
+> `docs/scheduler/dsp-one-retained-line-one-pack-correction-plan.md`: every qualifying retained
+> line represents one Third Party pack, and neither 12N numeric field affects selection or pack
+> count. Preserve the completed Phase 1 routing, admission, lifecycle, and exactly-once boundaries.
+
 ## Purpose
 
 Implement the Phase 1 Third Party Area and the data-model corrections required to support it.

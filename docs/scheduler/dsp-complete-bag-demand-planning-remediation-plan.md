@@ -2,7 +2,17 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: planned; no implementation started.
+Status: checkpoint implementation committed as `c755dac`; numeric-field semantics superseded by
+the correction plan referenced below.
+
+> **Supersession notice:** The checkpoint implementation of this plan was committed as `c755dac`.
+> Production data subsequently disproved this plan's use of `numberOfPacks` as a slot multiplier
+> and `numberOfPacksPicked` as physical/station-pending evidence. The correction is specified in
+> `docs/scheduler/dsp-one-retained-line-one-pack-correction-plan.md`. That plan supersedes every
+> quantity, picked-count, outstanding-quantity, and per-line multi-ordinal decision below while
+> preserving this plan's bag ownership, lifecycle, ordering, correlation, P2P, immutable-index,
+> efficiency, and Exception-deferral decisions. Do not implement or restore the superseded
+> decisions from this historical checkpoint plan.
 
 ## Purpose
 

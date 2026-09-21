@@ -51,7 +51,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
 
     @Test
     void shouldPreservePatientAndPrescriptionForAdaptedThirdPartyCollection() {
-        DspOrderItem sourceLine = adaptedLine(ASSOCIATED_ORDER_ID);
+        DspOrderItem sourceLine = adaptedLine(ASSOCIATED_ORDER_ID, 3, 2);
         NotionalToteOrder adaptedOrder = order(
                 "adapted-source-1",
                 "adapted-tote-1",
@@ -61,7 +61,7 @@ class ThirdPartyAdaptedCollectIntegrationTest {
                 ASSOCIATED_ORDER_ID,
                 "associated-tote-1",
                 OrderType.ASSOCIATED,
-                adaptedLine(ASSOCIATED_ORDER_ID));
+                adaptedLine(ASSOCIATED_ORDER_ID, 2, 1));
         PhysicalToteId adaptedToteId = new PhysicalToteId("adapted-tote-1");
         PhysicalToteId associatedToteId = new PhysicalToteId("associated-tote-1");
         InMemoryProductMasterRepository products = new InMemoryProductMasterRepository(List.of(
@@ -152,18 +152,21 @@ class ThirdPartyAdaptedCollectIntegrationTest {
         assertFalse(adaptedLineStore.contains(preparedLineKey));
     }
 
-    private static DspOrderItem adaptedLine(String referenceOrderId) {
+    private static DspOrderItem adaptedLine(
+            String referenceOrderId,
+            int numberOfPacks,
+            int numberOfPacksPicked) {
         return new DspOrderItem(
                 LINE_REFERENCE,
                 PRODUCT_ID,
-                1,
+                numberOfPacks,
                 "0000310",
                 "patient-1",
                 "prescription-1",
                 DspOrderLineType.ADAPTED,
                 referenceOrderId,
                 1,
-                0);
+                numberOfPacksPicked);
     }
 
     private static NotionalToteOrder order(

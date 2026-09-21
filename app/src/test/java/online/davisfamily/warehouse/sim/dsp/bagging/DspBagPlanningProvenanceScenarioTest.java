@@ -90,6 +90,12 @@ class DspBagPlanningProvenanceScenarioTest {
         assertEquals(new OrderSheetKey("associated-order-1", 1), adaptedTrace.fulfilmentOrderSheetKey());
         assertEquals(new PhysicalToteId("associated-tote-1"), adaptedTrace.inputPhysicalToteId());
         assertEquals(new BagKey(ADAPTED_PRESCRIPTION, 1), adaptedTrace.bagKey());
+        assertEquals(1, scenario.result().packTraces().stream()
+                .filter(trace -> trace.sourceProvenance().lineReference().equals("line-adapted"))
+                .count());
+        assertEquals(1, scenario.result().packTraces().stream()
+                .filter(trace -> trace.sourceProvenance().lineReference().equals("line-fit"))
+                .count());
 
         for (PlannedPackTrace trace : scenario.result().packTraces()) {
             assertEquals(trace.sourceProvenance(),
@@ -158,7 +164,7 @@ class DspBagPlanningProvenanceScenarioTest {
                         (visit, lineWork) -> lineWork.lineReference(),
                         packPlanFactory);
         ThirdPartyLineWork thirdPartyWork = new ThirdPartyLineWork(
-                thirdPartyLine, 1, "Y74", ThirdPartyWorkType.DIRECT_FULFILMENT);
+                thirdPartyLine, "Y74", ThirdPartyWorkType.DIRECT_FULFILMENT);
         ThirdPartyVisit thirdPartyVisit = new ThirdPartyVisit(
                 new PhysicalToteId("full-tote-1"),
                 new ThirdPartyVisitPlan(
@@ -275,10 +281,10 @@ class DspBagPlanningProvenanceScenarioTest {
                         "patientId":"patient-1",
                         "prescriptionId":"prescription-fit",
                         "productId":"product-third-party",
-                        "numberOfPacks":"0001",
+                        "numberOfPacks":"0003",
                         "referenceOrderId":"full-order-1",
                         "referenceSheetNumber":"001",
-                        "numberOfPacksPicked":"0001"
+                        "numberOfPacksPicked":"0002"
                       },
                       {
                         "orderLineNumber":"line-overflow",
@@ -328,10 +334,10 @@ class DspBagPlanningProvenanceScenarioTest {
                         "patientId":"patient-2",
                         "prescriptionId":"prescription-adapted",
                         "productId":"product-adapted",
-                        "numberOfPacks":"0001",
+                        "numberOfPacks":"0003",
                         "referenceOrderId":"associated-order-1",
                         "referenceSheetNumber":"001",
-                        "numberOfPacksPicked":"0001"
+                        "numberOfPacksPicked":"0002"
                       }
                     ]
                   }

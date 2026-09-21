@@ -44,6 +44,8 @@ class ThirdPartyAreaTest {
                 area.snapshot().activeVisits().stream()
                         .map(state -> state.orderSheetKey().orderId())
                         .toList());
+        assertEquals(1, area.snapshot().activeVisits().getFirst().lineCount());
+        assertEquals(1, area.snapshot().activeVisits().getFirst().packCount());
     }
 
     @Test
@@ -113,7 +115,6 @@ class ThirdPartyAreaTest {
                                         orderId,
                                         1,
                                         0),
-                                1,
                                 "Y74",
                                 ThirdPartyWorkType.DIRECT_FULFILMENT))));
     }

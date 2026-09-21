@@ -92,7 +92,6 @@ class ThirdPartyStationAdmissionAdapterTest {
                 OrderType.FULL_PACK,
                 List.of(new ThirdPartyLineWork(
                         line,
-                        1,
                         "Y74",
                         ThirdPartyWorkType.DIRECT_FULFILMENT)));
     }

@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
@@ -26,6 +27,8 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineRecord;
+import online.davisfamily.warehouse.sim.dsp.adapting.PlannedSlotCollectedPackCorrelationResolver;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriter;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
@@ -93,6 +96,25 @@ class DspFullDayAnalysisScenarioTest {
                 .anyMatch(line -> line.utilization() > 0d));
         assertEquals(13, report.metrics().closedOutboundToteCount());
         assertEquals(13, report.metrics().allocatedBagCount());
+
+        var ordinaryNonUnitSlots = first.input().bagPlan().plannedPackSlots().stream()
+                .filter(slot -> slot.slotKey().sourceOrderSheetKey()
+                        .equals(new OrderSheetKey("full-104", 1))
+                        && slot.slotKey().lineReference().equals("full-104-line-1"))
+                .toList();
+        assertEquals(1, ordinaryNonUnitSlots.size());
+        assertEquals(Optional.of(new PhysicalToteId("full-104-tote-1")),
+                ordinaryNonUnitSlots.getFirst().initialPhysicalToteId());
+
+        var directThirdPartySlots = first.input().bagPlan().plannedPackSlots().stream()
+                .filter(slot -> slot.slotKey().sourceOrderSheetKey()
+                        .equals(new OrderSheetKey("full-109-third-party", 1))
+                        && slot.slotKey().lineReference().equals("full-109-third-party-line"))
+                .toList();
+        assertEquals(1, directThirdPartySlots.size());
+        assertTrue(directThirdPartySlots.getFirst().initialPhysicalToteId().isEmpty());
+        assertEquals("pack-full-109-third-party-line-1",
+                directThirdPartySlots.getFirst().reservedPhysicalPackId());
 
         Map<String, ?> completions = report.serviceCentres().stream()
                 .collect(Collectors.toMap(result -> result.serviceCentreId(), result -> result.outcome()));
@@ -183,8 +205,27 @@ class DspFullDayAnalysisScenarioTest {
 
         assertTrue(slot.initialPhysicalToteId().isEmpty());
         assertEquals("pack-000243688425-1", slot.reservedPhysicalPackId());
-        assertEquals(3, plannedBag.physicalPackIds().size());
-        assertEquals(new BagSequencePosition(3, 3),
+        assertEquals(2, plannedBag.physicalPackIds().size());
+        assertEquals(1, input.bagPlan().plannedPackSlots().stream()
+                .filter(candidate -> candidate.slotKey().sourceOrderSheetKey().equals(sourceSheet)
+                        && candidate.slotKey().lineReference().equals("000243688425"))
+                .count());
+        var sourceLine = input.data().orders().stream()
+                .filter(order -> order.orderSheetKey().equals(sourceSheet))
+                .flatMap(order -> order.items().stream())
+                .filter(line -> line.lineReference().equals("000243688425"))
+                .findFirst()
+                .orElseThrow();
+        AdaptedLineRecord collectedLine = AdaptedLineRecord.fromPreparedLine(
+                sourceLine,
+                sourceSheet,
+                "104");
+        PlannedSlotCollectedPackCorrelationResolver resolver =
+                new PlannedSlotCollectedPackCorrelationResolver(input.bagPlan());
+        assertEquals(slot.bagKey().correlationId(), resolver.resolve(collectedLine, 1));
+        assertThrows(IllegalArgumentException.class, () -> resolver.resolve(collectedLine, 0));
+        assertThrows(IllegalArgumentException.class, () -> resolver.resolve(collectedLine, 2));
+        assertEquals(new BagSequencePosition(1, 1),
                 input.bagPlan().requireBagSequencePosition(plannedBag.bagKey()));
         assertEquals(plannedBag.bagKey().correlationId(), slot.bagKey().correlationId());
         assertEquals(sourceSheet, slot.sourceProvenance().sourceOrderSheetKey());
@@ -216,7 +257,7 @@ class DspFullDayAnalysisScenarioTest {
 
             assertTrue(collected, "the adapted collection must publish its reserved pack");
             assertTrue(completed, "P2P must close the bag only after all planned packs arrive");
-            assertEquals(3, loadPlan(runtime, associatedToteId).getPackPlans().stream()
+            assertEquals(2, loadPlan(runtime, associatedToteId).getPackPlans().stream()
                     .filter(pack -> pack.correlationId().equals(slot.bagKey().correlationId()))
                     .count());
             assertTrue(runtime.snapshot().p2pLines().stream()
@@ -697,7 +738,8 @@ class DspFullDayAnalysisScenarioTest {
             messages.add(writeMessage(directory, "full-104-" + index + ".json", message(
                     "full-104", "001", "05", "full-104-tote-" + index, "104", "999",
                     List.of(line("full-104-line-" + index, "05", "product-a", "pharmacy-104",
-                            "patient-104", "rx-104", 1, 1)))));
+                            "patient-104", "rx-104", index == 1 ? 3 : 1,
+                            index == 1 ? 0 : 1)))));
         }
         for (int index = 1; index <= 2; index++) {
             messages.add(writeMessage(directory, "full-104-overflow-" + index + ".json", message(
@@ -721,7 +763,7 @@ class DspFullDayAnalysisScenarioTest {
         messages.add(writeMessage(directory, "09-full-109-third-party.json", message(
                 "full-109-third-party", "001", "05", "full-109-third-party-tote", "109", "990",
                 List.of(line("full-109-third-party-line", "03", "product-b", "pharmacy-109",
-                        "patient-109", "rx-109-third-party", 2, 0)))));
+                        "patient-109", "rx-109-third-party", 3, 2)))));
         for (int index = 1; index <= 8; index++) {
             messages.add(writeMessage(directory, "10-full-109-" + index + ".json", message(
                     "full-109-" + index, "001", "05", "full-109-tote-" + index, "109", "990",
@@ -743,7 +785,7 @@ class DspFullDayAnalysisScenarioTest {
         Path adapted = writeMessage(directory, "01-adapted-integrated.json", message(
                 "adapted-integrated", "001", "02", "adapted-integrated-tote", "104", "999",
                 List.of(line("000243688425", "02", "third-party-product",
-                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0)))
+                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 3, 2)))
                 .replace("\"referenceOrderId\":\"adapted-integrated\"",
                         "\"referenceOrderId\":\"associated-integrated\""));
         Path associated = writeMessage(directory, "02-associated-integrated.json", message(
@@ -752,7 +794,7 @@ class DspFullDayAnalysisScenarioTest {
                         line("ordinary-integrated-line", "05", "ordinary-product",
                                 "pharmacy-integrated", "patient-integrated", "20002460000226956", 8, 8),
                         line("000243688425", "02", "third-party-product",
-                                "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0))));
+                                "pharmacy-integrated", "patient-integrated", "20002460000226956", 2, 1))));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, List.of(adapted, associated)), profile);
     }
@@ -767,13 +809,13 @@ class DspFullDayAnalysisScenarioTest {
         Path adapted = writeMessage(directory, "01-adapted-pending.json", message(
                 "adapted-integrated", "001", "02", "adapted-integrated-tote", "104", "999",
                 List.of(line("000243688425", "02", "third-party-product",
-                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0)))
+                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 3, 2)))
                 .replace("\"referenceOrderId\":\"adapted-integrated\"",
                         "\"referenceOrderId\":\"associated-integrated\""));
         Path associated = writeMessage(directory, "02-associated-pending.json", message(
                 "associated-integrated", "001", "04", "associated-integrated-tote", "104", "999",
                 List.of(line("000243688425", "02", "third-party-product",
-                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 1, 0))));
+                        "pharmacy-integrated", "patient-integrated", "20002460000226956", 2, 1))));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, List.of(adapted, associated)), profile);
     }

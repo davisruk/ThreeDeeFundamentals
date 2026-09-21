@@ -7,7 +7,7 @@ public record ThirdPartyVisitState(
         OrderSheetKey orderSheetKey,
         PhysicalToteId physicalToteId,
         int lineCount,
-        int outstandingPackCount,
+        int packCount,
         double remainingProcessingSeconds) {
 
     public ThirdPartyVisitState {
@@ -20,8 +20,8 @@ public record ThirdPartyVisitState(
         if (lineCount <= 0) {
             throw new IllegalArgumentException("lineCount must be > 0");
         }
-        if (outstandingPackCount <= 0) {
-            throw new IllegalArgumentException("outstandingPackCount must be > 0");
+        if (packCount <= 0) {
+            throw new IllegalArgumentException("packCount must be > 0");
         }
         if (!Double.isFinite(remainingProcessingSeconds) || remainingProcessingSeconds < 0d) {
             throw new IllegalArgumentException("remainingProcessingSeconds must be finite and >= 0");

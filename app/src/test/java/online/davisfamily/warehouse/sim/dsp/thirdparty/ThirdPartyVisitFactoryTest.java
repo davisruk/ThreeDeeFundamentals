@@ -27,7 +27,7 @@ class ThirdPartyVisitFactoryTest {
                 product("complete", "Y75"));
         NotionalToteOrder order = order(
                 OrderType.ADAPTED,
-                line("line-1", "third-party", DspOrderLineType.ADAPTED, 3, 1),
+                line("line-1", "third-party", DspOrderLineType.ADAPTED, 3, 2),
                 line("line-2", "regular", DspOrderLineType.ADAPTED, 1, 0),
                 line("line-3", "complete", DspOrderLineType.ADAPTED, 1, 1));
 
@@ -36,12 +36,16 @@ class ThirdPartyVisitFactoryTest {
         assertEquals(order.orderSheetKey(), plan.orderSheetKey());
         assertEquals(order.serviceCentreId(), plan.serviceCentreId());
         assertEquals(OrderType.ADAPTED, plan.orderType());
-        assertEquals(2, plan.outstandingPackCount());
-        assertEquals(List.of(new ThirdPartyLineWork(
-                order.items().getFirst(),
-                2,
-                "Y74",
-                ThirdPartyWorkType.ADAPTED_PREPARATION)), plan.lineWork());
+        assertEquals(2, plan.packCount());
+        assertEquals(List.of(
+                new ThirdPartyLineWork(
+                        order.items().getFirst(),
+                        "Y74",
+                        ThirdPartyWorkType.ADAPTED_PREPARATION),
+                new ThirdPartyLineWork(
+                        order.items().get(2),
+                        "Y75",
+                        ThirdPartyWorkType.ADAPTED_PREPARATION)), plan.lineWork());
         assertThrows(UnsupportedOperationException.class, () -> plan.lineWork().clear());
     }
 
@@ -72,7 +76,7 @@ class ThirdPartyVisitFactoryTest {
                     .getFirst();
 
             assertEquals(ThirdPartyWorkType.DIRECT_FULFILMENT, lineWork.workType());
-            assertEquals(2, lineWork.outstandingQuantity());
+            assertEquals("line-1", lineWork.lineReference());
         }
     }
 
@@ -97,12 +101,15 @@ class ThirdPartyVisitFactoryTest {
     }
 
     @Test
-    void shouldReturnNoVisitWhenThirdPartyWorkIsAlreadyComplete() {
+    void shouldSelectThirdPartyLineWhenPickedCountIsPositive() {
         ThirdPartyVisitFactory factory = factory(product("third-party", "Y74"));
 
-        assertTrue(factory.planFor(order(
+        ThirdPartyVisitPlan plan = factory.planFor(order(
                 OrderType.FULL_PACK,
-                line("line-1", "third-party", DspOrderLineType.FULL_PACK, 1, 1))).isEmpty());
+                line("line-1", "third-party", DspOrderLineType.FULL_PACK, 1, 2))).orElseThrow();
+
+        assertEquals(1, plan.packCount());
+        assertEquals("line-1", plan.lineWork().getFirst().lineReference());
     }
 
     @Test

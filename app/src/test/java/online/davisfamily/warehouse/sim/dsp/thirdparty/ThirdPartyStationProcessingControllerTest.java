@@ -455,7 +455,6 @@ class ThirdPartyStationProcessingControllerTest {
                         orderId,
                         1,
                         0),
-                1,
                 "Y74",
                 lineType == DspOrderLineType.ADAPTED
                         ? ThirdPartyWorkType.ADAPTED_PREPARATION
