@@ -65,7 +65,7 @@ class OutboundGeneratedSheetIntegrationTest {
         PlannedBag secondBag = bag("rx-1", 2, associatedFulfilmentSheet);
         PackSourceProvenance sourceProvenance = new PackSourceProvenance(
                 adaptedSourceSheet,
-                "line-1",
+                "line-2",
                 "product-1",
                 "SC-1",
                 "pharmacy-1",

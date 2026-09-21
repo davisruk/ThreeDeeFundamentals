@@ -207,8 +207,8 @@ class DspHeadlessP2pLineRuntimeTest {
                 List.of(plannedBag),
                 List.of(firstPlan, secondPlan),
                 List.of(
-                        trace("pack-1", firstId, bagKey, orderSheetKey),
-                        trace("pack-2", secondId, bagKey, orderSheetKey)));
+                        trace("pack-1", firstId, bagKey, orderSheetKey, "line-1"),
+                        trace("pack-2", secondId, bagKey, orderSheetKey, "line-2")));
 
         MutableWorkPlanProvider provider = new MutableWorkPlanProvider();
         provider.put(correlationId, 2);
@@ -270,12 +270,13 @@ class DspHeadlessP2pLineRuntimeTest {
             String packId,
             PhysicalToteId inputToteId,
             BagKey bagKey,
-            OrderSheetKey orderSheetKey) {
+            OrderSheetKey orderSheetKey,
+            String lineReference) {
         return new PlannedPackTrace(
                 packId,
                 new PackSourceProvenance(
                         orderSheetKey,
-                        "line-1",
+                        lineReference,
                         "product-1",
                         "SC-1",
                         "pharmacy-1",

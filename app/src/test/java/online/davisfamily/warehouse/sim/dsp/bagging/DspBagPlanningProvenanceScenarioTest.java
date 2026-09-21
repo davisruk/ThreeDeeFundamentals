@@ -50,9 +50,14 @@ class DspBagPlanningProvenanceScenarioTest {
         Scenario scenario = createScenario();
 
         assertEquals(
-                List.of(FIT_PRESCRIPTION, OVERFLOW_PRESCRIPTION, FIT_PRESCRIPTION),
+                List.of(
+                        FIT_PRESCRIPTION,
+                        OVERFLOW_PRESCRIPTION,
+                        OVERFLOW_PRESCRIPTION,
+                        OVERFLOW_PRESCRIPTION,
+                        FIT_PRESCRIPTION),
                 scenario.fullPackOrder().items().stream().map(DspOrderItem::prescriptionId).toList());
-        assertEquals(List.of(PATIENT, PATIENT, PATIENT),
+        assertEquals(List.of(PATIENT, PATIENT, PATIENT, PATIENT, PATIENT),
                 scenario.fullPackOrder().items().stream().map(DspOrderItem::patientId).toList());
         assertEquals(
                 List.of(
@@ -61,10 +66,10 @@ class DspBagPlanningProvenanceScenarioTest {
                         new BagKey(OVERFLOW_PRESCRIPTION, 2),
                         new BagKey(ADAPTED_PRESCRIPTION, 1)),
                 scenario.result().plannedBags().stream().map(PlannedBag::bagKey).toList());
-        assertEquals(List.of("pack-line-overflow-1", "pack-line-overflow-2"),
+        assertEquals(List.of("pack-line-overflow-1-1", "pack-line-overflow-2-1"),
                 scenario.result().findBag(new BagKey(OVERFLOW_PRESCRIPTION, 1))
                         .orElseThrow().physicalPackIds());
-        assertEquals(List.of("pack-line-overflow-3"),
+        assertEquals(List.of("pack-line-overflow-3-1"),
                 scenario.result().findBag(new BagKey(OVERFLOW_PRESCRIPTION, 2))
                         .orElseThrow().physicalPackIds());
     }
@@ -174,10 +179,11 @@ class DspBagPlanningProvenanceScenarioTest {
                         List.of(thirdPartyWork)));
         fullPackPlans.add(thirdPartyFactory.createPackPlan(thirdPartyVisit, thirdPartyWork, 1));
 
-        DspOrderItem overflowLine = line(fullPackOrder, "line-overflow");
-        for (int ordinal = 1; ordinal <= overflowLine.quantity(); ordinal++) {
+        for (String lineReference : List.of(
+                "line-overflow-1", "line-overflow-2", "line-overflow-3")) {
+            DspOrderItem overflowLine = line(fullPackOrder, lineReference);
             fullPackPlans.add(packPlanFactory.createPackPlan(
-                    "pack-" + overflowLine.lineReference() + "-" + ordinal,
+                    "pack-" + overflowLine.lineReference() + "-1",
                     overflowLine.lineReference(),
                     DIMENSIONS,
                     provenance(fullPackOrder, overflowLine)));
@@ -272,7 +278,7 @@ class DspBagPlanningProvenanceScenarioTest {
                   "transportContainer": {"payload":"full-tote-1"},
                   "serviceCentre": {"payload":"104"},
                   "orderDetail": {
-                    "numberOfOrderLines": 3,
+                    "numberOfOrderLines": 5,
                     "orderLines": [
                       {
                         "orderLineNumber":"line-fit",
@@ -287,16 +293,40 @@ class DspBagPlanningProvenanceScenarioTest {
                         "numberOfPacksPicked":"0002"
                       },
                       {
-                        "orderLineNumber":"line-overflow",
+                        "orderLineNumber":"line-overflow-1",
                         "orderLineType":"05",
                         "pharmacyId":"0006461",
                         "patientId":"patient-1",
                         "prescriptionId":"prescription-overflow",
                         "productId":"product-regular",
-                        "numberOfPacks":"0003",
+                        "numberOfPacks":"0001",
                         "referenceOrderId":"full-order-1",
                         "referenceSheetNumber":"001",
-                        "numberOfPacksPicked":"0003"
+                        "numberOfPacksPicked":"0001"
+                      },
+                      {
+                        "orderLineNumber":"line-overflow-2",
+                        "orderLineType":"05",
+                        "pharmacyId":"0006461",
+                        "patientId":"patient-1",
+                        "prescriptionId":"prescription-overflow",
+                        "productId":"product-regular",
+                        "numberOfPacks":"0001",
+                        "referenceOrderId":"full-order-1",
+                        "referenceSheetNumber":"001",
+                        "numberOfPacksPicked":"0001"
+                      },
+                      {
+                        "orderLineNumber":"line-overflow-3",
+                        "orderLineType":"05",
+                        "pharmacyId":"0006461",
+                        "patientId":"patient-1",
+                        "prescriptionId":"prescription-overflow",
+                        "productId":"product-regular",
+                        "numberOfPacks":"0001",
+                        "referenceOrderId":"full-order-1",
+                        "referenceSheetNumber":"001",
+                        "numberOfPacksPicked":"0001"
                       },
                       {
                         "orderLineNumber":"line-missing",
