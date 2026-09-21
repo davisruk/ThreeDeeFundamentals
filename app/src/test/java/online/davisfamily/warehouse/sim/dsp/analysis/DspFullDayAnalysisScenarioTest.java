@@ -192,7 +192,7 @@ class DspFullDayAnalysisScenarioTest {
     }
 
     @Test
-    void shouldCarryAnAdaptedThirdPartySlotThroughCollectionIntoP2p(
+    void shouldCarryMixedPrescriptionThroughThirdPartyAndCollectionIntoP2p(
             @TempDir Path directory) throws Exception {
         DspUncalibratedFullDayProfile profile = adaptedThirdPartyProfile();
         DspFullDayLoadedInput input = loadAdaptedThirdPartyInput(directory, profile);
@@ -201,15 +201,41 @@ class DspFullDayAnalysisScenarioTest {
                 sourceSheet,
                 "000243688425",
                 1));
+        PlannedPackSlot ordinarySlot = input.bagPlan().requirePlannedPackSlot(
+                new PlannedPackSlotKey(
+                        new OrderSheetKey("associated-integrated", 1),
+                        "ordinary-integrated-line",
+                        1));
+        PlannedPackSlot directThirdPartySlot = input.bagPlan().requirePlannedPackSlot(
+                new PlannedPackSlotKey(
+                        new OrderSheetKey("associated-integrated", 1),
+                        "direct-third-party-line",
+                        1));
         PlannedBag plannedBag = input.bagPlan().requireBag(slot.bagKey());
 
         assertTrue(slot.initialPhysicalToteId().isEmpty());
         assertEquals("pack-000243688425-1", slot.reservedPhysicalPackId());
-        assertEquals(2, plannedBag.physicalPackIds().size());
-        assertEquals(1, input.bagPlan().plannedPackSlots().stream()
-                .filter(candidate -> candidate.slotKey().sourceOrderSheetKey().equals(sourceSheet)
-                        && candidate.slotKey().lineReference().equals("000243688425"))
+        assertTrue(directThirdPartySlot.initialPhysicalToteId().isEmpty());
+        assertEquals("pack-direct-third-party-line-1",
+                directThirdPartySlot.reservedPhysicalPackId());
+        assertEquals(Optional.of(new PhysicalToteId("associated-integrated-tote")),
+                ordinarySlot.initialPhysicalToteId());
+        assertEquals(3, plannedBag.physicalPackIds().size());
+        assertEquals(List.of(
+                        "pack-associated-integrated-tote-ordinary-integrated-line-1",
+                        "pack-direct-third-party-line-1",
+                        "pack-000243688425-1"),
+                plannedBag.physicalPackIds());
+        assertEquals(
+                Set.of(ordinarySlot.slotKey(), slot.slotKey(), directThirdPartySlot.slotKey()),
+                input.bagPlan().plannedPackSlots().stream()
+                        .map(candidate -> candidate.slotKey())
+                        .collect(Collectors.toSet()));
+        assertEquals(3, input.bagPlan().plannedPackSlots().stream()
+                .filter(candidate -> candidate.slotKey().packOrdinal() == 1)
                 .count());
+        assertEquals(new BagSequencePosition(1, 1),
+                input.bagPlan().requireBagSequencePosition(plannedBag.bagKey()));
         var sourceLine = input.data().orders().stream()
                 .filter(order -> order.orderSheetKey().equals(sourceSheet))
                 .flatMap(order -> order.items().stream())
@@ -238,6 +264,9 @@ class DspFullDayAnalysisScenarioTest {
                     .anyMatch(pack -> pack.packId().equals(slot.reservedPhysicalPackId())));
             assertFalse(loadPlan(runtime, associatedToteId).getPackPlans().stream()
                     .anyMatch(pack -> pack.packId().equals(slot.reservedPhysicalPackId())));
+            assertFalse(loadPlan(runtime, associatedToteId).getPackPlans().stream()
+                    .anyMatch(pack -> pack.packId().equals(
+                            directThirdPartySlot.reservedPhysicalPackId())));
 
             boolean collected = false;
             boolean completed = false;
@@ -257,9 +286,17 @@ class DspFullDayAnalysisScenarioTest {
 
             assertTrue(collected, "the adapted collection must publish its reserved pack");
             assertTrue(completed, "P2P must close the bag only after all planned packs arrive");
-            assertEquals(2, loadPlan(runtime, associatedToteId).getPackPlans().stream()
+            assertTrue(loadPlan(runtime, associatedToteId).getPackPlans().stream()
+                    .anyMatch(pack -> pack.packId().equals(
+                            directThirdPartySlot.reservedPhysicalPackId())
+                            && pack.correlationId().equals(plannedBag.bagKey().correlationId())));
+            assertEquals(3, loadPlan(runtime, associatedToteId).getPackPlans().stream()
                     .filter(pack -> pack.correlationId().equals(slot.bagKey().correlationId()))
                     .count());
+            assertEquals(Set.of(plannedBag.bagKey().correlationId()),
+                    runtime.snapshot().p2pLines().stream()
+                            .flatMap(line -> line.completedBagCorrelationIds().stream())
+                            .collect(Collectors.toSet()));
             assertTrue(runtime.snapshot().p2pLines().stream()
                     .flatMap(line -> line.outboundAllocation().allocatedBags().stream())
                     .anyMatch(allocated -> allocated.plannedBag().equals(plannedBag)));
@@ -793,6 +830,8 @@ class DspFullDayAnalysisScenarioTest {
                 List.of(
                         line("ordinary-integrated-line", "05", "ordinary-product",
                                 "pharmacy-integrated", "patient-integrated", "20002460000226956", 8, 8),
+                        line("direct-third-party-line", "03", "third-party-product",
+                                "pharmacy-integrated", "patient-integrated", "20002460000226956", 3, 2),
                         line("000243688425", "02", "third-party-product",
                                 "pharmacy-integrated", "patient-integrated", "20002460000226956", 2, 1))));
         return new DspFullDayInputLoader().load(
