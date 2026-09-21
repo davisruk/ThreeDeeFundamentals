@@ -17,7 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
-import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
 import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
@@ -78,6 +78,12 @@ class DspFullDayInputLoaderTest {
         LoadedDspData data = loaded.loadedData();
         assertEquals(List.of("adapted-order", "full-order", "associated-order", "empty-order", "partial-order"),
                 data.orders().stream().map(order -> order.orderId()).toList());
+        assertEquals(
+                List.of("adapted-order", "full-order", "associated-order", "empty-order",
+                        "unresolved-order", "partial-order"),
+                loaded.reportableOrders().stream().map(order -> order.orderId()).toList());
+        assertTrue(loaded.rejectionCatalog().rejectedLines().isEmpty());
+        assertEquals(0, loaded.rejectionCatalog().rejectedMessageCount());
         assertEquals(List.of(OrderType.ADAPTED, OrderType.FULL_PACK, OrderType.ASSOCIATED, OrderType.EMPTY, OrderType.FULL_PACK),
                 data.orders().stream().map(order -> order.orderType()).toList());
         assertEquals(List.of("adapted-tote", "full-tote", "associated-tote", "partial-known-tote"),
@@ -176,6 +182,99 @@ class DspFullDayInputLoaderTest {
         assertEquals(1, loaded.loadReport().inboundToteIdSubstitutions().size());
         assertTrue(loaded.loadReport().unresolvedProductLines().isEmpty());
         assertEquals(loaded.loadReport(), loaded.loadedData().report());
+    }
+
+    @Test
+    void shouldRecoverMalformedMessageAndPlanSuccessfulLaterMessage(@TempDir Path directory)
+            throws IOException {
+        Path productMaster = write(directory, "products.csv", """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        Path malformed = write(directory, "01-malformed.json", "{ not valid json");
+        Path valid = write(directory, "02-valid.json", message(
+                "valid-order", "001", "05", "valid-tote", "104", "999",
+                "valid-line", "05", "product-a", "pharmacy", "patient", "prescription",
+                "0001", "0000"));
+
+        DspFullDayLoadedInput loaded = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, List.of(malformed, valid)),
+                DspUncalibratedFullDayProfile.productionBaseline(
+                        OPERATING_DATE, 10, Duration.ofSeconds(3), 1, 4, 2));
+
+        assertEquals(List.of("valid-order"), loaded.reportableOrders().stream()
+                .map(order -> order.orderId()).toList());
+        assertEquals(List.of("valid-order"), loaded.data().orders().stream()
+                .map(order -> order.orderId()).toList());
+        assertEquals(1, loaded.rejectionCatalog().rejectedMessageCount());
+        assertEquals(1, loaded.rejectionCatalog().count(
+                DspInputRejectionReason.MALFORMED_12N_MESSAGE));
+        assertEquals(malformed, loaded.rejectionCatalog().rejectedMessages().getFirst().path());
+        assertEquals(0, loaded.rejectionCatalog().rejectedMessages().getFirst()
+                .sourceMessageEncounterIndex());
+        assertEquals(1, loaded.bagPlan().plannedPackSlots().size());
+    }
+
+    @Test
+    void shouldQuarantineMissingSourceAliasAndPlanSiblingLine(@TempDir Path directory)
+            throws IOException {
+        Path productMaster = write(directory, "products.csv", """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                product-b,Product B,,200,100,80
+                """);
+        Path associated = write(directory, "associated.json", twoLineAssociatedMessage());
+
+        DspFullDayLoadedInput loaded = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, List.of(associated)),
+                DspUncalibratedFullDayProfile.productionBaseline(
+                        OPERATING_DATE, 10, Duration.ofSeconds(3), 1, 4, 2));
+
+        assertEquals(List.of("associated-order"), loaded.reportableOrders().stream()
+                .map(order -> order.orderId()).toList());
+        assertEquals(List.of("sibling-line"), loaded.data().orders().getFirst().items().stream()
+                .map(DspOrderItem::lineReference).toList());
+        assertEquals(List.of("sibling-line"), loaded.data().inboundToteManifests().getFirst()
+                .items().stream().map(DspOrderItem::lineReference).toList());
+        assertEquals(1, loaded.rejectionCatalog().rejectedLineCount());
+        assertEquals(
+                DspInputRejectionReason.MISSING_ADAPTED_SOURCE,
+                loaded.rejectionCatalog().rejectedLines().getFirst().reason());
+        assertEquals(1, loaded.bagPlan().plannedPackSlots().size());
+        assertTrue(loaded.bagPlan().plannedPackSlots().stream()
+                .noneMatch(slot -> slot.slotKey().lineReference().equals("alias-line")));
+    }
+
+    @Test
+    void shouldExcludeCompletelyRejectedOrderBeforeStrictPlanning(@TempDir Path directory)
+            throws IOException {
+        Path productMaster = write(directory, "products.csv", """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        Path rejected = write(directory, "01-rejected.json", message(
+                "rejected-order", "001", "04", "rejected-tote", "104", "999",
+                "alias-line", "02", "product-a", "pharmacy", "patient", "prescription",
+                "0001", "0000"));
+        Path valid = write(directory, "02-valid.json", message(
+                "valid-order", "001", "05", "valid-tote", "104", "999",
+                "valid-line", "05", "product-a", "pharmacy", "patient", "valid-prescription",
+                "0001", "0000"));
+
+        DspFullDayLoadedInput loaded = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, List.of(rejected, valid)),
+                DspUncalibratedFullDayProfile.productionBaseline(
+                        OPERATING_DATE, 10, Duration.ofSeconds(3), 1, 4, 2));
+
+        assertEquals(List.of("rejected-order", "valid-order"), loaded.reportableOrders().stream()
+                .map(order -> order.orderId()).toList());
+        assertEquals(List.of("valid-order"), loaded.data().orders().stream()
+                .map(order -> order.orderId()).toList());
+        assertEquals(1, loaded.rejectionCatalog().rejectedLineCount());
+        assertTrue(loaded.bagPlan().plannedPackSlots().stream()
+                .allMatch(slot -> !slot.fulfilmentOrderSheetKey().orderId().equals("rejected-order")));
+        assertTrue(loaded.bagPlan().p2pToteLoadPlans().stream()
+                .noneMatch(plan -> plan.physicalToteId().value().equals("rejected-tote")));
     }
 
     @Test
@@ -281,5 +380,46 @@ class DspFullDayInputLoaderTest {
                 orderId, sheetNumber, toteType, transportField, priority, serviceCentreId,
                 lineReference, lineType, pharmacyId, patientId, prescriptionId, productId,
                 numberOfPacks, numberOfPacksPicked, orderId);
+    }
+
+    private static String twoLineAssociatedMessage() {
+        return """
+                {
+                  "header": {"orderId":"associated-order","sheetNumber":"001"},
+                  "toteIdentifier": {"payload":"04"},
+                  "transportContainer": {"payload":"associated-tote"},
+                  "orderPriority": {"payload":"999"},
+                  "serviceCentre": {"payload":"104"},
+                  "orderDetail": {
+                    "numberOfOrderLines": 2,
+                    "orderLines": [
+                      {
+                        "orderLineNumber":"alias-line",
+                        "orderLineType":"02",
+                        "pharmacyId":"pharmacy",
+                        "patientId":"patient",
+                        "prescriptionId":"alias-prescription",
+                        "productId":"product-a",
+                        "numberOfPacks":"0001",
+                        "referenceSheetNumber":"001",
+                        "numberOfPacksPicked":"0000",
+                        "referenceOrderId":"associated-order"
+                      },
+                      {
+                        "orderLineNumber":"sibling-line",
+                        "orderLineType":"05",
+                        "pharmacyId":"pharmacy",
+                        "patientId":"patient",
+                        "prescriptionId":"sibling-prescription",
+                        "productId":"product-b",
+                        "numberOfPacks":"0001",
+                        "referenceSheetNumber":"001",
+                        "numberOfPacksPicked":"0000",
+                        "referenceOrderId":"associated-order"
+                      }
+                    ]
+                  }
+                }
+                """;
     }
 }
