@@ -343,6 +343,12 @@ Required tests:
 
 No additional user verification is required for this step.
 
+Proposed commit message:
+
+```text
+Preserve 12N source identity and recover malformed messages
+```
+
 ## Step 2: Add Immutable Rejection Domain And Dependency-Closed Preflight
 
 Add the types and exact rules in Fixed Decisions 2, 5, 6, and 7.
@@ -385,6 +391,12 @@ production extension point or runtime callback.
 ### User verification
 
 No additional user verification is required for this step.
+
+Proposed commit message:
+
+```text
+Add dependency-closed DSP input rejection preflight
+```
 
 ## Step 3: Integrate The Projection And Preserve Strict Planning
 
@@ -432,6 +444,12 @@ Required tests:
 
 No additional user verification is required for this step.
 
+Proposed commit message:
+
+```text
+Integrate executable input projection with strict bag planning
+```
+
 ## Step 4: Add Bounded Progress And Complete Final Reporting
 
 Publish rejection information through the existing progress, inspection, and JSON ownership
@@ -467,6 +485,12 @@ Required tests:
 ### User verification
 
 No additional user verification is required for this step.
+
+Proposed commit message:
+
+```text
+Report recoverable DSP input exclusions
+```
 
 ## Step 5: End-To-End, Scale, And Static Boundary Proof
 
@@ -514,6 +538,12 @@ production day as part of Step 35 of
 The external run must pass the former missing-source failure, report that line as
 `MISSING_ADAPTED_SOURCE`, continue processing later valid input, and terminate at supported
 completion or the exact hard cutoff. It must exit zero unless a genuine fatal failure occurs.
+
+Proposed commit message:
+
+```text
+Prove recoverable input rejection end to end
+```
 
 ## Acceptance Criteria
 
