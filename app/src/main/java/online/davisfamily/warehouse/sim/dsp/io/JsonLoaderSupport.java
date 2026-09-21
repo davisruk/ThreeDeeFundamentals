@@ -12,6 +12,18 @@ final class JsonLoaderSupport {
     private JsonLoaderSupport() {
     }
 
+    static String readText(Path path) {
+        if (path == null) {
+            throw new IllegalArgumentException("path must not be null");
+        }
+
+        try {
+            return Files.readString(path);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to read JSON from path " + path, e);
+        }
+    }
+
     static <T> T read(Path path, Class<T> type) {
         if (path == null) {
             throw new IllegalArgumentException("path must not be null");

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -166,6 +167,83 @@ class DspDatasetAssemblerTest {
         assertEquals(List.of("line-2"), data.inboundToteManifests().get(1).items().stream()
                 .map(DspOrderItem::lineReference)
                 .toList());
+    }
+
+    @Test
+    void shouldPreserveOriginalSourceLineIndexesThroughManualFiltering() {
+        TwelveNInputMessage sourcedMessage = new TwelveNInputMessage(
+                Path.of("source-7.json"),
+                7,
+                physicalMessage(
+                        "order-1", "001", "04", "tote-1", "104",
+                        line("manual-line", "01", "pharmacy-1", "product-1"),
+                        line("retained-line", "05", "pharmacy-1", "product-1")));
+
+        LoadedDspData data = assembler.assembleSourced(
+                List.of(product("product-1")),
+                List.of(sourcedMessage));
+
+        assertEquals(1, data.retainedInputLines().size());
+        DspRetainedInputLine retainedLine = data.retainedInputLines().getFirst();
+        assertEquals("retained-line", retainedLine.orderItem().lineReference());
+        assertEquals(7, retainedLine.sourceMessageEncounterIndex());
+        assertEquals(1, retainedLine.sourceLineIndex());
+        assertEquals(0L, data.orders().getFirst().sequenceNumber());
+        assertEquals(1, data.report().ignoredManualLineCount());
+    }
+
+    @Test
+    void shouldKeepManualMessagesOutOfRetainedLineMetadata() {
+        LoadedDspData data = assembler.assembleSourced(
+                List.of(product("product-1")),
+                List.of(
+                        new TwelveNInputMessage(
+                                Path.of("manual.json"),
+                                3,
+                                physicalMessage(
+                                        "manual-order", "001", "01", null, "104",
+                                        line("manual-line", "01", "pharmacy-1", "product-1"))),
+                        new TwelveNInputMessage(
+                                Path.of("dispatch.json"),
+                                4,
+                                physicalMessage(
+                                        "dispatch-order", "001", "05", "tote-1", "104",
+                                        line("dispatch-line", "05", "pharmacy-1", "product-1")))));
+
+        assertEquals(1, data.retainedInputLines().size());
+        assertEquals(4, data.retainedInputLines().getFirst().sourceMessageEncounterIndex());
+        assertEquals(0, data.retainedInputLines().getFirst().sourceLineIndex());
+        assertEquals(1, data.orders().size());
+        assertEquals(0L, data.orders().getFirst().sequenceNumber());
+        assertEquals("dispatch-line", data.orders().getFirst().items().getFirst().lineReference());
+        assertEquals(1, data.report().ignoredManualMessageCount());
+        assertTrue(data.preparedLines().isEmpty());
+        assertEquals(0, data.report().omittedOrderCount());
+    }
+
+    @Test
+    void shouldDeriveDeterministicFixtureMetadataForCompatibilityAssembly() {
+        LoadedDspData assembled = assembler.assemble(
+                List.of(product("product-1")),
+                List.of(physicalMessage(
+                        "order-1", "001", "05", "tote-1", "104",
+                        line("line-1", "05", "pharmacy-1", "product-1"),
+                        line("line-2", "05", "pharmacy-1", "product-1"))));
+
+        assertEquals(List.of(0, 0), assembled.retainedInputLines().stream()
+                .map(DspRetainedInputLine::sourceMessageEncounterIndex)
+                .toList());
+        assertEquals(List.of(0, 1), assembled.retainedInputLines().stream()
+                .map(DspRetainedInputLine::sourceLineIndex)
+                .toList());
+
+        LoadedDspData fixtureConstructed = new LoadedDspData(
+                assembled.products(),
+                assembled.orders(),
+                assembled.preparedLines(),
+                assembled.loadedPreparedLineKeys());
+
+        assertEquals(assembled.retainedInputLines(), fixtureConstructed.retainedInputLines());
     }
 
     @Test
@@ -495,6 +573,7 @@ class DspDatasetAssemblerTest {
         assertEquals(1, data.report().ignoredManualMessageCount());
         assertEquals(1, data.report().ignoredManualLineCount());
         assertEquals(0, data.report().omittedOrderCount());
+        assertTrue(data.retainedInputLines().isEmpty());
     }
 
     @Test

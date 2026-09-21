@@ -1,5 +1,6 @@
 package online.davisfamily.warehouse.sim.dsp.io;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -50,6 +51,37 @@ public class DspDatasetAssembler {
             throw new IllegalArgumentException("messages must not be null");
         }
 
+        List<TwelveNInputMessage> sourcedMessages = new ArrayList<>();
+        for (int sourceMessageEncounterIndex = 0;
+                sourceMessageEncounterIndex < messages.size();
+                sourceMessageEncounterIndex++) {
+            TwelveNMessageJson message = messages.get(sourceMessageEncounterIndex);
+            if (message == null) {
+                throw new IllegalArgumentException("messages must not contain null");
+            }
+            sourcedMessages.add(new TwelveNInputMessage(
+                    Path.of("fixture-" + sourceMessageEncounterIndex + ".json"),
+                    sourceMessageEncounterIndex,
+                    message));
+        }
+        return assembleSourced(products, sourcedMessages);
+    }
+
+    public LoadedDspData assembleSourced(
+            List<ProductMasterRecord> products,
+            List<TwelveNInputMessage> messages) {
+        if (products == null) {
+            throw new IllegalArgumentException("products must not be null");
+        }
+        if (messages == null) {
+            throw new IllegalArgumentException("messages must not be null");
+        }
+        for (TwelveNInputMessage message : messages) {
+            if (message == null) {
+                throw new IllegalArgumentException("messages must not contain null");
+            }
+        }
+
         List<ProductMasterRecord> retainedProducts = new ArrayList<>();
         Set<String> knownProductIds = new LinkedHashSet<>();
         for (ProductMasterRecord product : products) {
@@ -64,6 +96,7 @@ public class DspDatasetAssembler {
         Map<OrderSheetKey, LogicalOrderGroup> orderGroups = new LinkedHashMap<>();
         List<InboundToteManifest> inboundToteManifests = new ArrayList<>();
         List<DspOrderItem> preparedLines = new ArrayList<>();
+        List<DspRetainedInputLine> retainedInputLines = new ArrayList<>();
         Set<PreparedLineKey> loadedPreparedLineKeys = new LinkedHashSet<>();
         List<UnresolvedProductLine> unresolvedProductLines = new ArrayList<>();
         List<InboundToteIdSubstitution> inboundToteIdSubstitutions = new ArrayList<>();
@@ -76,10 +109,8 @@ public class DspDatasetAssembler {
         int omittedOrderCount = 0;
         long nextSourceSequenceNumber = 0;
 
-        for (TwelveNMessageJson message : messages) {
-            if (message == null) {
-                throw new IllegalArgumentException("messages must not contain null");
-            }
+        for (TwelveNInputMessage inputMessage : messages) {
+            TwelveNMessageJson message = inputMessage.message();
             TwelveNLineMappingSupport.validateMessage(message);
             TwelveNMessageKind messageKind = messageKindMapper.map(message.toteIdentifier().payload());
             if (messageKind == TwelveNMessageKind.MANUAL_PREPARATION) {
@@ -90,10 +121,24 @@ public class DspDatasetAssembler {
 
             MappedTwelveNOrder mapped = orderMapper.map(message, nextSourceSequenceNumber);
             NotionalToteOrder mappedOrder = mapped.order();
-            List<DspOrderItem> retainedLines = mappedOrder.items().stream()
-                    .filter(line -> line.lineType() != DspOrderLineType.MANUAL)
-                    .toList();
-            ignoredManualLineCount += mappedOrder.items().size() - retainedLines.size();
+            List<DspOrderItem> mappedRetainedLines = new ArrayList<>();
+            for (int sourceLineIndex = 0;
+                    sourceLineIndex < mappedOrder.items().size();
+                    sourceLineIndex++) {
+                DspOrderItem line = mappedOrder.items().get(sourceLineIndex);
+                if (line.lineType() == DspOrderLineType.MANUAL) {
+                    ignoredManualLineCount++;
+                    continue;
+                }
+                mappedRetainedLines.add(line);
+                retainedInputLines.add(new DspRetainedInputLine(
+                        line,
+                        mappedOrder.orderSheetKey(),
+                        mappedOrder.orderType(),
+                        inputMessage.sourceMessageEncounterIndex(),
+                        sourceLineIndex));
+            }
+            List<DspOrderItem> retainedLines = List.copyOf(mappedRetainedLines);
             if (retainedLines.isEmpty()) {
                 omittedOrderCount++;
                 continue;
@@ -170,7 +215,8 @@ public class DspDatasetAssembler {
                 loadedPreparedLineKeys,
                 Set.of(),
                 manifestCatalog.manifests(),
-                report);
+                report,
+                retainedInputLines);
     }
 
     private NotionalToteOrder withItems(NotionalToteOrder order, List<DspOrderItem> items) {
@@ -185,10 +231,11 @@ public class DspDatasetAssembler {
                 order.sequenceNumber());
     }
 
-    private static Set<String> sourcePhysicalToteIds(List<TwelveNMessageJson> messages) {
+    private static Set<String> sourcePhysicalToteIds(List<TwelveNInputMessage> messages) {
         Set<String> values = new LinkedHashSet<>();
-        for (TwelveNMessageJson message : messages) {
-            if (message == null || message.transportContainer() == null) {
+        for (TwelveNInputMessage inputMessage : messages) {
+            TwelveNMessageJson message = inputMessage.message();
+            if (message.transportContainer() == null) {
                 continue;
             }
             String value = message.transportContainer().payload();
