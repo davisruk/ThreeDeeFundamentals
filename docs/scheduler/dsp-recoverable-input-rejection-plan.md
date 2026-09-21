@@ -62,10 +62,12 @@ For the current implementation, inspect these production classes and their tests
   `DspFullDayAnalysisReport`, and `DspFullDayReportJsonWriter`;
 - `DspFullDayAnalysisRuntimeFactory` and `DspFullDayCompletionEvaluator`;
 - `TwelveNDatasetLoaderTest`, `DspDatasetAssemblerTest`,
-  `DspFullDayInputLoaderTest`, `DspFullDayBagPlanningRequestFactoryTest`,
-  `DspFullDayProgressFormatterTest`, `DspFullDayReportFactoryTest`,
-  `DspFullDayReportJsonWriterTest`, `DspFullDayAnalysisCommandTest`, and
-  `DspFullDayAnalysisScenarioTest`.
+  `DspFullDayInputLoaderTest`, `DspFullDayProgressFormatterTest`,
+  `DspFullDayReportFactoryTest`, `DspFullDayReportJsonWriterTest`,
+  `DspFullDayAnalysisCommandTest`, and `DspFullDayAnalysisScenarioTest`.
+
+`DspFullDayBagPlanningRequestFactoryTest` does not exist before this feature. Step 3 creates it;
+inspect it before executing any later step that names it.
 
 ## Fixed Decisions
 
@@ -418,6 +420,9 @@ has moved into preflight. There must be one executable projection owner.
 Keep `DspFullDayBagPlanningRequestFactory` strict. Add regression assertions proving direct factory
 calls still reject missing/duplicate/mismatched correlation, while input-loader calls quarantine
 the same attributable data before factory entry.
+
+Create `DspFullDayBagPlanningRequestFactoryTest` in Step 3 as the focused owner of those direct
+factory strictness regressions.
 
 One completely rejected order within a day is valid and is absent from executable planning. The
 existing full-day requirement that the complete supplied dataset contain at least one executable
