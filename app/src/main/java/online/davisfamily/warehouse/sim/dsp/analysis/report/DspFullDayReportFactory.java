@@ -21,6 +21,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfi
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.AdaptingBenchDefinition;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.QueueCapacities;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspP2pLineMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspServiceCentreMetricsSnapshot;
@@ -203,6 +204,7 @@ public final class DspFullDayReportFactory {
                         .toList()));
         List<String> warnings = warnings(
                 input.report(),
+                input.rejectionCatalog(),
                 metrics,
                 unsupportedWork,
                 runtime.cutoff().diagnostic());
@@ -217,6 +219,7 @@ public final class DspFullDayReportFactory {
                 runtime,
                 configuration(profile),
                 input.report(),
+                input.rejectionCatalog(),
                 serviceCentres,
                 p2pLines,
                 occupancySamples,
@@ -276,6 +279,7 @@ public final class DspFullDayReportFactory {
                 profile.calibrationStatus(),
                 DspCompletionMilestone.valueOf(profile.completionMilestone()),
                 input.report(),
+                input.rejectionCatalog(),
                 serviceCentres,
                 unsupportedWork,
                 unfinishedIdentities,
@@ -406,6 +410,7 @@ public final class DspFullDayReportFactory {
 
     private static List<String> warnings(
             DspDatasetLoadReport loadReport,
+            DspInputRejectionCatalog rejectionCatalog,
             DspFullDayMetricsSnapshot metrics,
             List<String> unsupportedWork,
             String cutoffDiagnostic) {
@@ -417,6 +422,13 @@ public final class DspFullDayReportFactory {
         }
         if (loadReport.omittedOrderCount() > 0) {
             values.add("One or more input orders were omitted from the supported runtime");
+        }
+        if (rejectionCatalog.rejectedLineCount() > 0
+                || rejectionCatalog.rejectedMessageCount() > 0) {
+            values.add("Recoverable input exclusions: rejectedLines="
+                    + rejectionCatalog.rejectedLineCount()
+                    + ", rejectedMessages="
+                    + rejectionCatalog.rejectedMessageCount());
         }
         if (!loadReport.inboundToteIdSubstitutions().isEmpty()) {
             values.add("Reused inbound carrier barcodes were assigned distinct DSP journey IDs");

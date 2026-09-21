@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayOccupancySample;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspP2pLineMetricsSnapshot;
@@ -26,7 +28,9 @@ public final class DspFullDayProgressFormatter {
         lines.add("Run: state=" + runtime.state()
                 + " profile=" + snapshot.profileId()
                 + " calibration=" + snapshot.calibrationStatus()
-                + " milestone=" + snapshot.completionMilestone());
+                + " milestone=" + snapshot.completionMilestone()
+                + " completedWithInputExclusions="
+                + snapshot.completedWithInputExclusions());
         lines.add("Clock: business=" + metrics.clock().businessDateTime()
                 + " elapsed=" + metrics.clock().elapsedSimulationTime()
                 + " phase=" + metrics.clock().phase());
@@ -91,6 +95,9 @@ public final class DspFullDayProgressFormatter {
                 + " manualLines=" + snapshot.loadReport().ignoredManualLineCount()
                 + " omittedOrders=" + snapshot.loadReport().omittedOrderCount()
                 + " unresolvedProducts=" + snapshot.loadReport().unresolvedProductLines().size()
+                + " rejectedLines=" + snapshot.rejectionCatalog().rejectedLineCount()
+                + " rejectedMessages=" + snapshot.rejectionCatalog().rejectedMessageCount()
+                + " countsByReason=" + rejectionReasonSummary(snapshot.rejectionCatalog())
                 + " reusedInboundToteIds="
                 + snapshot.loadReport().inboundToteIdSubstitutions().size());
         lines.add("Unsupported: count=" + metrics.unsupportedWork().size());
@@ -169,6 +176,14 @@ public final class DspFullDayProgressFormatter {
 
     private String valueOrNone(String value) {
         return value == null || value.isBlank() ? "none" : value;
+    }
+
+    private String rejectionReasonSummary(DspInputRejectionCatalog catalog) {
+        String summary = java.util.Arrays.stream(DspInputRejectionReason.values())
+                .map(reason -> reason + "=" + catalog.count(reason))
+                .filter(value -> !value.endsWith("=0"))
+                .collect(Collectors.joining(","));
+        return summary.isEmpty() ? "none" : summary;
     }
 
     private String decimal(double value) {

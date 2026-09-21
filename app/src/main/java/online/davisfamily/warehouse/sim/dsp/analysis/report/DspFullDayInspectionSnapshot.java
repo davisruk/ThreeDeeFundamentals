@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import online.davisfamily.warehouse.sim.dsp.analysis.DspCompletionMilestone;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayLoadedInput;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
 import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
 
@@ -15,16 +16,41 @@ public record DspFullDayInspectionSnapshot(
         String calibrationStatus,
         DspCompletionMilestone completionMilestone,
         DspDatasetLoadReport loadReport,
+        DspInputRejectionCatalog rejectionCatalog,
         List<DspServiceCentreAnalysisResult> serviceCentres,
         List<String> unsupportedWork,
         List<String> unfinishedIdentities,
         Optional<DspFullDayAnalysisReport> finalReport) {
 
+    /** Compatibility constructor for inspection callers that predate rejection reporting. */
+    public DspFullDayInspectionSnapshot(
+            DspFullDayAnalysisRuntimeSnapshot runtime,
+            String profileId,
+            String calibrationStatus,
+            DspCompletionMilestone completionMilestone,
+            DspDatasetLoadReport loadReport,
+            List<DspServiceCentreAnalysisResult> serviceCentres,
+            List<String> unsupportedWork,
+            List<String> unfinishedIdentities,
+            Optional<DspFullDayAnalysisReport> finalReport) {
+        this(
+                runtime,
+                profileId,
+                calibrationStatus,
+                completionMilestone,
+                loadReport,
+                DspInputRejectionCatalog.empty(),
+                serviceCentres,
+                unsupportedWork,
+                unfinishedIdentities,
+                finalReport);
+    }
+
     public DspFullDayInspectionSnapshot {
         if (runtime == null || profileId == null || profileId.isBlank()
                 || calibrationStatus == null || calibrationStatus.isBlank()
                 || completionMilestone == null || loadReport == null
-                || serviceCentres == null || unsupportedWork == null
+                || rejectionCatalog == null || serviceCentres == null || unsupportedWork == null
                 || unfinishedIdentities == null || finalReport == null) {
             throw new IllegalArgumentException("inspection snapshot values must not be null");
         }
@@ -49,6 +75,7 @@ public record DspFullDayInspectionSnapshot(
                 report == null ? null : report.calibrationStatus(),
                 report == null ? null : report.completionMilestone(),
                 report == null ? null : report.loadReport(),
+                report == null ? null : report.rejectionCatalog(),
                 report == null ? null : report.serviceCentres(),
                 report == null ? null : report.unsupportedWork(),
                 report == null ? null : report.unfinishedIdentities(),
@@ -66,6 +93,7 @@ public record DspFullDayInspectionSnapshot(
                 runtime == null ? null : runtime.metrics().calibrationStatus(),
                 runtime == null ? null : milestone(runtime.metrics().completionMilestone()),
                 input == null ? null : input.report(),
+                input == null ? null : input.rejectionCatalog(),
                 serviceCentres,
                 runtime == null ? null : runtime.metrics().unsupportedWork(),
                 unfinishedIdentities,
@@ -78,6 +106,13 @@ public record DspFullDayInspectionSnapshot(
 
     public boolean terminal() {
         return runtime.state() != online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState.RUNNING;
+    }
+
+    /** Whether a terminal inspection contains recoverable input exclusions. */
+    public boolean completedWithInputExclusions() {
+        return terminal()
+                && (rejectionCatalog.rejectedLineCount() > 0
+                        || rejectionCatalog.rejectedMessageCount() > 0);
     }
 
     /** Returns the final report when this is a final snapshot. */

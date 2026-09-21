@@ -14,6 +14,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsSn
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayOccupancySample;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspP2pLineMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
 import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
 
 /**
@@ -32,6 +33,7 @@ public record DspFullDayAnalysisReport(
         DspFullDayAnalysisRuntimeSnapshot runtimeSnapshot,
         Map<String, Object> configuration,
         DspDatasetLoadReport loadReport,
+        DspInputRejectionCatalog rejectionCatalog,
         List<DspServiceCentreAnalysisResult> serviceCentres,
         List<DspP2pLineMetricsSnapshot> p2pLines,
         List<DspFullDayOccupancySample> occupancySamples,
@@ -40,11 +42,50 @@ public record DspFullDayAnalysisReport(
         List<String> unsupportedWork,
         List<String> unfinishedIdentities) {
 
+    /** Compatibility constructor for report callers that predate recoverable input reporting. */
+    public DspFullDayAnalysisReport(
+            String profileId,
+            String calibrationStatus,
+            DspCompletionMilestone completionMilestone,
+            DspFullDayTerminationReason terminationReason,
+            DspFullDayRuntimeState state,
+            DspFullDayMetricsSnapshot metrics,
+            DspFullDayAnalysisRuntimeSnapshot runtimeSnapshot,
+            Map<String, Object> configuration,
+            DspDatasetLoadReport loadReport,
+            List<DspServiceCentreAnalysisResult> serviceCentres,
+            List<DspP2pLineMetricsSnapshot> p2pLines,
+            List<DspFullDayOccupancySample> occupancySamples,
+            List<DspFullDayMetricsSnapshot.ElasticInfeasibilityEvent> elasticInfeasibilityHistory,
+            List<String> warnings,
+            List<String> unsupportedWork,
+            List<String> unfinishedIdentities) {
+        this(
+                profileId,
+                calibrationStatus,
+                completionMilestone,
+                terminationReason,
+                state,
+                metrics,
+                runtimeSnapshot,
+                configuration,
+                loadReport,
+                DspInputRejectionCatalog.empty(),
+                serviceCentres,
+                p2pLines,
+                occupancySamples,
+                elasticInfeasibilityHistory,
+                warnings,
+                unsupportedWork,
+                unfinishedIdentities);
+    }
+
     public DspFullDayAnalysisReport {
         profileId = requireValue(profileId, "profileId");
         calibrationStatus = requireValue(calibrationStatus, "calibrationStatus");
         if (completionMilestone == null || terminationReason == null || state == null
-                || metrics == null || runtimeSnapshot == null || loadReport == null) {
+                || metrics == null || runtimeSnapshot == null || loadReport == null
+                || rejectionCatalog == null) {
             throw new IllegalArgumentException("report values must not be null");
         }
         if (state != metrics.state() || state != runtimeSnapshot.state()) {
@@ -86,6 +127,12 @@ public record DspFullDayAnalysisReport(
 
     public List<String> unsupported() {
         return unsupportedWork;
+    }
+
+    /** Whether this completed report contains recoverable input exclusions. */
+    public boolean completedWithInputExclusions() {
+        return rejectionCatalog.rejectedLineCount() > 0
+                || rejectionCatalog.rejectedMessageCount() > 0;
     }
 
     private static <T> List<T> copyValues(List<T> values, String fieldName) {

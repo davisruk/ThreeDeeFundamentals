@@ -24,6 +24,9 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspRejectedLine;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayOccupancySample;
@@ -33,7 +36,9 @@ import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisR
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspHeadlessP2pLineRuntimeSnapshot;
 import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocatedTote;
 import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
+import online.davisfamily.warehouse.sim.dsp.io.TwelveNRejectedInputMessage;
 import online.davisfamily.warehouse.sim.dsp.io.UnresolvedProductLine;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.outbound.AllocatedOutboundBag;
@@ -146,9 +151,10 @@ public final class DspFullDayReportJsonWriter {
         root.put("schemaVersion", SCHEMA_VERSION);
         root.set("profile", profileNode(report));
         root.set("termination", terminationNode(report));
+        root.put("completedWithInputExclusions", report.completedWithInputExclusions());
         root.set("clock", clockNode(report.metrics().clock()));
         root.set("configuration", objectMapper.valueToTree(report.configuration()));
-        root.set("load", loadNode(report.loadReport()));
+        root.set("load", loadNode(report.loadReport(), report.rejectionCatalog()));
         root.set("metrics", metricsNode(report.metrics()));
 
         ArrayNode centres = root.putArray("serviceCentres");
@@ -199,11 +205,19 @@ public final class DspFullDayReportJsonWriter {
         return node;
     }
 
-    private ObjectNode loadNode(DspDatasetLoadReport report) {
+    private ObjectNode loadNode(
+            DspDatasetLoadReport report,
+            DspInputRejectionCatalog rejectionCatalog) {
         ObjectNode node = JsonNodeFactory.instance.objectNode();
         node.put("ignoredManualMessageCount", report.ignoredManualMessageCount());
         node.put("ignoredManualLineCount", report.ignoredManualLineCount());
         node.put("omittedOrderCount", report.omittedOrderCount());
+        node.put("rejectedLineCount", rejectionCatalog.rejectedLineCount());
+        node.put("rejectedMessageCount", rejectionCatalog.rejectedMessageCount());
+        ObjectNode rejectionCounts = node.putObject("countsByReason");
+        for (DspInputRejectionReason reason : DspInputRejectionReason.values()) {
+            rejectionCounts.put(reason.name(), rejectionCatalog.count(reason));
+        }
         ArrayNode substitutions = node.putArray("inboundToteIdSubstitutions");
         for (var value : report.inboundToteIdSubstitutions()) {
             substitutions.addObject()
@@ -219,7 +233,69 @@ public final class DspFullDayReportJsonWriter {
                     .put("lineReference", value.lineReference())
                     .put("productId", value.productId());
         }
+        ArrayNode rejectedMessages = node.putArray("rejectedMessages");
+        for (TwelveNRejectedInputMessage value : rejectionCatalog.rejectedMessages()) {
+            rejectedMessages.add(rejectedMessageNode(value));
+        }
+        ArrayNode rejectedLines = node.putArray("rejectedLines");
+        for (DspRejectedLine value : rejectionCatalog.rejectedLines()) {
+            rejectedLines.add(rejectedLineNode(value));
+        }
         return node;
+    }
+
+    private ObjectNode rejectedMessageNode(TwelveNRejectedInputMessage value) {
+        ObjectNode node = JsonNodeFactory.instance.objectNode();
+        node.put("path", value.path().toString());
+        node.put("sourceMessageEncounterIndex", value.sourceMessageEncounterIndex());
+        node.put("reason", DspInputRejectionReason.MALFORMED_12N_MESSAGE.name());
+        node.put("diagnostic", value.diagnostic());
+        node.put("exceptionClassName", value.exceptionClassName());
+        ArrayNode stackTrace = node.putArray("stackTraceLines");
+        value.stackTraceLines().forEach(stackTrace::add);
+        return node;
+    }
+
+    private ObjectNode rejectedLineNode(DspRejectedLine value) {
+        ObjectNode node = JsonNodeFactory.instance.objectNode();
+        node.set("orderItem", orderItemNode(value.orderItem()));
+        node.set("sourceOrderSheetKey", orderSheetNode(value.sourceOrderSheetKey()));
+        node.put("sourceOrderType", value.sourceOrderType().name());
+        value.targetOrderSheetKey().ifPresentOrElse(
+                target -> node.set("targetOrderSheetKey", orderSheetNode(target)),
+                () -> node.set("targetOrderSheetKey", NullNode.instance));
+        node.put("sourceMessageEncounterIndex", value.sourceMessageEncounterIndex());
+        node.put("sourceLineIndex", value.sourceLineIndex());
+        value.preparedLineKey().ifPresentOrElse(
+                key -> node.set("preparedLineKey", preparedLineKeyNode(key)),
+                () -> node.set("preparedLineKey", NullNode.instance));
+        node.put("reason", value.reason().name());
+        node.put("diagnostic", value.diagnostic());
+        optionalString(node, "exceptionClassName", value.exceptionClassName());
+        ArrayNode stackTrace = node.putArray("stackTraceLines");
+        value.stackTraceLines().forEach(stackTrace::add);
+        return node;
+    }
+
+    private ObjectNode orderItemNode(DspOrderItem value) {
+        return JsonNodeFactory.instance.objectNode()
+                .put("lineReference", value.lineReference())
+                .put("productId", value.productId())
+                .put("quantity", value.quantity())
+                .put("pharmacyId", value.pharmacyId())
+                .put("patientId", value.patientId())
+                .put("prescriptionId", value.prescriptionId())
+                .put("lineType", value.lineType().name())
+                .put("referenceOrderId", value.referenceOrderId())
+                .put("referenceSheetNumber", value.referenceSheetNumber())
+                .put("numberOfPacksPicked", value.numberOfPacksPicked());
+    }
+
+    private ObjectNode preparedLineKeyNode(
+            online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey value) {
+        return JsonNodeFactory.instance.objectNode()
+                .put("targetOrderId", value.targetOrderId())
+                .put("lineReference", value.lineReference());
     }
 
     private ObjectNode metricsNode(DspFullDayMetricsSnapshot metrics) {

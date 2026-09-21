@@ -31,6 +31,10 @@ public final class DspFullDayInspectionSnapshot {
         return delegate.terminal();
     }
 
+    public boolean completedWithInputExclusions() {
+        return delegate.completedWithInputExclusions();
+    }
+
     online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionSnapshot reportSnapshot() {
         return delegate;
     }

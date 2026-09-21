@@ -2,14 +2,22 @@ package online.davisfamily.warehouse.sim.dsp.analysis.report;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspRejectedLine;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspP2pLineMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspServiceCentreMetricsSnapshot;
+import online.davisfamily.warehouse.sim.dsp.io.TwelveNRejectedInputMessage;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
 
@@ -30,7 +38,9 @@ public final class DspFullDayInspectionFormatter {
                 + " termination=" + termination
                 + " profile=" + snapshot.profileId()
                 + " calibration=" + snapshot.calibrationStatus()
-                + " milestone=" + snapshot.completionMilestone());
+                + " milestone=" + snapshot.completionMilestone()
+                + " completedWithInputExclusions="
+                + snapshot.completedWithInputExclusions());
         lines.add("Clock: business=" + metrics.clock().businessDateTime()
                 + " elapsed=" + metrics.clock().elapsedSimulationTime()
                 + " phase=" + metrics.clock().phase());
@@ -101,8 +111,16 @@ public final class DspFullDayInspectionFormatter {
                 + " manualLines=" + snapshot.loadReport().ignoredManualLineCount()
                 + " omittedOrders=" + snapshot.loadReport().omittedOrderCount()
                 + " unresolvedProducts=" + snapshot.loadReport().unresolvedProductLines().size()
+                + " rejectedLines=" + snapshot.rejectionCatalog().rejectedLineCount()
+                + " rejectedMessages=" + snapshot.rejectionCatalog().rejectedMessageCount()
+                + " countsByReason=" + rejectionReasonSummary(snapshot.rejectionCatalog())
                 + " reusedInboundToteIds="
                 + snapshot.loadReport().inboundToteIdSubstitutions().size());
+        lines.add("Input exclusions: rejectedLines="
+                + snapshot.rejectionCatalog().rejectedLineCount()
+                + " rejectedMessages=" + snapshot.rejectionCatalog().rejectedMessageCount()
+                + " countsByReason=" + rejectionReasonSummary(snapshot.rejectionCatalog()));
+        addRejectionDetails(lines, snapshot.rejectionCatalog());
         lines.add("Unsupported: " + joinOrNone(snapshot.unsupportedWork()));
         lines.add("Unfinished: " + joinOrNone(snapshot.unfinishedIdentities()));
         return List.copyOf(lines);
@@ -191,6 +209,107 @@ public final class DspFullDayInspectionFormatter {
         return value.map(Duration::toString).orElse("none");
     }
 
+    private String rejectionReasonSummary(DspInputRejectionCatalog catalog) {
+        String summary = java.util.Arrays.stream(DspInputRejectionReason.values())
+                .map(reason -> reason + "=" + catalog.count(reason))
+                .filter(value -> !value.endsWith("=0"))
+                .collect(Collectors.joining(","));
+        return summary.isEmpty() ? "none" : summary;
+    }
+
+    private void addRejectionDetails(
+            List<String> lines,
+            DspInputRejectionCatalog catalog) {
+        for (RejectionDetail detail : rejectionDetails(catalog)) {
+            if (detail.message() != null) {
+                TwelveNRejectedInputMessage message = detail.message();
+                lines.add("RejectedMessage: encounterIndex="
+                        + message.sourceMessageEncounterIndex()
+                        + " path=" + message.path()
+                        + " reason=MALFORMED_12N_MESSAGE"
+                        + " diagnostic=" + message.diagnostic()
+                        + " exceptionClass=" + message.exceptionClassName());
+                for (String stackTraceLine : message.stackTraceLines()) {
+                    lines.add("RejectedMessageStackTrace: encounterIndex="
+                            + message.sourceMessageEncounterIndex()
+                            + " " + stackTraceLine);
+                }
+            } else {
+                DspRejectedLine rejectedLine = detail.line();
+                lines.add("RejectedLine: encounterIndex="
+                        + rejectedLine.sourceMessageEncounterIndex()
+                        + " sourceLineIndex=" + rejectedLine.sourceLineIndex()
+                        + " sourceOrder=" + orderSheet(rejectedLine.sourceOrderSheetKey())
+                        + " sourceType=" + rejectedLine.sourceOrderType()
+                        + " targetOrder=" + rejectedLine.targetOrderSheetKey()
+                                .map(this::orderSheet)
+                                .orElse("none")
+                        + " preparedLine=" + rejectedLine.preparedLineKey()
+                                .map(this::preparedLine)
+                                .orElse("none")
+                        + " reason=" + rejectedLine.reason()
+                        + " diagnostic=" + rejectedLine.diagnostic()
+                        + " exceptionClass=" + rejectedLine.exceptionClassName()
+                                .orElse("none")
+                        + " orderItem=" + orderItem(rejectedLine.orderItem()));
+                for (String stackTraceLine : rejectedLine.stackTraceLines()) {
+                    lines.add("RejectedLineStackTrace: encounterIndex="
+                            + rejectedLine.sourceMessageEncounterIndex()
+                            + " sourceLineIndex=" + rejectedLine.sourceLineIndex()
+                            + " " + stackTraceLine);
+                }
+            }
+        }
+    }
+
+    private List<RejectionDetail> rejectionDetails(DspInputRejectionCatalog catalog) {
+        List<RejectionDetail> details = new ArrayList<>(
+                catalog.rejectedMessageCount() + catalog.rejectedLineCount());
+        int sequence = 0;
+        for (TwelveNRejectedInputMessage message : catalog.rejectedMessages()) {
+            details.add(new RejectionDetail(
+                    message.sourceMessageEncounterIndex(),
+                    -1,
+                    sequence++,
+                    message,
+                    null));
+        }
+        for (DspRejectedLine line : catalog.rejectedLines()) {
+            details.add(new RejectionDetail(
+                    line.sourceMessageEncounterIndex(),
+                    line.sourceLineIndex(),
+                    sequence++,
+                    null,
+                    line));
+        }
+        details.sort(Comparator
+                .comparingInt(RejectionDetail::sourceMessageEncounterIndex)
+                .thenComparingInt(RejectionDetail::sourceLineIndex)
+                .thenComparingInt(RejectionDetail::sequence));
+        return details;
+    }
+
+    private String orderSheet(OrderSheetKey value) {
+        return value.orderId() + "/" + value.sheetNumber();
+    }
+
+    private String preparedLine(PreparedLineKey value) {
+        return value.targetOrderId() + "/" + value.lineReference();
+    }
+
+    private String orderItem(DspOrderItem value) {
+        return "lineReference=" + value.lineReference()
+                + ",productId=" + value.productId()
+                + ",quantity=" + value.quantity()
+                + ",pharmacyId=" + value.pharmacyId()
+                + ",patientId=" + value.patientId()
+                + ",prescriptionId=" + value.prescriptionId()
+                + ",lineType=" + value.lineType()
+                + ",referenceOrderId=" + value.referenceOrderId()
+                + ",referenceSheetNumber=" + value.referenceSheetNumber()
+                + ",numberOfPacksPicked=" + value.numberOfPacksPicked();
+    }
+
     private String valueOrNone(String value) {
         return value == null || value.isBlank() ? "none" : value;
     }
@@ -201,5 +320,13 @@ public final class DspFullDayInspectionFormatter {
 
     private String decimal(double value) {
         return String.format(Locale.ROOT, "%.6f", value);
+    }
+
+    private record RejectionDetail(
+            int sourceMessageEncounterIndex,
+            int sourceLineIndex,
+            int sequence,
+            TwelveNRejectedInputMessage message,
+            DspRejectedLine line) {
     }
 }
