@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -13,13 +14,17 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackSlot;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -85,6 +90,92 @@ class DspFullDayLoadScaleTest {
         assertFalse(first.bagPlan().packTraces().isEmpty());
     }
 
+    @Test
+    void shouldKeepGeneratedScaleConstructionIndexedWithSmallRecoverableSideProjection(
+            @TempDir Path directory) throws Exception {
+        DspUncalibratedFullDayProfile profile =
+                DspUncalibratedFullDayProfile.productionBaseline(
+                        OPERATING_DATE, 10, Duration.ofSeconds(1), 2, 4, 4);
+        DspFullDayLoadedInput input = loadScaleInputWithSmallRecoverableProjection(
+                directory.resolve("recoverable-scale"), profile);
+
+        assertEquals(SYNTHETIC_PACK_LINE_COUNT, input.data().orders().getFirst().items().size());
+        assertEquals(SYNTHETIC_PACK_LINE_COUNT, input.bagPlan().plannedPackSlots().size());
+        assertEquals(1, input.rejectionCatalog().rejectedMessageCount());
+        assertEquals(1, input.rejectionCatalog().rejectedLineCount());
+        assertEquals(1, input.rejectionCatalog().count(
+                DspInputRejectionReason.MALFORMED_12N_MESSAGE));
+        assertEquals(1, input.rejectionCatalog().count(
+                DspInputRejectionReason.MISSING_ADAPTED_SOURCE));
+        OrderSheetKey rejectedOrder = new OrderSheetKey("scale-rejected-order", 1);
+        assertSame(input.rejectionCatalog().rejectedLinesForTargetOrder(rejectedOrder),
+                input.rejectionCatalog().rejectedLinesForTargetOrder(rejectedOrder));
+        assertSame(input.rejectionCatalog().countsByReason(),
+                input.rejectionCatalog().countsByReason());
+        assertSame(input.rejectionCatalog().rejectedLinesByTargetOrder(),
+                input.rejectionCatalog().rejectedLinesByTargetOrder());
+
+        BagPlanningResult plan = input.bagPlan();
+        int visitedSlots = 0;
+        for (PlannedPackSlot slot : plan.plannedPackSlots()) {
+            assertSame(slot, plan.findPlannedPackSlot(slot.slotKey()).orElseThrow());
+            visitedSlots++;
+        }
+        assertEquals(SYNTHETIC_PACK_LINE_COUNT, visitedSlots);
+        int visitedTraces = 0;
+        for (PlannedPackTrace trace : plan.packTraces()) {
+            assertSame(trace, plan.findPackTrace(trace.physicalPackId()).orElseThrow());
+            visitedTraces++;
+        }
+        assertEquals(SYNTHETIC_PACK_LINE_COUNT, visitedTraces);
+        List<Integer> sampledLineIndexes = List.of(0, SYNTHETIC_PACK_LINE_COUNT / 2,
+                SYNTHETIC_PACK_LINE_COUNT - 1);
+        for (int lineIndex : sampledLineIndexes) {
+            PlannedPackSlot slot = plan.plannedPackSlots().get(lineIndex);
+            assertSame(slot, plan.findPlannedPackSlot(slot.slotKey()).orElseThrow());
+            PlannedPackTrace trace = plan.packTraces().get(lineIndex);
+            assertSame(trace, plan.findPackTrace(trace.physicalPackId()).orElseThrow());
+        }
+        assertSame(plan.plannedBags().getFirst(), plan.findBagByCorrelationId(
+                plan.plannedBags().getFirst().bagKey().correlationId()).orElseThrow());
+        assertSame(plan.plannedBags().getLast(), plan.findBagByCorrelationId(
+                plan.plannedBags().getLast().bagKey().correlationId()).orElseThrow());
+    }
+
+    @Test
+    void shouldKeepRecoverableInputOutsideRuntimePackages() throws IOException {
+        Path sourceRoot = Stream.of(
+                        Path.of("src", "main", "java"),
+                        Path.of("app", "src", "main", "java"),
+                        Path.of("..", "app", "src", "main", "java"))
+                .filter(Files::isDirectory)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("missing Java source root"))
+                .resolve("online/davisfamily/warehouse/sim/dsp");
+        List<Path> runtimeRoots = List.of(
+                sourceRoot.resolve("analysis").resolve("runtime"),
+                sourceRoot.resolve("runtime"));
+        for (Path runtimeRoot : runtimeRoots) {
+            assertTrue(Files.isDirectory(runtimeRoot), "missing runtime source root " + runtimeRoot);
+            try (Stream<Path> paths = Files.walk(runtimeRoot)) {
+                for (Path source : paths.filter(Files::isRegularFile)
+                        .filter(path -> path.toString().endsWith(".java"))
+                        .toList()) {
+                    String contents = Files.readString(source);
+                    assertFalse(contents.contains("DspRejectedLine"), source.toString());
+                    assertFalse(contents.contains("TwelveNRejectedInputMessage"),
+                            source.toString());
+                    assertFalse(contents.contains("DspInputRejectionCatalog"), source.toString());
+                    assertFalse(contents.contains("DspInputRejectionReason"), source.toString());
+                    assertFalse(contents.contains("rejectedLines"), source.toString());
+                    assertFalse(contents.contains("rejectedMessages"), source.toString());
+                    assertFalse(contents.contains("rejectionCatalog"), source.toString());
+                    assertFalse(contents.toLowerCase().contains("rejection"), source.toString());
+                }
+            }
+        }
+    }
+
     private static DspFullDayLoadedInput loadScaleInput(
             Path directory,
             DspUncalibratedFullDayProfile profile) throws IOException {
@@ -97,6 +188,49 @@ class DspFullDayLoadScaleTest {
                 directory.resolve("scale-order.json"), scaleMessage());
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, List.of(message)), profile);
+    }
+
+    private static DspFullDayLoadedInput loadScaleInputWithSmallRecoverableProjection(
+            Path directory,
+            DspUncalibratedFullDayProfile profile) throws IOException {
+        Files.createDirectories(directory);
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                scale-product,Scale Product,,200,100,80
+                """);
+        Path malformed = Files.writeString(directory.resolve("00-malformed.json"),
+                "{ not valid json");
+        Path message = Files.writeString(
+                directory.resolve("01-scale-order.json"), scaleMessage());
+        Path rejected = Files.writeString(
+                directory.resolve("02-scale-rejected-order.json"), """
+                {
+                  "header": {"orderId":"scale-rejected-order","sheetNumber":"001"},
+                  "toteIdentifier": {"payload":"04"},
+                  "transportContainer": {"payload":"scale-rejected-tote"},
+                  "orderPriority": {"payload":"999"},
+                  "serviceCentre": {"payload":"104"},
+                  "orderDetail": {
+                    "numberOfOrderLines": 1,
+                    "orderLines": [
+                      {
+                        "orderLineNumber":"scale-rejected-line",
+                        "orderLineType":"02",
+                        "pharmacyId":"scale-pharmacy",
+                        "patientId":"scale-patient",
+                        "prescriptionId":"scale-rejected-rx",
+                        "productId":"scale-product",
+                        "numberOfPacks":"0001",
+                        "referenceSheetNumber":"001",
+                        "numberOfPacksPicked":"0000",
+                        "referenceOrderId":"scale-rejected-order"
+                      }
+                    ]
+                  }
+                }
+                """);
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, List.of(malformed, message, rejected)), profile);
     }
 
     private static String scaleMessage() {

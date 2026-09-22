@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,9 +30,12 @@ import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineRecord;
 import online.davisfamily.warehouse.sim.dsp.adapting.PlannedSlotCollectedPackCorrelationResolver;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriter;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagSequencePosition;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
@@ -46,7 +50,6 @@ import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
 import online.davisfamily.warehouse.sim.dsp.supply.PhysicalToteSupplyState;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaConfig;
-import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
@@ -59,9 +62,14 @@ class DspFullDayAnalysisScenarioTest {
         ScenarioRun first = runScenario(directory.resolve("mixed-first"));
         ScenarioRun second = runScenario(directory.resolve("mixed-second"));
 
-        assertEquals(first.report(), second.report());
+        assertEquals(first.report().rejectionCatalog().rejectedLines(),
+                second.report().rejectionCatalog().rejectedLines());
+        assertEquals(first.report().rejectionCatalog().rejectedMessages(),
+                second.report().rejectionCatalog().rejectedMessages());
+        assertEquals(first.report().rejectionCatalog().countsByReason(),
+                second.report().rejectionCatalog().countsByReason());
         assertEquals(first.reportJson(), second.reportJson());
-        assertEquals(first.inspection(), second.inspection());
+        assertEquals(first.progressOutput(), second.progressOutput());
 
         DspFullDayAnalysisReport report = first.report();
         var snapshot = report.runtimeSnapshot();
@@ -71,7 +79,12 @@ class DspFullDayAnalysisScenarioTest {
         assertEquals(Set.of("104", "108", "109", "116"), first.input().data().orders().stream()
                 .map(order -> order.serviceCentreId())
                 .collect(Collectors.toCollection(LinkedHashSet::new)));
-        assertEquals(EnumSet.allOf(OrderType.class), orderTypes);
+        assertEquals(EnumSet.of(OrderType.EMPTY, OrderType.ASSOCIATED, OrderType.FULL_PACK),
+                orderTypes);
+        Set<OrderType> reportableOrderTypes = first.input().reportableOrders().stream()
+                .map(order -> order.orderType())
+                .collect(Collectors.toCollection(() -> EnumSet.noneOf(OrderType.class)));
+        assertEquals(EnumSet.allOf(OrderType.class), reportableOrderTypes);
         assertEquals(DspUncalibratedFullDayProfile.PROFILE_ID, report.profileId());
         assertEquals(DspUncalibratedFullDayProfile.TIMING_CALIBRATION_STATUS,
                 report.calibrationStatus());
@@ -135,10 +148,10 @@ class DspFullDayAnalysisScenarioTest {
                 .allMatch(centre -> centre.authorizationElapsedTime().isPresent()
                         && centre.admittedAfterStartupCount() > 0));
 
-        assertTrue(snapshot.stationProcessing().activeClaims().stream()
-                .anyMatch(claim -> claim.destination().stationType() == StationType.THIRD_PARTY
-                        && claim.physicalToteId().value().equals("full-109-third-party-tote")));
-        assertTrue(snapshot.lifecycle().totes().values().stream()
+        assertTrue(snapshot.lifecycle().totes().entrySet().stream()
+                .anyMatch(entry -> entry.getKey().value().equals("full-109-third-party-tote")
+                        && !entry.getValue().terminal()));
+        assertFalse(snapshot.lifecycle().totes().values().stream()
                 .anyMatch(tote -> tote.state() == PhysicalToteLifecycleState.CONSUMED_AT_ADAPTING));
         assertTrue(snapshot.lifecycle().assignments().size()
                 > first.input().data().inboundToteManifests().size());
@@ -189,6 +202,149 @@ class DspFullDayAnalysisScenarioTest {
                                 .equals(tote.serviceCentreId().orElseThrow())
                                 && bag.plannedBag().pharmacyId()
                                 .equals(tote.pharmacyId().orElseThrow()))));
+    }
+
+    @Test
+    void shouldCompleteMixedRecoverableInputWithoutCreatingRejectedRuntimeWork(
+            @TempDir Path directory) throws Exception {
+        DspUncalibratedFullDayProfile profile = recoverableScenarioProfile();
+        DspFullDayLoadedInput input = loadRecoverableInput(directory.resolve("mixed"), profile);
+        ScenarioRun mixed = runLoadedInput(input, profile, directory.resolve("mixed"));
+
+        assertEquals(
+                DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE,
+                mixed.report().state(),
+                () -> "completion=" + mixed.report().serviceCentres()
+                        + ", scheduler=" + mixed.report().runtimeSnapshot().scheduler()
+                        + ", supply=" + mixed.report().runtimeSnapshot().supply()
+                        + ", p2p=" + mixed.report().runtimeSnapshot().p2pLines());
+        assertEquals(DspFullDayTerminationReason.ALL_SUPPORTED_WORK_COMPLETE,
+                mixed.report().terminationReason());
+        assertTrue(mixed.report().completedWithInputExclusions());
+        assertEquals(List.of("104"), mixed.report().serviceCentres().stream()
+                .map(result -> result.serviceCentreId())
+                .toList());
+        assertTrue(mixed.report().serviceCentres().getFirst().complete());
+
+        assertEquals(List.of(
+                        "valid-before",
+                        "valid-adapted-source",
+                        "valid-adapted-fulfilment",
+                        "partial-order",
+                        "valid-third-party",
+                        "valid-after"),
+                input.data().orders().stream().map(order -> order.orderId()).toList());
+        assertEquals(List.of(
+                        "valid-before",
+                        "valid-adapted-source",
+                        "valid-adapted-fulfilment",
+                        "missing-source-order",
+                        "orphan-source-order",
+                        "duplicate-source-a",
+                        "duplicate-source-b",
+                        "duplicate-source-fulfilment",
+                        "duplicate-fulfilment-source",
+                        "duplicate-fulfilment-order",
+                        "duplicate-fulfilment-order",
+                        "mismatch-source",
+                        "mismatch-order",
+                        "partial-order",
+                        "fully-rejected-order",
+                        "valid-third-party",
+                        "valid-after"),
+                input.reportableOrders().stream().map(order -> order.orderId()).toList());
+        assertEquals(List.of(0L, 1L, 2L, 13L, 15L, 16L),
+                input.data().orders().stream().map(order -> order.sequenceNumber()).toList());
+        assertEquals(List.of(0, 1, 2, 14, 16, 17),
+                input.data().retainedInputLines().stream()
+                        .map(line -> line.sourceMessageEncounterIndex())
+                        .distinct()
+                        .toList());
+        assertEquals(input.data().orders().stream().map(order -> order.orderId()).toList(),
+                mixed.report().runtimeSnapshot().scheduler().orderStates().stream()
+                        .map(state -> state.order().orderId())
+                        .toList());
+        assertEquals(0, input.report().ignoredManualMessageCount());
+        assertEquals(0, input.report().ignoredManualLineCount());
+
+        DspInputRejectionCatalog catalog = input.rejectionCatalog();
+        assertEquals(12, catalog.rejectedLineCount());
+        assertEquals(1, catalog.rejectedMessageCount());
+        assertEquals(3, catalog.count(DspInputRejectionReason.MISSING_ADAPTED_SOURCE));
+        assertEquals(1, catalog.count(DspInputRejectionReason.MISSING_ADAPTED_FULFILMENT));
+        assertEquals(3, catalog.count(DspInputRejectionReason.DUPLICATE_ADAPTED_SOURCE));
+        assertEquals(3, catalog.count(DspInputRejectionReason.DUPLICATE_ADAPTED_FULFILMENT));
+        assertEquals(2,
+                catalog.count(DspInputRejectionReason.ADAPTED_SOURCE_FULFILMENT_MISMATCH));
+        assertSame(catalog, mixed.report().rejectionCatalog());
+        assertEquals(List.of(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15),
+                catalog.rejectedLines().stream()
+                        .map(line -> line.sourceMessageEncounterIndex())
+                        .toList());
+        assertEquals(List.of(13), catalog.rejectedMessages().stream()
+                .map(message -> message.sourceMessageEncounterIndex())
+                .toList());
+        assertEquals(0, catalog.rejectedLines().stream()
+                .filter(line -> line.sourceOrderSheetKey().orderId().equals("partial-order"))
+                .findFirst().orElseThrow().sourceLineIndex());
+        assertEquals(1, input.data().orders().stream()
+                .filter(order -> order.orderId().equals("partial-order"))
+                .findFirst().orElseThrow().items().size());
+        assertThrows(UnsupportedOperationException.class,
+                () -> catalog.rejectedLines().clear());
+        assertThrows(UnsupportedOperationException.class,
+                () -> catalog.countsByReason().clear());
+        assertSame(catalog.countsByReason(), catalog.countsByReason());
+        assertSame(catalog.rejectedLinesByTargetOrder(), catalog.rejectedLinesByTargetOrder());
+
+        assertTrue(mixed.reportJson().contains("MISSING_ADAPTED_SOURCE"));
+        assertTrue(mixed.reportJson().contains("fully-rejected-order"));
+        assertTrue(mixed.progressOutput().contains("rejectedLines=12"));
+        List<String> finalInspection = new DspFullDayInspectionFormatter()
+                .describe(mixed.report());
+        assertTrue(finalInspection.stream().anyMatch(line -> line.startsWith("RejectedLine: ")
+                && line.contains("sourceOrder=fully-rejected-order/1")));
+
+        Set<String> fullyRejectedOrderIds = Set.of(
+                "missing-source-order",
+                "orphan-source-order",
+                "duplicate-source-a",
+                "duplicate-source-b",
+                "duplicate-source-fulfilment",
+                "duplicate-fulfilment-source",
+                "duplicate-fulfilment-order",
+                "mismatch-source",
+                "mismatch-order",
+                "fully-rejected-order");
+        Set<String> rejectedPhysicalToteIds = Set.of(
+                "missing-source-tote",
+                "orphan-source-tote",
+                "duplicate-source-a-tote",
+                "duplicate-source-b-tote",
+                "duplicate-source-fulfilment-tote",
+                "duplicate-fulfilment-source-tote",
+                "duplicate-fulfilment-a-tote",
+                "duplicate-fulfilment-b-tote",
+                "mismatch-source-tote",
+                "mismatch-tote",
+                "fully-rejected-tote");
+        assertNoRejectedWork(input, mixed.report(), fullyRejectedOrderIds,
+                rejectedPhysicalToteIds);
+
+        DspFullDayLoadedInput executableOnly = new DspFullDayLoadedInput(
+                input.data(),
+                input.data().orders(),
+                DspInputRejectionCatalog.empty(),
+                input.bagPlan(),
+                input.report(),
+                input.timetable());
+        ScenarioRun withoutCatalog = runLoadedInput(
+                executableOnly,
+                profile,
+                directory.resolve("without-catalog"));
+        assertEquals(runtimeCardinality(mixed.report().runtimeSnapshot()),
+                runtimeCardinality(withoutCatalog.report().runtimeSnapshot()));
+        assertFalse(withoutCatalog.report().completedWithInputExclusions());
     }
 
     @Test
@@ -486,6 +642,14 @@ class DspFullDayAnalysisScenarioTest {
         Files.createDirectories(directory);
         DspUncalibratedFullDayProfile profile = profile();
         DspFullDayLoadedInput input = loadMixedInput(directory, profile);
+        return runLoadedInput(input, profile, directory);
+    }
+
+    private static ScenarioRun runLoadedInput(
+            DspFullDayLoadedInput input,
+            DspUncalibratedFullDayProfile profile,
+            Path directory) throws IOException {
+        Files.createDirectories(directory);
         ByteArrayOutputStream inspectionBytes = new ByteArrayOutputStream();
         AtomicLong monotonicClock = new AtomicLong();
         Path output = directory.resolve("report.json");
@@ -613,6 +777,34 @@ class DspFullDayAnalysisScenarioTest {
                 0.001d,
                 new DspUncalibratedFullDayProfile.QueueCapacities(1, 1, 1, 1, 1),
                 new ThirdPartyAreaConfig(16, 1, 100_000d),
+                baseline.adaptingStorageConfig(),
+                baseline.adaptingBenchDefinitions(),
+                baseline.p2pPlaceholderDurations(),
+                baseline.p2pLineDefinitions(),
+                baseline.prlCountPerLine(),
+                baseline.timetable());
+    }
+
+    private static DspUncalibratedFullDayProfile recoverableScenarioProfile() {
+        DspUncalibratedFullDayProfile baseline = adaptedThirdPartyProfile();
+        // Keep the headless boundary fine enough for a three-pack PCR group. A ten-second
+        // step can advance the first accepted packs to outfeed before the final PRL transfer
+        // is admitted, leaving the group unable to hand off.
+        return new DspUncalibratedFullDayProfile(
+                baseline.operatingDate(),
+                baseline.osrInventoryConfig(),
+                baseline.serviceCentreSupplyConfig(),
+                baseline.inboundToteArrivalPolicy(),
+                baseline.av02AllocationConfig(),
+                baseline.p2pElasticAllocationConfig(),
+                baseline.outboundToteConfig(),
+                baseline.maximumPacksPerBag(),
+                Duration.ofSeconds(1),
+                baseline.maximumStepsPerAdvance(),
+                baseline.metricSampleInterval(),
+                baseline.routeSpeedUnitsPerSecond(),
+                baseline.queueCapacities(),
+                baseline.thirdPartyAreaConfig(),
                 baseline.adaptingStorageConfig(),
                 baseline.adaptingBenchDefinitions(),
                 baseline.p2pPlaceholderDurations(),
@@ -811,6 +1003,107 @@ class DspFullDayAnalysisScenarioTest {
                 new DspFullDayInputPaths(products, messages), profile);
     }
 
+    private static DspFullDayLoadedInput loadRecoverableInput(
+            Path directory,
+            DspUncalibratedFullDayProfile profile) throws IOException {
+        Files.createDirectories(directory);
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                product-b,Product B,Y74,200,100,80
+                """);
+        List<Path> messages = new ArrayList<>();
+        messages.add(writeMessage(directory, "00-valid-before.json", message(
+                "valid-before", "001", "05", "valid-before-tote", "104", "999",
+                List.of(line("valid-before-line", "05", "product-a", "pharmacy-104",
+                        "patient-before", "rx-before", 1, 0)))));
+        messages.add(writeMessage(directory, "01-valid-adapted-source.json", message(
+                "valid-adapted-source", "001", "02", "valid-adapted-source-tote", "104", "999",
+                List.of(line("valid-adapted-line", "02", "product-b", "pharmacy-adapted",
+                        "patient-adapted", "rx-adapted", 3, 2)))
+                .replace("\"referenceOrderId\":\"valid-adapted-source\"",
+                        "\"referenceOrderId\":\"valid-adapted-fulfilment\"")));
+        messages.add(writeMessage(directory, "02-valid-adapted-fulfilment.json", message(
+                "valid-adapted-fulfilment", "001", "04", "valid-adapted-fulfilment-tote", "104", "999",
+                List.of(
+                        line("valid-adapted-ordinary-line", "05", "product-a", "pharmacy-adapted",
+                                "patient-adapted", "rx-adapted", 8, 8),
+                        line("valid-adapted-third-party-line", "03", "product-b", "pharmacy-adapted",
+                                "patient-adapted", "rx-adapted", 3, 2),
+                        line("valid-adapted-line", "02", "product-b", "pharmacy-adapted",
+                                "patient-adapted", "rx-adapted", 2, 1)))));
+        messages.add(writeMessage(directory, "03-missing-source.json", message(
+                "missing-source-order", "001", "04", "missing-source-tote", "104", "999",
+                List.of(line("missing-source-line", "02", "product-a", "pharmacy-104",
+                        "patient-missing", "rx-missing", 1, 0)))));
+        messages.add(writeMessage(directory, "04-orphan-source.json", message(
+                "orphan-source-order", "001", "02", "orphan-source-tote", "104", "999",
+                List.of(line("orphan-source-line", "02", "product-a", "pharmacy-104",
+                        "patient-orphan", "rx-orphan", 1, 0)))));
+        messages.add(writeMessage(directory, "05-duplicate-source-a.json", message(
+                "duplicate-source-a", "001", "02", "duplicate-source-a-tote", "104", "999",
+                List.of(line("duplicate-source-line", "02", "product-a", "pharmacy-104",
+                        "patient-duplicate-source", "rx-duplicate-source", 1, 0)))
+                .replace("\"referenceOrderId\":\"duplicate-source-a\"",
+                        "\"referenceOrderId\":\"duplicate-source-fulfilment\"")));
+        messages.add(writeMessage(directory, "06-duplicate-source-b.json", message(
+                "duplicate-source-b", "001", "02", "duplicate-source-b-tote", "104", "999",
+                List.of(line("duplicate-source-line", "02", "product-a", "pharmacy-104",
+                        "patient-duplicate-source", "rx-duplicate-source", 1, 0)))
+                .replace("\"referenceOrderId\":\"duplicate-source-b\"",
+                        "\"referenceOrderId\":\"duplicate-source-fulfilment\"")));
+        messages.add(writeMessage(directory, "07-duplicate-source-fulfilment.json", message(
+                "duplicate-source-fulfilment", "001", "04", "duplicate-source-fulfilment-tote", "104", "999",
+                List.of(line("duplicate-source-line", "02", "product-a", "pharmacy-104",
+                        "patient-duplicate-source", "rx-duplicate-source", 1, 0)))));
+        messages.add(writeMessage(directory, "08-duplicate-fulfilment-source.json", message(
+                "duplicate-fulfilment-source", "001", "02", "duplicate-fulfilment-source-tote", "104", "999",
+                List.of(line("duplicate-fulfilment-line", "02", "product-a", "pharmacy-104",
+                        "patient-duplicate-fulfilment", "rx-duplicate-fulfilment", 1, 0)))
+                .replace("\"referenceOrderId\":\"duplicate-fulfilment-source\"",
+                        "\"referenceOrderId\":\"duplicate-fulfilment-order\"")));
+        messages.add(writeMessage(directory, "09-duplicate-fulfilment-a.json", message(
+                "duplicate-fulfilment-order", "001", "04", "duplicate-fulfilment-a-tote", "104", "999",
+                List.of(line("duplicate-fulfilment-line", "02", "product-a", "pharmacy-104",
+                        "patient-duplicate-fulfilment", "rx-duplicate-fulfilment", 1, 0)))));
+        messages.add(writeMessage(directory, "10-duplicate-fulfilment-b.json", message(
+                "duplicate-fulfilment-order", "002", "04", "duplicate-fulfilment-b-tote", "104", "999",
+                List.of(line("duplicate-fulfilment-line", "02", "product-a", "pharmacy-104",
+                        "patient-duplicate-fulfilment", "rx-duplicate-fulfilment", 1, 0)))));
+        messages.add(writeMessage(directory, "11-mismatch-source.json", message(
+                "mismatch-source", "001", "02", "mismatch-source-tote", "104", "999",
+                List.of(line("mismatch-line", "02", "product-a", "pharmacy-104",
+                        "patient-mismatch", "rx-mismatch", 1, 0)))
+                .replace("\"referenceOrderId\":\"mismatch-source\"",
+                        "\"referenceOrderId\":\"mismatch-order\"")));
+        messages.add(writeMessage(directory, "12-mismatch-fulfilment.json", message(
+                "mismatch-order", "001", "04", "mismatch-tote", "104", "999",
+                List.of(line("mismatch-line", "02", "product-b", "pharmacy-104",
+                        "patient-mismatch", "rx-mismatch", 1, 0)))));
+        messages.add(writeMessage(directory, "14-malformed.json", "{ not valid json"));
+        messages.add(writeMessage(directory, "15-partial.json", message(
+                "partial-order", "001", "04", "partial-tote", "104", "999",
+                List.of(
+                        line("partial-rejected-line", "02", "product-a", "pharmacy-104",
+                                "patient-partial", "rx-partial-rejected", 1, 0),
+                        line("partial-valid-line", "05", "product-a", "pharmacy-104",
+                                "patient-partial", "rx-partial-valid", 1, 0)))));
+        messages.add(writeMessage(directory, "16-fully-rejected.json", message(
+                "fully-rejected-order", "001", "04", "fully-rejected-tote", "108", "998",
+                List.of(line("fully-rejected-line", "02", "product-a", "pharmacy-108",
+                        "patient-fully-rejected", "rx-fully-rejected", 1, 0)))));
+        messages.add(writeMessage(directory, "17-valid-third-party.json", message(
+                "valid-third-party", "001", "05", "valid-third-party-tote", "104", "999",
+                List.of(line("valid-third-party-line", "03", "product-b", "pharmacy-104",
+                        "patient-third-party", "rx-third-party", 1, 0)))));
+        messages.add(writeMessage(directory, "18-valid-after.json", message(
+                "valid-after", "001", "05", "valid-after-tote", "104", "999",
+                List.of(line("valid-after-line", "05", "product-a", "pharmacy-104",
+                        "patient-after", "rx-after", 1, 0)))));
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, messages), profile);
+    }
+
     private static DspFullDayLoadedInput loadAdaptedThirdPartyInput(
             Path directory,
             DspUncalibratedFullDayProfile profile) throws IOException {
@@ -857,6 +1150,168 @@ class DspFullDayAnalysisScenarioTest {
                         "pharmacy-integrated", "patient-integrated", "20002460000226956", 2, 1))));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(products, List.of(adapted, associated)), profile);
+    }
+
+    private static void assertNoRejectedWork(
+            DspFullDayLoadedInput input,
+            DspFullDayAnalysisReport report,
+            Set<String> fullyRejectedOrderIds,
+            Set<String> rejectedPhysicalToteIds) {
+        Set<LineIdentity> rejectedLineIdentities = input.rejectionCatalog().rejectedLines().stream()
+                .map(line -> new LineIdentity(
+                        line.sourceOrderSheetKey(), line.orderItem().lineReference()))
+                .collect(Collectors.toSet());
+
+        assertTrue(input.data().orders().stream()
+                .noneMatch(order -> fullyRejectedOrderIds.contains(order.orderId())));
+        assertTrue(input.data().retainedInputLines().stream()
+                .noneMatch(line -> rejectedLineIdentities.contains(new LineIdentity(
+                        line.sourceOrderSheetKey(), line.orderItem().lineReference()))));
+        assertTrue(input.data().inboundToteManifests().stream()
+                .noneMatch(manifest -> rejectedPhysicalToteIds.contains(
+                        manifest.physicalToteId().value())
+                        || manifest.items().stream().anyMatch(item -> rejectedLineIdentities.contains(
+                                new LineIdentity(manifest.orderSheetKey(), item.lineReference())))));
+
+        assertTrue(input.bagPlan().plannedPackSlots().stream().noneMatch(slot ->
+                fullyRejectedOrderIds.contains(slot.slotKey().sourceOrderSheetKey().orderId())
+                        || fullyRejectedOrderIds.contains(slot.fulfilmentOrderSheetKey().orderId())
+                        || rejectedLineIdentities.contains(new LineIdentity(
+                                slot.slotKey().sourceOrderSheetKey(),
+                                slot.slotKey().lineReference()))));
+        assertTrue(input.bagPlan().packTraces().stream().noneMatch(trace ->
+                fullyRejectedOrderIds.contains(trace.sourceProvenance().sourceOrderSheetKey().orderId())
+                        || fullyRejectedOrderIds.contains(trace.fulfilmentOrderSheetKey().orderId())
+                        || rejectedLineIdentities.contains(new LineIdentity(
+                                trace.sourceProvenance().sourceOrderSheetKey(),
+                                trace.sourceProvenance().lineReference()))));
+        assertTrue(input.bagPlan().plannedBags().stream()
+                .flatMap(bag -> bag.owningOrderSheetKeys().stream())
+                .noneMatch(sheet -> fullyRejectedOrderIds.contains(sheet.orderId())));
+        assertTrue(input.bagPlan().p2pToteLoadPlans().stream()
+                .noneMatch(plan -> rejectedPhysicalToteIds.contains(plan.physicalToteId().value())));
+
+        DspFullDayAnalysisRuntimeSnapshot snapshot = report.runtimeSnapshot();
+        assertTrue(snapshot.scheduler().orderStates().stream()
+                .noneMatch(state -> fullyRejectedOrderIds.contains(state.order().orderId())));
+        assertTrue(snapshot.scheduler().preparedLineKeys().stream()
+                .noneMatch(key -> fullyRejectedOrderIds.contains(key.targetOrderId())));
+        assertTrue(snapshot.supply().serviceCentres().stream()
+                .flatMap(centre -> centre.physicalTotes().stream())
+                .noneMatch(tote -> rejectedPhysicalToteIds.contains(tote.physicalToteId().value())));
+        assertTrue(snapshot.osr().storedTotes().stream()
+                .noneMatch(manifest -> rejectedPhysicalToteIds.contains(
+                        manifest.physicalToteId().value())));
+        assertTrue(snapshot.osr().departedTotes().stream()
+                .noneMatch(manifest -> rejectedPhysicalToteIds.contains(
+                        manifest.physicalToteId().value())));
+        assertTrue(snapshot.av02().waitingTotes().stream()
+                .noneMatch(tote -> rejectedPhysicalToteIds.contains(tote.physicalToteId().value())));
+        assertTrue(snapshot.av02().departedTotes().stream()
+                .noneMatch(tote -> rejectedPhysicalToteIds.contains(tote.physicalToteId().value())));
+        assertTrue(snapshot.lifecycle().totes().keySet().stream()
+                .noneMatch(tote -> rejectedPhysicalToteIds.contains(tote.value())));
+        assertTrue(snapshot.lifecycle().assignments().stream()
+                .noneMatch(assignment -> rejectedPhysicalToteIds.contains(
+                        assignment.physicalToteId().value())
+                        || fullyRejectedOrderIds.contains(assignment.orderSheetKey().orderId())));
+        assertTrue(snapshot.elastic().leases().lines().stream()
+                .flatMap(line -> line.physicalAssignments().stream())
+                .noneMatch(assignment -> rejectedPhysicalToteIds.contains(
+                        assignment.physicalToteId().value())));
+        assertTrue(snapshot.stationProcessing().activeClaims().stream()
+                .noneMatch(claim -> rejectedPhysicalToteIds.contains(claim.physicalToteId().value())));
+        assertTrue(snapshot.stationProcessing().pendingDispositions().stream()
+                .noneMatch(disposition -> rejectedPhysicalToteIds.contains(
+                        disposition.physicalToteId().value())));
+        assertTrue(snapshot.outboundTransport().entries().stream()
+                .noneMatch(entry -> rejectedPhysicalToteIds.contains(entry.physicalToteId().value())));
+        assertTrue(snapshot.transportInFlight().entries().stream()
+                .noneMatch(entry -> rejectedPhysicalToteIds.contains(entry.physicalToteId().value())));
+        assertTrue(snapshot.stationArrivals().stream()
+                .flatMap(queue -> queue.entries().stream())
+                .noneMatch(entry -> rejectedPhysicalToteIds.contains(entry.physicalToteId().value())));
+        assertNoRejectedId(snapshot.transportIngress().headPhysicalToteId(), rejectedPhysicalToteIds);
+        assertNoRejectedId(snapshot.transportIngress().lastIngressPhysicalToteId(),
+                rejectedPhysicalToteIds);
+        assertNoRejectedId(snapshot.transportIngress().blockedPhysicalToteId(),
+                rejectedPhysicalToteIds);
+        assertNoRejectedId(snapshot.transportArrival().lastArrivedPhysicalToteId(),
+                rejectedPhysicalToteIds);
+        assertNoRejectedId(snapshot.transportArrival().blockedPhysicalToteId(),
+                rejectedPhysicalToteIds);
+        assertTrue(snapshot.transportArrival().pendingArrivals().stream()
+                .noneMatch(arrival -> rejectedPhysicalToteIds.contains(
+                        arrival.physicalToteId().value())));
+        assertNoRejectedId(snapshot.operationalRelease().lastPhysicalToteId(),
+                rejectedPhysicalToteIds);
+        assertTrue(snapshot.p2pLines().stream()
+                .flatMap(line -> line.outboundAllocation().openTotesByLine().values().stream())
+                .noneMatch(tote -> rejectedPhysicalToteIds.contains(tote.physicalToteId().value())));
+        assertTrue(snapshot.p2pLines().stream()
+                .flatMap(line -> line.outboundAllocation().closedTotes().stream())
+                .noneMatch(tote -> rejectedPhysicalToteIds.contains(tote.physicalToteId().value())));
+        assertTrue(report.unsupportedWork().stream()
+                .noneMatch(value -> fullyRejectedOrderIds.stream().anyMatch(value::contains)));
+        assertTrue(report.unfinishedIdentities().stream()
+                .noneMatch(value -> fullyRejectedOrderIds.stream().anyMatch(value::contains)));
+        assertTrue(report.serviceCentres().stream()
+                .noneMatch(result -> result.serviceCentreId().equals("108")));
+    }
+
+    private static void assertNoRejectedId(
+            Optional<PhysicalToteId> value,
+            Set<String> rejectedPhysicalToteIds) {
+        assertTrue(value.isEmpty()
+                || !rejectedPhysicalToteIds.contains(value.orElseThrow().value()));
+    }
+
+    private static RuntimeCardinality runtimeCardinality(
+            DspFullDayAnalysisRuntimeSnapshot snapshot) {
+        int supplyPhysicalTotes = snapshot.supply().serviceCentres().stream()
+                .mapToInt(centre -> centre.physicalTotes().size())
+                .sum();
+        int p2pPhysicalAssignments = snapshot.elastic().leases().lines().stream()
+                .mapToInt(line -> line.physicalAssignments().size())
+                .sum();
+        int p2pOutboundTotes = snapshot.p2pLines().stream()
+                .mapToInt(line -> line.outboundAllocation().openTotesByLine().size()
+                        + line.outboundAllocation().closedTotes().size())
+                .sum();
+        int p2pAllocatedBags = snapshot.p2pLines().stream()
+                .mapToInt(line -> line.outboundAllocation().allocatedBags().size())
+                .sum();
+        return new RuntimeCardinality(
+                snapshot.scheduler().orderStates().size(),
+                snapshot.scheduler().preparedLineKeys().size(),
+                snapshot.supply().serviceCentres().size(),
+                supplyPhysicalTotes,
+                snapshot.osr().storedTotes().size() + snapshot.osr().departedTotes().size(),
+                snapshot.av02().waitingTotes().size() + snapshot.av02().departedTotes().size(),
+                snapshot.lifecycle().totes().size(),
+                snapshot.lifecycle().assignments().size(),
+                p2pPhysicalAssignments,
+                snapshot.elastic().allocation().serviceCentres().size(),
+                snapshot.elastic().allocation().serviceCentres().stream()
+                        .mapToLong(demand -> demand.rawRequiredLines())
+                        .sum(),
+                snapshot.elastic().allocation().totalDesiredLines(),
+                snapshot.elastic().allocation().totalUnmetRequiredLines(),
+                p2pOutboundTotes,
+                p2pAllocatedBags,
+                snapshot.stationProcessing().activeClaims().size()
+                        + snapshot.stationProcessing().pendingDispositions().size(),
+                snapshot.stationClaims().size(),
+                snapshot.stationArrivals().stream()
+                        .mapToInt(queue -> queue.entries().size())
+                        .sum(),
+                snapshot.outboundTransport().entries().size(),
+                snapshot.transportInFlight().entries().size(),
+                snapshot.transportIngress().transportOccupancy(),
+                snapshot.transportIngress().inFlightOccupancy(),
+                snapshot.transportArrival().pendingArrivals().size(),
+                snapshot.completions().size(),
+                snapshot.p2pLines().size());
     }
 
     private static ToteLoadPlan loadPlan(
@@ -942,6 +1397,37 @@ class DspFullDayAnalysisScenarioTest {
             DspFullDayLoadedInput input,
             DspFullDayAnalysisReport report,
             String reportJson,
-            String inspection) {
+            String progressOutput) {
+    }
+
+    private record LineIdentity(OrderSheetKey orderSheetKey, String lineReference) {
+    }
+
+    private record RuntimeCardinality(
+            int schedulerOrders,
+            int schedulerPreparedLines,
+            int supplyServiceCentres,
+            int supplyPhysicalTotes,
+            int osrTotes,
+            int av02Totes,
+            int lifecycleTotes,
+            int lifecycleAssignments,
+            int p2pPhysicalAssignments,
+            int elasticServiceCentres,
+            long elasticRawRequiredLines,
+            int elasticDesiredLines,
+            int elasticUnmetRequiredLines,
+            int p2pOutboundTotes,
+            int p2pAllocatedBags,
+            int stationWork,
+            int stationClaims,
+            int stationArrivals,
+            int outboundTransportEntries,
+            int inFlightTransportEntries,
+            int transportIngressOccupancy,
+            int transportInFlightOccupancy,
+            int pendingArrivals,
+            int completionObligations,
+            int p2pLines) {
     }
 }
