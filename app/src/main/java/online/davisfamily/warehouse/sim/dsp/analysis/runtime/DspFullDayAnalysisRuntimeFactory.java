@@ -235,7 +235,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
                         new ContainedPackP2pTipperPayloadFactory(1f, 1f, 0f, 0f, 0f, 0f),
                         stationCoordinator,
                         new AssignedLineWorkPlanProvider(
-                                definition.lineId(), workPlanProvider, correlationAssignments),
+                                definition.lineId(),
+                                workPlanProvider,
+                                correlationAssignments::snapshot),
                         bagPlan,
                         outboundAllocator,
                         p2pCompletedListener,
@@ -822,39 +824,6 @@ public final class DspFullDayAnalysisRuntimeFactory {
         @Override
         public Set<String> expectedCorrelationIds() {
             return expectedPackCounts.keySet();
-        }
-    }
-
-    private static final class AssignedLineWorkPlanProvider
-            implements ToteToBagWorkPlanProvider {
-        private final P2pLineId lineId;
-        private final LiveWorkPlanProvider allWork;
-        private final P2pBagCorrelationAssignmentRegistry assignments;
-
-        private AssignedLineWorkPlanProvider(
-                P2pLineId lineId,
-                LiveWorkPlanProvider allWork,
-                P2pBagCorrelationAssignmentRegistry assignments) {
-            this.lineId = lineId;
-            this.allWork = allWork;
-            this.assignments = assignments;
-        }
-
-        @Override
-        public java.util.OptionalInt expectedPackCount(String correlationId) {
-            if (assignments.lineFor(correlationId).filter(lineId::equals).isEmpty()) {
-                return java.util.OptionalInt.empty();
-            }
-            return allWork.expectedPackCount(correlationId);
-        }
-
-        @Override
-        public Set<String> expectedCorrelationIds() {
-            return allWork.expectedCorrelationIds().stream()
-                    .filter(correlation -> assignments.lineFor(correlation)
-                            .filter(lineId::equals)
-                            .isPresent())
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         }
     }
 

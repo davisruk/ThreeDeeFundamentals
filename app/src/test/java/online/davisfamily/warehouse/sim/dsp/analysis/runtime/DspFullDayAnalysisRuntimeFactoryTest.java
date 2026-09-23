@@ -64,6 +64,9 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                 new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
             assertEquals(5, runtime.lineRuntimes().size());
             assertEquals(31, runtime.lineRuntimes().getFirst().prlConveyors().size());
+            assertTrue(runtime.lineRuntimes().stream()
+                    .allMatch(line -> line.config().workPlanProvider()
+                            instanceof AssignedLineWorkPlanProvider));
             assertSame(runtime.outboundToteAllocator(),
                     runtime.lineRuntimes().getFirst().outboundToteAllocator());
             assertEquals(DspFullDayRuntimeState.RUNNING, runtime.state());

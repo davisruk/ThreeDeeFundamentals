@@ -2,10 +2,12 @@ package online.davisfamily.warehouse.sim.dsp.p2p.bag;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
@@ -16,6 +18,7 @@ public final class P2pBagCorrelationAssignmentSnapshot {
 
     private final List<P2pBagCorrelationAssignment> assignments;
     private final Map<String, P2pBagCorrelationAssignment> assignmentsByCorrelation;
+    private final Map<P2pLineId, Set<String>> correlationIdsByLine;
 
     public P2pBagCorrelationAssignmentSnapshot(
             List<P2pBagCorrelationAssignment> assignments) {
@@ -23,6 +26,7 @@ public final class P2pBagCorrelationAssignmentSnapshot {
             throw new IllegalArgumentException("assignments must not be null");
         }
         Map<String, P2pBagCorrelationAssignment> byCorrelation = new LinkedHashMap<>();
+        Map<P2pLineId, LinkedHashSet<String>> byLine = new LinkedHashMap<>();
         for (P2pBagCorrelationAssignment assignment : assignments) {
             if (assignment == null) {
                 throw new IllegalArgumentException("assignments must not contain null");
@@ -32,9 +36,16 @@ public final class P2pBagCorrelationAssignmentSnapshot {
                         "correlation assignments must be unique: "
                                 + assignment.correlationId());
             }
+            byLine.computeIfAbsent(assignment.lineId(), ignored -> new LinkedHashSet<>())
+                    .add(assignment.correlationId());
         }
         this.assignments = List.copyOf(assignments);
         this.assignmentsByCorrelation = Collections.unmodifiableMap(byCorrelation);
+        Map<P2pLineId, Set<String>> immutableByLine = new LinkedHashMap<>();
+        byLine.forEach((lineId, correlationIds) -> immutableByLine.put(
+                lineId,
+                Collections.unmodifiableSet(new LinkedHashSet<>(correlationIds))));
+        this.correlationIdsByLine = Collections.unmodifiableMap(immutableByLine);
     }
 
     public P2pBagCorrelationAssignmentSnapshot(
@@ -65,6 +76,13 @@ public final class P2pBagCorrelationAssignmentSnapshot {
 
     public Map<String, P2pBagCorrelationAssignment> correlationAssignments() {
         return assignmentsByCorrelation();
+    }
+
+    public Set<String> correlationIdsFor(P2pLineId lineId) {
+        if (lineId == null) {
+            throw new IllegalArgumentException("lineId must not be null");
+        }
+        return correlationIdsByLine.getOrDefault(lineId, Set.of());
     }
 
     public boolean compatibleWith(

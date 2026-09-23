@@ -47,6 +47,30 @@ class P2pBagCorrelationAssignmentSnapshotTest {
     }
 
     @Test
+    void shouldIndexCorrelationIdsByLineInEncounterOrderAndReuseImmutableSets() {
+        P2pLineId firstLine = new P2pLineId("line-a");
+        P2pLineId secondLine = new P2pLineId("line-b");
+        P2pBagCorrelationAssignmentSnapshot snapshot =
+                new P2pBagCorrelationAssignmentSnapshot(List.of(
+                        assignment("correlation-a-1", firstLine),
+                        assignment("correlation-b-1", secondLine),
+                        assignment("correlation-a-2", firstLine)));
+
+        var firstLineCorrelations = snapshot.correlationIdsFor(firstLine);
+        assertEquals(List.of("correlation-a-1", "correlation-a-2"),
+                firstLineCorrelations.stream().toList());
+        assertEquals(List.of("correlation-b-1"),
+                snapshot.correlationIdsFor(secondLine).stream().toList());
+        assertEquals(List.of(),
+                snapshot.correlationIdsFor(new P2pLineId("line-missing")).stream().toList());
+        assertSame(firstLineCorrelations, snapshot.correlationIdsFor(firstLine));
+        assertThrows(UnsupportedOperationException.class,
+                () -> firstLineCorrelations.add("correlation-a-3"));
+        assertThrows(IllegalArgumentException.class,
+                () -> snapshot.correlationIdsFor(null));
+    }
+
+    @Test
     void shouldDefensivelyCopyAndExposeImmutableStableCollections() {
         ArrayList<P2pBagCorrelationAssignment> source =
                 new ArrayList<>(List.of(assignment(1), assignment(2)));
@@ -104,8 +128,16 @@ class P2pBagCorrelationAssignmentSnapshotTest {
     }
 
     private static P2pBagCorrelationAssignment assignment(int index) {
-        return new P2pBagCorrelationAssignment(
+        return assignment(
                 "correlation-" + index,
                 new P2pLineId("line-" + index));
+    }
+
+    private static P2pBagCorrelationAssignment assignment(
+            String correlationId,
+            P2pLineId lineId) {
+        return new P2pBagCorrelationAssignment(
+                correlationId,
+                lineId);
     }
 }
