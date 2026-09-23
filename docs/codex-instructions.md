@@ -22,8 +22,10 @@ Always read these documents before starting:
    `docs/scheduler/dsp-full-day-analysis-metrics-inspection-plan.md`
 6. The active recoverable-input correction plan,
    `docs/scheduler/dsp-recoverable-input-rejection-plan.md`
-7. The active full-day runner clock-read remediation plan,
+7. The completed full-day runner clock-read remediation plan,
    `docs/scheduler/dsp-full-day-runner-clock-read-remediation-plan.md`
+8. The active full-day fixed-step performance remediation plan,
+   `docs/scheduler/dsp-full-day-fixed-step-performance-remediation-plan.md`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 

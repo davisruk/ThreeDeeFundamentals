@@ -25,7 +25,11 @@ those corrections and exposed a bounded set of remaining polling-driven snapshot
 completion, request, and metrics allocations. Steps 26-33 apply the static hot-path audit without
 broadening into general engine work, Step 34 owns the shared performance/functional gate, and Step
 35 owns final regression, external verification, review, and closure after the recoverable-input
-prerequisite in `docs/scheduler/dsp-recoverable-input-rejection-plan.md`. A broader engine and
+prerequisite in `docs/scheduler/dsp-recoverable-input-rejection-plan.md`. The committed runner
+clock-read correction removed its measured extra snapshot call, but the subsequent source audit
+found six additional fixed-step/high-cardinality paths. Complete
+`docs/scheduler/dsp-full-day-fixed-step-performance-remediation-plan.md` before retrying the
+terminal external run. A broader engine and
 render-integrated simulation allocation review remains deferred until the functional full-day path
 is working end to end.
 
@@ -4091,6 +4095,13 @@ polling-driven runner cost. Complete the narrow, separately authorized
 `docs/scheduler/dsp-full-day-runner-clock-read-remediation-plan.md` and its user-owned profile
 gate before treating this step's full-day external run as verified. That remediation does not
 change the Step 35 terminal-run, report, or deferred-behavior criteria.
+
+The runner remediation is complete and verified at `f6b20a3`, but its follow-up run remained
+orders of magnitude too slow. Step 35 is therefore also blocked by
+`docs/scheduler/dsp-full-day-fixed-step-performance-remediation-plan.md`. Complete its six
+implementation steps, shared user-owned functional/performance gate, and independent
+higher-reasoning architecture review before retrying this terminal run. That remediation preserves
+the fixed step and domain behavior; it removes only code-audit-confirmed redundant work.
 
 Step 35 is blocked by the checkpoint remediation in
 `docs/scheduler/dsp-complete-bag-demand-planning-remediation-plan.md` and its authoritative

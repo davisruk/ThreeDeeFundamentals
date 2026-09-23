@@ -2,7 +2,10 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection`
 
-Status: planned. No production change is authorized by this document alone; the user starts the implementation step separately.
+Status: complete and verified at `f6b20a3`. The user-owned early and `PT7M` JFR gates found zero
+`DspFullDayMetricsCollector.snapshot()` samples after the change. Overall full-day performance
+remains unacceptably slow and is now owned by the separate fixed-step performance remediation
+plan; the narrow clock-read correction is accepted without claiming an end-to-end speed target.
 
 ## Purpose And Evidence
 
