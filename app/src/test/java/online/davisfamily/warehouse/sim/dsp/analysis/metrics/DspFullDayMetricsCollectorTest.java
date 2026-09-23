@@ -41,6 +41,10 @@ import online.davisfamily.threedee.sim.framework.SimulationContext;
 
 class DspFullDayMetricsCollectorTest {
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
+    private static final int DETAILED_P2P_LINE_READ_INDEX = 6;
+    private static final List<Integer> UPDATE_SUPPLIER_READ_INDICES = List.of(
+            0, 1, 2, 3, 4, 5, 7, 9, 10, 12, 14, 15, 16, 17, 18);
+    private static final List<Integer> UNUSED_SUPPLIER_READ_INDICES = List.of(8, 11, 13);
 
     @Test
     void shouldExposeZeroStateMetadataAndInitialOccupancySample(@TempDir Path directory)
@@ -123,7 +127,7 @@ class DspFullDayMetricsCollectorTest {
     }
 
     @Test
-    void shouldReadEverySupplierOncePerStepAndAccumulateDurationForRepeatedIdentities(
+    void shouldSeparateUpdateSupplierReadsFromReportOnlyInputsAndAccumulateDuration(
             @TempDir Path directory) throws IOException {
         DspUncalibratedFullDayProfile profile = profile();
         DspFullDayLoadedInput input = loadInput(directory, profile);
@@ -136,15 +140,17 @@ class DspFullDayMetricsCollectorTest {
                     input,
                     countingSuppliers(fixedSuppliers(runtime), supplierReads));
 
-            assertSupplierReads(supplierReads, 1);
+            assertUpdateSupplierReads(supplierReads, 1);
+            assertReportOnlySupplierReads(supplierReads, 0);
             SimulationContext context = new SimulationContext();
-            collector.update(context, 0.25d);
-            collector.update(context, 0.75d);
+            collector.update(context, 1d);
             collector.update(context, 2d);
 
-            assertSupplierReads(supplierReads, 4);
+            assertUpdateSupplierReads(supplierReads, 3);
+            assertReportOnlySupplierReads(supplierReads, 0);
             DspFullDayMetricsSnapshot metrics = collector.snapshot();
-            assertSupplierReads(supplierReads, 5);
+            assertUpdateSupplierReads(supplierReads, 4);
+            assertReportOnlySupplierReads(supplierReads, 1);
             assertEquals(Duration.ofSeconds(3), metrics.observedSimulationDuration());
             assertEquals(1, metrics.occupancySamples().size());
         }
@@ -359,9 +365,19 @@ class DspFullDayMetricsCollectorTest {
         };
     }
 
-    private static void assertSupplierReads(List<AtomicInteger> reads, int expected) {
+    private static void assertUpdateSupplierReads(List<AtomicInteger> reads, int expected) {
         assertEquals(19, reads.size());
-        reads.forEach(count -> assertEquals(expected, count.get()));
+        UPDATE_SUPPLIER_READ_INDICES.forEach(index ->
+                assertEquals(expected, reads.get(index).get()));
+    }
+
+    private static void assertReportOnlySupplierReads(
+            List<AtomicInteger> reads,
+            int expectedDetailedP2pLineReads) {
+        assertEquals(expectedDetailedP2pLineReads,
+                reads.get(DETAILED_P2P_LINE_READ_INDEX).get());
+        UNUSED_SUPPLIER_READ_INDICES.forEach(index ->
+                assertEquals(0, reads.get(index).get()));
     }
 
     private static void assertMetricsUnchanged(

@@ -177,7 +177,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         this.loadReport = Objects.requireNonNull(loadReport, "loadReport must not be null");
         this.suppliers = Objects.requireNonNull(suppliers, "suppliers must not be null");
 
-        MetricInputs initial = readInputs();
+        UpdateInputs initial = readUpdateInputs();
         this.lastClockElapsedTime = initial.clock().elapsedSimulationTime();
         this.nextMetricSampleElapsedTime = metricSampleInterval;
         this.previousAdmittedInboundToteCount = initial.supply().admittedAfterStartupCount();
@@ -208,7 +208,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         }
         requireNonnegativeFinite(dtSeconds, "dtSeconds");
 
-        MetricInputs current = readInputs();
+        UpdateInputs current = readUpdateInputs();
         Duration elapsed = current.clock().elapsedSimulationTime();
         if (elapsed.compareTo(lastClockElapsedTime) < 0) {
             throw new IllegalStateException("operational clock elapsed time moved backwards");
@@ -247,7 +247,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
     }
 
     public DspFullDayMetricsSnapshot snapshot() {
-        MetricInputs current = readInputs();
+        ReportInputs current = readReportInputs();
         return buildSnapshot(current);
     }
 
@@ -259,7 +259,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         return true;
     }
 
-    private DspFullDayMetricsSnapshot buildSnapshot(MetricInputs current) {
+    private DspFullDayMetricsSnapshot buildSnapshot(ReportInputs current) {
         OutboundCounts outboundCounts = outboundCounts(current.outbound());
         Duration elapsed = current.clock().elapsedSimulationTime();
         double elapsedSeconds = durationToSeconds(elapsed);
@@ -319,7 +319,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                 List.copyOf(unsupportedWork));
     }
 
-    private List<DspServiceCentreMetricsSnapshot> serviceCentreMetrics(MetricInputs current) {
+    private List<DspServiceCentreMetricsSnapshot> serviceCentreMetrics(ReportInputs current) {
         Map<String, ServiceCentreSupplySnapshot> supplyById = current.supply().serviceCentres()
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(
@@ -389,8 +389,8 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         return List.copyOf(result);
     }
 
-    private List<DspP2pLineMetricsSnapshot> lineMetrics(MetricInputs current) {
-        Map<P2pLineId, DspHeadlessP2pLineRuntimeSnapshot> runtimeLines = current.p2pLines()
+    private List<DspP2pLineMetricsSnapshot> lineMetrics(ReportInputs current) {
+        Map<P2pLineId, DspHeadlessP2pLineRuntimeSnapshot> runtimeLines = current.p2pLineSnapshots()
                 .stream()
                 .collect(java.util.stream.Collectors.toMap(
                         line -> line.lineDefinition().lineId(),
@@ -478,7 +478,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         return Collections.unmodifiableMap(result);
     }
 
-    private void classifyAndAccumulate(MetricInputs current, Duration stepDuration) {
+    private void classifyAndAccumulate(UpdateInputs current, Duration stepDuration) {
         Map<String, OperationalBlockCounts> operationalBlocks = operationalBlocks(current);
         Map<String, String> physicalToteOwners = physicalToteOwners(current);
         for (DspServiceCentreCompletionSnapshot completion : current.completions()) {
@@ -496,7 +496,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
 
     private Optional<BlockObservation> classify(
             DspServiceCentreCompletionSnapshot completion,
-            MetricInputs current,
+            UpdateInputs current,
             OperationalBlockCounts operational,
             Map<String, String> physicalToteOwners) {
         if (!completion.unsupportedWork().isEmpty()) {
@@ -575,7 +575,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
 
     private long physicalStationBlocks(
             String serviceCentreId,
-            MetricInputs current,
+            UpdateInputs current,
             Map<String, String> physicalToteOwners) {
         Set<PhysicalToteId> blocked = new LinkedHashSet<>();
         current.transportIngress().blockedPhysicalToteId().ifPresent(blocked::add);
@@ -594,7 +594,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                 .count();
     }
 
-    private Map<String, OperationalBlockCounts> operationalBlocks(MetricInputs current) {
+    private Map<String, OperationalBlockCounts> operationalBlocks(UpdateInputs current) {
         Optional<DspOperationalReleaseEvaluation> evaluation = current.operationalRelease()
                 .lastEvaluation();
         DspOperationalReleaseEvaluation evaluationValue = evaluation.orElse(null);
@@ -641,7 +641,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         return result;
     }
 
-    private Map<String, String> physicalToteOwners(MetricInputs current) {
+    private Map<String, String> physicalToteOwners(UpdateInputs current) {
         if (cachedPhysicalToteOwners != null
                 && physicalOwnersSchedulerSnapshot == current.scheduler()
                 && physicalOwnersSupplySnapshot == current.supply()
@@ -712,7 +712,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         return immutableResult;
     }
 
-    private void accumulateLineBusyTime(MetricInputs current, Duration stepDuration) {
+    private void accumulateLineBusyTime(UpdateInputs current, Duration stepDuration) {
         for (P2pLineLeaseSnapshot line : current.elastic().leases().lines()) {
             if (!line.activity().quiescent()) {
                 P2pLineId lineId = line.definition().lineId();
@@ -725,7 +725,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         }
     }
 
-    private boolean recordNewCompletions(MetricInputs current) {
+    private boolean recordNewCompletions(UpdateInputs current) {
         boolean changed = false;
         for (DspServiceCentreCompletionSnapshot completion : current.completions()) {
             if (completion.complete() && previouslyCompletedCentres.add(
@@ -736,14 +736,14 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         return changed;
     }
 
-    private void initializeCompletionState(MetricInputs initial) {
+    private void initializeCompletionState(UpdateInputs initial) {
         initial.completions().stream()
                 .filter(DspServiceCentreCompletionSnapshot::complete)
                 .map(DspServiceCentreCompletionSnapshot::serviceCentreId)
                 .forEach(previouslyCompletedCentres::add);
     }
 
-    private void recordElasticIssues(MetricInputs current, boolean initial) {
+    private void recordElasticIssues(UpdateInputs current, boolean initial) {
         ElasticIssueProjection projection = elasticIssueProjection(current.elastic().allocation());
         for (String serviceCentreId : projection.serviceCentreIds()) {
             List<P2pElasticAllocationIssue> issues = projection.issuesByCentre().getOrDefault(
@@ -795,7 +795,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         return projection;
     }
 
-    private void captureOccupancySample(MetricInputs current) {
+    private void captureOccupancySample(UpdateInputs current) {
         Duration elapsed = current.clock().elapsedSimulationTime();
         if (!occupancySamples.isEmpty()
                 && occupancySamples.getLast().elapsedSimulationTime().equals(elapsed)) {
@@ -837,7 +837,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         }
     }
 
-    private void validateMonotonicCounts(MetricInputs current) {
+    private void validateMonotonicCounts(UpdateInputs current) {
         if (current.supply().admittedAfterStartupCount() < previousAdmittedInboundToteCount
                 || current.osr().departedTotes().size() < previousDepartedInboundToteCount
                 || current.outbound().closedTotes().size() < previousClosedOutboundToteCount
@@ -850,7 +850,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         previousAllocatedBagCount = current.outbound().allocatedBags().size();
     }
 
-    private boolean hasCapacityBlockedSupply(MetricInputs current) {
+    private boolean hasCapacityBlockedSupply(UpdateInputs current) {
         return current.supply().serviceCentres().stream()
                 .flatMap(centre -> centre.physicalTotes().stream())
                 .anyMatch(tote -> tote.state() == PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY)
@@ -858,27 +858,44 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                         .anyMatch(completion -> completion.capacityBlockedManifestCount() > 0);
     }
 
-    private MetricInputs readInputs() {
-        return new MetricInputs(
+    private UpdateInputs readUpdateInputs() {
+        return new UpdateInputs(
                 value(suppliers.clockSnapshotSupplier().get(), "clockSnapshot"),
                 value(suppliers.supplySnapshotSupplier().get(), "supplySnapshot"),
                 value(suppliers.osrSnapshotSupplier().get(), "osrSnapshot"),
                 value(suppliers.av02SnapshotSupplier().get(), "av02Snapshot"),
                 value(suppliers.lifecycleSnapshotSupplier().get(), "lifecycleSnapshot"),
                 value(suppliers.elasticSnapshotSupplier().get(), "elasticSnapshot"),
-                listValue(suppliers.p2pLineSnapshotsSupplier(), "p2pLineSnapshots"),
                 value(suppliers.operationalReleaseSnapshotSupplier().get(), "operationalReleaseSnapshot"),
-                value(suppliers.transportInFlightSnapshotSupplier().get(), "transportInFlightSnapshot"),
                 value(suppliers.transportIngressSnapshotSupplier().get(), "transportIngressSnapshot"),
                 value(suppliers.transportArrivalSnapshotSupplier().get(), "transportArrivalSnapshot"),
-                value(suppliers.outboundTransportSnapshotSupplier().get(), "outboundTransportSnapshot"),
                 listValue(suppliers.stationArrivalSnapshotsSupplier(), "stationArrivalSnapshots"),
-                value(suppliers.stationProcessingSnapshotSupplier().get(), "stationProcessingSnapshot"),
                 listValue(suppliers.stationClaimSnapshotsSupplier(), "stationClaimSnapshots"),
                 value(suppliers.outboundSnapshotSupplier().get(), "outboundSnapshot"),
                 value(suppliers.schedulerSnapshotSupplier().get(), "schedulerSnapshot"),
                 listValue(suppliers.completionSnapshotsSupplier(), "completionSnapshots"),
                 value(suppliers.runtimeStateSupplier().get(), "runtimeState"));
+    }
+
+    private ReportInputs readReportInputs() {
+        UpdateInputs update = readUpdateInputs();
+        return new ReportInputs(
+                update.clock(),
+                update.supply(),
+                update.osr(),
+                update.av02(),
+                update.lifecycle(),
+                update.elastic(),
+                listValue(suppliers.p2pLineSnapshotsSupplier(), "p2pLineSnapshots"),
+                update.operationalRelease(),
+                update.transportIngress(),
+                update.transportArrival(),
+                update.stationArrivals(),
+                update.stationClaims(),
+                update.outbound(),
+                update.scheduler(),
+                update.completions(),
+                update.state());
     }
 
     private static <T> T value(T value, String fieldName) {
@@ -1035,21 +1052,35 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             List<String> serviceCentreIds,
             Map<String, String> signaturesByCentre) { }
 
-    private record MetricInputs(
+    private record UpdateInputs(
             DspOperationalClockSnapshot clock,
             DspSupplySnapshot supply,
             OsrInventorySnapshot osr,
             Av02InventorySnapshot av02,
             PhysicalToteLifecycleSnapshot lifecycle,
             DspP2pElasticAllocationRuntimeSnapshot elastic,
-            List<DspHeadlessP2pLineRuntimeSnapshot> p2pLines,
             DspOperationalReleaseControllerSnapshot operationalRelease,
-            WarehouseTransportInFlightSnapshot transportInFlight,
             WarehouseTransportIngressControllerSnapshot transportIngress,
             WarehouseTransportArrivalControllerSnapshot transportArrival,
-            OsrOutboundTransportQueueSnapshot outboundTransport,
             List<StationRoutedToteArrivalQueueSnapshot> stationArrivals,
-            StationProcessingSnapshot stationProcessing,
+            List<StationArrivalClaimControllerSnapshot> stationClaims,
+            OutboundAllocationSnapshot outbound,
+            WarehouseSchedulerSnapshot scheduler,
+            List<DspServiceCentreCompletionSnapshot> completions,
+            DspFullDayRuntimeState state) { }
+
+    private record ReportInputs(
+            DspOperationalClockSnapshot clock,
+            DspSupplySnapshot supply,
+            OsrInventorySnapshot osr,
+            Av02InventorySnapshot av02,
+            PhysicalToteLifecycleSnapshot lifecycle,
+            DspP2pElasticAllocationRuntimeSnapshot elastic,
+            List<DspHeadlessP2pLineRuntimeSnapshot> p2pLineSnapshots,
+            DspOperationalReleaseControllerSnapshot operationalRelease,
+            WarehouseTransportIngressControllerSnapshot transportIngress,
+            WarehouseTransportArrivalControllerSnapshot transportArrival,
+            List<StationRoutedToteArrivalQueueSnapshot> stationArrivals,
             List<StationArrivalClaimControllerSnapshot> stationClaims,
             OutboundAllocationSnapshot outbound,
             WarehouseSchedulerSnapshot scheduler,
