@@ -31,6 +31,7 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
     private final Av02AllocationSnapshotFactory snapshotFactory;
     private final Av02AllocationController allocationController;
     private long nextSequence;
+    private AllocationInputs lastEvaluatedInputs;
     private long activeSequence = -1L;
     private Av02AllocationSnapshot activeAllocationSnapshot;
     private Av02AllocationSnapshot activeRevalidationSnapshot;
@@ -98,7 +99,9 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
                 idAllocator,
                 loadPlanRegistry);
 
-        Av02AllocationSnapshot initial = buildSnapshot(0L);
+        AllocationInputs initialInputs = captureInputs();
+        Av02AllocationSnapshot initial = buildSnapshot(0L, initialInputs);
+        this.lastEvaluatedInputs = initialInputs;
         this.latestSnapshot = runtimeSnapshot(
                 initial,
                 Optional.empty(),
@@ -116,11 +119,18 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
             throw new IllegalArgumentException("dtSeconds must be finite and >= 0");
         }
 
+        AllocationInputs inputs = captureInputs();
+        if (sameInputReferences(lastEvaluatedInputs, inputs)
+                && latestSnapshot.snapshot().command().isEmpty()) {
+            return;
+        }
+
         long sequence = nextSequence++;
         activeSequence = sequence;
-        activeAllocationSnapshot = buildSnapshot(sequence);
+        activeAllocationSnapshot = null;
         activeRevalidationSnapshot = null;
         try {
+            activeAllocationSnapshot = buildSnapshot(sequence, inputs);
             allocationController.update(context, dtSeconds);
             Optional<Av02AllocationSnapshot> revalidationSnapshot =
                     Optional.ofNullable(activeRevalidationSnapshot);
@@ -129,6 +139,7 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
                     revalidationSnapshot,
                     activeAllocationSnapshot.command(),
                     allocationController.lastAllocatedTote());
+            lastEvaluatedInputs = inputs;
         } finally {
             activeSequence = -1L;
             activeAllocationSnapshot = null;
@@ -153,13 +164,36 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
     }
 
     private Av02AllocationSnapshot buildSnapshot(long sequence) {
+        return buildSnapshot(sequence, captureInputs());
+    }
+
+    private Av02AllocationSnapshot buildSnapshot(long sequence, AllocationInputs inputs) {
+        return snapshotFactory.create(
+                sequence,
+                inputs.scheduler(),
+                inputs.supply(),
+                inputs.inventory(),
+                inputs.lifecycle());
+    }
+
+    private AllocationInputs captureInputs() {
         WarehouseSchedulerSnapshot scheduler = requireSupplied(
                 schedulerSnapshotSupplier, "schedulerSnapshotSupplier");
         DspSupplySnapshot supply = requireSupplied(
                 supplySnapshotSupplier, "supplySnapshotSupplier");
         PhysicalToteLifecycleSnapshot lifecycle = requireSupplied(
                 lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
-        return snapshotFactory.create(sequence, scheduler, supply, inventory.snapshot(), lifecycle);
+        Av02InventorySnapshot inventorySnapshot = inventory.snapshot();
+        return new AllocationInputs(scheduler, supply, lifecycle, inventorySnapshot);
+    }
+
+    private static boolean sameInputReferences(AllocationInputs first, AllocationInputs second) {
+        return first != null
+                && second != null
+                && first.scheduler() == second.scheduler()
+                && first.supply() == second.supply()
+                && first.lifecycle() == second.lifecycle()
+                && first.inventory() == second.inventory();
     }
 
     private DspAv02AllocationRuntimeSnapshot runtimeSnapshot(
@@ -192,6 +226,13 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
             throw new IllegalStateException(fieldName + " returned null");
         }
         return value;
+    }
+
+    private record AllocationInputs(
+            WarehouseSchedulerSnapshot scheduler,
+            DspSupplySnapshot supply,
+            PhysicalToteLifecycleSnapshot lifecycle,
+            Av02InventorySnapshot inventory) {
     }
 
     private static void requireNonNull(Object value, String fieldName) {

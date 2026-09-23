@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.av02;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -65,6 +66,7 @@ class DspAv02AllocationRuntimeControllerTest {
         assertEquals(1, first.sequence());
         assertEquals(1, first.selectedCommand().orElseThrow().snapshotSequence());
         assertEquals(1, first.freshRevalidationSnapshot().orElseThrow().sequence());
+        assertNotSame(first.snapshot(), first.freshRevalidationSnapshot().orElseThrow());
         assertEquals(1, fixture.inventory.occupancy());
         assertEquals(1, fixture.idAllocator.calls);
         Av02AllocatedTote firstTote = fixture.inventory.head().orElseThrow();
@@ -88,6 +90,7 @@ class DspAv02AllocationRuntimeControllerTest {
         assertEquals(2, second.sequence());
         assertEquals(2, second.selectedCommand().orElseThrow().snapshotSequence());
         assertEquals(2, second.freshRevalidationSnapshot().orElseThrow().sequence());
+        assertNotSame(second.snapshot(), second.freshRevalidationSnapshot().orElseThrow());
         assertEquals(2, fixture.inventory.occupancy());
         assertEquals(2, fixture.idAllocator.calls);
         assertEquals(
@@ -301,6 +304,42 @@ class DspAv02AllocationRuntimeControllerTest {
         assertNull(fixture.loadPlans.getLoadPlanFor(new PhysicalToteId("av02-000001")));
     }
 
+    private static void assertSingleChangedInputEvaluation(Fixture fixture) {
+        DspAv02AllocationRuntimeSnapshot initial = fixture.runtime.snapshot();
+
+        fixture.runtime.update(new SimulationContext(), 0d);
+
+        DspAv02AllocationRuntimeSnapshot changed = fixture.runtime.snapshot();
+        assertEquals(initial.sequence() + 1, changed.sequence());
+        assertNotSame(initial, changed);
+        assertNotSame(initial.snapshot(), changed.snapshot());
+        assertTrue(changed.selectedCommand().isEmpty());
+
+        fixture.runtime.update(new SimulationContext(), 0d);
+
+        assertSame(changed, fixture.runtime.snapshot());
+        assertSame(changed.snapshot(), fixture.runtime.snapshot().snapshot());
+        assertEquals(changed.sequence(), fixture.runtime.snapshot().sequence());
+    }
+
+    private static Av02InventorySnapshot replaceInventorySnapshot(
+            Av02PhysicalToteInventory inventory) {
+        Av02InventorySnapshot current = inventory.snapshot();
+        Av02InventorySnapshot replacement = new Av02InventorySnapshot(
+                current.capacity(),
+                current.waitingTotes(),
+                current.departedTotes());
+        try {
+            var currentSnapshotField = Av02PhysicalToteInventory.class
+                    .getDeclaredField("currentSnapshot");
+            currentSnapshotField.setAccessible(true);
+            currentSnapshotField.set(inventory, replacement);
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError("Unable to replace AV02 inventory snapshot", failure);
+        }
+        return replacement;
+    }
+
     private static void assertBlocked(
             Fixture fixture,
             Av02AllocationBlockReason expectedReason) {
@@ -360,6 +399,133 @@ class DspAv02AllocationRuntimeControllerTest {
         assertTrue(fixture.runtime.snapshot().sequence() > published.sequence());
         assertEquals(2, fixture.inventory.occupancy());
         assertEquals(2, fixture.idAllocator.calls);
+    }
+
+    @Test
+    void shouldSkipUnchangedNoCommandUpdatesAndPreservePublishedIdentities() {
+        NotionalToteOrder order = emptyOrder("empty-unchanged", 0, DspOrderLineType.FULL_PACK);
+        Fixture fixture = fixture(
+                1,
+                List.of(order),
+                new SequenceSupplier<>(List.of(scheduler(List.of(order), Set.of()))),
+                new SequenceSupplier<>(List.of(supply(List.of(order), Set.of()))),
+                new SequenceSupplier<>(List.of(emptyLifecycle())));
+        DspAv02AllocationRuntimeSnapshot initial = fixture.runtime.snapshot();
+        int schedulerCalls = fixture.schedulerSupplier.calls;
+        int supplyCalls = fixture.supplySupplier.calls;
+        int lifecycleCalls = fixture.lifecycleSupplier.calls;
+
+        fixture.runtime.update(new SimulationContext(), 0d);
+        fixture.runtime.update(new SimulationContext(), 30d);
+
+        assertSame(initial, fixture.runtime.snapshot());
+        assertSame(initial.snapshot(), fixture.runtime.snapshot().snapshot());
+        assertEquals(0, fixture.runtime.snapshot().sequence());
+        assertTrue(fixture.runtime.snapshot().selectedCommand().isEmpty());
+        assertEquals(0, fixture.idAllocator.calls);
+        assertEquals(schedulerCalls + 2, fixture.schedulerSupplier.calls);
+        assertEquals(supplyCalls + 2, fixture.supplySupplier.calls);
+        assertEquals(lifecycleCalls + 2, fixture.lifecycleSupplier.calls);
+    }
+
+    @Test
+    void shouldReevaluateEachChangedInputReferenceIncludingEqualDistinctValues() {
+        NotionalToteOrder order = emptyOrder("empty-input-change", 0, DspOrderLineType.FULL_PACK);
+        DspSupplySnapshot unauthorizedSupply = supply(List.of(order), Set.of());
+        WarehouseSchedulerSnapshot baseScheduler = scheduler(List.of(order), Set.of());
+        PhysicalToteLifecycleSnapshot baseLifecycle = emptyLifecycle();
+
+        WarehouseSchedulerSnapshot equalScheduler = scheduler(List.of(order), Set.of());
+        assertEquals(baseScheduler, equalScheduler);
+        assertNotSame(baseScheduler, equalScheduler);
+        Fixture schedulerFixture = fixture(
+                1,
+                List.of(order),
+                new SequenceSupplier<>(List.of(baseScheduler, equalScheduler)),
+                new SequenceSupplier<>(List.of(unauthorizedSupply)),
+                new SequenceSupplier<>(List.of(baseLifecycle)));
+        assertSingleChangedInputEvaluation(schedulerFixture);
+
+        DspSupplySnapshot equalSupply = supply(List.of(order), Set.of());
+        assertEquals(unauthorizedSupply, equalSupply);
+        assertNotSame(unauthorizedSupply, equalSupply);
+        Fixture supplyFixture = fixture(
+                1,
+                List.of(order),
+                new SequenceSupplier<>(List.of(baseScheduler)),
+                new SequenceSupplier<>(List.of(unauthorizedSupply, equalSupply)),
+                new SequenceSupplier<>(List.of(baseLifecycle)));
+        assertSingleChangedInputEvaluation(supplyFixture);
+
+        PhysicalToteLifecycleSnapshot equalLifecycle = emptyLifecycle();
+        assertEquals(baseLifecycle, equalLifecycle);
+        assertNotSame(baseLifecycle, equalLifecycle);
+        Fixture lifecycleFixture = fixture(
+                1,
+                List.of(order),
+                new SequenceSupplier<>(List.of(baseScheduler)),
+                new SequenceSupplier<>(List.of(unauthorizedSupply)),
+                new SequenceSupplier<>(List.of(baseLifecycle, equalLifecycle)));
+        assertSingleChangedInputEvaluation(lifecycleFixture);
+
+        Fixture inventoryFixture = fixture(
+                1,
+                List.of(order),
+                new SequenceSupplier<>(List.of(baseScheduler)),
+                new SequenceSupplier<>(List.of(unauthorizedSupply)),
+                new SequenceSupplier<>(List.of(baseLifecycle)));
+        Av02InventorySnapshot initialInventory = inventoryFixture.inventory.snapshot();
+        Av02InventorySnapshot equalInventory = replaceInventorySnapshot(inventoryFixture.inventory);
+        assertEquals(initialInventory, equalInventory);
+        assertNotSame(initialInventory, equalInventory);
+        assertSingleChangedInputEvaluation(inventoryFixture);
+    }
+
+    @Test
+    void shouldRetainPublishedSnapshotAndReconsiderAfterAllocationFailure() {
+        NotionalToteOrder order = emptyOrder("empty-allocation-failure", 0, DspOrderLineType.FULL_PACK);
+        WarehouseSchedulerSnapshot schedulerSnapshot = scheduler(List.of(order), Set.of());
+        DspSupplySnapshot supplySnapshot = supply(List.of(order), sheetKeys(List.of(order)));
+        PhysicalToteLifecycleSnapshot lifecycleSnapshot = emptyLifecycle();
+        ControlledSupplier<WarehouseSchedulerSnapshot> schedulerSupplier =
+                new SequenceSupplier<>(List.of(schedulerSnapshot));
+        ControlledSupplier<DspSupplySnapshot> supplySupplier =
+                new SequenceSupplier<>(List.of(supplySnapshot));
+        ControlledSupplier<PhysicalToteLifecycleSnapshot> lifecycleSupplier =
+                new SequenceSupplier<>(List.of(lifecycleSnapshot));
+        Av02PhysicalToteInventory inventory = new Av02PhysicalToteInventory(
+                new Av02AllocationConfig(1));
+        PhysicalToteLifecycleLedger lifecycle = new PhysicalToteLifecycleLedger();
+        FailingIdAllocator idAllocator = new FailingIdAllocator();
+        MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();
+        DspAv02AllocationRuntimeController runtime = new DspAv02AllocationRuntimeController(
+                schedulerSupplier::get,
+                supplySupplier::get,
+                lifecycleSupplier::get,
+                inventory,
+                lifecycle,
+                idAllocator,
+                loadPlans);
+        DspAv02AllocationRuntimeSnapshot published = runtime.snapshot();
+        Av02InventorySnapshot inventoryBefore = inventory.snapshot();
+        PhysicalToteLifecycleSnapshot lifecycleBefore = lifecycle.snapshot();
+
+        assertThrows(IllegalStateException.class,
+                () -> runtime.update(new SimulationContext(), 0d));
+        assertSame(published, runtime.snapshot());
+        assertSame(inventoryBefore, inventory.snapshot());
+        assertSame(lifecycleBefore, lifecycle.snapshot());
+        assertEquals(1, idAllocator.calls);
+        assertEquals(0, inventory.occupancy());
+        assertNull(loadPlans.getLoadPlanFor(new PhysicalToteId("av02-000001")));
+
+        assertThrows(IllegalStateException.class,
+                () -> runtime.update(new SimulationContext(), 0d));
+        assertSame(published, runtime.snapshot());
+        assertEquals(2, idAllocator.calls);
+        assertEquals(5, schedulerSupplier.calls);
+        assertEquals(5, supplySupplier.calls);
+        assertEquals(5, lifecycleSupplier.calls);
     }
 
     private static void assertUnchangedAfterInvalidUpdate(
@@ -613,6 +779,16 @@ class DspAv02AllocationRuntimeControllerTest {
         public PhysicalToteId nextPhysicalToteId() {
             calls++;
             return new PhysicalToteId("av02-" + String.format("%06d", calls));
+        }
+    }
+
+    private static final class FailingIdAllocator implements PhysicalToteIdAllocator {
+        private int calls;
+
+        @Override
+        public PhysicalToteId nextPhysicalToteId() {
+            calls++;
+            throw new IllegalStateException("test allocation failure");
         }
     }
 }
