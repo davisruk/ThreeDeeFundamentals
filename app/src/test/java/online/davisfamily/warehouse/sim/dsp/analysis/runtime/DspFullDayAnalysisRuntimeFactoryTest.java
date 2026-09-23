@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.analysis.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -14,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -221,6 +223,57 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     }
 
     @Test
+    void shouldRefreshCompletionWhenDynamicStationStateChangesForLargeInputs(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadManyFullPacks(directory, profile, 24);
+
+        assertTrue(input.data().inboundToteManifests().size() >= 24);
+        assertTrue(input.bagPlan().plannedBags().size() >= 24);
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var previousCompletion = runtime.completionSnapshots();
+            var previousStation = runtime.stationProcessingRuntime().coordinatorSnapshot();
+            var previousLifecycle = runtime.lifecycleSnapshotSupplier().get();
+            int previousDynamicStationCount = previousCompletion.stream()
+                    .mapToInt(snapshot -> snapshot.activeStationClaimCount()
+                            + snapshot.pendingStationDispositionCount())
+                    .sum();
+
+            var changedCompletion = previousCompletion;
+            var changedStation = previousStation;
+            boolean foundUnchangedLifecycleWithStationChange = false;
+            for (int step = 0; step < 60 && !foundUnchangedLifecycleWithStationChange; step++) {
+                runtime.update(1d);
+                var currentCompletion = runtime.completionSnapshots();
+                var currentStation = runtime.stationProcessingRuntime().coordinatorSnapshot();
+                var currentLifecycle = runtime.lifecycleSnapshotSupplier().get();
+                int currentDynamicStationCount = currentCompletion.stream()
+                        .mapToInt(snapshot -> snapshot.activeStationClaimCount()
+                                + snapshot.pendingStationDispositionCount())
+                        .sum();
+
+                if (currentLifecycle == previousLifecycle
+                        && currentDynamicStationCount != previousDynamicStationCount) {
+                    changedCompletion = currentCompletion;
+                    changedStation = currentStation;
+                    foundUnchangedLifecycleWithStationChange = true;
+                } else {
+                    previousCompletion = currentCompletion;
+                    previousStation = currentStation;
+                    previousLifecycle = currentLifecycle;
+                    previousDynamicStationCount = currentDynamicStationCount;
+                }
+            }
+
+            assertTrue(foundUnchangedLifecycleWithStationChange);
+            assertNotEquals(previousStation, changedStation);
+            assertNotEquals(previousCompletion, changedCompletion);
+        }
+    }
+
+    @Test
     void shouldCloseOnlyTheAllocatedCentreAndRecheckLiveProcessingState(
             @TempDir Path directory) throws IOException {
         DspUncalibratedFullDayProfile profile = profile();
@@ -384,6 +437,27 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                 message("order-108", "tote-108", "108", "998"));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(productMaster, List.of(firstOrder, secondOrder)), profile);
+    }
+
+    private static DspFullDayLoadedInput loadManyFullPacks(
+            Path directory,
+            DspUncalibratedFullDayProfile profile,
+            int orderCount) throws IOException {
+        Path productMaster = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        List<Path> orderPaths = new ArrayList<>();
+        for (int index = 0; index < orderCount; index++) {
+            String orderId = "order-large-" + index;
+            String serviceCentreId = index % 2 == 0 ? "104" : "108";
+            String priority = index % 2 == 0 ? "999" : "998";
+            orderPaths.add(Files.writeString(
+                    directory.resolve(orderId + ".json"),
+                    message(orderId, "tote-large-" + index, serviceCentreId, priority)));
+        }
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, orderPaths), profile);
     }
 
     private static String message(

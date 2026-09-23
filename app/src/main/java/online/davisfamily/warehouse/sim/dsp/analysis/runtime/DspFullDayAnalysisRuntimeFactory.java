@@ -832,6 +832,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
         private final Map<String, List<InboundToteManifest>> manifestsByServiceCentre;
         private final Map<String, List<PlannedBag>> plannedBagsByServiceCentre;
         private final Map<String, PlannedBag> plannedBagsByCorrelationId;
+        private final DspFullDayCompletionProjectionCache projectionCache;
         private final InboundToteManifestCatalog manifestCatalog;
         private final Map<String, List<String>> unsupportedByServiceCentre;
         private final List<String> globalUnsupportedWork;
@@ -868,6 +869,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
             this.plannedBagsByServiceCentre = indexPlannedBags(input.bagPlan().plannedBags());
             this.plannedBagsByCorrelationId = indexPlannedBagsByCorrelationId(
                     input.bagPlan().plannedBags());
+            this.projectionCache = new DspFullDayCompletionProjectionCache(
+                    this.manifestsByServiceCentre,
+                    this.plannedBagsByServiceCentre);
             this.manifestCatalog = manifestCatalog;
             UnsupportedWorkIndex unsupportedWork = indexUnsupportedWork(input);
             this.unsupportedByServiceCentre = unsupportedWork.byServiceCentre();
@@ -890,13 +894,21 @@ public final class DspFullDayAnalysisRuntimeFactory {
         public List<online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionSnapshot> get() {
             DspOperationalClockSnapshot clock = evaluatorClock();
             DspSupplySnapshot supply = supplyController.snapshot();
-            List<String> serviceCentreIds = supply.serviceCentres().stream()
-                    .map(ServiceCentreSupplySnapshot::serviceCentreId)
-                    .toList();
             PhysicalToteLifecycleSnapshot lifecycle = lifecycleLedger.snapshot();
             OsrInventorySnapshot osr = osrInventory.snapshot();
             Av02InventorySnapshot av02 = av02Inventory.snapshot();
             OutboundAllocationSnapshot outbound = outboundAllocator.snapshot();
+            DspFullDayCompletionProjectionCache.SupplyProjection supplyProjection =
+                    projectionCache.supplyProjection(supply);
+            DspFullDayCompletionProjectionCache.LifecycleProjection lifecycleProjection =
+                    projectionCache.lifecycleProjection(lifecycle);
+            DspFullDayCompletionProjectionCache.OsrProjection osrProjection =
+                    projectionCache.osrProjection(osr);
+            DspFullDayCompletionProjectionCache.Av02Projection av02Projection =
+                    projectionCache.av02Projection(av02);
+            DspFullDayCompletionProjectionCache.OutboundProjection outboundProjection =
+                    projectionCache.outboundProjection(outbound);
+            List<String> serviceCentreIds = supplyProjection.serviceCentreIds();
             StationProcessingSnapshot station = stationRuntime.coordinatorSnapshot();
             P2pLineLeaseCatalogSnapshot leases = elasticRuntime.leaseSnapshot();
             List<P2pLineCompletionCapture> lineCaptures = lineCaptures(leases);
@@ -910,14 +922,12 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
             PhysicalToteOwnerLookup physicalToteOwnerLookup = physicalToteOwnerLookup(
                     av02, outbound, activeRoutedTotes);
-            Set<BagKey> allocatedBags = outbound.allocatedBagKeys();
-            Map<String, Integer> nonTerminalInbound = nonTerminalInboundCounts(lifecycle);
+            Set<BagKey> allocatedBags = outboundProjection.allocatedBagKeys();
+            Map<String, Integer> nonTerminalInbound = lifecycleProjection.nonTerminalInboundCounts();
             Map<String, Integer> remainingPhysicalTotes = remainingPhysicalToteCounts(
-                    lifecycle, physicalToteOwnerLookup);
-            Map<String, Integer> osrWaiting = countByServiceCentre(
-                    osr.storedTotes(), InboundToteManifest::serviceCentreId);
-            Map<String, Integer> av02Waiting = countByServiceCentre(
-                    av02.waitingTotes(), Av02AllocatedTote::serviceCentreId);
+                    lifecycleProjection.nonTerminalPhysicalToteIds(), physicalToteOwnerLookup);
+            Map<String, Integer> osrWaiting = osrProjection.waitingCounts();
+            Map<String, Integer> av02Waiting = av02Projection.waitingCounts();
             Map<String, Integer> activeClaims = conservativePhysicalToteCounts(
                     station.activeClaims(),
                     StationProcessingSnapshot.ActiveClaim::physicalToteId,
@@ -938,26 +948,18 @@ public final class DspFullDayAnalysisRuntimeFactory {
             Map<String, Integer> tipperInput = tipperInputCounts(
                     lineCaptures, serviceCentreIds);
             Map<String, Integer> p2pAssignments = p2pAssignmentCounts(leases, lifecycle);
-            Map<String, Integer> openOutbound = openOutboundCounts(outbound);
+            Map<String, Integer> openOutbound = outboundProjection.openOutboundCounts();
             Map<String, Integer> unallocatedCompleted = unallocatedCompletedCounts(
                     lineCaptures, allocatedBags);
             List<online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionSnapshot> result = new ArrayList<>();
             for (ServiceCentreSupplySnapshot centre : supply.serviceCentres()) {
                 String id = centre.serviceCentreId();
                 List<String> unsupported = unsupportedFor(id);
-                int blocked = (int) centre.physicalTotes().stream()
-                        .filter(tote -> tote.state() == PhysicalToteSupplyState.BLOCKED_BY_OSR_CAPACITY)
-                        .count();
-                List<PlannedBag> plannedForCentre = plannedBagsByServiceCentre.getOrDefault(
-                        id, List.of());
-                int remainingBags = 0;
-                int remainingPacks = 0;
-                for (PlannedBag bag : plannedForCentre) {
-                    if (!allocatedBags.contains(bag.bagKey())) {
-                        remainingBags++;
-                        remainingPacks += bag.physicalPackIds().size();
-                    }
-                }
+                int blocked = supplyProjection.capacityBlockedCounts().getOrDefault(id, 0);
+                int remainingBags = outboundProjection.remainingPlannedBagCounts()
+                        .getOrDefault(id, 0);
+                int remainingPacks = outboundProjection.remainingPlannedPackCounts()
+                        .getOrDefault(id, 0);
                 DspFullDayCompletionEvaluator.Observation observation =
                         new DspFullDayCompletionEvaluator.Observation(
                                 id,
@@ -1071,41 +1073,15 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     Map.copyOf(activeRouteOwners), outbound, av02, manifestCatalog);
         }
 
-        private Map<String, Integer> nonTerminalInboundCounts(
-                PhysicalToteLifecycleSnapshot lifecycle) {
-            Map<String, Integer> counts = new HashMap<>();
-            for (List<InboundToteManifest> manifests : manifestsByServiceCentre.values()) {
-                for (InboundToteManifest manifest : manifests) {
-                    PhysicalToteRecord tote = lifecycle.totes().get(manifest.physicalToteId());
-                    if (tote != null && !tote.terminal()) {
-                        counts.merge(manifest.serviceCentreId(), 1, Integer::sum);
-                    }
-                }
-            }
-            return counts;
-        }
-
         private static Map<String, Integer> remainingPhysicalToteCounts(
-                PhysicalToteLifecycleSnapshot lifecycle,
+                List<PhysicalToteId> nonTerminalPhysicalToteIds,
                 PhysicalToteOwnerLookup physicalToteOwnerLookup) {
             Map<String, Integer> counts = new HashMap<>();
-            for (PhysicalToteRecord tote : lifecycle.totes().values()) {
-                if (!tote.terminal()) {
-                    String serviceCentreId = physicalToteOwnerLookup.ownerFor(tote.id());
-                    if (serviceCentreId != null) {
-                        counts.merge(serviceCentreId, 1, Integer::sum);
-                    }
+            for (PhysicalToteId physicalToteId : nonTerminalPhysicalToteIds) {
+                String serviceCentreId = physicalToteOwnerLookup.ownerFor(physicalToteId);
+                if (serviceCentreId != null) {
+                    counts.merge(serviceCentreId, 1, Integer::sum);
                 }
-            }
-            return counts;
-        }
-
-        private static <T> Map<String, Integer> countByServiceCentre(
-                Iterable<T> values,
-                Function<T, String> serviceCentreId) {
-            Map<String, Integer> counts = new HashMap<>();
-            for (T value : values) {
-                counts.merge(serviceCentreId.apply(value), 1, Integer::sum);
             }
             return counts;
         }
@@ -1218,16 +1194,6 @@ public final class DspFullDayAnalysisRuntimeFactory {
             return counts;
         }
 
-        private static Map<String, Integer> openOutboundCounts(
-                OutboundAllocationSnapshot outbound) {
-            Map<String, Integer> counts = new HashMap<>();
-            for (OutboundToteSnapshot tote : outbound.openTotesByLine().values()) {
-                tote.serviceCentreId().ifPresent(serviceCentreId ->
-                        counts.merge(serviceCentreId, 1, Integer::sum));
-            }
-            return counts;
-        }
-
         private Map<String, Integer> unallocatedCompletedCounts(
                 List<P2pLineCompletionCapture> lineCaptures,
                 Set<BagKey> allocatedBags) {
@@ -1271,7 +1237,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 Map<String, List<T>> indexed) {
             Map<String, List<T>> immutable = new LinkedHashMap<>();
             indexed.forEach((key, values) -> immutable.put(key, List.copyOf(values)));
-            return Map.copyOf(immutable);
+            return java.util.Collections.unmodifiableMap(immutable);
         }
 
         private static Map<String, PlannedBag> indexPlannedBagsByCorrelationId(
