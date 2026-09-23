@@ -195,7 +195,7 @@ public final class DspFullDayAnalysisRunner {
                         throw TerminalReached.INSTANCE;
                     }
                     runtime.update(stepSeconds);
-                    Duration elapsed = runtime.metricsSnapshot().clock().elapsedSimulationTime();
+                    Duration elapsed = runtime.clockController().snapshot().elapsedSimulationTime();
                     if (progressSchedule.reached(elapsed)) {
                         progressSchedule.advancePast(elapsed);
                         printProgress(

@@ -4086,6 +4086,12 @@ Proposed commit message: none; this verification step creates no repository chan
 
 ## Step 35: Regression, External Dataset Run, Review, And Closure
 
+The stopped production-data run after recoverable-input integration exposed a separate
+polling-driven runner cost. Complete the narrow, separately authorized
+`docs/scheduler/dsp-full-day-runner-clock-read-remediation-plan.md` and its user-owned profile
+gate before treating this step's full-day external run as verified. That remediation does not
+change the Step 35 terminal-run, report, or deferred-behavior criteria.
+
 Step 35 is blocked by the checkpoint remediation in
 `docs/scheduler/dsp-complete-bag-demand-planning-remediation-plan.md` and its authoritative
 production-data correction in

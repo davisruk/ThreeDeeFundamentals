@@ -107,6 +107,53 @@ class DspFullDayAnalysisRunnerTest {
     }
 
     @Test
+    void shouldReadPublishedClockForNonAlignedProgressThresholds(@TempDir Path directory)
+            throws Exception {
+        DspUncalibratedFullDayProfile profile = slowProfile(directory, Duration.ofHours(1), 3);
+        DspFullDayLoadedInput input = DspFullDayReportTestSupport.input(directory, profile);
+        Path output = directory.resolve("non-aligned-report.json");
+        Path progressLog = directory.resolve("non-aligned-progress.log");
+        ByteArrayOutputStream consoleBytes = new ByteArrayOutputStream();
+
+        DspFullDayAnalysisReport report = new DspFullDayAnalysisRunner(
+                () -> 1_000_000L,
+                new PrintStream(consoleBytes, true, StandardCharsets.UTF_8))
+                .run(
+                        input,
+                        profile,
+                        output,
+                        Optional.empty(),
+                        Optional.of(progressLog),
+                        Duration.ofMinutes(90),
+                        false);
+
+        String progress = Files.readString(progressLog);
+        List<String> labels = progress.lines()
+                .filter(line -> line.startsWith("[dsp-full-day:progress="))
+                .toList();
+        assertEquals(List.of(
+                "[dsp-full-day:progress=PT2H]",
+                "[dsp-full-day:progress=PT3H]",
+                "[dsp-full-day:progress=PT5H]",
+                "[dsp-full-day:progress=PT6H]",
+                "[dsp-full-day:progress=PT8H]",
+                "[dsp-full-day:progress=PT9H]",
+                "[dsp-full-day:progress=PT11H]",
+                "[dsp-full-day:progress=PT12H]",
+                "[dsp-full-day:progress=PT14H]",
+                "[dsp-full-day:progress=PT15H]",
+                "[dsp-full-day:progress=PT17H]",
+                "[dsp-full-day:progress=PT18H]"), labels);
+        assertTrue(progress.indexOf("[dsp-full-day:start]")
+                < progress.indexOf(labels.getFirst()));
+        assertTrue(progress.lastIndexOf("[dsp-full-day:final]")
+                > progress.lastIndexOf(labels.getLast()));
+        assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, report.state());
+        assertEquals(Duration.ofHours(18), report.runtimeSnapshot().clock().elapsedSimulationTime());
+        assertEquals(progress, consoleBytes.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void shouldLeaveFlushedProgressAndFailureBlockWhenFinalReportWriteFails(@TempDir Path directory)
             throws Exception {
         DspUncalibratedFullDayProfile profile = profile(directory, Duration.ofSeconds(1), 20);

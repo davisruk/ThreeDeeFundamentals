@@ -5,7 +5,7 @@ $javaPid = Get-CimInstance Win32_Process -Filter "Name = 'java.exe'" |
     Select-Object -ExpandProperty ProcessId
 	
 & "$env:JAVA_HOME\bin\jcmd.exe" $javaPid JFR.start `
-    name=dsp-step20 `
+    name=$step `
     settings=profile `
     duration=45s `
     disk=true `
