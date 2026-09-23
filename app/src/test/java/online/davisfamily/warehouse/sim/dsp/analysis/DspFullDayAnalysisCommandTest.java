@@ -176,6 +176,57 @@ class DspFullDayAnalysisCommandTest {
     }
 
     @Test
+    void shouldSelectConfiguredServiceCentreScheduleAndKeepOmittedFallback(@TempDir Path directory)
+            throws Exception {
+        Fixture fixture = fixture(directory);
+        Path configDirectory = Files.createDirectory(directory.resolve("config"));
+        Path schedulePath = Files.writeString(configDirectory.resolve("schedule.json"), """
+                {"serviceCentres":[{"serviceCentreId":"104","displayName":"Letchworth",
+                "priority":123,"trunkerDepartureTime":{"dayOffset":0,
+                "localTime":{"hour":17,"minute":0}}}]}
+                """);
+        String base = configJsonWithOrders("../products.csv",
+                List.of("../order-104.json"), "report.json");
+        Path configPath = configDirectory.resolve("full-day.json");
+        Files.writeString(configPath, base);
+        DspFullDayAnalysisCommandParser parser = new DspFullDayAnalysisCommandParser();
+
+        DspFullDayAnalysisCommand fallback = parser.parse(new String[] {"--config=" + configPath});
+        assertTrue(fallback.serviceCentreSchedulePath().isEmpty());
+        assertEquals(999, DspFullDayAnalysisMain.profile(fallback).timetable().require("104").priority());
+
+        Files.writeString(configPath, withSchedule(base, "schedule.json"));
+        DspFullDayAnalysisCommand relative = parser.parse(new String[] {"--config=" + configPath});
+        assertEquals(schedulePath, relative.serviceCentreSchedulePath().orElseThrow());
+        assertEquals(123, DspFullDayAnalysisMain.profile(relative).timetable().require("104").priority());
+
+        Files.writeString(configPath, withSchedule(base, jsonPath(schedulePath)));
+        DspFullDayAnalysisCommand absolute = parser.parse(new String[] {"--config=" + configPath});
+        assertEquals(schedulePath, absolute.serviceCentreSchedulePath().orElseThrow());
+
+        Files.writeString(configPath, withSchedule(base, "missing.json"));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(new String[] {"--config=" + configPath}));
+        Files.writeString(configPath, withSchedule(base, "."));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(new String[] {"--config=" + configPath}));
+        Files.writeString(configPath, withSchedule(base, " "));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(new String[] {"--config=" + configPath}));
+        Files.writeString(schedulePath, "invalid-json");
+        Files.writeString(configPath, withSchedule(base, "schedule.json"));
+        assertThrows(IllegalArgumentException.class,
+                () -> DspFullDayAnalysisMain.profile(
+                        parser.parse(new String[] {"--config=" + configPath})));
+    }
+
+    private static String withSchedule(String base, String schedulePath) {
+        return base.replace("\"operatingDate\":",
+                "\"serviceCentreSchedule\": \"" + schedulePath + "\",\n"
+                        + "  \"operatingDate\":");
+    }
+
+    @Test
     void shouldAllowCommandLineOverridesAndReplaceConfiguredOrderMode(@TempDir Path directory)
             throws Exception {
         Fixture fixture = fixture(directory);

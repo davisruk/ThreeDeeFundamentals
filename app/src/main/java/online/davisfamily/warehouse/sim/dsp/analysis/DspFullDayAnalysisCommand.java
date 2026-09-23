@@ -23,13 +23,15 @@ record DspFullDayAnalysisCommand(
         Duration metricSampleInterval,
         boolean overwrite,
         Optional<Path> progressLogPath,
-        Duration progressInterval) {
+        Duration progressInterval,
+        Optional<Path> serviceCentreSchedulePath) {
 
     DspFullDayAnalysisCommand {
         if (productMasterPath == null || orderPaths == null || orderPaths.isEmpty()
                 || outputPath == null || inspectionOutputPath == null || operatingDate == null
                 || inboundInterval == null || fixedStep == null || metricSampleInterval == null
-                || progressLogPath == null || progressInterval == null) {
+                || progressLogPath == null || progressInterval == null
+                || serviceCentreSchedulePath == null) {
             throw new IllegalArgumentException("command values must not be null or empty");
         }
         if (osrLowWaterMark < 0 || av02Capacity < 1 || outboundBagCapacity < 1

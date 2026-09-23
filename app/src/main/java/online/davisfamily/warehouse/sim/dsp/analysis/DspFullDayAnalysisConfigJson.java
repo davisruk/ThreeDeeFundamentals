@@ -21,7 +21,8 @@ record DspFullDayAnalysisConfigJson(
         Integer metricSampleSeconds,
         Boolean overwrite,
         String progressLog,
-        Integer progressIntervalSeconds) {
+        Integer progressIntervalSeconds,
+        String serviceCentreSchedule) {
 
     DspFullDayAnalysisConfigJson {
         if (orders != null) {

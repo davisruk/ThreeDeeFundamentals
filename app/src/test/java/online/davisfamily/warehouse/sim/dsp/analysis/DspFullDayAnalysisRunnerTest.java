@@ -248,7 +248,8 @@ class DspFullDayAnalysisRunnerTest {
                 Duration.ofSeconds(60),
                 false,
                 Optional.empty(),
-                Duration.ofSeconds(300));
+                Duration.ofSeconds(300),
+                Optional.empty());
         return DspFullDayAnalysisMain.profile(command);
     }
 

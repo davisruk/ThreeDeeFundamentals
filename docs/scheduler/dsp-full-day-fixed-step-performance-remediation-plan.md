@@ -527,18 +527,104 @@ and three dead supplier reads disappear completely.
 
 ### User verification
 
-After Step 6 focused verification passes, the user runs the shared batch gate below. Step 6 is not
-complete until that gate is reported.
+After Step 6 focused verification passes, proceed to the user-approved Step 7 configuration
+amendment before the user runs the shared batch gate below. Step 6 is not complete until that gate
+is reported.
 
 Proposed commit message: `Separate fixed-step metrics capture from reporting`
 
+## Step 7: Configure The Full-Day Service-Centre Timetable
+
+This user-approved pre-gate amendment is a data-configuration step, not a seventh fixed-step
+efficiency mechanism. It follows the six focused efficiency steps and precedes the external run.
+Do not change the production baseline, scheduler, 12N interpretation, or any of the six efficiency
+mechanisms.
+
+### Required reading
+
+Read the full-day plan's effective configuration contract and Step 14, then
+`DspFullDayAnalysisConfigJson`, `DspFullDayAnalysisConfigLoader`,
+`DspFullDayAnalysisCommandParser`, `DspFullDayAnalysisCommand`, `DspFullDayAnalysisMain`,
+`DspUncalibratedFullDayProfile`, `DspFullDayInputLoader`, `DspServiceCentreTimetable`,
+`ServiceCentreSchedule`, `OperationalDayTime`, and their directly relevant tests.
+
+### Required change surface
+
+Create package-private `DspFullDayServiceCentreScheduleLoader` and its test under
+`online.davisfamily.warehouse.sim.dsp.analysis`. Modify only the full-day JSON config binding,
+config loader, command parser, command, and main; `DspFullDayAnalysisCommandTest`,
+`DspFullDayInputLoaderTest`, and the runner test's direct command fixture; and the full-day config
+example. Amend the full-day plan's previously deferred configuration statement. Do not modify the
+domain timetable types, baseline factory, full-day profile, input parser, runner, runtime factory,
+report schemas, scheduler, or Gradle task. Do not edit the user's external files in this step.
+
+### Implementation contract
+
+- Add optional JSON property `serviceCentreSchedule` as a nonblank path string. Resolve relative
+  values from the normalized absolute parent of `--config`, using the existing configured-path
+  rule. There is no new CLI option. Omission retains the exact hard-coded production timetable;
+  presence requires an existing regular file and never silently falls back on read/validation
+  failure. Keep all existing CLI/config merge, path, and output semantics unchanged.
+- The schedule file is one strict UTF-8 JSON object with exactly one `serviceCentres` array, in
+  schedule order. Each nonempty array element is an object with exactly `serviceCentreId` string,
+  `displayName` string, `priority` integer, and `trunkerDepartureTime` object. The time object has
+  exactly `dayOffset` integer and `localTime` object; local time has exactly `hour` and `minute`
+  integers. Reject unknown, missing, duplicate, null, or wrong-typed properties, invalid clock
+  fields, invalid day offsets/priorities, empty list, and duplicate centre IDs. Use the existing
+  domain constructors for value validation. Preserve file order and publish one immutable
+  `DspServiceCentreTimetable` only after the complete file validates. Fail with a path-bearing
+  `IllegalArgumentException` and retained cause on syntax, I/O, or validation failure.
+- Add an optional schedule path to the package-private command. The main builds the normal
+  production profile, loads the optional timetable once before input loading, and injects it into
+  the existing full profile constructor. `DspFullDayInputLoader` then checks each 12N priority
+  against that same timetable; all downstream consumers use it through the existing profile.
+- The supplied new schedule has 11 centres and adds Birmingham (125). Preston (109) is day 1
+  `05:00`, as confirmed by the user; do not carry the day-0 typo into an example or test. The
+  supplied external file needs a valid JSON root, `serviceCentres` in place of `schedules`, and
+  removal of its trailing array comma before the user can point config at it. The user owns that
+  external correction and the external `scheduler_conf.json` update.
+
+### Decision-complete test contract
+
+- `DspFullDayServiceCentreScheduleLoaderTest` loads an ordered replacement including 125 and
+  day-1 Preston, asserts exact timetable values and immutability, and rejects malformed JSON,
+  duplicate keys, unknown/missing/null/wrong-typed fields, empty array, invalid time/day/priority,
+  and duplicate centre IDs without returning a partial timetable.
+- `DspFullDayAnalysisCommandTest` proves omitted-path fallback, config-relative and absolute
+  schedule path resolution, non-file and blank path rejection, and profile selection through
+  `DspFullDayAnalysisMain.profile` without changing existing CLI/config equivalence.
+- `DspFullDayInputLoaderTest` proves the profile with a replacement timetable accepts its changed
+  centre priority and still rejects a mismatched 12N priority; the unchanged baseline case remains
+  green. The runner test fixture adopts the new optional command component without changing its
+  behavior.
+
+### Expected output
+
+The full-day run can use a current service-centre schedule without rebuilding code, while
+configurations without the property keep the exact old timetable and strict input validation.
+
+### Implementation verification
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayServiceCentreScheduleLoaderTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInputLoaderTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisRunnerTest
+```
+
+### User verification
+
+The user corrects the external schedule JSON, adds `serviceCentreSchedule` to external
+`scheduler_conf.json`, and then runs the shared functional/performance gate below. No model-run
+performance or JFR check is authorized in this step.
+
+Proposed commit message: `Configure full-day service-centre timetable`
+
 ## Shared User-Owned Functional And Performance Gate
 
-The implementation agent must not run or edit the user's JFR scripts. After all six focused test
+The implementation agent must not run or edit the user's JFR scripts. After all seven focused test
 commands are green, the user runs the full-day plan's focused regression command, then the complete
-suite, then rebuilds the installed distribution. The user runs the same external dataset,
-simulation-affecting configuration, JDK, heap, and progress interval used for the `PT7M` evidence,
-with new output/JFR names.
+suite, then rebuilds the installed distribution. The user uses the newer dataset and configured
+schedule, with new output/JFR names. Because this differs from the `PT7M` dataset, quantitative
+before/after speedup is UNPROVEN; this run establishes functional progress and current hotspots,
+not a same-dataset performance improvement.
 
 First use a bounded progress gate: record wall-clock start and the wall-clock times of the first
 three complete simulated-minute progress blocks. Stop after `PT3M` if the rate is still clearly
@@ -549,7 +635,8 @@ initial ADAPTED-heavy phase before deciding whether to attempt the complete day.
 Only after the code-audit batch, take one user-owned 45-second JFR during active work and run the
 existing analysis scripts. Report, with total sample context:
 
-- fixed-step wall/simulated-time rate and whether it improves, stalls, or regresses;
+- fixed-step wall/simulated-time rate and whether it is viable for a complete day, without a
+  before/after speedup claim;
 - execution samples and weighted allocation for the six named paths;
 - whether `AssignedLineWorkPlanProvider.expectedCorrelationIds` still traverses all work;
 - AV02 factory samples during unchanged no-command periods;
@@ -560,7 +647,8 @@ existing analysis scripts. Report, with total sample context:
 
 Do not require a percentage threshold from sampled data. Acceptance requires green functional
 tests, no deterministic-output regression, disappearance of the specifically removed traversals
-from their old polling call sites, and a positive simulated-time/wall-time movement. If a removed
+from their old polling call sites. Positive simulated-time/wall-time movement relative to the
+older dataset cannot be established by this gate. If a removed
 site remains because the same work was moved, the relevant step fails. If the sites disappear but
 performance remains orders of magnitude too slow, accept only the proven local corrections and
 mark the full-day performance target UNPROVEN; use the new dominant code path to decide the next
@@ -575,13 +663,14 @@ performance workaround.
 ## Independent Architecture And Efficiency Review
 
 The implementing Luna Max session must not perform or sign off this review. Its per-step diff
-check is implementation acceptance, not independent review. After the six steps, focused tests,
+check is implementation acceptance, not independent review. After the six efficiency steps,
+Step 7 configuration, focused tests,
 user regression, and bounded performance gate, start a clean-context higher-reasoning model and
 give it only:
 
 - this plan;
-- the baseline commit `f6b20a3` and final six-step commit/diff range;
-- the six focused test results and user-run gate summary;
+- the baseline commit `f6b20a3`, six efficiency commits, and separate Step 7 config commit/diff;
+- the seven focused test results and user-run gate summary;
 - the named production files and directly invoked owners needed to trace each path.
 
 This deliberately bounds review cost: one review after the batch, no general repository review,
@@ -599,7 +688,9 @@ class/method evidence for every item below:
   required;
 - no public compatibility break, extra production mechanism, global/shared mutable state,
   synchronization, background work, deep key, fingerprint, or unbounded retention was added;
-- no unrelated behavior or deferred feature entered the diff;
+- no unrelated behavior or deferred feature entered the six efficiency-step diff; the separately
+  approved Step 7 config diff is limited to timetable selection before input loading, strict
+  validation, and its documentation/tests, with baseline and scheduler behavior unchanged;
 - every changed production file is necessary for one named step and every mandatory efficiency
   test would fail for reconstruction/rescanning.
 
@@ -612,7 +703,8 @@ syntax failures may return to Luna under the unchanged plan.
 
 After user verification and independent review are green, a lower-cost documentation model may:
 
-- mark this plan complete and record the six commit hashes, focused/user test results, bounded
+- mark this plan complete and record the six efficiency commit hashes and separate Step 7 config
+  commit hash, focused/user test results, bounded
   wall/simulated-time evidence, and honest JFR conclusions;
 - update the full-day plan's status and Step 35 prerequisite to state that this remediation is
   complete, replacing its obsolete requirement that metrics read every supplier every fixed step

@@ -32,7 +32,8 @@ final class DspFullDayAnalysisConfigLoader {
             "metricSampleSeconds",
             "overwrite",
             "progressLog",
-            "progressIntervalSeconds");
+            "progressIntervalSeconds",
+            "serviceCentreSchedule");
 
     private final ObjectMapper objectMapper;
 
@@ -88,7 +89,7 @@ final class DspFullDayAnalysisConfigLoader {
     private static void validateProperty(String name, JsonNode value) {
         switch (name) {
             case "productMaster", "ordersDirectory", "output", "inspectionOutput", "operatingDate",
-                    "progressLog" -> {
+                    "progressLog", "serviceCentreSchedule" -> {
                 requireText(name, value);
             }
             case "orders" -> {

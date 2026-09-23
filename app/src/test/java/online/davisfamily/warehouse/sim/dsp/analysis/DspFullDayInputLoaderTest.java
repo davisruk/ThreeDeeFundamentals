@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -22,9 +23,54 @@ import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
+import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreSchedule;
+import online.davisfamily.warehouse.sim.dsp.time.OperationalDayTime;
 
 class DspFullDayInputLoaderTest {
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
+
+    @Test
+    void shouldValidate12nPriorityAgainstReplacementTimetable(@TempDir Path directory)
+            throws IOException {
+        Path productMaster = write(directory, "products.csv", """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        Path matching = write(directory, "matching.json", message(
+                "matching-order", "001", "05", "matching-tote", "104", "123",
+                "matching-line", "05", "product-a", "pharmacy", "patient",
+                "prescription", "0001", "0001"));
+        Path mismatched = write(directory, "mismatched.json", message(
+                "mismatched-order", "001", "05", "mismatched-tote", "104", "124",
+                "mismatched-line", "05", "product-a", "pharmacy", "patient",
+                "prescription", "0001", "0001"));
+        DspUncalibratedFullDayProfile baseline = DspUncalibratedFullDayProfile.productionBaseline(
+                OPERATING_DATE, 10, Duration.ofSeconds(3), 1, 4, 4);
+        DspServiceCentreTimetable replacement = new DspServiceCentreTimetable(List.of(
+                new ServiceCentreSchedule("104", "Letchworth", 123,
+                        new OperationalDayTime(0, LocalTime.of(17, 0)))));
+        DspUncalibratedFullDayProfile configured = new DspUncalibratedFullDayProfile(
+                baseline.operatingDate(), baseline.osrInventoryConfig(),
+                baseline.serviceCentreSupplyConfig(), baseline.inboundToteArrivalPolicy(),
+                baseline.av02AllocationConfig(), baseline.p2pElasticAllocationConfig(),
+                baseline.outboundToteConfig(), baseline.maximumPacksPerBag(),
+                baseline.fixedStep(), baseline.maximumStepsPerAdvance(),
+                baseline.metricSampleInterval(), baseline.routeSpeedUnitsPerSecond(),
+                baseline.queueCapacities(), baseline.thirdPartyAreaConfig(),
+                baseline.adaptingStorageConfig(), baseline.adaptingBenchDefinitions(),
+                baseline.p2pPlaceholderDurations(), baseline.p2pLineDefinitions(),
+                baseline.prlCountPerLine(), replacement);
+        DspFullDayInputLoader loader = new DspFullDayInputLoader();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> loader.load(new DspFullDayInputPaths(productMaster, List.of(matching)), baseline));
+        DspFullDayLoadedInput loaded = loader.load(
+                new DspFullDayInputPaths(productMaster, List.of(matching)), configured);
+        assertEquals(replacement, loaded.timetable());
+        assertThrows(IllegalArgumentException.class,
+                () -> loader.load(new DspFullDayInputPaths(productMaster, List.of(mismatched)), configured));
+    }
 
     @Test
     void shouldLoadInSuppliedOrderAndRetainMixedWorkAndBagProvenance(@TempDir Path directory)

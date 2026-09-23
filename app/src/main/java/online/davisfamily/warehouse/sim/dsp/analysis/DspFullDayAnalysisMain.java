@@ -2,6 +2,8 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 
 import java.io.PrintStream;
 
+import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
+
 /** Command-line entry point for one explicitly uncalibrated headless DSP operating-day run. */
 public final class DspFullDayAnalysisMain {
     private DspFullDayAnalysisMain() {
@@ -53,6 +55,9 @@ public final class DspFullDayAnalysisMain {
                 command.av02Capacity(),
                 command.outboundBagCapacity(),
                 command.maximumPacksPerBag());
+        DspServiceCentreTimetable timetable = command.serviceCentreSchedulePath()
+                .map(path -> new DspFullDayServiceCentreScheduleLoader().load(path))
+                .orElseGet(baseline::timetable);
         return new DspUncalibratedFullDayProfile(
                 baseline.operatingDate(),
                 baseline.osrInventoryConfig(),
@@ -73,7 +78,7 @@ public final class DspFullDayAnalysisMain {
                 baseline.p2pPlaceholderDurations(),
                 baseline.p2pLineDefinitions(),
                 baseline.prlCountPerLine(),
-                baseline.timetable());
+                timetable);
     }
 
     private static String message(Exception exception) {

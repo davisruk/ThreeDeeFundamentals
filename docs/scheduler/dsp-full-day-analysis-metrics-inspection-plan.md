@@ -494,6 +494,7 @@ The JSON configuration uses these exact camel-case properties and JSON value typ
 {
   "productMaster": "path string",
   "ordersDirectory": "path string",
+  "serviceCentreSchedule": "optional path string (Step 7 amendment)",
   "output": "path string",
   "inspectionOutput": "path string",
   "progressLog": "path string",
@@ -518,8 +519,10 @@ values, duplicate JSON properties, unknown properties, blank paths, wrong JSON t
 numeric/date values are rejected. Relative paths in the JSON resolve against the normalized parent
 of the configuration file; relative command-line paths retain their existing process-working-
 directory meaning. There is no environment-variable, home-directory, comment, include, or secret
-substitution. The configuration file does not configure the production service-centre timetable or
-priorities; that remains a separately deferred scheduling-configuration change.
+substitution. Step 7 of `dsp-full-day-fixed-step-performance-remediation-plan.md` formally amends
+this boundary: the full-day config may optionally name a strict service-centre schedule JSON file.
+An absent property retains the production baseline; a supplied file replaces the timetable in
+the full-day profile before input loading. This does not configure other scheduler entry points.
 
 Exactly one order-input mode is required. Explicit-file mode uses one or more repeated `--orders`
 options and retains their argument order. Directory mode uses the singleton `--orders-directory`
@@ -4099,7 +4102,8 @@ change the Step 35 terminal-run, report, or deferred-behavior criteria.
 The runner remediation is complete and verified at `f6b20a3`, but its follow-up run remained
 orders of magnitude too slow. Step 35 is therefore also blocked by
 `docs/scheduler/dsp-full-day-fixed-step-performance-remediation-plan.md`. Complete its six
-implementation steps, shared user-owned functional/performance gate, and independent
+efficiency steps, the user-approved Step 7 schedule-configuration amendment, shared user-owned
+functional/performance gate, and independent
 higher-reasoning architecture review before retrying this terminal run. That remediation preserves
 the fixed step and domain behavior; it removes only code-audit-confirmed redundant work.
 

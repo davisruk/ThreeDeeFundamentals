@@ -1,6 +1,7 @@
 {
   "productMaster": "input/product_automation.csv",
   "ordersDirectory": "input/orders",
+  "serviceCentreSchedule": "input/service-centre-schedule.json",
   "output": "output/report.json",
   "inspectionOutput": "output/inspection.txt",
   "progressLog": "output/progress.log",

@@ -27,6 +27,7 @@ final class DspFullDayAnalysisCommandParser {
     private static final String OUTPUT = "output";
     private static final String INSPECTION_OUTPUT = "inspection-output";
     private static final String PROGRESS_LOG = "progress-log";
+    private static final String SERVICE_CENTRE_SCHEDULE = "service-centre-schedule";
     private static final String PROGRESS_INTERVAL_SECONDS = "progress-interval-seconds";
     private static final String OPERATING_DATE = "operating-date";
     private static final String OSR_LOW_WATER_MARK = "osr-low-water-mark";
@@ -59,6 +60,7 @@ final class DspFullDayAnalysisCommandParser {
         Path outputPath = null;
         Path inspectionOutputPath = null;
         Path progressLogPath = null;
+        Path serviceCentreSchedulePath = null;
         LocalDate operatingDate = null;
         int osrLowWaterMark = -1;
         Duration inboundInterval = null;
@@ -86,6 +88,8 @@ final class DspFullDayAnalysisCommandParser {
                     config.inspectionOutput(), configBaseDirectory, INSPECTION_OUTPUT);
             progressLogPath = configuredPath(
                     config.progressLog(), configBaseDirectory, PROGRESS_LOG);
+            serviceCentreSchedulePath = configuredPath(
+                    config.serviceCentreSchedule(), configBaseDirectory, SERVICE_CENTRE_SCHEDULE);
             if (config.operatingDate() != null) {
                 operatingDate = parseDate(config.operatingDate());
             }
@@ -257,6 +261,9 @@ final class DspFullDayAnalysisCommandParser {
         if (progressLogPath != null) {
             validateOutputPath(progressLogPath, PROGRESS_LOG);
         }
+        if (serviceCentreSchedulePath != null) {
+            validateRegularFile(serviceCentreSchedulePath, SERVICE_CENTRE_SCHEDULE);
+        }
         validateDistinctOutputPaths(outputPath, inspectionOutputPath, progressLogPath);
 
         return new DspFullDayAnalysisCommand(
@@ -275,7 +282,8 @@ final class DspFullDayAnalysisCommandParser {
                 metricSampleInterval,
                 overwrite,
                 Optional.ofNullable(progressLogPath),
-                progressInterval);
+                progressInterval,
+                Optional.ofNullable(serviceCentreSchedulePath));
     }
 
     private static Path findConfigPath(String[] arguments) {
