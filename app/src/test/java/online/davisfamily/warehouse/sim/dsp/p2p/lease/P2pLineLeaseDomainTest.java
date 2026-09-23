@@ -2,11 +2,13 @@ package online.davisfamily.warehouse.sim.dsp.p2p.lease;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -229,6 +231,27 @@ class P2pLineLeaseDomainTest {
                         activityWithOpenTote(unassignedOutboundTote(
                                 "outbound-unassigned", definition.lineId())),
                         List.of()));
+    }
+
+    @Test
+    void shouldRetainRegistryPublishedImmutableAssignmentListIdentity() {
+        P2pLineDefinition definition = definition("p2p-line-1", "p2p-target-1");
+        P2pLineLeaseRegistry registry = new P2pLineLeaseRegistry(List.of(definition));
+        registry.acquireLease(definition.lineId(), "SC-104", P2pLineActivitySnapshot.idle());
+        registry.commitAssignment(assignment("physical-1", "SC-104", definition));
+
+        P2pLineLeaseSnapshot first = registry.snapshot(
+                Map.of(definition.lineId(), P2pLineActivitySnapshot.idle()))
+                .findLine(definition.lineId())
+                .orElseThrow();
+        P2pLineLeaseSnapshot second = registry.snapshot(
+                Map.of(definition.lineId(), P2pLineActivitySnapshot.idle()))
+                .findLine(definition.lineId())
+                .orElseThrow();
+
+        assertSame(first.physicalAssignments(), second.physicalAssignments());
+        assertThrows(UnsupportedOperationException.class,
+                () -> first.physicalAssignments().clear());
     }
 
     @Test

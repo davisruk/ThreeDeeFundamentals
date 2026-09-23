@@ -1,6 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.lease;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -111,6 +113,62 @@ class P2pLineLeaseRegistryTest {
                         new OperationalRouteDestination(StationType.P2P, "wrong-target"))));
         assertThrows(IllegalArgumentException.class, () -> registry.commitAssignment(null));
         assertThrows(IllegalArgumentException.class, () -> registry.findAssignment(null));
+    }
+
+    @Test
+    void shouldPublishOrderedPerLineAssignmentsWithStableUnchangedIdentity() {
+        P2pLineDefinition first = definition("line-1", "target-1");
+        P2pLineDefinition second = definition("line-2", "target-2");
+        P2pLineLeaseRegistry registry = new P2pLineLeaseRegistry(List.of(first, second));
+        registry.acquireLease(first.lineId(), "SC-104", P2pLineActivitySnapshot.idle());
+        registry.acquireLease(second.lineId(), "SC-108", P2pLineActivitySnapshot.idle());
+
+        P2pPhysicalToteAssignment firstAssignment = assignment("physical-1", "SC-104", first);
+        P2pPhysicalToteAssignment secondAssignment = assignment("physical-2", "SC-108", second);
+        P2pPhysicalToteAssignment laterFirstAssignment = assignment(
+                "physical-3", "SC-104", first);
+        registry.commitAssignment(firstAssignment);
+        registry.commitAssignment(secondAssignment);
+
+        P2pLineLeaseCatalogSnapshot firstPublished = registry.snapshot(
+                idleActivities(first, second));
+        P2pLineLeaseSnapshot firstLine = firstPublished.findLine(first.lineId()).orElseThrow();
+        P2pLineLeaseSnapshot secondLine = firstPublished.findLine(second.lineId()).orElseThrow();
+        assertEquals(List.of(firstAssignment), firstLine.physicalAssignments());
+        assertEquals(List.of(secondAssignment), secondLine.physicalAssignments());
+
+        P2pLineLeaseCatalogSnapshot repeated = registry.snapshot(idleActivities(first, second));
+        assertSame(
+                firstLine.physicalAssignments(),
+                repeated.findLine(first.lineId()).orElseThrow().physicalAssignments());
+        assertSame(
+                secondLine.physicalAssignments(),
+                repeated.findLine(second.lineId()).orElseThrow().physicalAssignments());
+
+        registry.commitAssignment(laterFirstAssignment);
+        P2pLineLeaseCatalogSnapshot afterFirstReplacement = registry.snapshot(
+                idleActivities(first, second));
+        P2pLineLeaseSnapshot replacedFirst = afterFirstReplacement.findLine(first.lineId())
+                .orElseThrow();
+        P2pLineLeaseSnapshot unchangedSecond = afterFirstReplacement.findLine(second.lineId())
+                .orElseThrow();
+        assertEquals(
+                List.of(firstAssignment, laterFirstAssignment),
+                replacedFirst.physicalAssignments());
+        assertNotSame(firstLine.physicalAssignments(), replacedFirst.physicalAssignments());
+        assertSame(secondLine.physicalAssignments(), unchangedSecond.physicalAssignments());
+
+        P2pLineLeaseTransitionSnapshot transitionBeforeDuplicate = registry
+                .lastTransitionFor(first.lineId())
+                .orElseThrow();
+        registry.commitAssignment(laterFirstAssignment);
+        assertSame(
+                transitionBeforeDuplicate,
+                registry.lastTransitionFor(first.lineId()).orElseThrow());
+        P2pLineLeaseSnapshot afterDuplicate = registry.snapshot(idleActivities(first, second))
+                .findLine(first.lineId())
+                .orElseThrow();
+        assertSame(replacedFirst.physicalAssignments(), afterDuplicate.physicalAssignments());
     }
 
     @Test

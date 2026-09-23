@@ -79,6 +79,16 @@ class ToteToBagP2pLineActivityProbeTest {
     }
 
     @Test
+    void shouldPreserveCompatibilityPrlMapSnapshot() {
+        Fixture fixture = fixture();
+
+        Map<String, PrlConveyor> prlsById = fixture.toteToBagFlowController.getPrlsById();
+
+        assertEquals(List.of("prl-1"), prlsById.keySet().stream().toList());
+        assertThrows(UnsupportedOperationException.class, prlsById::clear);
+    }
+
+    @Test
     void shouldReadQueueTipperPackPathBaggingAndOutboundActivity() {
         Fixture fixture = fixture();
         fixture.stationQueue.enqueue(routedTote("station-tote", fixture.definition.destination()));

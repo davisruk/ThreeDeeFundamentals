@@ -1,6 +1,5 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.lease;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -8,12 +7,11 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperInputQueue;
-import online.davisfamily.warehouse.sim.totebag.assignment.PrlState;
 import online.davisfamily.warehouse.sim.totebag.control.SorterTipperDownstreamFlow;
+import online.davisfamily.warehouse.sim.totebag.control.PrlActivitySummary;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
-import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
 import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
 import online.davisfamily.warehouse.sim.totebag.machine.BaggingMachine;
 import online.davisfamily.warehouse.sim.totebag.machine.SortingMachine;
@@ -98,13 +96,7 @@ public final class ToteToBagP2pLineActivityProbe implements P2pLineActivityProbe
     }
 
     private P2pPackPathActivitySnapshot packPathSnapshot() {
-        Map<String, PrlConveyor> prlsById = toteToBagFlowController.getPrlsById();
-        int nonIdlePrlCount = (int) prlsById.values().stream()
-                .filter(prl -> prl.getAssignment().getState() != PrlState.IDLE)
-                .count();
-        int prlPackCount = prlsById.values().stream()
-                .mapToInt(prl -> prl.getPacks().size())
-                .sum();
+        PrlActivitySummary prlActivitySummary = toteToBagFlowController.prlActivitySummary();
 
         return new P2pPackPathActivitySnapshot(
                 sortingMachine.getQueuedPacks().size(),
@@ -112,8 +104,8 @@ public final class ToteToBagP2pLineActivityProbe implements P2pLineActivityProbe
                 sorterDownstreamFlow.getPendingSorterOutfeedCount(),
                 toteToBagFlowController.getPdcLaneEntries().size(),
                 toteToBagFlowController.getActivePdcTransfers().size(),
-                nonIdlePrlCount,
-                prlPackCount,
+                prlActivitySummary.nonIdlePrlCount(),
+                prlActivitySummary.packCount(),
                 toteToBagFlowController.getActivePrlToPcrTransfers().size(),
                 pcrConveyor.getLaneEntries().size(),
                 pcrConveyor.getTravellingGroups().size(),

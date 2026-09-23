@@ -18,6 +18,8 @@ public final class P2pLineLeaseRegistry {
     private final Map<P2pLineId, MutableLineLease> leasesByLineId = new LinkedHashMap<>();
     private final Map<PhysicalToteId, P2pPhysicalToteAssignment> assignmentsByPhysicalToteId =
             new LinkedHashMap<>();
+    private final Map<P2pLineId, List<P2pPhysicalToteAssignment>> assignmentsByLineId =
+            new LinkedHashMap<>();
     private long transitionSequence;
 
     public P2pLineLeaseRegistry(List<P2pLineDefinition> definitions) {
@@ -39,6 +41,7 @@ public final class P2pLineLeaseRegistry {
             }
             validatedDefinitions.add(definition);
             leasesByLineId.put(definition.lineId(), new MutableLineLease(definition));
+            assignmentsByLineId.put(definition.lineId(), List.of());
         }
         this.definitions = List.copyOf(validatedDefinitions);
     }
@@ -116,7 +119,11 @@ public final class P2pLineLeaseRegistry {
                     "P2P assignment service centre does not own the selected line");
         }
 
+        List<P2pPhysicalToteAssignment> replacement = new ArrayList<>(
+                assignmentsByLineId.get(line.definition.lineId()));
+        replacement.add(assignment);
         assignmentsByPhysicalToteId.put(assignment.physicalToteId(), assignment);
+        assignmentsByLineId.put(line.definition.lineId(), List.copyOf(replacement));
         recordTransition(
                 line,
                 "ASSIGNMENT_COMMITTED physicalTote="
@@ -204,26 +211,22 @@ public final class P2pLineLeaseRegistry {
     private P2pLineLeaseSnapshot snapshot(
             MutableLineLease line,
             P2pLineActivitySnapshot activity) {
-        return new P2pLineLeaseSnapshot(
+        return P2pLineLeaseSnapshot.fromValidatedRegistryState(
                 line.definition,
                 Optional.ofNullable(line.serviceCentreId),
                 activity,
-                assignmentsByPhysicalToteId.values().stream()
-                        .filter(assignment -> assignment.lineId().equals(line.definition.lineId()))
-                        .toList());
+                assignmentsByLineId.get(line.definition.lineId()));
     }
 
     private void validateSnapshot(
             MutableLineLease line,
             String serviceCentreId,
             P2pLineActivitySnapshot activity) {
-        new P2pLineLeaseSnapshot(
+        P2pLineLeaseSnapshot.fromValidatedRegistryState(
                 line.definition,
                 Optional.of(serviceCentreId),
                 activity,
-                assignmentsByPhysicalToteId.values().stream()
-                        .filter(assignment -> assignment.lineId().equals(line.definition.lineId()))
-                        .toList());
+                assignmentsByLineId.get(line.definition.lineId()));
     }
 
     private MutableLineLease requireLine(P2pLineId lineId) {

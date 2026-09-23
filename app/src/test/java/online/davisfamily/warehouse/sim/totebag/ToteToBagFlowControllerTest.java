@@ -23,10 +23,12 @@ import online.davisfamily.threedee.model.Mesh;
 import online.davisfamily.threedee.rendering.RenderableObject;
 import online.davisfamily.threedee.path.LinearSegment3;
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.totebag.assignment.PrlAssignmentPlan;
 import online.davisfamily.warehouse.sim.totebag.assignment.PrlState;
 import online.davisfamily.warehouse.sim.totebag.assignment.ToteToBagAssignmentPlanner;
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
+import online.davisfamily.warehouse.sim.totebag.control.PrlActivitySummary;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
@@ -162,6 +164,35 @@ class ToteToBagFlowControllerTest {
 
         assertEquals(List.of("bag-a", "bag-b"), baggingMachine.getCompletedCorrelationIds());
         assertTrue(pcrConveyor.isEmpty());
+    }
+
+    @Test
+    void shouldSummarizePrlActivityWithoutMutatingPrlState() {
+        AdmissionFixture fixture = createAdmissionFixture();
+        ToteToBagFlowController controller = fixture.controller();
+
+        assertEquals(new PrlActivitySummary(0, 0), controller.prlActivitySummary());
+        assertThrows(IllegalArgumentException.class, () -> new PrlActivitySummary(-1, 0));
+        assertThrows(IllegalArgumentException.class, () -> new PrlActivitySummary(0, -1));
+
+        PrlConveyor firstPrl = fixture.prls().get(0);
+        PrlConveyor secondPrl = fixture.prls().get(1);
+        firstPrl.assign(new PrlAssignmentPlan("prl-1", "bag-a", 2));
+        secondPrl.assign(new PrlAssignmentPlan("prl-2", "bag-b", 2));
+        assertEquals(new PrlActivitySummary(2, 0), controller.prlActivitySummary());
+
+        firstPrl.acceptPack(new Pack("pack-a1", "bag-a", candidatePackDimensions()));
+        secondPrl.acceptPack(new Pack("pack-b1", "bag-b", candidatePackDimensions()));
+        secondPrl.acceptPack(new Pack("pack-b2", "bag-b", candidatePackDimensions()));
+
+        PrlActivitySummary firstRead = controller.prlActivitySummary();
+        PrlActivitySummary secondRead = controller.prlActivitySummary();
+        assertEquals(new PrlActivitySummary(2, 3), firstRead);
+        assertEquals(firstRead, secondRead);
+        assertEquals(1, firstPrl.getAssignment().getReceivedPackCount());
+        assertEquals(2, secondPrl.getAssignment().getReceivedPackCount());
+        assertEquals(1, firstPrl.getPacks().size());
+        assertEquals(2, secondPrl.getPacks().size());
     }
 
     @Test

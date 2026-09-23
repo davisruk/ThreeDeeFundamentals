@@ -456,6 +456,18 @@ public class ToteToBagFlowController implements SimulationController {
         return Collections.unmodifiableMap(new LinkedHashMap<>(prlsById));
     }
 
+    public PrlActivitySummary prlActivitySummary() {
+        int nonIdlePrlCount = 0;
+        int packCount = 0;
+        for (PrlConveyor prl : prlsById.values()) {
+            if (prl.getAssignment().getState() != PrlState.IDLE) {
+                nonIdlePrlCount++;
+            }
+            packCount += prl.getPacks().size();
+        }
+        return new PrlActivitySummary(nonIdlePrlCount, packCount);
+    }
+
     public Queue<ReleasedPackGroup> getReleasedGroups() {
         return releasedGroups;
     }
