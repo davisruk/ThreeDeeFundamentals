@@ -36,22 +36,25 @@ public final class DspOperationalReleaseSnapshotFactory {
     private LogicalSnapshotIndex cachedLogicalSnapshotIndex;
     private InboundToteManifestCatalog cachedManifestCatalog;
     private ManifestCatalogIndex cachedManifestCatalogIndex;
+    private OsrProcessingReleaseSnapshot cachedJoinedPhysicalSnapshot;
+    private InboundToteManifestCatalog cachedJoinedManifestCatalog;
+    private Av02InventorySnapshot cachedJoinedAv02InventorySnapshot;
+    private WarehouseSchedulerSnapshot cachedJoinedLogicalSnapshot;
+    private DspOperationalReleaseSnapshot.CandidateState cachedCandidateState;
 
     public DspOperationalReleaseSnapshot create(
             OsrProcessingReleaseSnapshot physicalSnapshot,
             InboundToteManifestCatalog manifestCatalog,
             WarehouseSchedulerSnapshot logicalSnapshot) {
         validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
-        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
-        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalIndex.index());
-        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+        JoinedCandidateLookup joined = joinedCandidateFor(
+                physicalSnapshot, manifestCatalog, null, logicalSnapshot);
         DspOperationalReleaseSnapshot snapshot = createSnapshot(
-                joinedCandidates,
-                manifestIndex.index().pharmacyGroups(),
+                joined.candidateState(),
                 logicalSnapshot,
-                deriveCompatibilityAdmissions(joinedCandidates, logicalSnapshot));
-        publish(logicalIndex, manifestIndex);
+                deriveCompatibilityAdmissions(
+                        joined.candidateState().candidates(), logicalSnapshot));
+        publish(joined);
         return snapshot;
     }
 
@@ -64,18 +67,14 @@ public final class DspOperationalReleaseSnapshotFactory {
             throw new IllegalArgumentException("av02InventorySnapshot must not be null");
         }
         validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
-        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
-        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot,
-                manifestCatalog,
-                av02InventorySnapshot,
-                logicalIndex.index());
+        JoinedCandidateLookup joined = joinedCandidateFor(
+                physicalSnapshot, manifestCatalog, av02InventorySnapshot, logicalSnapshot);
         DspOperationalReleaseSnapshot snapshot = createSnapshot(
-                joinedCandidates,
-                buildPharmacyGroups(joinedCandidates),
+                joined.candidateState(),
                 logicalSnapshot,
-                deriveCompatibilityAdmissions(joinedCandidates, logicalSnapshot));
-        publish(logicalIndex);
+                deriveCompatibilityAdmissions(
+                        joined.candidateState().candidates(), logicalSnapshot));
+        publish(joined);
         return snapshot;
     }
 
@@ -88,18 +87,15 @@ public final class DspOperationalReleaseSnapshotFactory {
             throw new IllegalArgumentException("routeAdmissionFactory must not be null");
         }
         validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
-        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
-        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalIndex.index());
+        JoinedCandidateLookup joined = joinedCandidateFor(
+                physicalSnapshot, manifestCatalog, null, logicalSnapshot);
         List<OperationalCandidateRouteAdmission> routeAdmissions =
-                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
-        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+                routeAdmissionFactory.create(joined.candidateState().candidates(), logicalSnapshot);
         DspOperationalReleaseSnapshot snapshot = createSnapshot(
-                joinedCandidates,
-                manifestIndex.index().pharmacyGroups(),
+                joined.candidateState(),
                 logicalSnapshot,
                 routeAdmissions);
-        publish(logicalIndex, manifestIndex);
+        publish(joined);
         return snapshot;
     }
 
@@ -117,20 +113,17 @@ public final class DspOperationalReleaseSnapshotFactory {
             throw new IllegalArgumentException("P2P operational snapshot inputs must not be null");
         }
         validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
-        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
-        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalIndex.index());
+        JoinedCandidateLookup joined = joinedCandidateFor(
+                physicalSnapshot, manifestCatalog, null, logicalSnapshot);
         List<OperationalCandidateRouteAdmission> routeAdmissions =
-                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
-        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+                routeAdmissionFactory.create(joined.candidateState().candidates(), logicalSnapshot);
         DspOperationalReleaseSnapshot snapshot = createSnapshot(
-                joinedCandidates,
-                manifestIndex.index().pharmacyGroups(),
+                joined.candidateState(),
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
                 p2pTargetAdmissions);
-        publish(logicalIndex, manifestIndex);
+        publish(joined);
         return snapshot;
     }
 
@@ -147,21 +140,18 @@ public final class DspOperationalReleaseSnapshotFactory {
             throw new IllegalArgumentException("elastic operational snapshot inputs must not be null");
         }
         validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
-        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
-        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot, manifestCatalog, logicalIndex.index());
+        JoinedCandidateLookup joined = joinedCandidateFor(
+                physicalSnapshot, manifestCatalog, null, logicalSnapshot);
         List<OperationalCandidateRouteAdmission> routeAdmissions =
-                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
-        ManifestIndexLookup manifestIndex = manifestIndexFor(manifestCatalog);
+                routeAdmissionFactory.create(joined.candidateState().candidates(), logicalSnapshot);
         DspOperationalReleaseSnapshot snapshot = createSnapshot(
-                joinedCandidates,
-                manifestIndex.index().pharmacyGroups(),
+                joined.candidateState(),
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
                 p2pTargetAdmissions,
                 Optional.of(elasticAllocation));
-        publish(logicalIndex, manifestIndex);
+        publish(joined);
         return snapshot;
     }
 
@@ -182,23 +172,18 @@ public final class DspOperationalReleaseSnapshotFactory {
             throw new IllegalArgumentException("av02InventorySnapshot must not be null");
         }
         validateJoinInputs(physicalSnapshot, manifestCatalog, logicalSnapshot);
-        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
-        List<DspOperationalReleaseCandidate> joinedCandidates = joinCandidates(
-                physicalSnapshot,
-                manifestCatalog,
-                av02InventorySnapshot,
-                logicalIndex.index());
+        JoinedCandidateLookup joined = joinedCandidateFor(
+                physicalSnapshot, manifestCatalog, av02InventorySnapshot, logicalSnapshot);
         List<OperationalCandidateRouteAdmission> routeAdmissions =
-                routeAdmissionFactory.create(joinedCandidates, logicalSnapshot);
+                routeAdmissionFactory.create(joined.candidateState().candidates(), logicalSnapshot);
         DspOperationalReleaseSnapshot snapshot = createSnapshot(
-                joinedCandidates,
-                buildPharmacyGroups(joinedCandidates),
+                joined.candidateState(),
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
                 p2pTargetAdmissions,
                 Optional.of(elasticAllocation));
-        publish(logicalIndex);
+        publish(joined);
         return snapshot;
     }
 
@@ -264,28 +249,27 @@ public final class DspOperationalReleaseSnapshotFactory {
     }
 
     private static DspOperationalReleaseSnapshot createSnapshot(
-            List<DspOperationalReleaseCandidate> joinedCandidates,
-            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            DspOperationalReleaseSnapshot.CandidateState candidateState,
             WarehouseSchedulerSnapshot logicalSnapshot,
             List<OperationalCandidateRouteAdmission> routeAdmissions) {
-        return new DspOperationalReleaseSnapshot(
-                joinedCandidates,
-                pharmacyGroups,
+        return DspOperationalReleaseSnapshot.fromValidatedCandidateState(
+                candidateState,
                 logicalSnapshot.stationAdmissions(),
                 logicalSnapshot.preparedLineKeys(),
-                routeAdmissions);
+                routeAdmissions,
+                new P2pLineLeaseCatalogSnapshot(List.of()),
+                Map.of(),
+                Optional.empty());
     }
 
     private static DspOperationalReleaseSnapshot createSnapshot(
-            List<DspOperationalReleaseCandidate> joinedCandidates,
-            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            DspOperationalReleaseSnapshot.CandidateState candidateState,
             WarehouseSchedulerSnapshot logicalSnapshot,
             List<OperationalCandidateRouteAdmission> routeAdmissions,
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
             List<OperationalRouteTargetAdmissionSnapshot> p2pTargetAdmissions) {
         return createSnapshot(
-                joinedCandidates,
-                pharmacyGroups,
+                candidateState,
                 logicalSnapshot,
                 routeAdmissions,
                 p2pLineLeases,
@@ -294,8 +278,7 @@ public final class DspOperationalReleaseSnapshotFactory {
     }
 
     private static DspOperationalReleaseSnapshot createSnapshot(
-            List<DspOperationalReleaseCandidate> joinedCandidates,
-            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            DspOperationalReleaseSnapshot.CandidateState candidateState,
             WarehouseSchedulerSnapshot logicalSnapshot,
             List<OperationalCandidateRouteAdmission> routeAdmissions,
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
@@ -315,9 +298,8 @@ public final class DspOperationalReleaseSnapshotFactory {
                 throw new IllegalArgumentException("Duplicate P2P target admission: " + destination);
             }
         }
-        return new DspOperationalReleaseSnapshot(
-                joinedCandidates,
-                pharmacyGroups,
+        return DspOperationalReleaseSnapshot.fromValidatedCandidateState(
+                candidateState,
                 logicalSnapshot.stationAdmissions(),
                 logicalSnapshot.preparedLineKeys(),
                 routeAdmissions,
@@ -358,6 +340,58 @@ public final class DspOperationalReleaseSnapshotFactory {
         }
     }
 
+    private JoinedCandidateLookup joinedCandidateFor(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            Av02InventorySnapshot av02InventorySnapshot,
+            WarehouseSchedulerSnapshot logicalSnapshot) {
+        if (cachedCandidateState != null
+                && physicalSnapshot == cachedJoinedPhysicalSnapshot
+                && manifestCatalog == cachedJoinedManifestCatalog
+                && av02InventorySnapshot == cachedJoinedAv02InventorySnapshot
+                && logicalSnapshot == cachedJoinedLogicalSnapshot) {
+            return new JoinedCandidateLookup(
+                    physicalSnapshot,
+                    manifestCatalog,
+                    av02InventorySnapshot,
+                    logicalSnapshot,
+                    cachedCandidateState,
+                    null,
+                    null,
+                    false);
+        }
+
+        LogicalIndexLookup logicalIndex = logicalIndexFor(logicalSnapshot);
+        List<DspOperationalReleaseCandidate> joinedCandidates;
+        ManifestIndexLookup manifestIndex = null;
+        List<ServiceCentrePharmacyGroup> pharmacyGroups;
+        if (av02InventorySnapshot == null) {
+            joinedCandidates = joinCandidates(
+                    physicalSnapshot, manifestCatalog, logicalIndex.index());
+            manifestIndex = manifestIndexFor(manifestCatalog);
+            pharmacyGroups = manifestIndex.index().pharmacyGroups();
+        } else {
+            joinedCandidates = joinCandidates(
+                    physicalSnapshot,
+                    manifestCatalog,
+                    av02InventorySnapshot,
+                    logicalIndex.index());
+            pharmacyGroups = buildPharmacyGroups(joinedCandidates);
+        }
+        DspOperationalReleaseSnapshot.CandidateState candidateState =
+                DspOperationalReleaseSnapshot.validatedCandidateState(
+                        joinedCandidates, pharmacyGroups);
+        return new JoinedCandidateLookup(
+                physicalSnapshot,
+                manifestCatalog,
+                av02InventorySnapshot,
+                logicalSnapshot,
+                candidateState,
+                logicalIndex,
+                manifestIndex,
+                true);
+    }
+
     private LogicalIndexLookup logicalIndexFor(WarehouseSchedulerSnapshot logicalSnapshot) {
         if (logicalSnapshot == cachedLogicalSnapshot) {
             return new LogicalIndexLookup(
@@ -380,20 +414,27 @@ public final class DspOperationalReleaseSnapshotFactory {
                 true);
     }
 
-    private void publish(LogicalIndexLookup logicalIndex) {
-        publish(logicalIndex, null);
-    }
-
     private void publish(
             LogicalIndexLookup logicalIndex,
             ManifestIndexLookup manifestIndex) {
-        if (logicalIndex.publish()) {
+        if (logicalIndex != null && logicalIndex.publish()) {
             cachedLogicalSnapshot = logicalIndex.snapshot();
             cachedLogicalSnapshotIndex = logicalIndex.index();
         }
         if (manifestIndex != null && manifestIndex.publish()) {
             cachedManifestCatalog = manifestIndex.catalog();
             cachedManifestCatalogIndex = manifestIndex.index();
+        }
+    }
+
+    private void publish(JoinedCandidateLookup joined) {
+        publish(joined.logicalIndex(), joined.manifestIndex());
+        if (joined.publish()) {
+            cachedJoinedPhysicalSnapshot = joined.physicalSnapshot();
+            cachedJoinedManifestCatalog = joined.manifestCatalog();
+            cachedJoinedAv02InventorySnapshot = joined.av02InventorySnapshot();
+            cachedJoinedLogicalSnapshot = joined.logicalSnapshot();
+            cachedCandidateState = joined.candidateState();
         }
     }
 
@@ -633,6 +674,17 @@ public final class DspOperationalReleaseSnapshotFactory {
     private record ManifestIndexLookup(
             InboundToteManifestCatalog catalog,
             ManifestCatalogIndex index,
+            boolean publish) {
+    }
+
+    private record JoinedCandidateLookup(
+            OsrProcessingReleaseSnapshot physicalSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            Av02InventorySnapshot av02InventorySnapshot,
+            WarehouseSchedulerSnapshot logicalSnapshot,
+            DspOperationalReleaseSnapshot.CandidateState candidateState,
+            LogicalIndexLookup logicalIndex,
+            ManifestIndexLookup manifestIndex,
             boolean publish) {
     }
 

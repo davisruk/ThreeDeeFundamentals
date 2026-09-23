@@ -3,9 +3,11 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -26,6 +28,9 @@ import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationCalibrationStatus;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
@@ -33,6 +38,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 
 class DspOperationalReleaseSnapshotTest {
@@ -314,6 +320,99 @@ class DspOperationalReleaseSnapshotTest {
         assertEquals(List.of(
                 group("sc-1", "pharmacy-2", 0, 2),
                 group("sc-1", "pharmacy-1", 1, 1)), second.pharmacyGroups());
+    }
+
+    @Test
+    void shouldReuseValidatedCandidateStateWhileRevalidatingDynamicInputs() {
+        DspSchedulerOrderState logicalState = logicalState(
+                "order-1", OrderType.FULL_PACK, "sc-1", "pharmacy-1");
+        DspOperationalReleaseCandidate candidate = candidate(
+                "tote-1", 1, logicalState, List.of("pharmacy-1"));
+        DspOperationalReleaseSnapshot.CandidateState candidateState =
+                DspOperationalReleaseSnapshot.validatedCandidateState(
+                        List.of(candidate),
+                        List.of(group("sc-1", "pharmacy-1", 0, 1)));
+        P2pLineLeaseCatalogSnapshot leases = new P2pLineLeaseCatalogSnapshot(List.of());
+
+        DspOperationalReleaseSnapshot first = DspOperationalReleaseSnapshot
+                .fromValidatedCandidateState(
+                        candidateState,
+                        Map.of(),
+                        Set.of(),
+                        List.of(),
+                        leases,
+                        Map.of(),
+                        Optional.empty());
+        DspOperationalReleaseSnapshot second = DspOperationalReleaseSnapshot
+                .fromValidatedCandidateState(
+                        candidateState,
+                        Map.of(),
+                        Set.of(),
+                        List.of(),
+                        leases,
+                        Map.of(),
+                        Optional.empty());
+
+        assertSame(candidateState.candidates(), first.candidates());
+        assertSame(candidateState.pharmacyGroups(), first.pharmacyGroups());
+        assertSame(first.candidates(), second.candidates());
+        assertSame(first.pharmacyGroups(), second.pharmacyGroups());
+
+        OperationalCandidateRouteAdmission invalidRoute =
+                new OperationalCandidateRouteAdmission(
+                        new PhysicalToteId("missing"),
+                        openAdmission(StationType.P2P, "p2p-1"));
+        for (int attempt = 0; attempt < 2; attempt++) {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> DspOperationalReleaseSnapshot.fromValidatedCandidateState(
+                            candidateState,
+                            Map.of(),
+                            Set.of(),
+                            List.of(invalidRoute),
+                            leases,
+                            Map.of(),
+                            Optional.empty()));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> DspOperationalReleaseSnapshot.fromValidatedCandidateState(
+                            candidateState,
+                            Map.of(),
+                            Set.of(),
+                            List.of(),
+                            null,
+                            Map.of(),
+                            Optional.empty()));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> DspOperationalReleaseSnapshot.fromValidatedCandidateState(
+                            candidateState,
+                            Map.of(),
+                            Set.of(),
+                            List.of(),
+                            leases,
+                            Map.of(new OperationalRouteDestination(
+                                    StationType.P2P, "missing"), true),
+                            Optional.empty()));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> DspOperationalReleaseSnapshot.fromValidatedCandidateState(
+                            candidateState,
+                            Map.of(),
+                            Set.of(),
+                            List.of(),
+                            leases,
+                            Map.of(),
+                            Optional.of(new P2pElasticAllocationSnapshot(
+                                    P2pElasticAllocationSnapshot
+                                            .DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                                    P2pElasticAllocationCalibrationStatus.UNCALIBRATED,
+                                    LocalDateTime.of(2026, 8, 24, 6, 0),
+                                    List.of(new P2pLineId("line-1")),
+                                    1,
+                                    List.of(),
+                                    List.of()))));
+        }
     }
 
     @Test

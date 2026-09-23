@@ -1,6 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.osr.release;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -174,6 +176,45 @@ class OsrProcessingReleaseSnapshotFactoryTest {
                 new PhysicalToteLifecycleSnapshot(Map.of(), List.of()));
 
         assertTrue(snapshot.candidates().isEmpty());
+    }
+
+    @Test
+    void shouldReuseExactInputsReplaceEitherInputAndRetainPriorSnapshotAfterFailure() {
+        InboundToteManifest stored = manifest(
+                "stored", sheet("order-stored"), OrderType.FULL_PACK, "104", 1);
+        PhysicalToteLifecycleSnapshot lifecycle = lifecycle(stored);
+        OsrInventorySnapshot inventory = new OsrInventorySnapshot(1, List.of(stored), List.of());
+
+        OsrProcessingReleaseSnapshot first = factory.create(inventory, lifecycle);
+        assertSame(first, factory.create(inventory, lifecycle));
+
+        OsrInventorySnapshot equalDistinctInventory = new OsrInventorySnapshot(
+                1, List.of(stored), List.of());
+        assertNotSame(inventory, equalDistinctInventory);
+        OsrProcessingReleaseSnapshot afterInventoryChange = factory.create(
+                equalDistinctInventory, lifecycle);
+        assertNotSame(first, afterInventoryChange);
+
+        PhysicalToteLifecycleSnapshot equalDistinctLifecycle =
+                new PhysicalToteLifecycleSnapshot(lifecycle.totes(), lifecycle.assignments());
+        assertNotSame(lifecycle, equalDistinctLifecycle);
+        OsrProcessingReleaseSnapshot afterLifecycleChange = factory.create(
+                equalDistinctInventory, equalDistinctLifecycle);
+        assertNotSame(afterInventoryChange, afterLifecycleChange);
+        assertSame(
+                afterLifecycleChange,
+                factory.create(equalDistinctInventory, equalDistinctLifecycle));
+
+        InboundToteManifest missing = manifest(
+                "missing", sheet("order-missing"), OrderType.ADAPTED, "104", 2);
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        new OsrInventorySnapshot(1, List.of(missing), List.of()),
+                        equalDistinctLifecycle));
+        assertSame(
+                afterLifecycleChange,
+                factory.create(equalDistinctInventory, equalDistinctLifecycle));
     }
 
     private static PhysicalToteLifecycleSnapshot lifecycle(

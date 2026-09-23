@@ -14,6 +14,9 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventorySnapshot;
 
 public final class OsrProcessingReleaseSnapshotFactory {
+    private OsrInventorySnapshot cachedInventorySnapshot;
+    private PhysicalToteLifecycleSnapshot cachedLifecycleSnapshot;
+    private OsrProcessingReleaseSnapshot cachedSnapshot;
 
     public OsrProcessingReleaseSnapshot create(
             OsrInventorySnapshot inventorySnapshot,
@@ -23,6 +26,11 @@ public final class OsrProcessingReleaseSnapshotFactory {
         }
         if (lifecycleSnapshot == null) {
             throw new IllegalArgumentException("lifecycleSnapshot must not be null");
+        }
+        if (inventorySnapshot == cachedInventorySnapshot
+                && lifecycleSnapshot == cachedLifecycleSnapshot
+                && cachedSnapshot != null) {
+            return cachedSnapshot;
         }
 
         List<OsrProcessingReleaseCandidate> candidates = new ArrayList<>();
@@ -76,6 +84,10 @@ public final class OsrProcessingReleaseSnapshotFactory {
                     availability,
                     blockingPhysicalToteId));
         }
-        return new OsrProcessingReleaseSnapshot(candidates);
+        OsrProcessingReleaseSnapshot snapshot = new OsrProcessingReleaseSnapshot(candidates);
+        cachedInventorySnapshot = inventorySnapshot;
+        cachedLifecycleSnapshot = lifecycleSnapshot;
+        cachedSnapshot = snapshot;
+        return snapshot;
     }
 }

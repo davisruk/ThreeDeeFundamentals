@@ -480,6 +480,11 @@ class DspOperationalReleaseSnapshotFactoryTest {
                 new OperationalRouteTargetDefinition(StationType.P2P, "p2p-1", 1));
         OperationalRouteEntryQueue secondQueue = new OperationalRouteEntryQueue(
                 new OperationalRouteTargetDefinition(StationType.P2P, "p2p-2", 1));
+        OsrProcessingReleaseSnapshot physicalSnapshot = new OsrProcessingReleaseSnapshot(List.of(
+                physicalCandidate(firstManifest),
+                physicalCandidate(secondManifest)));
+        InboundToteManifestCatalog manifestCatalog = new InboundToteManifestCatalog(
+                List.of(firstManifest, secondManifest));
         AtomicInteger resolutionCount = new AtomicInteger();
         OperationalCandidateRouteAdmissionFactory admissionFactory =
                 new OperationalCandidateRouteAdmissionFactory(
@@ -495,10 +500,8 @@ class DspOperationalReleaseSnapshotFactoryTest {
                         new OperationalRouteTargetRegistry(List.of(firstQueue, secondQueue)));
 
         DspOperationalReleaseSnapshot snapshot = factory.create(
-                new OsrProcessingReleaseSnapshot(List.of(
-                        physicalCandidate(firstManifest),
-                        physicalCandidate(secondManifest))),
-                new InboundToteManifestCatalog(List.of(firstManifest, secondManifest)),
+                physicalSnapshot,
+                manifestCatalog,
                 logicalSnapshot,
                 admissionFactory);
 
@@ -509,6 +512,13 @@ class DspOperationalReleaseSnapshotFactoryTest {
                         .map(routeAdmission -> routeAdmission.stationAdmission()
                                 .selectedTargetId().orElseThrow())
                         .toList());
+        DspOperationalReleaseSnapshot repeated = factory.create(
+                physicalSnapshot,
+                manifestCatalog,
+                logicalSnapshot,
+                admissionFactory);
+        assertEquals(4, resolutionCount.get());
+        assertSame(snapshot.candidates(), repeated.candidates());
         assertThrows(
                 IllegalArgumentException.class,
                 () -> factory.create(
@@ -644,12 +654,13 @@ class DspOperationalReleaseSnapshotFactoryTest {
                         physicalSnapshot, equalButDistinctCatalog, invalidChangedLogical));
         assertSame(rebuiltLogicalIndex, privateField(factory, "cachedLogicalSnapshotIndex"));
         assertSame(rebuiltManifestIndex, privateField(factory, "cachedManifestCatalogIndex"));
-        assertEquals(
-                equalButDistinct,
-                factory.create(
-                        physicalSnapshot,
-                        equalButDistinctCatalog,
-                        equalButDistinctLogical));
+        DspOperationalReleaseSnapshot afterFailure = factory.create(
+                physicalSnapshot,
+                equalButDistinctCatalog,
+                equalButDistinctLogical);
+        assertSame(equalButDistinct.candidates(), afterFailure.candidates());
+        assertSame(equalButDistinct.pharmacyGroups(), afterFailure.pharmacyGroups());
+        assertEquals(equalButDistinct, afterFailure);
 
         DspOperationalReleaseSnapshotFactory separateFactory =
                 new DspOperationalReleaseSnapshotFactory();
@@ -662,6 +673,62 @@ class DspOperationalReleaseSnapshotFactoryTest {
         assertNotSame(
                 privateField(factory, "cachedManifestCatalogIndex"),
                 privateField(separateFactory, "cachedManifestCatalogIndex"));
+    }
+
+    @Test
+    void shouldReplaceJoinedProjectionForEveryChangedInputAndIsolateAv02Presence() {
+        DspOrderItem item = adaptedItem("line-1", "product-1", "pharmacy-1", "reference-1");
+        InboundToteManifest manifest = manifest(
+                "tote-1", "order-1", OrderType.ADAPTED, "sc-1", List.of(item), 1);
+        OsrProcessingReleaseSnapshot physical = new OsrProcessingReleaseSnapshot(
+                List.of(physicalCandidate(manifest)));
+        InboundToteManifestCatalog catalog = new InboundToteManifestCatalog(List.of(manifest));
+        WarehouseSchedulerSnapshot logical = logicalSnapshot(List.of(logicalState(
+                "order-1", OrderType.ADAPTED, "sc-1", List.of(item), 999,
+                DspOrderStatus.BLOCKED)));
+
+        DspOperationalReleaseSnapshot first = factory.create(physical, catalog, logical);
+        DspOperationalReleaseSnapshot same = factory.create(physical, catalog, logical);
+        assertSame(first.candidates(), same.candidates());
+        assertSame(first.pharmacyGroups(), same.pharmacyGroups());
+
+        OsrProcessingReleaseSnapshot equalPhysical = new OsrProcessingReleaseSnapshot(
+                List.of(physicalCandidate(manifest)));
+        DspOperationalReleaseSnapshot physicalChanged = factory.create(
+                equalPhysical, catalog, logical);
+        assertNotSame(first.candidates(), physicalChanged.candidates());
+
+        InboundToteManifestCatalog equalCatalog = new InboundToteManifestCatalog(List.of(manifest));
+        DspOperationalReleaseSnapshot catalogChanged = factory.create(
+                equalPhysical, equalCatalog, logical);
+        assertNotSame(physicalChanged.candidates(), catalogChanged.candidates());
+
+        WarehouseSchedulerSnapshot equalLogical = logicalSnapshot(List.of(logicalState(
+                "order-1", OrderType.ADAPTED, "sc-1", List.of(item), 999,
+                DspOrderStatus.BLOCKED)));
+        DspOperationalReleaseSnapshot logicalChanged = factory.create(
+                equalPhysical, equalCatalog, equalLogical);
+        assertNotSame(catalogChanged.candidates(), logicalChanged.candidates());
+
+        Av02InventorySnapshot emptyAv02 = new Av02InventorySnapshot(2, List.of(), List.of());
+        DspOperationalReleaseSnapshot av02 = factory.create(
+                equalPhysical, equalCatalog, emptyAv02, equalLogical);
+        assertNotSame(logicalChanged.candidates(), av02.candidates());
+        DspOperationalReleaseSnapshot av02Same = factory.create(
+                equalPhysical, equalCatalog, emptyAv02, equalLogical);
+        assertSame(av02.candidates(), av02Same.candidates());
+        assertSame(av02.pharmacyGroups(), av02Same.pharmacyGroups());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(
+                        equalPhysical,
+                        equalCatalog,
+                        emptyAv02,
+                        logicalSnapshot(List.of())));
+        DspOperationalReleaseSnapshot afterFailure = factory.create(
+                equalPhysical, equalCatalog, emptyAv02, equalLogical);
+        assertSame(av02.candidates(), afterFailure.candidates());
     }
 
     @Test

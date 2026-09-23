@@ -20,6 +20,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 
 public final class DspOperationalReleaseSnapshot {
+    private final CandidateState candidateState;
     private final List<DspOperationalReleaseCandidate> candidates;
     private final List<ServiceCentrePharmacyGroup> pharmacyGroups;
     private final Map<StationType, StationAdmissionSnapshot> stationAdmissions;
@@ -38,8 +39,7 @@ public final class DspOperationalReleaseSnapshot {
             Map<StationType, StationAdmissionSnapshot> stationAdmissions,
             Set<PreparedLineKey> preparedLineKeys) {
         this(
-                candidates,
-                pharmacyGroups,
+                validatedCandidateState(candidates, pharmacyGroups),
                 stationAdmissions,
                 preparedLineKeys,
                 deriveCompatibilityRouteAdmissions(candidates, stationAdmissions),
@@ -55,8 +55,7 @@ public final class DspOperationalReleaseSnapshot {
             Set<PreparedLineKey> preparedLineKeys,
             List<OperationalCandidateRouteAdmission> routeAdmissions) {
         this(
-                candidates,
-                pharmacyGroups,
+                validatedCandidateState(candidates, pharmacyGroups),
                 stationAdmissions,
                 preparedLineKeys,
                 routeAdmissions,
@@ -74,8 +73,7 @@ public final class DspOperationalReleaseSnapshot {
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
             Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions) {
         this(
-                candidates,
-                pharmacyGroups,
+                validatedCandidateState(candidates, pharmacyGroups),
                 stationAdmissions,
                 preparedLineKeys,
                 routeAdmissions,
@@ -93,11 +91,31 @@ public final class DspOperationalReleaseSnapshot {
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
             Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
             Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation) {
-        CandidateCopies candidateCopies = copyCandidates(candidates);
-        this.candidates = candidateCopies.candidates();
-        this.candidatesByPhysicalToteId = candidateCopies.byPhysicalToteId();
-        GroupCopies groupCopies = copyAndValidateGroups(pharmacyGroups);
-        this.pharmacyGroups = groupCopies.pharmacyGroups();
+        this(
+                validatedCandidateState(candidates, pharmacyGroups),
+                stationAdmissions,
+                preparedLineKeys,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pRouteAdmissions,
+                elasticP2pAllocation);
+    }
+
+    private DspOperationalReleaseSnapshot(
+            CandidateState candidateState,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
+            Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation) {
+        if (candidateState == null) {
+            throw new IllegalArgumentException("candidateState must not be null");
+        }
+        this.candidateState = candidateState;
+        this.candidates = candidateState.candidates();
+        this.candidatesByPhysicalToteId = candidateState.candidatesByPhysicalToteId();
+        this.pharmacyGroups = candidateState.pharmacyGroups();
         this.stationAdmissions = copyStationAdmissions(stationAdmissions);
         this.preparedLineKeys = copyPreparedLineKeys(preparedLineKeys);
         this.routeAdmissions = copyRouteAdmissions(
@@ -113,8 +131,40 @@ public final class DspOperationalReleaseSnapshot {
         }
         this.elasticP2pAllocation = elasticP2pAllocation;
         validateElasticAllocation(this.candidates, p2pLineLeases, elasticP2pAllocation);
-        this.groupIndexByPhysicalToteId = validateCandidateGroups(
-                this.candidates, groupCopies.byServiceCentreAndPharmacy());
+        this.groupIndexByPhysicalToteId = candidateState.groupIndexByPhysicalToteId();
+    }
+
+    static CandidateState validatedCandidateState(
+            List<DspOperationalReleaseCandidate> candidates,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups) {
+        CandidateCopies candidateCopies = copyCandidates(candidates);
+        GroupCopies groupCopies = copyAndValidateGroups(pharmacyGroups);
+        Map<PhysicalToteId, Integer> groupIndexes = validateCandidateGroups(
+                candidateCopies.candidates(), groupCopies.byServiceCentreAndPharmacy());
+        return new CandidateState(
+                candidateCopies.candidates(),
+                candidateCopies.byPhysicalToteId(),
+                groupCopies.pharmacyGroups(),
+                groupCopies.byServiceCentreAndPharmacy(),
+                groupIndexes);
+    }
+
+    static DspOperationalReleaseSnapshot fromValidatedCandidateState(
+            CandidateState candidateState,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
+            Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation) {
+        return new DspOperationalReleaseSnapshot(
+                candidateState,
+                stationAdmissions,
+                preparedLineKeys,
+                routeAdmissions,
+                p2pLineLeases,
+                p2pRouteAdmissions,
+                elasticP2pAllocation);
     }
 
     public List<DspOperationalReleaseCandidate> candidates() {
@@ -437,6 +487,50 @@ public final class DspOperationalReleaseSnapshot {
             copy.add(routeAdmission);
         }
         return List.copyOf(copy);
+    }
+
+    static final class CandidateState {
+        private final List<DspOperationalReleaseCandidate> candidates;
+        private final Map<PhysicalToteId, DspOperationalReleaseCandidate>
+                candidatesByPhysicalToteId;
+        private final List<ServiceCentrePharmacyGroup> pharmacyGroups;
+        private final Map<String, Map<String, ServiceCentrePharmacyGroup>>
+                byServiceCentreAndPharmacy;
+        private final Map<PhysicalToteId, Integer> groupIndexByPhysicalToteId;
+
+        private CandidateState(
+                List<DspOperationalReleaseCandidate> candidates,
+                Map<PhysicalToteId, DspOperationalReleaseCandidate> candidatesByPhysicalToteId,
+                List<ServiceCentrePharmacyGroup> pharmacyGroups,
+                Map<String, Map<String, ServiceCentrePharmacyGroup>>
+                        byServiceCentreAndPharmacy,
+                Map<PhysicalToteId, Integer> groupIndexByPhysicalToteId) {
+            this.candidates = candidates;
+            this.candidatesByPhysicalToteId = candidatesByPhysicalToteId;
+            this.pharmacyGroups = pharmacyGroups;
+            this.byServiceCentreAndPharmacy = byServiceCentreAndPharmacy;
+            this.groupIndexByPhysicalToteId = groupIndexByPhysicalToteId;
+        }
+
+        List<DspOperationalReleaseCandidate> candidates() {
+            return candidates;
+        }
+
+        Map<PhysicalToteId, DspOperationalReleaseCandidate> candidatesByPhysicalToteId() {
+            return candidatesByPhysicalToteId;
+        }
+
+        List<ServiceCentrePharmacyGroup> pharmacyGroups() {
+            return pharmacyGroups;
+        }
+
+        Map<String, Map<String, ServiceCentrePharmacyGroup>> byServiceCentreAndPharmacy() {
+            return byServiceCentreAndPharmacy;
+        }
+
+        Map<PhysicalToteId, Integer> groupIndexByPhysicalToteId() {
+            return groupIndexByPhysicalToteId;
+        }
     }
 
     private record CandidateCopies(
