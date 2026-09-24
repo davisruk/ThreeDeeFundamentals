@@ -295,6 +295,19 @@ Hard rules:
 - partially filled totes are flushed when their applicable work completes or a cutoff requires closure.
 
 Detailed tote substitution, prescription bag grouping, and output splitting are defined by the lifecycle requirements.
+Keeping every bag of one prescription in the same outbound tote is a possible
+future store-handling policy, not a current hard rule; capacity-driven splitting
+remains permitted.
+
+The inbound FULL_PACK/ASSOCIATED patient-within-order containment guarantee
+is supplied by the upstream 12N producer; the simulator does not add an
+initialisation or simulation-step validation scan for PPG/patient splits.
+PPG membership is not present in 12N. A completed bag may enter its separate
+outbound physical tote while the incoming source sheet is still actively
+assigned to an inbound tote. Outbound sheet ownership always uses the derived
+source-sheet/outgoing-tote numbering in the lifecycle requirements, never the
+active incoming sheet key. This separation preserves the existing
+one-active-physical-assignment-per-sheet invariant.
 
 ## 11. Service-Centre Timetable
 

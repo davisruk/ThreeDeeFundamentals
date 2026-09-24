@@ -8,30 +8,32 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignment;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
 public final class OutputSheetAllocator {
-    private final Map<String, Integer> highestSheetNumberByOrderId = new LinkedHashMap<>();
+    private static final int MAX_SHEET_NUMBER = 999;
+    private static final int MAX_OUTGOING_TOTE_ORDINAL = 19;
+
+    private final Set<OrderSheetKey> knownOrderSheetKeys;
     private final Map<SourceToteKey, OrderSheetKey> outputSheetBySourceAndTote = new LinkedHashMap<>();
-    private final Map<OrderSheetKey, LinkedHashSet<OrderSheetKey>> outputSheetsBySource = new LinkedHashMap<>();
+    private final Map<OrderSheetKey, Integer> nextOrdinalBySource = new LinkedHashMap<>();
+    private final Map<OrderSheetKey, SourceToteKey> sourceToteByOutputSheet = new LinkedHashMap<>();
 
     public OutputSheetAllocator(Collection<OrderSheetKey> knownOrderSheetKeys) {
         if (knownOrderSheetKeys == null) {
             throw new IllegalArgumentException("knownOrderSheetKeys must not be null");
         }
+        LinkedHashSet<OrderSheetKey> knownKeys = new LinkedHashSet<>();
         for (OrderSheetKey knownOrderSheetKey : knownOrderSheetKeys) {
             if (knownOrderSheetKey == null) {
                 throw new IllegalArgumentException("knownOrderSheetKeys must not contain null");
             }
-            highestSheetNumberByOrderId.merge(
-                    knownOrderSheetKey.orderId(),
-                    knownOrderSheetKey.sheetNumber(),
-                    Math::max);
+            knownKeys.add(knownOrderSheetKey);
         }
+        this.knownOrderSheetKeys = Set.copyOf(knownKeys);
     }
 
     public List<OutputSheetAllocation> resolve(
@@ -40,91 +42,117 @@ public final class OutputSheetAllocator {
             PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
         validateInputs(sourceOwningSheetKeys, targetOutboundToteId, lifecycleSnapshot);
 
-        Map<String, Integer> stagedHighestSheetNumbers = new LinkedHashMap<>(highestSheetNumberByOrderId);
         Map<SourceToteKey, OrderSheetKey> stagedMappings = new LinkedHashMap<>(outputSheetBySourceAndTote);
-        Map<OrderSheetKey, LinkedHashSet<OrderSheetKey>> stagedOutputs = copyOutputSheetsBySource();
+        Map<OrderSheetKey, Integer> stagedNextOrdinals = new LinkedHashMap<>(nextOrdinalBySource);
+        Map<OrderSheetKey, SourceToteKey> stagedOwners = new LinkedHashMap<>(sourceToteByOutputSheet);
         List<OutputSheetAllocation> allocations = new ArrayList<>();
 
         for (OrderSheetKey sourceKey : sourceOwningSheetKeys) {
             SourceToteKey mappingKey = new SourceToteKey(sourceKey, targetOutboundToteId);
             OrderSheetKey outputKey = stagedMappings.get(mappingKey);
             if (outputKey == null) {
-                outputKey = selectOutputSheet(
-                        sourceKey,
-                        targetOutboundToteId,
-                        lifecycleSnapshot,
-                        stagedHighestSheetNumbers,
-                        stagedOutputs);
+                int ordinal = nextOrdinal(sourceKey, stagedNextOrdinals);
+                outputKey = deriveOutputSheet(sourceKey, ordinal);
+                rejectOutputKeyCollision(outputKey, mappingKey, stagedOwners);
+                rejectActiveAssignmentToNewOutputKey(outputKey, lifecycleSnapshot);
+                stagedNextOrdinals.put(sourceKey, ordinal);
                 stagedMappings.put(mappingKey, outputKey);
-                stagedOutputs.computeIfAbsent(sourceKey, ignored -> new LinkedHashSet<>()).add(outputKey);
+                stagedOwners.put(outputKey, mappingKey);
             } else {
-                rejectActiveNonOutboundAssignment(outputKey, lifecycleSnapshot);
+                requireExistingOutputAssignment(outputKey, targetOutboundToteId, lifecycleSnapshot);
             }
             allocations.add(new OutputSheetAllocation(sourceKey, outputKey));
         }
 
-        highestSheetNumberByOrderId.clear();
-        highestSheetNumberByOrderId.putAll(stagedHighestSheetNumbers);
         outputSheetBySourceAndTote.clear();
         outputSheetBySourceAndTote.putAll(stagedMappings);
-        outputSheetsBySource.clear();
-        outputSheetsBySource.putAll(stagedOutputs);
+        nextOrdinalBySource.clear();
+        nextOrdinalBySource.putAll(stagedNextOrdinals);
+        sourceToteByOutputSheet.clear();
+        sourceToteByOutputSheet.putAll(stagedOwners);
         return List.copyOf(allocations);
     }
 
-    private OrderSheetKey selectOutputSheet(
+    private int nextOrdinal(
             OrderSheetKey sourceKey,
-            PhysicalToteId targetOutboundToteId,
-            PhysicalToteLifecycleSnapshot lifecycleSnapshot,
-            Map<String, Integer> stagedHighestSheetNumbers,
-            Map<OrderSheetKey, LinkedHashSet<OrderSheetKey>> stagedOutputs) {
-        LinkedHashSet<OrderSheetKey> candidates = new LinkedHashSet<>();
-        candidates.add(sourceKey);
-        candidates.addAll(stagedOutputs.getOrDefault(sourceKey, new LinkedHashSet<>()));
-
-        boolean activeOnAnotherTote = false;
-        for (OrderSheetKey candidate : candidates) {
-            var activeAssignment = lifecycleSnapshot.activeAssignmentFor(candidate);
-            if (activeAssignment.isEmpty()) {
-                continue;
-            }
-            PhysicalToteAssignment assignment = activeAssignment.orElseThrow();
-            requireOutboundStage(assignment);
-            if (assignment.physicalToteId().equals(targetOutboundToteId)) {
-                return candidate;
-            }
-            activeOnAnotherTote = true;
+            Map<OrderSheetKey, Integer> stagedNextOrdinals) {
+        int ordinal;
+        try {
+            ordinal = Math.incrementExact(stagedNextOrdinals.getOrDefault(sourceKey, 0));
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException(
+                    "Outgoing tote ordinal overflows for source sheet: " + sourceKey,
+                    exception);
         }
-
-        if (!activeOnAnotherTote) {
-            return sourceKey;
+        if (ordinal > MAX_OUTGOING_TOTE_ORDINAL) {
+            throw new IllegalArgumentException(
+                    "Outgoing tote ordinal exceeds the supported range for source sheet: " + sourceKey);
         }
-
-        int nextSheetNumber = Math.incrementExact(
-                stagedHighestSheetNumbers.getOrDefault(sourceKey.orderId(), sourceKey.sheetNumber()));
-        stagedHighestSheetNumbers.put(sourceKey.orderId(), nextSheetNumber);
-        return new OrderSheetKey(sourceKey.orderId(), nextSheetNumber);
+        return ordinal;
     }
 
-    private void rejectActiveNonOutboundAssignment(
-            OrderSheetKey outputSheetKey,
-            PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
-        lifecycleSnapshot.activeAssignmentFor(outputSheetKey).ifPresent(this::requireOutboundStage);
+    private OrderSheetKey deriveOutputSheet(OrderSheetKey sourceKey, int ordinal) {
+        int outputSheetNumber;
+        try {
+            outputSheetNumber = Math.addExact(
+                    80,
+                    Math.addExact(Math.multiplyExact(sourceKey.sheetNumber(), 20), ordinal));
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException(
+                    "Derived output sheet number overflows for source sheet: " + sourceKey,
+                    exception);
+        }
+        if (outputSheetNumber > MAX_SHEET_NUMBER) {
+            throw new IllegalArgumentException(
+                    "Derived output sheet number exceeds 999 for source sheet: " + sourceKey);
+        }
+        return new OrderSheetKey(sourceKey.orderId(), outputSheetNumber);
     }
 
-    private void requireOutboundStage(PhysicalToteAssignment assignment) {
-        if (assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND_BAG
-                && assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND) {
+    private void rejectOutputKeyCollision(
+            OrderSheetKey outputKey,
+            SourceToteKey mappingKey,
+            Map<OrderSheetKey, SourceToteKey> stagedOwners) {
+        if (knownOrderSheetKeys.contains(outputKey)) {
+            throw new IllegalArgumentException(
+                    "Derived output sheet collides with a known order sheet: " + outputKey);
+        }
+        SourceToteKey existingOwner = stagedOwners.get(outputKey);
+        if (existingOwner != null && !existingOwner.equals(mappingKey)) {
             throw new IllegalStateException(
-                    "Output sheet still has an active non-outbound assignment: "
-                            + assignment.orderSheetKey());
+                    "Derived output sheet is already owned by another source/tote mapping: " + outputKey);
         }
     }
 
-    private Map<OrderSheetKey, LinkedHashSet<OrderSheetKey>> copyOutputSheetsBySource() {
-        Map<OrderSheetKey, LinkedHashSet<OrderSheetKey>> copy = new LinkedHashMap<>();
-        outputSheetsBySource.forEach((source, outputs) -> copy.put(source, new LinkedHashSet<>(outputs)));
-        return copy;
+    private void rejectActiveAssignmentToNewOutputKey(
+            OrderSheetKey outputKey,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
+        lifecycleSnapshot.activeAssignmentFor(outputKey).ifPresent(assignment -> {
+            if (assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND_BAG
+                    && assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND) {
+                throw new IllegalStateException(
+                        "Output sheet has an active non-outbound assignment: " + outputKey);
+            }
+            throw new IllegalStateException(
+                    "Derived output sheet already has an active assignment: " + outputKey);
+        });
+    }
+
+    private void requireExistingOutputAssignment(
+            OrderSheetKey outputKey,
+            PhysicalToteId targetOutboundToteId,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
+        lifecycleSnapshot.activeAssignmentFor(outputKey).ifPresent(assignment -> {
+            if (assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND_BAG
+                    && assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND) {
+                throw new IllegalStateException(
+                        "Output sheet has an active non-outbound assignment: " + outputKey);
+            }
+            if (!assignment.physicalToteId().equals(targetOutboundToteId)) {
+                throw new IllegalStateException(
+                        "Output sheet is actively assigned to another physical tote: " + outputKey);
+            }
+        });
     }
 
     private static void validateInputs(

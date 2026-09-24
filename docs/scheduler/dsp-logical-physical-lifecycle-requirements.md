@@ -56,6 +56,20 @@ OrderSheetKey = orderId + sheetNumber
 
 A logical order contains one or more logical sheets. Sheet numbers may arrive in 12N or be allocated by CPAS/simulator output splitting under the same order ID.
 
+For DSP outbound output, the sheet number is derived from the incoming sheet and a
+one-based outgoing-tote ordinal scoped to that incoming `(orderId, sheetNumber)`:
+
+```text
+outgoingSheetNumber = 80 + (incomingSheetNumber * 20 + outgoingToteNumber)
+```
+
+For example, incoming `TOTE001/001` yields outbound `TOTE001/101`, then `/102`
+when a second physical outbound tote carries its work. Incoming `TOTE001/002`
+starts independently at outbound `/121`. The ordinal is not a physical
+`transportContainer` identifier and does not count totes from other incoming
+sheets or orders. An outbound physical tote may have distinct output-sheet
+assignments for several source orders/sheets.
+
 ### 3.3 Physical tote identity
 
 `transportContainer` identifies one physical tote/load unit. It is the identifier that should be used by physical tote state, movement, station visits, tote load plans, and renderable tote instances.
@@ -134,7 +148,16 @@ At any point in time, one logical sheet has at most one active physical tote ass
 OrderSheetKey -> 0..1 active PhysicalTote
 ```
 
-A logical sheet may have several assignments sequentially over its lifecycle, for example an inbound pack tote followed by an outbound bag tote.
+A logical sheet may have several assignments sequentially over its lifecycle,
+for example an inbound pack tote assignment progressing to a pre-P2P stage.
+Outbound bag ownership uses a separate, derived sheet key.
+
+For FULL_PACK and ASSOCIATED bag output, the active inbound source sheet and
+its derived outbound sheet are **different** `OrderSheetKey`s. A completed bag
+may be allocated to an outbound tote while its source sheet still has an active
+inbound or pre-P2P assignment. The one-active-assignment invariant applies to
+each key independently; outbound allocation must not terminate or overwrite
+the source assignment.
 
 ### 5.3 Outbound aggregation
 
@@ -150,14 +173,20 @@ Every bag in that tote must belong to the same pharmacy and therefore the same s
 
 ### 5.4 Concurrent split invariant
 
-One logical sheet must not be represented by two physical totes concurrently. If one order's output must occupy another tote at the same time, allocate another sheet number under the same order ID.
+One logical sheet must not be represented by two physical totes concurrently.
+The incoming sheet and each derived output sheet are separate logical keys;
+when one source's output occupies another outbound tote, derive another output
+sheet number under that same order ID.
 
 ```text
-Order A / Sheet 001 -> Outbound Tote X
-Order A / Sheet 002 -> Outbound Tote Y
+Order A / incoming Sheet 001 -> output Sheet 101 -> Outbound Tote X
+Order A / incoming Sheet 001 -> output Sheet 102 -> Outbound Tote Y
 ```
 
-The bags and lines placed in Tote Y become owned by generated Sheet 002. Sheet 001 retains only the work allocated to Tote X. Provenance must retain the original source sheet so future reporting can explain the split.
+The bags and lines placed in Tote Y become owned by the next derived outbound
+sheet for their incoming source sheet. Provenance must retain that source sheet
+so future reporting can explain the split. Incoming Sheet 002 is not an
+overflow sheet for incoming Sheet 001.
 
 ## 6. Physical Tote Assignment History
 
@@ -277,14 +306,13 @@ Inbound physical tote [packs]
 Outbound physical tote [bags]
 ```
 
-P2P completion shall:
-
-1. terminate the inbound physical tote assignment;
-2. mark the inbound physical tote consumed;
-3. preserve pack and logical line provenance;
-4. create or identify completed bag records;
-5. assign each bag to the current valid outbound tote for its P2P line;
-6. create output sheet allocations when concurrent overflow requires them.
+P2P processing shall eventually terminate the inbound physical tote
+assignment and mark that tote consumed. Independently, each completed bag
+retains pack and logical-line provenance, is assigned to the current valid
+outbound tote for its P2P line, and receives a derived output sheet for its
+source-sheet/outbound-tote pairing. Bag discharge and outbound allocation may
+precede termination of the inbound tote's assignment; one is not a precondition
+for the other.
 
 The existing tipper, sorter, PDC, PRL, PCR, and bagger state machines may remain separate. This requirement changes identity and handoff contracts, not their internal ownership boundaries without a concrete need.
 
@@ -332,6 +360,31 @@ Rules:
 
 Patient affinity is best effort. A closed outbound tote is never reopened merely because another bag for the same patient arrives later.
 
+The upstream FULL_PACK/ASSOCIATED 12N producer guarantees that, when a notional
+order is manifested in multiple physical inbound totes/sheets, all lines for
+one patient within that incoming order stay in the same physical tote and
+sheet. This covers all that patient's prescriptions in that order, regardless
+of whether the upstream system represents them as one or several Patient
+Prescription Groups (PPGs). A patient ID may recur in a different incoming
+order; patient identity alone is not a global tote-grouping key. 12N carries
+patient and prescription IDs but no PPG ID, so the simulator cannot infer PPG
+membership. Treat this containment as a trusted input contract, not a new
+load-time or per-step validation pass. A valid planned prescription bag has one
+incoming owning sheet; the existing multi-sheet value API may remain for
+compatibility but is not a valid-data requirement for FULL_PACK/ASSOCIATED.
+The containment rule does not restrict outbound bags for one prescription:
+capacity may place them in separate physical outbound totes, each with a
+derived sheet from the **same** incoming order/sheet.
+
+Possible future store-handling policy: require every completed bag for one
+prescription to be placed in the same outbound physical tote. This is **not**
+a current constraint or part of the derived-output-sheet remediation. The
+current allocator may split a prescription's bags across outbound totes when
+bag-count capacity and receipt order require it. Stores can identify the
+relevant physical totes through their barcodes and downstream bag-to-tote
+information; a stricter policy would need a separately agreed planning and
+allocation change.
+
 ## 12. Outbound Tote Allocation
 
 Each P2P instance has its own logical reservoir of empty outbound totes. Empty totes may appear without modelling reservoir conveyor geometry in the first implementation.
@@ -362,17 +415,25 @@ Once closed, a tote is not reopened. A new empty tote is introduced when more ba
 
 ## 13. Output Splitting And Generated Sheets
 
-If all output for an order fits in the tote currently assigned to its existing sheet, physical tote substitution may retain that sheet number.
+The first outbound physical tote carrying work from an incoming source sheet
+receives outgoing-tote ordinal 1 for that source and the formula above; each
+additional distinct outbound physical tote carrying that source's work takes
+the next ordinal. Further bags from the same source placed in the same
+outbound physical tote reuse its derived output sheet. The ordinal never
+resets because a prior outbound tote closes or its lifecycle assignment ends.
 
-If later bags for the same order require another concurrent outbound tote:
-
-1. allocate the next available sheet number under that order ID;
-2. associate the overflow bags and their logical lines with the generated sheet;
-3. retain their original source sheet provenance;
-4. create an active assignment from the generated sheet to the new outbound tote;
-5. ensure no sheet has two active physical assignments.
-
-Sheet allocation must be deterministic and safe when several orders share an outbound tote.
+Output ownership remains separate from immutable incoming sheet, pack, and
+planned-bag provenance. The inbound source key is never reused as output
+ownership merely because its assignment has ended. A derived output key must
+not collide with another known incoming or generated key under that order ID;
+unsupported ordinal/range or collision conditions fail explicitly rather than
+silently changing the prescribed formula. The protocol's three-digit sheet
+field and the formula's 20-number blocks bound representable output; normal
+operation relies on fewer than 20 outgoing totes per incoming sheet. One
+derived output sheet has at most one active physical tote assignment, while
+one outbound physical tote may own several derived sheets. Future 32R work
+must use the retained source-to-output mapping; this requirement does not
+implement 32R.
 
 ## 14. Exceptions Relationship
 
@@ -430,7 +491,7 @@ status codes. MANUAL input remains deliberately discarded and is not part of thi
 9. P2P consumes the inbound tote and uses a different outbound tote.
 10. EMPTY receives its first physical tote at AV02 and consumes no OSR tote capacity beforehand.
 11. Prescription ID drives bag grouping; patient ID drives best-effort tote affinity.
-12. Output overflow creates another sheet rather than assigning one sheet to two totes concurrently.
+12. Every distinct source-sheet/outbound-tote pairing has a derived output sheet; overflow advances the per-source ordinal rather than assigning one output sheet to two totes.
 13. Logical line state survives physical tote substitution and splitting.
 14. Missing lines are logical outcomes, not fake physical packs.
 15. Lifecycle history is sufficient to explain source-to-output containment.
