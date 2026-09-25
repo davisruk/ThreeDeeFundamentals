@@ -10,7 +10,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot
 
 public class ThirdPartyStationAdmissionResolver implements StationAdmissionResolver {
     private final StationAdmissionResolver fallbackResolver;
-    private final ThirdPartyVisitFactory visitFactory;
+    private final ThirdPartyVisitPlanSource planSource;
     private final Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier;
     private final ThirdPartyStationAdmissionAdapter adapter;
 
@@ -20,7 +20,7 @@ public class ThirdPartyStationAdmissionResolver implements StationAdmissionResol
             Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier) {
         this(
                 fallbackResolver,
-                visitFactory,
+                requireVisitFactory(visitFactory)::planFor,
                 areaSnapshotSupplier,
                 new ThirdPartyStationAdmissionAdapter());
     }
@@ -32,27 +32,35 @@ public class ThirdPartyStationAdmissionResolver implements StationAdmissionResol
             String targetId) {
         this(
                 fallbackResolver,
-                visitFactory,
+                requireVisitFactory(visitFactory)::planFor,
                 areaSnapshotSupplier,
                 new ThirdPartyStationAdmissionAdapter(targetId));
     }
 
+    public ThirdPartyStationAdmissionResolver(
+            StationAdmissionResolver fallbackResolver,
+            ThirdPartyVisitPlanSource planSource,
+            Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier,
+            String targetId) {
+        this(fallbackResolver, planSource, areaSnapshotSupplier, new ThirdPartyStationAdmissionAdapter(targetId));
+    }
+
     private ThirdPartyStationAdmissionResolver(
             StationAdmissionResolver fallbackResolver,
-            ThirdPartyVisitFactory visitFactory,
+            ThirdPartyVisitPlanSource planSource,
             Supplier<ThirdPartyAreaSnapshot> areaSnapshotSupplier,
             ThirdPartyStationAdmissionAdapter adapter) {
         if (fallbackResolver == null) {
             throw new IllegalArgumentException("fallbackResolver must not be null");
         }
-        if (visitFactory == null) {
-            throw new IllegalArgumentException("visitFactory must not be null");
+        if (planSource == null) {
+            throw new IllegalArgumentException("planSource must not be null");
         }
         if (areaSnapshotSupplier == null) {
             throw new IllegalArgumentException("areaSnapshotSupplier must not be null");
         }
         this.fallbackResolver = fallbackResolver;
-        this.visitFactory = visitFactory;
+        this.planSource = planSource;
         this.areaSnapshotSupplier = areaSnapshotSupplier;
         this.adapter = adapter;
     }
@@ -79,6 +87,13 @@ public class ThirdPartyStationAdmissionResolver implements StationAdmissionResol
         if (areaSnapshot == null) {
             throw new IllegalStateException("areaSnapshotSupplier returned null");
         }
-        return adapter.admissionFor(visitFactory.planFor(candidate.order()), areaSnapshot);
+        return adapter.admissionFor(planSource.planFor(candidate.order()), areaSnapshot);
+    }
+
+    private static ThirdPartyVisitFactory requireVisitFactory(ThirdPartyVisitFactory visitFactory) {
+        if (visitFactory == null) {
+            throw new IllegalArgumentException("visitFactory must not be null");
+        }
+        return visitFactory;
     }
 }

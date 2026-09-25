@@ -57,6 +57,33 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
 
     @Test
+    void shouldRetainThirdPartyOrdersAndDeterministicOrderAcrossReleaseEvaluations(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadThirdPartyFullPacks(directory, profile);
+        List<OrderSheetKey> inputOrder = input.data().orders().stream()
+                .map(order -> order.orderSheetKey()).toList();
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            runtime.update(1d);
+            DspFullDayAnalysisRuntimeSnapshot first = runtime.snapshot();
+            runtime.update(1d);
+            DspFullDayAnalysisRuntimeSnapshot second = runtime.snapshot();
+
+            assertEquals(DspFullDayRuntimeState.RUNNING, second.state());
+            assertTrue(first.operationalRelease().lastEvaluation().isPresent());
+            assertTrue(second.operationalRelease().lastEvaluation().isPresent());
+            assertTrue(second.operationalRelease().lastCompletedEvaluationSequence().orElseThrow()
+                    > first.operationalRelease().lastCompletedEvaluationSequence().orElseThrow());
+            assertEquals(inputOrder, first.scheduler().orderStates().stream()
+                    .map(state -> state.order().orderSheetKey()).toList());
+            assertEquals(inputOrder, second.scheduler().orderStates().stream()
+                    .map(state -> state.order().orderSheetKey()).toList());
+        }
+    }
+
+    @Test
     void shouldComposeFiveLinesWithSharedAuthoritativeOwners(@TempDir Path directory)
             throws IOException {
         DspUncalibratedFullDayProfile profile = profile();
@@ -435,6 +462,22 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                 message("order-104", "tote-104", "104", "999"));
         Path secondOrder = Files.writeString(directory.resolve("order-108.json"),
                 message("order-108", "tote-108", "108", "998"));
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, List.of(firstOrder, secondOrder)), profile);
+    }
+
+    private static DspFullDayLoadedInput loadThirdPartyFullPacks(
+            Path directory,
+            DspUncalibratedFullDayProfile profile) throws IOException {
+        Path productMaster = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,Y74,200,100,80
+                """);
+        Path firstOrder = Files.writeString(directory.resolve("order-104.json"),
+                message("order-104", "tote-104", "104", "999"));
+        Path secondOrder = Files.writeString(directory.resolve("order-108.json"),
+                message("order-108", "tote-108", "108", "998")
+                        .replace("\"orderLineNumber\":\"line-1\"", "\"orderLineNumber\":\"line-2\""));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(productMaster, List.of(firstOrder, secondOrder)), profile);
     }

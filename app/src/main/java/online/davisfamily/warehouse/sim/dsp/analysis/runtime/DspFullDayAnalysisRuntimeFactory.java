@@ -155,6 +155,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
             ThirdPartyArea thirdPartyArea = new ThirdPartyArea(profile.thirdPartyAreaConfig());
             ThirdPartyVisitFactory thirdPartyVisitFactory = new ThirdPartyVisitFactory(
                     new InMemoryProductMasterRepository(data.products()));
+            ThirdPartyVisitPlanCatalog thirdPartyVisitPlans = new ThirdPartyVisitPlanCatalog(
+                    data.orders(), thirdPartyVisitFactory);
             ThirdPartyAreaController thirdPartyAreaController = new ThirdPartyAreaController(
                     thirdPartyArea,
                     loadPlans,
@@ -289,7 +291,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
             StationAdmissionResolver stationAdmissionResolver = stationAdmissionResolver(
                     profile,
                     adaptingArea,
-                    thirdPartyVisitFactory,
+                    thirdPartyVisitPlans,
                     thirdPartyAreaController,
                     topology,
                     lineRuntimes,
@@ -695,7 +697,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
     private static StationAdmissionResolver stationAdmissionResolver(
             DspUncalibratedFullDayProfile profile,
             AdaptingArea adaptingArea,
-            ThirdPartyVisitFactory thirdPartyVisitFactory,
+            ThirdPartyVisitPlanSource thirdPartyVisitPlans,
             ThirdPartyAreaController thirdPartyAreaController,
             RouteTopology topology,
             List<DspHeadlessP2pLineRuntime> lineRuntimes,
@@ -712,7 +714,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                                 profile.adaptingBenchDefinitions().size())));
         StationAdmissionResolver thirdParty = new ThirdPartyStationAdmissionResolver(
                 adapting,
-                thirdPartyVisitFactory,
+                thirdPartyVisitPlans,
                 thirdPartyAreaController::areaSnapshot,
                 THIRD_PARTY_DESTINATION.targetId());
         DspFullDayP2pAdmissionSnapshotSource p2pAdmissionSnapshotSource =

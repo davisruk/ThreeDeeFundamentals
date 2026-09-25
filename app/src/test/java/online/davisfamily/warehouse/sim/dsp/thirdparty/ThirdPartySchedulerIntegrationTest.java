@@ -39,6 +39,34 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot
 class ThirdPartySchedulerIntegrationTest {
 
     @Test
+    void shouldUseCatalogAtSchedulerBoundaryAndLeaveFullAreaUnchanged() {
+        NotionalToteOrder order = fullPackOrder("catalog-order");
+        InMemoryProductMasterRepository products = new InMemoryProductMasterRepository(List.of(
+                product("third-party-product", "Y74")));
+        ThirdPartyVisitFactory visitFactory = new ThirdPartyVisitFactory(products);
+        ThirdPartyVisitPlanCatalog catalog = new ThirdPartyVisitPlanCatalog(List.of(order), visitFactory);
+        ThirdPartyArea area = new ThirdPartyArea(new ThirdPartyAreaConfig(0, 1, 10d));
+        ThirdPartyStationAdmissionResolver resolver = new ThirdPartyStationAdmissionResolver(
+                new SnapshotStationAdmissionResolver(), catalog, area::snapshot, "third-party-ingress");
+        DspReleaseScheduler scheduler = new DspReleaseScheduler(
+                new ServiceCentreWindowPolicy(new ServiceCentrePriority(List.of("sc-1"))),
+                new DspDependencyEvaluator(), resolver);
+        DspSchedulerOrderState candidate = state(order, route(true, false, true));
+
+        SchedulerEvaluation open = scheduler.evaluate(snapshot(List.of(candidate), Set.of()));
+        assertTrue(open.releaseDecision().isPresent());
+        area.submitVisit(visitFactory.create(new PhysicalToteId("occupied"),
+                fullPackOrder("occupied-order")).orElseThrow());
+        ThirdPartyAreaSnapshot before = area.snapshot();
+
+        SchedulerEvaluation blocked = scheduler.evaluate(snapshot(List.of(candidate), Set.of()));
+        assertTrue(blocked.blockedDecision().isPresent());
+        assertTrue(blocked.blockedDecision().orElseThrow().blockReasons().stream()
+                .anyMatch(reason -> reason.contains("Third Party area has no capacity")));
+        assertEquals(before, area.snapshot());
+    }
+
+    @Test
     void shouldBlockQualifyingOrderWhenThirdPartyAreaIsFullWithoutMutatingArea() {
         Fixture fixture = fixture(new ThirdPartyAreaConfig(0, 1, 10d));
         fixture.area().submitVisit(fixture.visitFactory().create(
