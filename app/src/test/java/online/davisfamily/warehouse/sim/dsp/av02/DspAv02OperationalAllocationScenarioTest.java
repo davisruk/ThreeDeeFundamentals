@@ -473,8 +473,9 @@ class DspAv02OperationalAllocationScenarioTest {
 
             var outputSheet = allocatedBag.outputSheetAllocations().getFirst();
             assertEquals(EMPTY_DIRECT_104, outputSheet.sourceOwningSheetKey());
-            assertEquals(EMPTY_DIRECT_104, outputSheet.outputSheetKey());
-            assertFalse(outputSheet.generated());
+            OrderSheetKey derivedOutputSheet = new OrderSheetKey(EMPTY_DIRECT_104.orderId(), 101);
+            assertEquals(derivedOutputSheet, outputSheet.outputSheetKey());
+            assertTrue(outputSheet.generated());
             var outboundTote = allocatedSnapshot.openToteFor(fixture.p2pLine.lineId())
                     .orElseThrow();
             assertEquals(1, outboundTote.bagCount());
@@ -487,7 +488,7 @@ class DspAv02OperationalAllocationScenarioTest {
                     fixture.allocation.lifecycle.tote(outboundTote.physicalToteId())
                             .orElseThrow().role());
             assertEquals(PhysicalToteAssignmentStage.OUTBOUND_BAG,
-                    fixture.allocation.lifecycle.activeAssignmentFor(EMPTY_DIRECT_104)
+                    fixture.allocation.lifecycle.activeAssignmentFor(derivedOutputSheet)
                             .orElseThrow().stage());
             assertEquals(fixture.physicalToteId,
                     fixture.allocation.lifecycle.assignmentHistoryFor(EMPTY_DIRECT_104)
@@ -525,11 +526,11 @@ class DspAv02OperationalAllocationScenarioTest {
                     fixture.allocation.lifecycle.tote(closedTote.physicalToteId())
                             .orElseThrow().state());
             assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
-                    fixture.allocation.lifecycle.activeAssignmentFor(EMPTY_DIRECT_104)
+                    fixture.allocation.lifecycle.activeAssignmentFor(derivedOutputSheet)
                             .orElseThrow().stage());
             assertEquals(PhysicalToteAssignmentEndReason.OUTBOUND_TOTE_CLOSED,
-                    fixture.allocation.lifecycle.assignmentHistoryFor(EMPTY_DIRECT_104)
-                            .get(1).endReason().orElseThrow());
+                    fixture.allocation.lifecycle.assignmentHistoryFor(derivedOutputSheet)
+                            .getFirst().endReason().orElseThrow());
             assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_P2P,
                     fixture.allocation.lifecycle.tote(fixture.physicalToteId)
                             .orElseThrow().state());

@@ -60,7 +60,6 @@ public final class OutboundToteAllocator {
         if (allocatedBagKeys.contains(bag.bagKey())) {
             throw new IllegalStateException("Planned bag is already allocated: " + bag.bagKey());
         }
-        rejectActiveNonOutboundSourceAssignments(bag);
 
         MutableOutboundTote currentTote = openTotesByLine.get(lineId);
         OutboundToteClosureReason mismatchReason = mismatchReason(currentTote, bag);
@@ -224,18 +223,6 @@ public final class OutboundToteAllocator {
                         "Output sheet is already assigned to another physical tote or stage: "
                                 + outputSheet.outputSheetKey());
             }
-        }
-    }
-
-    private void rejectActiveNonOutboundSourceAssignments(PlannedBag bag) {
-        for (var sourceSheet : bag.owningOrderSheetKeys()) {
-            lifecycleLedger.activeAssignmentFor(sourceSheet).ifPresent(assignment -> {
-                if (assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND_BAG
-                        && assignment.stage() != PhysicalToteAssignmentStage.OUTBOUND) {
-                    throw new IllegalStateException(
-                            "Source sheet still has an active non-outbound assignment: " + sourceSheet);
-                }
-            });
         }
     }
 

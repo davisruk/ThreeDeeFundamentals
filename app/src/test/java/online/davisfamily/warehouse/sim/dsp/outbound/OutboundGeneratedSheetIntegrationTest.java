@@ -34,10 +34,12 @@ class OutboundGeneratedSheetIntegrationTest {
         AllocatedOutboundBag second = fixture.allocator().allocate(
                 LINE, bag("rx-1", 2, sourceSheet), seconds(2));
 
-        assertEquals(sourceSheet, outputSheet(first));
-        assertEquals(sheet("order-1", 2), outputSheet(second));
+        assertEquals(sheet("order-1", 101), outputSheet(first));
+        assertEquals(sheet("order-1", 102), outputSheet(second));
         assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
-                fixture.ledger().activeAssignmentFor(sourceSheet).orElseThrow().stage());
+                fixture.ledger().activeAssignmentFor(sheet("order-1", 101)).orElseThrow().stage());
+        assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
+                fixture.ledger().activeAssignmentFor(sheet("order-1", 102)).orElseThrow().stage());
         assertTrue(second.outputSheetAllocations().getFirst().generated());
     }
 
@@ -53,7 +55,7 @@ class OutboundGeneratedSheetIntegrationTest {
         AllocatedOutboundBag third = fixture.allocator().allocate(
                 LINE, bag("rx-1", 3, sourceSheet), seconds(4));
 
-        assertEquals(sheet("order-1", 2), outputSheet(second));
+        assertEquals(sheet("order-1", 102), outputSheet(second));
         assertEquals(outputSheet(second), outputSheet(third));
         assertEquals(second.outboundPhysicalToteId(), third.outboundPhysicalToteId());
     }
@@ -102,7 +104,7 @@ class OutboundGeneratedSheetIntegrationTest {
                 LINE, planningResult.plannedBags().get(1), seconds(2));
         PlannedPackTrace retainedTrace = planningResult.findPackTrace(trace.physicalPackId()).orElseThrow();
 
-        assertEquals(sheet("associated-order", 2), outputSheet(allocated));
+        assertEquals(sheet("associated-order", 102), outputSheet(allocated));
         assertSame(secondBag, allocated.plannedBag());
         assertEquals(List.of(associatedFulfilmentSheet), allocated.plannedBag().owningOrderSheetKeys());
         assertEquals(adaptedSourceSheet, retainedTrace.sourceProvenance().sourceOrderSheetKey());
@@ -128,8 +130,8 @@ class OutboundGeneratedSheetIntegrationTest {
         AllocatedOutboundBag overflowB = fixture.allocator().allocate(
                 LINE, bag("rx-b", 2, sourceB), seconds(5));
 
-        assertEquals(sheet("order-a", 5), outputSheet(overflowA));
-        assertEquals(sheet("order-b", 8), outputSheet(overflowB));
+        assertEquals(sheet("order-a", 102), outputSheet(overflowA));
+        assertEquals(sheet("order-b", 102), outputSheet(overflowB));
         assertEquals("order-a", outputSheet(overflowA).orderId());
         assertEquals("order-b", outputSheet(overflowB).orderId());
         assertEquals(overflowA.outboundPhysicalToteId(), overflowB.outboundPhysicalToteId());

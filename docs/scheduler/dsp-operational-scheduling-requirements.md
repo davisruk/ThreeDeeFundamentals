@@ -116,6 +116,12 @@ OSR occupancy counts physical inbound totes. It does not count:
 
 Occupancy decreases when a physical tote actually leaves the OSR, not when it is merely selected by a scheduler worker.
 
+The current 12N-only simulation does not include temporary OSR occupancy from
+an unmatched physical tote that arrives alongside a matched tote before manual
+pack consolidation. This observed production case and its deferred simulation
+scope are recorded in Section 5.5 of
+`docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`.
+
 ### 5.2 Logical supply state
 
 Logical order-sheet supply state shall distinguish semantics equivalent to:

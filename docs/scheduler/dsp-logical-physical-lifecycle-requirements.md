@@ -188,6 +188,26 @@ sheet for their incoming source sheet. Provenance must retain that source sheet
 so future reporting can explain the split. Incoming Sheet 002 is not an
 overflow sheet for incoming Sheet 001.
 
+### 5.5 Deferred unmatched inbound tote scenario
+
+In production, packs for one or more prescriptions may arrive in two physical
+totes even though only one 12N is received. That 12N describes all packs in both
+totes and identifies only one of the physical tote barcodes. Both totes are
+scanned into the OSR; the other tote has no matching 12N. Upstream monitoring
+detects this condition, and operators remove both totes, transfer the packs
+from the tote without a 12N into the tote identified by the 12N, then return
+that tote to the OSR.
+
+The current 12N-only simulator represents the reconciled, complete tote. It
+does not represent the temporary unmatched tote, its OSR occupancy, the manual
+transfer, or the delay before the matched tote returns. This production case
+does not change the active logical-sheet assignment invariant above: the
+unmatched tote has no 12N-derived logical assignment. A future, separately
+planned simulation mechanism may model the scan/admission and reconciliation
+events using physical observations beyond the 12N data. Do not infer an extra
+physical tote or a pack split from a single 12N. No implementation of this
+scenario is part of the current work.
+
 ## 6. Physical Tote Assignment History
 
 The simulator shall retain append-only assignment records sufficient to explain lifecycle transitions.

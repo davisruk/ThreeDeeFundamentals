@@ -2,6 +2,8 @@ package online.davisfamily.warehouse.sim.dsp.outbound;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -83,10 +85,10 @@ class DspOutboundToteAllocationScenarioTest {
                         .toList());
         assertEquals(
                 List.of(
-                        CAPACITY_SHEET,
-                        COMPANION_SHEET,
-                        sheet("order-capacity", 2),
-                        OTHER_PHARMACY_SHEET),
+                        sheet("order-capacity", 101),
+                        sheet("order-companion", 101),
+                        sheet("order-capacity", 102),
+                        sheet("order-other-pharmacy", 101)),
                 scenario.snapshot().allocatedBags().stream()
                         .map(allocation -> allocation.outputSheetAllocations().getFirst().outputSheetKey())
                         .toList());
@@ -126,7 +128,7 @@ class DspOutboundToteAllocationScenarioTest {
                 .orElseThrow();
         assertEquals(CAPACITY_SHEET, overflowTrace.fulfilmentOrderSheetKey());
         assertEquals(CAPACITY_SHEET, overflowTrace.sourceProvenance().sourceOrderSheetKey());
-        assertEquals(sheet("order-capacity", 2), scenario.snapshot().allocatedBags().get(2)
+        assertEquals(sheet("order-capacity", 102), scenario.snapshot().allocatedBags().get(2)
                 .outputSheetAllocations().getFirst().outputSheetKey());
     }
 
@@ -153,8 +155,68 @@ class DspOutboundToteAllocationScenarioTest {
                 scenario.ledger().assignmentHistoryFor(CAPACITY_SHEET).getFirst()
                         .endReason().orElseThrow());
         assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
-                scenario.ledger().activeAssignmentFor(CAPACITY_SHEET).orElseThrow().stage());
-        assertFalse(scenario.ledger().activeAssignmentFor(sheet("order-capacity", 2)).isEmpty());
+                scenario.ledger().activeAssignmentFor(sheet("order-capacity", 101)).orElseThrow().stage());
+        assertFalse(scenario.ledger().activeAssignmentFor(CAPACITY_SHEET).isPresent());
+        assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
+                scenario.ledger().activeAssignmentFor(sheet("order-capacity", 102)).orElseThrow().stage());
+    }
+
+    @Test
+    void shouldKeepRuntimeBagInReceiverWhenDuplicateAllocationFails() {
+        Scenario scenario = createScenario();
+        Bag duplicateBag = runtimeBag(scenario.planningResult().plannedBags().getFirst());
+        receive(scenario.receiver(), duplicateBag);
+        OutboundToteAllocationController controller = new OutboundToteAllocationController(
+                LINE, scenario.receiver(), scenario.planningResult(), scenario.allocator());
+        SimulationContext context = new SimulationContext();
+        context.setSimulationTimeSeconds(12d);
+
+        assertThrows(IllegalStateException.class, () -> controller.update(context, 0.1d));
+
+        assertEquals(1, scenario.receiver().getReceivedBags().size());
+        assertSame(duplicateBag, scenario.receiver().getReceivedBags().getFirst());
+        assertEquals(4, scenario.allocator().snapshot().allocatedBags().size());
+    }
+
+    @Test
+    void shouldKeepRuntimeBagInReceiverWhenOutputSheetIsAlreadyOwned() {
+        OrderSheetKey sourceSheet = sheet("order-conflict", 1);
+        OrderSheetKey outputSheet = sheet("order-conflict", 101);
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        PhysicalToteId existingOutboundTote = new PhysicalToteId("outbound-existing");
+        ledger.register(PhysicalToteRecord.outboundBag(existingOutboundTote));
+        ledger.assign(
+                outputSheet,
+                existingOutboundTote,
+                PhysicalToteAssignmentStage.OUTBOUND_BAG,
+                Duration.ofSeconds(1));
+        var lifecycleBefore = ledger.snapshot();
+        PlannedBag plannedBag = plannedBag(
+                "rx-conflict", 1, "pharmacy-1", sourceSheet, "pack-conflict");
+        PhysicalToteId inboundTote = new PhysicalToteId("inbound-conflict");
+        PlannedPackTrace packTrace = trace(plannedBag, sourceSheet, inboundTote, "line-conflict");
+        BagPlanningResult planningResult = BagPlanningResultTestFixtures.complete(
+                List.of(plannedBag), List.of(), List.of(packTrace));
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                ledger,
+                new DeterministicOutboundToteIdSource(),
+                new OutputSheetAllocator(List.of(sourceSheet)),
+                new OutboundToteConfig(2));
+        StoredBagReceiver receiver = new StoredBagReceiver("conflicting-output-bag");
+        Bag runtimeBag = runtimeBag(plannedBag);
+        receive(receiver, runtimeBag);
+        OutboundToteAllocationController controller = new OutboundToteAllocationController(
+                LINE, receiver, planningResult, allocator);
+        SimulationContext context = new SimulationContext();
+        context.setSimulationTimeSeconds(2d);
+
+        assertThrows(IllegalStateException.class, () -> controller.update(context, 0.1d));
+
+        assertEquals(1, receiver.getReceivedBags().size());
+        assertSame(runtimeBag, receiver.getReceivedBags().getFirst());
+        assertTrue(allocator.snapshot().openTotesByLine().isEmpty());
+        assertTrue(allocator.snapshot().allocatedBags().isEmpty());
+        assertEquals(lifecycleBefore, ledger.snapshot());
     }
 
     private static Scenario createScenario() {
@@ -203,6 +265,7 @@ class DspOutboundToteAllocationScenarioTest {
                 planningResult,
                 receiver,
                 inboundToteIds,
+                allocator,
                 allocator.snapshot());
     }
 
@@ -286,6 +349,7 @@ class DspOutboundToteAllocationScenarioTest {
             BagPlanningResult planningResult,
             StoredBagReceiver receiver,
             List<PhysicalToteId> inboundToteIds,
+            OutboundToteAllocator allocator,
             OutboundAllocationSnapshot snapshot) {
     }
 }

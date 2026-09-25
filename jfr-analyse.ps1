@@ -1,5 +1,5 @@
 . .\env-jfr-work.ps1
-
+<#
 & $jfr view hot-methods $recording |
     Out-File -Encoding utf8 "C:\misc\cpas-test\scheduler-testing\dsp-$step-hot-methods.txt"
 
@@ -11,13 +11,14 @@
 	 
 & $jfr view gc $recording |
     Out-File -Encoding utf8 "C:\misc\cpas-test\scheduler-testing\dsp-$step-gc.txt"
-	
+#>	
 $sampleFile = "C:\misc\cpas-test\scheduler-testing\dsp-$step-execution-sample.txt"
-& $jfr print --json --events jdk.ExecutionSample --stack-depth 16 $recording | Out-File -Encoding utf8 $sampleFile
+#& $jfr print --json --events jdk.ExecutionSample --stack-depth 16 $recording | Out-File -Encoding utf8 $sampleFile
 
 $targets = @(
-    "P2pBagCorrelationAssignmentSnapshot.lineFor",
-    "DspOperationalReleaseSnapshot.findByPhysicalToteId"
+    "DspOperationalReleaseScheduler.evaluate",
+    "DspFullDayMetricsCollector.update",
+	"DspFullDayMetricsCollector.operationalBlocks"
 )
 
 $json = Get-Content $sampleFile -Raw | ConvertFrom-Json

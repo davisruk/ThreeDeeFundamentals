@@ -70,8 +70,8 @@ class MultiLineOutboundToteAllocationTest {
         AllocatedOutboundBag second = allocator.allocate(
                 LINE_2, bag("rx-1", 2, sourceSheet), seconds(1));
 
-        assertEquals(sourceSheet, outputSheet(first));
-        assertEquals(sheet("order-1", 2), outputSheet(second));
+        assertEquals(sheet("order-1", 101), outputSheet(first));
+        assertEquals(sheet("order-1", 102), outputSheet(second));
         assertTrue(second.outputSheetAllocations().getFirst().generated());
         assertEquals(2, allocator.snapshot().openTotesByLine().size());
     }

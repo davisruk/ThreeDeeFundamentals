@@ -44,7 +44,9 @@ class OutboundToteAllocatorTest {
         assertEquals(PhysicalToteLifecycleState.OUTBOUND_BAG_TOTE,
                 fixture.ledger().tote(openTote.physicalToteId()).orElseThrow().state());
         assertEquals(PhysicalToteAssignmentStage.OUTBOUND_BAG,
-                fixture.ledger().activeAssignmentFor(sourceSheet).orElseThrow().stage());
+                fixture.ledger().activeAssignmentFor(sheet("order-1", 101)).orElseThrow().stage());
+        assertTrue(fixture.ledger().activeAssignmentFor(sourceSheet).isEmpty());
+        assertEquals(sourceSheet, allocated.outputSheetAllocations().getFirst().sourceOwningSheetKey());
     }
 
     @Test
@@ -66,7 +68,10 @@ class OutboundToteAllocatorTest {
         OutboundToteSnapshot tote = fixture.allocator().snapshot().openToteFor(LINE).orElseThrow();
         assertEquals(2, tote.bagCount());
         assertEquals(3, fixture.ledger().activeAssignmentsFor(tote.physicalToteId()).size());
-        assertEquals(List.of(firstSheet, secondSheet, thirdSheet),
+        assertEquals(List.of(
+                        sheet("order-1", 101),
+                        sheet("order-2", 101),
+                        sheet("order-3", 101)),
                 fixture.ledger().activeAssignmentsFor(tote.physicalToteId()).stream()
                         .map(assignment -> assignment.orderSheetKey())
                         .toList());
@@ -149,8 +154,47 @@ class OutboundToteAllocatorTest {
     }
 
     @Test
+    void shouldAllocateWhileInboundSourceRemainsAssignedAndKeepOrdinalAcrossOutboundTotes() {
+        OrderSheetKey sourceSheet = sheet("order-1", 1);
+        PhysicalToteId inboundToteId = new PhysicalToteId("inbound-source");
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        ledger.register(PhysicalToteRecord.inboundPack(inboundToteId));
+        ledger.transitionTote(inboundToteId, PhysicalToteLifecycleState.ACTIVE_PRE_P2P);
+        ledger.assign(sourceSheet, inboundToteId, PhysicalToteAssignmentStage.PRE_P2P, seconds(1));
+        PhysicalToteAssignment sourceAssignment = ledger.activeAssignmentFor(sourceSheet).orElseThrow();
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                ledger,
+                new DeterministicOutboundToteIdSource(),
+                new OutputSheetAllocator(List.of(sourceSheet)),
+                new OutboundToteConfig(1));
+        PlannedBag firstBag = bag("rx-1", 1, "SC-1", "pharmacy-1", "patient-1", sourceSheet);
+        PlannedBag secondBag = bag("rx-1", 2, "SC-1", "pharmacy-1", "patient-1", sourceSheet);
+
+        AllocatedOutboundBag first = allocator.allocate(LINE, firstBag, seconds(2));
+        AllocatedOutboundBag second = allocator.allocate(LINE, secondBag, seconds(3));
+
+        assertSame(firstBag, first.plannedBag());
+        assertSame(secondBag, second.plannedBag());
+        assertEquals(sheet("order-1", 101), first.outputSheetAllocations().getFirst().outputSheetKey());
+        assertEquals(sheet("order-1", 102), second.outputSheetAllocations().getFirst().outputSheetKey());
+        assertNotEquals(first.outboundPhysicalToteId(), second.outboundPhysicalToteId());
+        assertEquals(sourceAssignment, ledger.activeAssignmentFor(sourceSheet).orElseThrow());
+        assertEquals(PhysicalToteLifecycleState.ACTIVE_PRE_P2P,
+                ledger.tote(inboundToteId).orElseThrow().state());
+        assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
+                ledger.activeAssignmentFor(sheet("order-1", 101)).orElseThrow().stage());
+        assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
+                ledger.activeAssignmentFor(sheet("order-1", 102)).orElseThrow().stage());
+        assertEquals(List.of(sourceSheet), first.outputSheetAllocations().stream()
+                .map(OutputSheetAllocation::sourceOwningSheetKey)
+                .toList());
+        assertEquals(firstBag.physicalPackIds(), first.plannedBag().physicalPackIds());
+    }
+
+    @Test
     void shouldAdvanceClosedToteAndAssignmentsToOutboundLifecycle() {
         OrderSheetKey sourceSheet = sheet("order-1", 1);
+        OrderSheetKey outputSheet = sheet("order-1", 101);
         Fixture fixture = fixture(1, sourceSheet);
 
         fixture.allocator().allocate(LINE, bag("rx-1", sourceSheet), seconds(1));
@@ -159,10 +203,10 @@ class OutboundToteAllocatorTest {
         assertEquals(PhysicalToteLifecycleState.OUTBOUND,
                 fixture.ledger().tote(closedTote.physicalToteId()).orElseThrow().state());
         assertEquals(PhysicalToteAssignmentStage.OUTBOUND,
-                fixture.ledger().activeAssignmentFor(sourceSheet).orElseThrow().stage());
-        assertEquals(2, fixture.ledger().assignmentHistoryFor(sourceSheet).size());
+                fixture.ledger().activeAssignmentFor(outputSheet).orElseThrow().stage());
+        assertEquals(2, fixture.ledger().assignmentHistoryFor(outputSheet).size());
         assertEquals(PhysicalToteAssignmentEndReason.OUTBOUND_TOTE_CLOSED,
-                fixture.ledger().assignmentHistoryFor(sourceSheet).getFirst().endReason().orElseThrow());
+                fixture.ledger().assignmentHistoryFor(outputSheet).getFirst().endReason().orElseThrow());
     }
 
     @Test

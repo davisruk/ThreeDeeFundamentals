@@ -183,6 +183,7 @@ class ToteToBagFlowControllerTest {
 
         firstPrl.acceptPack(new Pack("pack-a1", "bag-a", candidatePackDimensions()));
         secondPrl.acceptPack(new Pack("pack-b1", "bag-b", candidatePackDimensions()));
+        secondPrl.update(0.2d);
         secondPrl.acceptPack(new Pack("pack-b2", "bag-b", candidatePackDimensions()));
 
         PrlActivitySummary firstRead = controller.prlActivitySummary();

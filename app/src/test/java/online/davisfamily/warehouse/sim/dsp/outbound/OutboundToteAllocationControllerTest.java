@@ -42,7 +42,7 @@ class OutboundToteAllocationControllerTest {
         assertEquals(plannedBag.bagKey(), allocation.bagKey());
         assertEquals("outbound-p2p-1-1", allocation.outboundPhysicalToteId().value());
         assertEquals(Duration.ofMillis(1_250),
-                fixture.ledger().activeAssignmentFor(sheet("order-1", 1)).orElseThrow().activatedAt());
+                fixture.ledger().activeAssignmentFor(sheet("order-1", 101)).orElseThrow().activatedAt());
         assertTrue(fixture.receiver().getReceivedBags().isEmpty());
     }
 

@@ -7,7 +7,7 @@ $javaPid = Get-CimInstance Win32_Process -Filter "Name = 'java.exe'" |
 & "$env:JAVA_HOME\bin\jcmd.exe" $javaPid JFR.start `
     name=$step `
     settings=profile `
-    duration=45s `
+    duration=$jfr_sample_duration `
     disk=true `
     filename=$recording
 	
