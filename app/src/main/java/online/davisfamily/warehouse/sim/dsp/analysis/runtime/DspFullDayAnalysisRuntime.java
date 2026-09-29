@@ -5,6 +5,8 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 import online.davisfamily.threedee.sim.framework.SimulationWorld;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBinSnapshot;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineStore;
 import online.davisfamily.warehouse.sim.dsp.adapting.MutableToteLoadPlanRegistry;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCompletionEvaluator;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCutoffController;
@@ -52,6 +54,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
     private final DspWarehouseTransportRuntime transportRuntime;
     private final DspStationProcessingRuntime stationProcessingRuntime;
     private final DspStationRouteContinuationRuntime continuationRuntime;
+    private final AdaptedLineStore adaptedLineStore;
     private final List<DspHeadlessP2pLineRuntime> lineRuntimes;
     private final DspFullDayCutoffController cutoffController;
     private final DspFullDayCompletionEvaluator completionEvaluator;
@@ -80,6 +83,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
             DspWarehouseTransportRuntime transportRuntime,
             DspStationProcessingRuntime stationProcessingRuntime,
             DspStationRouteContinuationRuntime continuationRuntime,
+            AdaptedLineStore adaptedLineStore,
             List<DspHeadlessP2pLineRuntime> lineRuntimes,
             DspFullDayCutoffController cutoffController,
             DspFullDayCompletionEvaluator completionEvaluator,
@@ -105,6 +109,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
         this.transportRuntime = Objects.requireNonNull(transportRuntime);
         this.stationProcessingRuntime = Objects.requireNonNull(stationProcessingRuntime);
         this.continuationRuntime = Objects.requireNonNull(continuationRuntime);
+        this.adaptedLineStore = Objects.requireNonNull(adaptedLineStore);
         this.lineRuntimes = List.copyOf(lineRuntimes);
         this.cutoffController = Objects.requireNonNull(cutoffController);
         this.completionEvaluator = Objects.requireNonNull(completionEvaluator);
@@ -215,6 +220,11 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
 
     public DspFullDayMetricsSnapshot metricsSnapshot() {
         return metricsCollector.snapshot();
+    }
+
+    /** Explicit simulation-thread inspection; never part of routine fixed-step snapshots. */
+    public List<AdaptingBinSnapshot> adaptingBinSnapshots() {
+        return adaptedLineStore.binSnapshots();
     }
 
     public void update(double dtSeconds) {

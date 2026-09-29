@@ -275,14 +275,14 @@ public class AdaptingStorageLayout {
         Map<AdaptingBenchId, Integer> stagedLineCountByBench = new LinkedHashMap<>();
         Set<String> rackKeys = new LinkedHashSet<>();
         Set<String> shelfKeys = new LinkedHashSet<>();
-        Set<String> binKeys = new LinkedHashSet<>();
+        Set<AdaptingStorageLocation> binKeys = new LinkedHashSet<>();
 
         for (AdaptedLineRecord record : stagedRecords.values()) {
             AdaptingStorageLocation location = record.location();
             stagedLineCountByBench.merge(location.benchId(), 1, Integer::sum);
             rackKeys.add(location.benchId().value() + ":" + location.rackIndex());
             shelfKeys.add(location.benchId().value() + ":" + location.rackIndex() + ":" + location.shelfIndex());
-            binKeys.add(location.benchId().value() + ":" + location.rackIndex() + ":" + location.shelfIndex() + ":" + location.binIndex());
+            binKeys.add(location);
         }
 
         return new AdaptedLineStoreSnapshot(

@@ -192,6 +192,36 @@ class AdaptedLineStoreTest {
     }
 
     @Test
+    void shouldCountDistinctOccupiedBinsForPharmaciesSharingBenchCoordinates() {
+        DspOrderItem firstLine = adaptedLine("first", "first-target", "0000310");
+        DspOrderItem secondLine = adaptedLine("second", "second-target", "0000388");
+        AdaptingStorageMap storageMap = storageMap(
+                "0000310", "bench-1", "0000388", "bench-1");
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                new AdaptingStorageConfig(2, 2, 2), storageMap,
+                new AdaptingTargetSheetCatalog(Map.of(
+                        key(firstLine), new OrderSheetKey("first-target", 1),
+                        key(secondLine), new OrderSheetKey("second-target", 1)))));
+
+        store.stageAll(List.of(firstLine, secondLine), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
+
+        List<AdaptingBinSnapshot> bins = store.binSnapshots();
+        assertEquals(2, bins.size());
+        assertNotEquals(bins.get(0).location(), bins.get(1).location());
+        assertEquals(bins.get(0).location().benchId(), bins.get(1).location().benchId());
+        assertEquals(bins.get(0).location().rackIndex(), bins.get(1).location().rackIndex());
+        assertEquals(bins.get(0).location().shelfIndex(), bins.get(1).location().shelfIndex());
+        assertEquals(bins.get(0).location().binIndex(), bins.get(1).location().binIndex());
+        assertEquals(2, store.snapshot().activeBinCount());
+
+        store.takeAll(List.of(key(firstLine)));
+        assertEquals(1, store.snapshot().activeBinCount());
+        assertEquals(List.of(key(secondLine)), binKeys(store.binSnapshots().getFirst()));
+        store.takeAll(List.of(key(secondLine)));
+        assertEquals(0, store.snapshot().activeBinCount());
+    }
+
+    @Test
     void shouldLinkOverflowBinsAndAppendLaterSourceToNonFullTail() {
         DspOrderItem a1 = adaptedLine("a1", "target", "0000310");
         DspOrderItem a2 = adaptedLine("a2", "target", "0000310");

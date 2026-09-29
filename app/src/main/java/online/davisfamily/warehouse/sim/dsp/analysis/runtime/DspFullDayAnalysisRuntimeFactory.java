@@ -89,6 +89,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
         try {
             LoadedDspData data = input.data();
             BagPlanningResult bagPlan = input.bagPlan();
+            AdaptingTargetSheetCatalog targetSheetCatalog =
+                    new DspFullDayAdaptingTargetSheetCatalogFactory().create(data, bagPlan);
             QueueCapacities queues = profile.queueCapacities();
 
             DspRouteDeriver routeDeriver = new DspRouteDeriver(
@@ -171,7 +173,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     .toList();
             storageMap.configureAvailableBenches(adaptingBenchIds);
             AdaptedLineStore adaptedLineStore = new AdaptedLineStore(
-                    new AdaptingStorageLayout(profile.adaptingStorageConfig(), storageMap));
+                    new AdaptingStorageLayout(
+                            profile.adaptingStorageConfig(), storageMap, targetSheetCatalog));
             List<AdaptingBench> adaptingBenches = new ArrayList<>();
             for (AdaptingBenchDefinition definition : profile.adaptingBenchDefinitions()) {
                 adaptingBenches.add(new AdaptingBench(
@@ -512,6 +515,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     transportRuntime,
                     stationRuntime,
                     continuationRuntime,
+                    adaptedLineStore,
                     lineRuntimes,
                     cutoffController,
                     completionEvaluator,
