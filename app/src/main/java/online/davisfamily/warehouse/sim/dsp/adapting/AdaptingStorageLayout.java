@@ -23,6 +23,7 @@ public class AdaptingStorageLayout {
     private final Map<PreparedLineKey, SheetBin> binsByPreparedLine = new LinkedHashMap<>();
     private long mutationVersion;
     private long binSnapshotVersion = -1;
+    private int occupiedStrictBinCount;
     private List<AdaptingBinSnapshot> cachedBinSnapshots = List.of();
 
     public AdaptingStorageLayout(AdaptingStorageConfig config, AdaptingStorageMap storageMap) {
@@ -101,21 +102,17 @@ public class AdaptingStorageLayout {
             if (!visitKeys.add(key) || stagedRecords.containsKey(key)) {
                 throw new IllegalStateException("Duplicate staged adapted line: " + key);
             }
-            AdaptingBenchId preferredBench = storageMap.preferredBenchFor(line.pharmacyId());
-            if (targetSheetCatalog != null) {
+            if (targetSheetCatalog == null) {
+                storageMap.preferredBenchFor(line.pharmacyId());
+            } else {
                 OrderSheetKey targetSheet = targetSheetCatalog.requireTargetSheet(key);
                 String priorPharmacy = visitPharmacies.putIfAbsent(targetSheet, line.pharmacyId());
                 if (priorPharmacy != null && !priorPharmacy.equals(line.pharmacyId())) {
                     throw new IllegalStateException("Target sheet has lines from different pharmacies: " + targetSheet);
                 }
                 SheetBinGroup group = groupsByTargetSheet.get(targetSheet);
-                if (group != null && (!group.pharmacyId.equals(line.pharmacyId())
-                        || !group.benchId.equals(preferredBench))) {
-                    throw new IllegalStateException("Target sheet pharmacy or preferred bench changed: " + targetSheet);
-                }
-                BinCursor cursor = cursorsByPharmacy.get(line.pharmacyId());
-                if (cursor != null && !cursor.benchId.equals(preferredBench)) {
-                    throw new IllegalStateException("Preferred bench changed for pharmacy " + line.pharmacyId());
+                if (group != null && !group.storeId.equals(line.pharmacyId())) {
+                    throw new IllegalStateException("Target sheet store changed: " + targetSheet);
                 }
                 targetSheets.add(targetSheet);
             }
@@ -162,21 +159,20 @@ public class AdaptingStorageLayout {
             OrderSheetKey targetSheet) {
         SheetBinGroup group = groupsByTargetSheet.get(targetSheet);
         if (group == null) {
-            AdaptingBenchId benchId = storageMap.preferredBenchFor(line.pharmacyId());
-            group = new SheetBinGroup(targetSheet, line.pharmacyId(), benchId);
+            group = new SheetBinGroup(line.pharmacyId());
             groupsByTargetSheet.put(targetSheet, group);
         }
         SheetBin bin = group.bins.isEmpty() ? null : group.bins.getLast();
         if (bin == null || bin.acceptedKeyCount == config.linesPerBin()) {
-            AdaptingBenchId benchId = group.benchId;
-            BinCursor cursor = cursorsByPharmacy.computeIfAbsent(
-                    line.pharmacyId(), pharmacy -> new BinCursor(pharmacy, benchId));
-            bin = new SheetBin(cursor.currentLocation());
+            bin = new SheetBin(new AdaptingBinId(
+                    group.storeId, targetSheet, group.bins.size() + 1));
             group.bins.add(bin);
-            cursor.advanceBin(config);
         }
-        AdaptedLineRecord record = AdaptedLineRecord.fromPreparedLine(
-                line, sourceOrderSheetKey, sourceServiceCentreId, bin.location);
+        if (bin.stagedRecords.isEmpty()) {
+            occupiedStrictBinCount++;
+        }
+        AdaptedLineRecord record = AdaptedLineRecord.fromPreparedLineWithoutLocation(
+                line, sourceOrderSheetKey, sourceServiceCentreId);
         stagedRecords.put(record.key(), record);
         bin.stagedRecords.put(record.key(), record);
         binsByPreparedLine.put(record.key(), bin);
@@ -209,6 +205,9 @@ public class AdaptingStorageLayout {
         if (record != null && targetSheetCatalog != null) {
             SheetBin bin = binsByPreparedLine.remove(key);
             bin.stagedRecords.remove(key);
+            if (bin.stagedRecords.isEmpty()) {
+                occupiedStrictBinCount--;
+            }
             OrderSheetKey targetSheet = targetSheetCatalog.requireTargetSheet(key);
             SheetBinGroup group = groupsByTargetSheet.get(targetSheet);
             group.activeRecordCount--;
@@ -259,11 +258,11 @@ public class AdaptingStorageLayout {
         for (SheetBinGroup group : groupsByTargetSheet.values()) {
             for (int index = 0; index < group.bins.size(); index++) {
                 SheetBin bin = group.bins.get(index);
-                Optional<AdaptingStorageLocation> next = index + 1 < group.bins.size()
-                        ? Optional.of(group.bins.get(index + 1).location)
+                Optional<AdaptingBinId> next = index + 1 < group.bins.size()
+                        ? Optional.of(group.bins.get(index + 1).id)
                         : Optional.empty();
-                snapshots.add(new AdaptingBinSnapshot(bin.location, group.targetSheet,
-                        index + 1, next, new ArrayList<>(bin.stagedRecords.values())));
+                snapshots.add(new AdaptingBinSnapshot(
+                        bin.id, next, List.copyOf(bin.stagedRecords.values())));
             }
         }
         cachedBinSnapshots = List.copyOf(snapshots);
@@ -272,13 +271,20 @@ public class AdaptingStorageLayout {
     }
 
     public AdaptedLineStoreSnapshot snapshot() {
+        if (targetSheetCatalog != null) {
+            return new AdaptedLineStoreSnapshot(
+                    stagedRecords.size(), stagedRecords.keySet(), Map.of(), 0, 0,
+                    occupiedStrictBinCount);
+        }
+
         Map<AdaptingBenchId, Integer> stagedLineCountByBench = new LinkedHashMap<>();
         Set<String> rackKeys = new LinkedHashSet<>();
         Set<String> shelfKeys = new LinkedHashSet<>();
         Set<AdaptingStorageLocation> binKeys = new LinkedHashSet<>();
 
         for (AdaptedLineRecord record : stagedRecords.values()) {
-            AdaptingStorageLocation location = record.location();
+            AdaptingStorageLocation location = record.location().orElseThrow(
+                    () -> new IllegalStateException("Legacy storage record has no location"));
             stagedLineCountByBench.merge(location.benchId(), 1, Integer::sum);
             rackKeys.add(location.benchId().value() + ":" + location.rackIndex());
             shelfKeys.add(location.benchId().value() + ":" + location.rackIndex() + ":" + location.shelfIndex());
@@ -339,26 +345,22 @@ public class AdaptingStorageLayout {
     }
 
     private static final class SheetBinGroup {
-        private final OrderSheetKey targetSheet;
-        private final String pharmacyId;
-        private final AdaptingBenchId benchId;
+        private final String storeId;
         private final List<SheetBin> bins = new ArrayList<>();
         private int activeRecordCount;
 
-        private SheetBinGroup(OrderSheetKey targetSheet, String pharmacyId, AdaptingBenchId benchId) {
-            this.targetSheet = targetSheet;
-            this.pharmacyId = pharmacyId;
-            this.benchId = benchId;
+        private SheetBinGroup(String storeId) {
+            this.storeId = storeId;
         }
     }
 
     private static final class SheetBin {
-        private final AdaptingStorageLocation location;
+        private final AdaptingBinId id;
         private final Map<PreparedLineKey, AdaptedLineRecord> stagedRecords = new LinkedHashMap<>();
         private int acceptedKeyCount;
 
-        private SheetBin(AdaptingStorageLocation location) {
-            this.location = location;
+        private SheetBin(AdaptingBinId id) {
+            this.id = id;
         }
     }
 }

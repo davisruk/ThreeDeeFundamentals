@@ -36,6 +36,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspFullDayInputPreflight;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBinId;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBinSnapshot;
 import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStorageConfig;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
@@ -502,11 +503,18 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             List<AdaptingBinSnapshot> stored = runtime.adaptingBinSnapshots();
             assertSame(stored, runtime.adaptingBinSnapshots());
             assertEquals(List.of(first, first, second), stored.stream()
-                    .map(AdaptingBinSnapshot::targetOrderSheetKey).toList());
-            assertEquals(List.of(1, 2, 1), stored.stream().map(AdaptingBinSnapshot::ordinal).toList());
-            assertEquals(Optional.of(stored.get(1).location()), stored.getFirst().nextLocation());
-            assertTrue(stored.get(1).nextLocation().isEmpty());
-            assertTrue(stored.get(2).nextLocation().isEmpty());
+                    .map(bin -> bin.id().targetOrderSheetKey()).toList());
+            assertEquals(List.of(1, 2, 1), stored.stream().map(bin -> bin.id().ordinal()).toList());
+            assertEquals(List.of(
+                    new AdaptingBinId("pharmacy-1", first, 1),
+                    new AdaptingBinId("pharmacy-1", first, 2),
+                    new AdaptingBinId("pharmacy-1", second, 1)),
+                    stored.stream().map(AdaptingBinSnapshot::id).toList());
+            assertSame(stored.get(1).id(), stored.getFirst().nextBinId().orElseThrow());
+            assertTrue(stored.get(1).nextBinId().isEmpty());
+            assertTrue(stored.get(2).nextBinId().isEmpty());
+            assertTrue(stored.stream().flatMap(bin -> bin.stagedRecords().stream())
+                    .allMatch(record -> record.location().isEmpty()));
             assertEquals(List.of("A1", "A2", "B"), stored.stream()
                     .flatMap(bin -> bin.stagedRecords().stream())
                     .map(record -> record.line().lineReference()).toList());
@@ -516,11 +524,11 @@ class DspFullDayAnalysisRuntimeFactoryTest {
 
             for (int step = 0; step < 500
                     && !runtime.adaptingBinSnapshots().stream()
-                            .allMatch(bin -> bin.targetOrderSheetKey().equals(second)); step++) {
+                            .allMatch(bin -> bin.id().targetOrderSheetKey().equals(second)); step++) {
                 runtime.update(1d);
             }
             assertEquals(List.of(second), runtime.adaptingBinSnapshots().stream()
-                    .map(AdaptingBinSnapshot::targetOrderSheetKey).toList());
+                    .map(bin -> bin.id().targetOrderSheetKey()).toList());
             assertEquals("B", runtime.adaptingBinSnapshots().getFirst()
                     .stagedRecords().getFirst().line().lineReference());
             assertCorrelations(input.bagPlan(), runtime, "tote-associated-1", source, List.of("A1", "A2"));
@@ -548,16 +556,25 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                 runtime.update(1d);
             }
             assertEquals(List.of(emptySheet), runtime.adaptingBinSnapshots().stream()
-                    .filter(bin -> bin.targetOrderSheetKey().equals(emptySheet))
-                    .map(AdaptingBinSnapshot::targetOrderSheetKey).toList());
+                    .filter(bin -> bin.id().targetOrderSheetKey().equals(emptySheet))
+                    .map(bin -> bin.id().targetOrderSheetKey()).toList());
+            List<AdaptingBinSnapshot> emptyBins = runtime.adaptingBinSnapshots();
+            assertEquals(List.of(new AdaptingBinId("pharmacy-1", emptySheet, 1)),
+                    emptyBins.stream().map(AdaptingBinSnapshot::id).toList());
+            assertTrue(emptyBins.getFirst().nextBinId().isEmpty());
+            assertEquals(List.of("B"), emptyBins.stream()
+                    .flatMap(bin -> bin.stagedRecords().stream())
+                    .map(record -> record.line().lineReference()).toList());
+            assertTrue(emptyBins.stream().flatMap(bin -> bin.stagedRecords().stream())
+                    .allMatch(record -> record.location().isEmpty()));
 
             for (int step = 0; step < 500
                     && runtime.adaptingBinSnapshots().stream()
-                            .anyMatch(bin -> bin.targetOrderSheetKey().equals(emptySheet)); step++) {
+                            .anyMatch(bin -> bin.id().targetOrderSheetKey().equals(emptySheet)); step++) {
                 runtime.update(1d);
             }
             assertFalse(runtime.adaptingBinSnapshots().stream()
-                    .anyMatch(bin -> bin.targetOrderSheetKey().equals(emptySheet)),
+                    .anyMatch(bin -> bin.id().targetOrderSheetKey().equals(emptySheet)),
                     () -> "EMPTY collection did not complete: state=" + runtime.state()
                             + ", av02=" + runtime.av02AllocationRuntimeController().snapshot()
                             + ", operational=" + runtime.operationalReleaseRuntime().controller().snapshot()

@@ -2,7 +2,6 @@ package online.davisfamily.warehouse.sim.dsp.adapting;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -43,7 +42,7 @@ class AdaptedLineStoreTest {
         assertEquals(SOURCE_ORDER_SHEET, record.sourceOrderSheetKey());
         assertEquals(SOURCE_SERVICE_CENTRE, record.sourceServiceCentreId());
         assertEquals(preparedLine, record.line());
-        assertEquals(new AdaptingBenchId("bench-1"), record.location().benchId());
+        assertEquals(new AdaptingBenchId("bench-1"), record.location().orElseThrow().benchId());
         assertFalse(store.contains(key));
         assertEquals(0, store.snapshot().stagedLineCount());
     }
@@ -134,9 +133,9 @@ class AdaptedLineStoreTest {
         AdaptedLineRecord line3 = store.take(PreparedLineKey.forPreparedLine(adaptedLine("line-3", "order-3", "0000310"))).orElseThrow();
         AdaptedLineRecord line5 = store.take(PreparedLineKey.forPreparedLine(adaptedLine("line-5", "order-5", "0000310"))).orElseThrow();
 
-        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 0, 0), line1.location());
-        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 1, 0), line3.location());
-        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 1, 0, 0), line5.location());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 0, 0), line1.location().orElseThrow());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 0, 1, 0), line3.location().orElseThrow());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-2"), 1, 0, 0), line5.location().orElseThrow());
     }
 
     @Test
@@ -177,8 +176,11 @@ class AdaptedLineStoreTest {
         store.stageAll(List.of(a1, b1, a2, b2), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
 
         List<AdaptingBinSnapshot> bins = store.binSnapshots();
-        assertEquals(List.of(first, second), bins.stream().map(AdaptingBinSnapshot::targetOrderSheetKey).toList());
-        assertNotEquals(bins.get(0).location(), bins.get(1).location());
+        assertEquals(List.of(first, second), bins.stream().map(bin -> bin.id().targetOrderSheetKey()).toList());
+        assertEquals(List.of(new AdaptingBinId("0000310", first, 1),
+                new AdaptingBinId("0000310", second, 1)), bins.stream().map(AdaptingBinSnapshot::id).toList());
+        assertTrue(bins.stream().flatMap(bin -> bin.stagedRecords().stream())
+                .allMatch(record -> record.location().isEmpty()));
         assertEquals(List.of(key(a1), key(a2)), binKeys(bins.get(0)));
         assertEquals(List.of(key(b1), key(b2)), binKeys(bins.get(1)));
         assertEquals(2, store.snapshot().activeBinCount());
@@ -186,14 +188,16 @@ class AdaptedLineStoreTest {
         assertEquals(List.of(key(a2), key(a1)), store.takeAll(List.of(key(a2), key(a1)))
                 .stream().map(AdaptedLineRecord::key).toList());
         assertEquals(List.of(second), store.binSnapshots().stream()
-                .map(AdaptingBinSnapshot::targetOrderSheetKey).toList());
+                .map(bin -> bin.id().targetOrderSheetKey()).toList());
         assertTrue(store.contains(key(b1)));
         assertTrue(store.contains(key(b2)));
     }
 
     @Test
-    void shouldCountDistinctOccupiedBinsForPharmaciesSharingBenchCoordinates() {
+    void shouldUseStoreSheetBinIdentityAndIgnoreBenchChangesInStrictStorage() {
         DspOrderItem firstLine = adaptedLine("first", "first-target", "0000310");
+        DspOrderItem thirdLine = adaptedLine("third", "first-target", "0000310");
+        DspOrderItem wrongStoreLine = adaptedLine("wrong-store", "first-target", "0000388");
         DspOrderItem secondLine = adaptedLine("second", "second-target", "0000388");
         AdaptingStorageMap storageMap = storageMap(
                 "0000310", "bench-1", "0000388", "bench-1");
@@ -201,24 +205,63 @@ class AdaptedLineStoreTest {
                 new AdaptingStorageConfig(2, 2, 2), storageMap,
                 new AdaptingTargetSheetCatalog(Map.of(
                         key(firstLine), new OrderSheetKey("first-target", 1),
+                        key(thirdLine), new OrderSheetKey("first-target", 1),
+                        key(wrongStoreLine), new OrderSheetKey("first-target", 1),
                         key(secondLine), new OrderSheetKey("second-target", 1)))));
 
         store.stageAll(List.of(firstLine, secondLine), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
 
         List<AdaptingBinSnapshot> bins = store.binSnapshots();
         assertEquals(2, bins.size());
-        assertNotEquals(bins.get(0).location(), bins.get(1).location());
-        assertEquals(bins.get(0).location().benchId(), bins.get(1).location().benchId());
-        assertEquals(bins.get(0).location().rackIndex(), bins.get(1).location().rackIndex());
-        assertEquals(bins.get(0).location().shelfIndex(), bins.get(1).location().shelfIndex());
-        assertEquals(bins.get(0).location().binIndex(), bins.get(1).location().binIndex());
+        AdaptingBinId firstId = bins.getFirst().id();
+        assertEquals(List.of(
+                new AdaptingBinId("0000310", new OrderSheetKey("first-target", 1), 1),
+                new AdaptingBinId("0000388", new OrderSheetKey("second-target", 1), 1)),
+                bins.stream().map(AdaptingBinSnapshot::id).toList());
+        assertTrue(bins.stream().flatMap(bin -> bin.stagedRecords().stream())
+                .allMatch(record -> record.location().isEmpty()));
+        assertTrue(store.snapshot().stagedLineCountByBench().isEmpty());
+        assertEquals(0, store.snapshot().activeRackCount());
+        assertEquals(0, store.snapshot().activeShelfCount());
         assertEquals(2, store.snapshot().activeBinCount());
 
-        store.takeAll(List.of(key(firstLine)));
+        storageMap.assignPharmacyToBench("0000310", new AdaptingBenchId("bench-2"));
+        store.stageAll(List.of(thirdLine), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
+        List<AdaptingBinSnapshot> afterBenchChange = store.binSnapshots();
+        assertSame(firstId, afterBenchChange.getFirst().id());
+        assertEquals(List.of(key(firstLine), key(thirdLine)), binKeys(afterBenchChange.getFirst()));
+        assertEquals(2, store.snapshot().activeBinCount());
+
+        List<AdaptingBinSnapshot> beforeRejectedStage = store.binSnapshots();
+        assertThrows(IllegalStateException.class, () -> store.stageAll(List.of(wrongStoreLine),
+                SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE));
+        assertSame(beforeRejectedStage, store.binSnapshots());
+        assertEquals(3, store.snapshot().stagedLineCount());
+        assertEquals(2, store.snapshot().activeBinCount());
+
+        store.takeAll(List.of(key(firstLine), key(thirdLine)));
         assertEquals(1, store.snapshot().activeBinCount());
         assertEquals(List.of(key(secondLine)), binKeys(store.binSnapshots().getFirst()));
         store.takeAll(List.of(key(secondLine)));
         assertEquals(0, store.snapshot().activeBinCount());
+    }
+
+    @Test
+    void shouldCountLegacyBinsByFullLocationWhenStoresShareCoordinateNumbers() {
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(),
+                storageMap("0000310", "bench-1", "0000388", "bench-1")));
+        DspOrderItem firstLine = adaptedLine("first", "first-order", "0000310");
+        DspOrderItem secondLine = adaptedLine("second", "second-order", "0000388");
+
+        stage(store, firstLine);
+        stage(store, secondLine);
+
+        AdaptedLineStoreSnapshot snapshot = store.snapshot();
+        assertEquals(Map.of(new AdaptingBenchId("bench-1"), 2), snapshot.stagedLineCountByBench());
+        assertEquals(1, snapshot.activeRackCount());
+        assertEquals(1, snapshot.activeShelfCount());
+        assertEquals(2, snapshot.activeBinCount());
     }
 
     @Test
@@ -247,46 +290,46 @@ class AdaptedLineStoreTest {
         store.stageAll(List.of(a1, a2, b1, b2, a3, a4, b3, b4, a5),
                 SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
         List<AdaptingBinSnapshot> firstBins = store.binSnapshots().stream()
-                .filter(bin -> bin.targetOrderSheetKey().equals(first)).toList();
+                .filter(bin -> bin.id().targetOrderSheetKey().equals(first)).toList();
 
-        assertEquals(List.of(1, 2, 3), firstBins.stream().map(AdaptingBinSnapshot::ordinal).toList());
+        assertEquals(List.of(1, 2, 3), firstBins.stream().map(bin -> bin.id().ordinal()).toList());
+        assertEquals(List.of(
+                new AdaptingBinId("0000310", first, 1),
+                new AdaptingBinId("0000310", first, 2),
+                new AdaptingBinId("0000310", first, 3)), firstBins.stream().map(AdaptingBinSnapshot::id).toList());
         assertEquals(List.of(2, 2, 1), firstBins.stream()
                 .map(bin -> bin.stagedRecords().size()).toList());
-        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 0, 0, 0),
-                firstBins.get(0).location());
-        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 0, 1, 0),
-                firstBins.get(1).location());
-        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 1, 0, 0),
-                firstBins.get(2).location());
-        assertEquals(java.util.Optional.of(firstBins.get(1).location()), firstBins.get(0).nextLocation());
-        assertEquals(java.util.Optional.of(firstBins.get(2).location()), firstBins.get(1).nextLocation());
-        assertTrue(firstBins.get(2).nextLocation().isEmpty());
+        assertEquals(5, store.snapshot().activeBinCount());
+        assertSame(firstBins.get(1).id(), firstBins.get(0).nextBinId().orElseThrow());
+        assertSame(firstBins.get(2).id(), firstBins.get(1).nextBinId().orElseThrow());
+        assertTrue(firstBins.get(2).nextBinId().isEmpty());
+        assertTrue(firstBins.stream().flatMap(bin -> bin.stagedRecords().stream())
+                .allMatch(record -> record.location().isEmpty()));
 
         store.stageAll(List.of(a6), new OrderSheetKey("later-source", 1), SOURCE_SERVICE_CENTRE);
         List<AdaptingBinSnapshot> after = store.binSnapshots().stream()
-                .filter(bin -> bin.targetOrderSheetKey().equals(first)).toList();
+                .filter(bin -> bin.id().targetOrderSheetKey().equals(first)).toList();
         assertEquals(3, after.size());
-        assertEquals(firstBins.get(2).location(), after.get(2).location());
+        assertSame(firstBins.get(2).id(), after.get(2).id());
         assertEquals(List.of(key(a5), key(a6)), binKeys(after.get(2)));
         assertEquals(new OrderSheetKey("later-source", 1), after.get(2).stagedRecords().get(1).sourceOrderSheetKey());
 
         store.takeAll(List.of(key(a1), key(a2)));
         List<AdaptingBinSnapshot> withEmptyPredecessor = store.binSnapshots().stream()
-                .filter(bin -> bin.targetOrderSheetKey().equals(first)).toList();
+                .filter(bin -> bin.id().targetOrderSheetKey().equals(first)).toList();
         assertEquals(3, withEmptyPredecessor.size());
         assertTrue(withEmptyPredecessor.getFirst().stagedRecords().isEmpty());
-        assertEquals(java.util.Optional.of(withEmptyPredecessor.get(1).location()),
-                withEmptyPredecessor.getFirst().nextLocation());
+        assertSame(withEmptyPredecessor.get(1).id(), withEmptyPredecessor.getFirst().nextBinId().orElseThrow());
         assertEquals(8, store.snapshot().stagedLineCount());
         assertEquals(4, store.snapshot().activeBinCount());
 
         store.takeAll(List.of(key(a3), key(a4), key(a5), key(a6)));
         assertEquals(List.of(second), store.binSnapshots().stream()
-                .map(AdaptingBinSnapshot::targetOrderSheetKey).distinct().toList());
+                .map(bin -> bin.id().targetOrderSheetKey()).distinct().toList());
     }
 
     @Test
-    void shouldValidateWholeStoreVisitWithoutMovingCoordinatesOrInvalidatingSnapshots() {
+    void shouldValidateWholeStoreVisitWithoutMutatingBinsOrInvalidatingSnapshots() {
         DspOrderItem first = adaptedLine("first", "target", "0000310");
         DspOrderItem second = adaptedLine("second", "target", "0000310");
         DspOrderItem third = adaptedLine("third", "target", "0000310");
@@ -309,13 +352,15 @@ class AdaptedLineStoreTest {
                 SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE));
         assertSame(before, store.binSnapshots());
         assertEquals(1, store.snapshot().stagedLineCount());
+        assertEquals(1, store.snapshot().activeBinCount());
 
         store.stageAll(List.of(second, third), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
         List<AdaptingBinSnapshot> after = store.binSnapshots();
         assertNotSame(before, after);
         assertEquals(List.of(2, 1), after.stream().map(bin -> bin.stagedRecords().size()).toList());
-        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 0, 0, 1),
-                after.get(1).location());
+        assertEquals(new AdaptingBinId("0000310", sheet, 2), after.get(1).id());
+        assertTrue(after.stream().flatMap(bin -> bin.stagedRecords().stream())
+                .allMatch(record -> record.location().isEmpty()));
         assertThrows(IllegalStateException.class, () -> store.stage(
                 AdaptedLineRecord.fromPreparedLine(missing, SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE)));
     }
@@ -341,6 +386,7 @@ class AdaptedLineStoreTest {
                 new PreparedLineKey("missing", "missing"))));
         assertSame(before, store.binSnapshots());
         assertEquals(30, store.snapshot().stagedLineCount());
+        assertEquals(30, store.snapshot().activeBinCount());
         assertThrows(UnsupportedOperationException.class, () -> before.clear());
         assertThrows(UnsupportedOperationException.class, () -> before.getFirst().stagedRecords().clear());
 

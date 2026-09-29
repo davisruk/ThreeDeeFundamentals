@@ -1,5 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.adapting;
 
+import java.util.Optional;
+
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
@@ -10,7 +12,7 @@ public record AdaptedLineRecord(
         OrderSheetKey sourceOrderSheetKey,
         String sourceServiceCentreId,
         DspOrderItem line,
-        AdaptingStorageLocation location) {
+        Optional<AdaptingStorageLocation> location) {
 
     public AdaptedLineRecord {
         if (key == null) {
@@ -64,6 +66,30 @@ public record AdaptedLineRecord(
                 sourceOrderSheetKey,
                 sourceServiceCentreId,
                 line,
-                location);
+                Optional.of(location));
+    }
+
+    public AdaptedLineRecord(
+            PreparedLineKey key,
+            OrderSheetKey sourceOrderSheetKey,
+            String sourceServiceCentreId,
+            DspOrderItem line,
+            AdaptingStorageLocation location) {
+        this(key, sourceOrderSheetKey, sourceServiceCentreId, line, Optional.of(location));
+    }
+
+    public static AdaptedLineRecord fromPreparedLineWithoutLocation(
+            DspOrderItem line,
+            OrderSheetKey sourceOrderSheetKey,
+            String sourceServiceCentreId) {
+        if (line == null) {
+            throw new IllegalArgumentException("line must not be null");
+        }
+        return new AdaptedLineRecord(
+                PreparedLineKey.forPreparedLine(line),
+                sourceOrderSheetKey,
+                sourceServiceCentreId,
+                line,
+                Optional.empty());
     }
 }
