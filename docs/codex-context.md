@@ -85,6 +85,20 @@ Important constraint:
 
 The active major work is a lifecycle-first DSP/OSR scheduling programme. FULL_PACK and ASSOCIATED are logical order types whose inbound physical totes are never reused as outbound dispatch totes. The lifecycle, supply, operational release, route-target, OSR outbound launch, physical warehouse transport, P2P-local arrival-consumer, sticky P2P lease, and deadline-aware elastic allocation foundations are complete, verified, and merged. AV02 operational allocation, generic station processing, generic station route continuation, and the operational EMPTY end-to-end proof are complete, verified, and merged to `master`; the proof merged at `afe40f5` with no production-code changes. Full-day execution, metrics, and inspection using the explicitly uncalibrated elastic profile are active planned work on `feature/dsp-full-day-analysis-metrics-inspection`.
 
+The full-day Adapting sheet-owned bin-group feature is implemented and verified
+on that branch; its user-run suite and legacy Adapting rig visual check passed,
+and the end-of-feature architecture review found all ten acceptance items
+conformant. Runtime construction derives an immutable exact prepared-line target
+sheet catalog from executable input and planned pack slots. Strict full-day
+STORE/COLLECT owns store/order/sheet bin groups with one-based linked overflow
+IDs, independent of processing benches and legacy physical coordinates.
+Prepared-key dependency readiness, source provenance, and collection order
+remain unchanged. Detailed immutable bin inspection is on demand, not part of
+fixed-step snapshots. The standalone Adapting rig retains its two-argument
+coordinate layout and existing appearance. Clickable bin renderables and an
+inspection UI remain deferred; no full-day performance gain is claimed from
+this storage change.
+
 Read:
 
 1. `docs/scheduler/dsp-logical-physical-lifecycle-requirements.md`
@@ -104,6 +118,7 @@ Read:
 15. `docs/scheduler/dsp-osr-outbound-route-launch-plan.md`
 16. `docs/machines/exceptions-station-requirements.md`
 17. `docs/machines/phase-1-stations-roadmap.md`
+18. `docs/scheduler/dsp-adapting-sheet-owned-bin-groups-plan.md`
 
 Current scheduler decisions:
 
@@ -269,6 +284,9 @@ Current programme position:
   detailed plan at `docs/scheduler/dsp-recoverable-input-rejection-plan.md`; preserve a
   DSP-visible reportable view and a small immutable rejection catalog, project only executable
   dependency-closed lines into bag/station/runtime work, and keep the bag planner strict;
+- full-day Adapting sheet-owned bin groups: complete and verified on the current
+  branch, with detailed plan at `docs/scheduler/dsp-adapting-sheet-owned-bin-groups-plan.md`;
+  strict store/order/sheet/ordinal identity is separate from legacy rig coordinates;
 - Exception Station Phase 1 now has the required lifecycle/bag/outbound foundation but remains a separate later feature.
 
 Compatibility note:

@@ -1,9 +1,10 @@
 # DSP Adapting Sheet-Owned Bin Groups Plan
 
-Status: Steps 1-3 implemented; corrective Step 4 planned after architecture review.
-The user has confirmed that store/order/sheet identifies a bin group and an
-overflow ordinal identifies each bin. This plan revision does not authorize
-Step 4 implementation; the user initiates it separately.
+Status: Steps 1-4 implemented and committed. User verification and the renewed
+architecture review passed; documentation closure recorded below.
+
+The user confirmed that store/order/sheet identifies a bin group and an
+overflow ordinal identifies each bin.
 
 ## Purpose
 
@@ -552,3 +553,24 @@ Only after user verification and architecture review are green, update:
 Closure is documentation reconciliation, not another storage or renderer design
 step. If implementation or review differs from this plan, stop and seek a plan
 revision before claiming completion.
+
+## Completion Record
+
+- Step 1: exact prepared-line target-sheet catalog implemented at `6faaa36`;
+  no additional user verification required.
+- Step 2: sheet-owned storage, overflow, and inspection implemented at
+  `ee1651c`; no additional user verification required. Its strict-mode
+  coordinate identity was superseded by Step 4, not retained as the final
+  contract.
+- Step 3: full-day composition and two-sheet/EMPTY scenarios implemented at
+  `8bda195`; the user reported the complete test suite green.
+- Step 4: strict store/order/sheet/ordinal bin identity implemented at
+  `b3982c5`; focused implementation checks passed, and the user reported both
+  the complete test suite and manual Adapting rig visual check passed.
+- Renewed end-of-feature architecture review: PASS on all ten named acceptance
+  items, with no FAIL or UNPROVEN item and no unrelated production change in
+  the feature diff. No full-day performance measurement was made for this
+  storage feature.
+- Documentation closure: the lifecycle and operational scheduling requirements,
+  `docs/codex-context.md`, this plan, and the mandatory reading order in
+  `docs/codex-instructions.md` were reconciled with the verified final contract.

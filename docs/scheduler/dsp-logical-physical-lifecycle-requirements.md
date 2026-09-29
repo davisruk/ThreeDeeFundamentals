@@ -265,6 +265,19 @@ Cencora inbound tote
 
 Adapting stores terminal prepared-line outcomes independently of the source tote. The source tote does not continue to P2P.
 
+For executable full-day work, Adapting STORE places each prepared ADAPTED line in a
+bin group owned by its fulfilment store (`pharmacyId`) and exact fulfilment
+`OrderSheetKey` (order ID and sheet number). The target sheet is resolved once
+from the validated planned pack slot, not from `referenceSheetNumber` or the
+ADAPTED source tote's sheet. Each group has its own one-based linked overflow
+bins; a new bin is allocated only after the current bin has accepted
+`AdaptingStorageConfig.linesPerBin()` prepared lines. Bins for different
+fulfilment sheets or stores never share contents. Full-day bin identity is
+store/order/sheet/overflow ordinal, without bench, rack, or shelf coordinates.
+Stored records retain their ADAPTED source sheet and service-centre provenance;
+the fulfilment sheet identifies storage and collection, not source provenance.
+ASSOCIATED and EMPTY COLLECT visits request only their own prepared-line keys.
+
 ### 8.2 FULL_PACK
 
 FULL_PACK is a logical fulfilment order type with an inbound physical pack tote.

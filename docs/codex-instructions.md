@@ -9,7 +9,7 @@ End-of-feature architecture review is a clean context boundary. When the impleme
 
 Documentation closure is also a clean context boundary. When architecture review has consumed substantial working context, the user may deliberately compact the session before documentation closure. Documentation closure must remain reconstructable from the repository, completed feature plan, architecture-review result, and other persistent documentation rather than depend on detailed pre-compaction conversational context.
 
-The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work.
+The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work. Full-day Adapting sheet-owned bin groups are implemented and verified; clickable bin visuals remain deferred.
 
 Always read these documents before starting:
 
@@ -26,6 +26,8 @@ Always read these documents before starting:
    `docs/scheduler/dsp-full-day-runner-clock-read-remediation-plan.md`
 8. The active full-day fixed-step performance remediation plan,
    `docs/scheduler/dsp-full-day-fixed-step-performance-remediation-plan.md`
+9. The completed full-day Adapting sheet-owned bin-groups plan,
+   `docs/scheduler/dsp-adapting-sheet-owned-bin-groups-plan.md`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 

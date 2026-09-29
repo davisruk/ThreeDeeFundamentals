@@ -226,6 +226,13 @@ Terminal outcomes include successful and incomplete preparation. Only successful
 
 Dependency readiness is per target order line. Completion of unrelated ADAPTED orders is not required.
 
+The full-day Adapting storage layout groups executable prepared lines by their
+exact fulfilment store/order/sheet and keeps separate linked bins for overflow.
+This is storage and inspection ownership, not a new scheduling unit:
+STORE still publishes readiness only after completion, and ASSOCIATED/EMPTY
+release still checks each of its own `PreparedLineKey` dependencies. It does
+not change OSR eligibility, candidate ranking, or release decisions.
+
 EMPTY additionally requires AV02 physical tote admission and consumes no OSR physical capacity before allocation.
 
 ### 7.5 Defensive validation
