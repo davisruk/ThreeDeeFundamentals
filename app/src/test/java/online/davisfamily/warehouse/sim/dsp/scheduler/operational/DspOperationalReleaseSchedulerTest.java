@@ -36,6 +36,8 @@ import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationC
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreLineDemandSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignment;
+import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirement;
 import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pServiceCentreWorkloadSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pInputActivitySnapshot;
@@ -57,6 +59,71 @@ class DspOperationalReleaseSchedulerTest {
 
     private final DspOperationalReleaseScheduler scheduler =
             new DspOperationalReleaseScheduler();
+
+    @Test
+    void shouldPreserveCandidateOrderAndBlocksAcrossCorrelationLineCompatibility() {
+        DspOperationalReleaseCandidate whollyIncompatible = candidate(
+                "incompatible-tote",
+                logicalState("incompatible-order", 1, OrderType.FULL_PACK, "sc-1", 999,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                1, OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty());
+        DspOperationalReleaseCandidate lineTwoCompatible = candidate(
+                "compatible-tote",
+                logicalState("compatible-order", 1, OrderType.FULL_PACK, "sc-1", 999,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                2, OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty());
+        P2pLineLeaseSnapshot firstLine = leasedLine("line-1", "sc-1", Optional.empty());
+        P2pLineLeaseSnapshot secondLine = leasedLine("line-2", "sc-1", Optional.empty());
+        P2pLineLeaseCatalogSnapshot lines = new P2pLineLeaseCatalogSnapshot(List.of(firstLine, secondLine));
+        P2pBagCorrelationRequirement firstRequirement = new P2pBagCorrelationRequirement("bag-1", 1);
+        P2pBagCorrelationRequirement secondRequirement = new P2pBagCorrelationRequirement("bag-2", 1);
+        P2pBagCorrelationRequirementCatalog requirements = new P2pBagCorrelationRequirementCatalog(
+                Map.of(whollyIncompatible.physicalCandidate().physicalToteId(),
+                                List.of(firstRequirement, secondRequirement),
+                        lineTwoCompatible.physicalCandidate().physicalToteId(),
+                                List.of(secondRequirement)),
+                Map.of());
+        P2pBagCorrelationAssignmentSnapshot assignments = new P2pBagCorrelationAssignmentSnapshot(List.of(
+                new P2pBagCorrelationAssignment("bag-1", firstLine.definition().lineId()),
+                new P2pBagCorrelationAssignment("bag-2", secondLine.definition().lineId())));
+        DspOperationalReleaseScheduler constrainedScheduler = new DspOperationalReleaseScheduler(
+                new OperationalDependencyReadinessPolicy(),
+                new OperationalRouteEntryAdmissionPolicy(),
+                new PharmacyGroupedSourceSequenceRankingPolicy(),
+                new StickyP2pLineAllocationPolicy(), requirements, () -> assignments);
+        Map<OperationalRouteDestination, Boolean> admissions = Map.of(
+                firstLine.definition().destination(), true,
+                secondLine.definition().destination(), true);
+        Map<StationType, StationAdmissionSnapshot> stationAdmissions = Map.of(
+                StationType.P2P, openAdmission(StationType.P2P, "target-line-1"));
+        DspOperationalReleaseSnapshot mixed = stickySnapshot(
+                List.of(whollyIncompatible, lineTwoCompatible), stationAdmissions,
+                Set.of(), lines, admissions);
+
+        DspOperationalReleaseEvaluation evaluated = constrainedScheduler.evaluate(mixed);
+
+        assertEquals(List.of(whollyIncompatible, lineTwoCompatible), mixed.candidates());
+        assertEquals(new PhysicalToteId("compatible-tote"),
+                evaluated.releaseDecision().orElseThrow().command().physicalToteId());
+        assertEquals(secondLine.definition().lineId(), evaluated.releaseDecision().orElseThrow()
+                .command().proposedP2pAssignment().orElseThrow().lineId());
+        assertEquals(new PhysicalToteId("incompatible-tote"),
+                evaluated.blockedCandidates().getFirst().physicalToteId());
+        assertEquals("NO_COMPATIBLE_P2P_LINE",
+                evaluated.blockedCandidates().getFirst().blocks().getFirst().reason());
+
+        DspOperationalReleaseSnapshot onlyIncompatible = stickySnapshot(
+                List.of(whollyIncompatible), stationAdmissions, Set.of(), lines, admissions);
+        DspOperationalReleaseEvaluation blocked = constrainedScheduler.evaluate(onlyIncompatible);
+        assertTrue(blocked.releaseDecision().isEmpty());
+        assertEquals("NO_COMPATIBLE_P2P_LINE",
+                blocked.blockedCandidates().getFirst().blocks().getFirst().reason());
+        assertEquals(DspOrderStatus.WAITING, whollyIncompatible.logicalOrderState().status());
+        assertEquals(List.of(
+                new P2pBagCorrelationAssignment("bag-1", firstLine.definition().lineId()),
+                new P2pBagCorrelationAssignment("bag-2", secondLine.definition().lineId())),
+                assignments.assignments());
+    }
 
     @Test
     void shouldSelectAvailableFallbackLineForDirectP2pAndCarryAssignment() {

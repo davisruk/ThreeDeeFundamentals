@@ -32,6 +32,35 @@ import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirement
 class P2pLineAllocationRequestFactoryTest {
 
     @Test
+    void shouldRespectSharedCorrelationOwnershipAtProductionRequestBoundary() {
+        P2pLineLeaseSnapshot first = catalog("line-1").lines().getFirst();
+        P2pLineLeaseSnapshot second = catalog("line-2").lines().getFirst();
+        P2pLineLeaseCatalogSnapshot lines = new P2pLineLeaseCatalogSnapshot(List.of(first, second));
+        PhysicalToteId toteId = new PhysicalToteId("shared-bag-tote");
+        OrderSheetKey sheetKey = new OrderSheetKey("shared-bag-order", 1);
+        P2pBagCorrelationRequirement requirement = new P2pBagCorrelationRequirement("shared-bag", 2);
+        P2pBagCorrelationRequirementCatalog requirements = new P2pBagCorrelationRequirementCatalog(
+                Map.of(toteId, Set.of(requirement)), Map.of(sheetKey, Set.of(requirement)));
+        P2pBagCorrelationAssignmentSnapshot assignments = new P2pBagCorrelationAssignmentSnapshot(List.of(
+                new online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignment(
+                        "shared-bag", first.definition().lineId())));
+        P2pLineAllocationRequestFactory factory = new P2pLineAllocationRequestFactory(
+                lines,
+                Map.of(first.definition().destination(), true, second.definition().destination(), true),
+                Optional.empty(), assignments, requirements);
+
+        P2pLineAllocationRequest request = factory.create(OperationalPhysicalToteSource.OSR,
+                toteId, sheetKey, "SC-104", List.of("pharmacy-1"), true);
+
+        assertTrue(request.bagCorrelationsCompatibleWith(first.definition().lineId()));
+        assertFalse(request.bagCorrelationsCompatibleWith(second.definition().lineId()));
+        assertSame(assignments, request.correlationAssignmentSnapshot());
+        assertEquals(List.of(requirement), requirements.allRequirements());
+        assertEquals(1, assignments.assignments().size());
+        assertEquals(first.definition().lineId(), assignments.lineFor("shared-bag").orElseThrow());
+    }
+
+    @Test
     void shouldValidateBatchInputsOnceAndReuseImmutableValuesAcrossCandidates() {
         P2pLineLeaseCatalogSnapshot lineCatalog = catalog("line-1");
         OperationalRouteDestination destination = lineCatalog.lines().getFirst()

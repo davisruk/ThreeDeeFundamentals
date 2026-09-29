@@ -1,20 +1,55 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.bag;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.AbstractSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
 class P2pBagCorrelationAssignmentSnapshotTest {
+
+    @Test
+    void shouldCheckCompatibilityInRequirementOrderWithoutStreamOrPerCallIndex() {
+        P2pLineId firstLine = new P2pLineId("line-a");
+        P2pLineId secondLine = new P2pLineId("line-b");
+        P2pBagCorrelationAssignmentSnapshot first = new P2pBagCorrelationAssignmentSnapshot(List.of(
+                assignment("assigned-a", firstLine), assignment("assigned-b", secondLine)));
+        P2pBagCorrelationRequirement unassigned = new P2pBagCorrelationRequirement("unassigned", 1);
+        P2pBagCorrelationRequirement assignedA = new P2pBagCorrelationRequirement("assigned-a", 1);
+        P2pBagCorrelationRequirement assignedB = new P2pBagCorrelationRequirement("assigned-b", 1);
+
+        assertTrue(first.compatibleWith(new CountingRequirements(), firstLine));
+        assertTrue(first.compatibleWith(new CountingRequirements(unassigned), firstLine));
+        assertTrue(first.compatibleWith(new CountingRequirements(assignedA), firstLine));
+        CountingRequirements mixed = new CountingRequirements(unassigned, assignedA);
+        assertTrue(first.compatibleWith(mixed, firstLine));
+        assertEquals(2, mixed.visited());
+        CountingRequirements conflict = new CountingRequirements(assignedB, unassigned, assignedA);
+        assertFalse(first.compatibleWith(conflict, firstLine));
+        assertEquals(1, conflict.visited());
+        assertThrows(IllegalArgumentException.class, () -> first.compatibleWith(null, firstLine));
+        assertThrows(IllegalArgumentException.class,
+                () -> first.compatibleWith(new CountingRequirements(assignedA), null));
+
+        P2pBagCorrelationAssignmentSnapshot second = new P2pBagCorrelationAssignmentSnapshot(List.of(
+                assignment("assigned-a", firstLine), assignment("assigned-b", firstLine)));
+        CountingRequirements nowCompatible = new CountingRequirements(assignedB, unassigned, assignedA);
+        assertTrue(second.compatibleWith(nowCompatible, firstLine));
+        assertEquals(3, nowCompatible.visited());
+        assertFalse(first.compatibleWith(new CountingRequirements(assignedB), firstLine));
+    }
 
     @Test
     void shouldIndexOrderedAssignmentsAndReturnExactEntries() {
@@ -139,5 +174,45 @@ class P2pBagCorrelationAssignmentSnapshotTest {
         return new P2pBagCorrelationAssignment(
                 correlationId,
                 lineId);
+    }
+
+    private static final class CountingRequirements extends AbstractSet<P2pBagCorrelationRequirement> {
+        private final List<P2pBagCorrelationRequirement> values;
+        private int visited;
+
+        private CountingRequirements(P2pBagCorrelationRequirement... values) {
+            this.values = List.of(values);
+        }
+
+        @Override
+        public Iterator<P2pBagCorrelationRequirement> iterator() {
+            Iterator<P2pBagCorrelationRequirement> delegate = values.iterator();
+            return new Iterator<>() {
+                @Override
+                public boolean hasNext() {
+                    return delegate.hasNext();
+                }
+
+                @Override
+                public P2pBagCorrelationRequirement next() {
+                    visited++;
+                    return delegate.next();
+                }
+            };
+        }
+
+        @Override
+        public int size() {
+            return values.size();
+        }
+
+        @Override
+        public java.util.stream.Stream<P2pBagCorrelationRequirement> stream() {
+            throw new AssertionError("compatibility must not open a stream");
+        }
+
+        private int visited() {
+            return visited;
+        }
     }
 }

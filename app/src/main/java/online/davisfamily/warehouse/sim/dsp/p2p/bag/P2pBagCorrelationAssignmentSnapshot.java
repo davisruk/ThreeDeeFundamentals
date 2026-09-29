@@ -91,11 +91,14 @@ public final class P2pBagCorrelationAssignmentSnapshot {
         if (requirements == null || lineId == null) {
             throw new IllegalArgumentException("requirements and lineId must not be null");
         }
-        return requirements.stream()
-                .map(P2pBagCorrelationRequirement::correlationId)
-                .map(this::lineFor)
-                .flatMap(Optional::stream)
-                .allMatch(lineId::equals);
+        for (P2pBagCorrelationRequirement requirement : requirements) {
+            P2pBagCorrelationAssignment assignment = assignmentsByCorrelation.get(
+                    requirement.correlationId());
+            if (assignment != null && !lineId.equals(assignment.lineId())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

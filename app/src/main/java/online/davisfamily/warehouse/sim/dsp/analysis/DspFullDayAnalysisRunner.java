@@ -10,10 +10,13 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.LongSupplier;
 
 import online.davisfamily.threedee.sim.framework.time.FixedStepExecutionConfig;
@@ -28,6 +31,12 @@ import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJson
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntime;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
 
 /** Executes one loaded full-day DSP analysis through bounded headless fixed steps. */
 public final class DspFullDayAnalysisRunner {
@@ -165,6 +174,8 @@ public final class DspFullDayAnalysisRunner {
                         profile.maximumStepsPerAdvance()));
         Set<String> completedServiceCentres = new HashSet<>();
         ProgressSchedule progressSchedule = new ProgressSchedule(progressInterval);
+        ProgressWallClock progressWallClock = new ProgressWallClock(monotonicNanos);
+        InboundToteManifestCatalog manifestCatalog = runtime.manifestCatalog();
         var startRuntime = runtime.snapshot();
 
         printProgress(
@@ -172,13 +183,16 @@ public final class DspFullDayAnalysisRunner {
                 "start",
                 startRuntime,
                 input,
-                profile);
+                profile,
+                manifestCatalog,
+                Optional.empty());
         printNewCompletions(
                 progressOutput,
                 startRuntime,
                 completedServiceCentres,
                 input,
-                profile);
+                profile,
+                manifestCatalog);
 
         long batchCount = 0L;
         long maximumBatchCount = maximumBatchCount(profile);
@@ -198,12 +212,16 @@ public final class DspFullDayAnalysisRunner {
                     Duration elapsed = runtime.clockController().snapshot().elapsedSimulationTime();
                     if (progressSchedule.reached(elapsed)) {
                         progressSchedule.advancePast(elapsed);
+                        var progressRuntime = runtime.snapshot();
+                        Duration wallInterval = progressWallClock.sincePreviousProgress();
                         printProgress(
                                 progressOutput,
                                 "progress=" + elapsed,
-                                runtime.snapshot(),
+                                progressRuntime,
                                 input,
-                                profile);
+                                profile,
+                                manifestCatalog,
+                                Optional.of(wallInterval));
                     }
                 });
             } catch (TerminalReached reached) {
@@ -222,7 +240,8 @@ public final class DspFullDayAnalysisRunner {
                     currentRuntime,
                     completedServiceCentres,
                     input,
-                    profile);
+                    profile,
+                    manifestCatalog);
         }
 
         var executionSnapshot = driver.snapshot();
@@ -230,7 +249,8 @@ public final class DspFullDayAnalysisRunner {
                 executionSnapshot.requestedTimeScale(),
                 executionSnapshot.achievedTimeScale());
         var finalRuntime = runtime.snapshot();
-        printProgress(progressOutput, "final", finalRuntime, input, profile);
+        printProgress(progressOutput, "final", finalRuntime, input, profile,
+                manifestCatalog, Optional.empty());
         DspFullDayAnalysisReport report = reportFactory.create(finalRuntime, input, profile);
         reportWriter.write(report, outputPath, overwrite);
         if (inspectionPath.isPresent()) {
@@ -247,11 +267,31 @@ public final class DspFullDayAnalysisRunner {
             String milestone,
             DspFullDayAnalysisRuntimeSnapshot runtime,
             DspFullDayLoadedInput input,
-            DspUncalibratedFullDayProfile profile) {
+            DspUncalibratedFullDayProfile profile,
+            InboundToteManifestCatalog manifestCatalog,
+            Optional<Duration> wallInterval) {
         try {
-            progressOutput.print(
-                    milestone,
-                    progressFormatter.describe(DspFullDayProgressSnapshot.from(runtime, input, profile)));
+            List<String> lines = new ArrayList<>(progressFormatter.describe(
+                    DspFullDayProgressSnapshot.from(runtime, input, profile)));
+            int transportIndex = -1;
+            for (int index = 0; index < lines.size(); index++) {
+                if (lines.get(index).startsWith("Transport: ")) {
+                    transportIndex = index;
+                    break;
+                }
+            }
+            if (transportIndex < 0) {
+                throw new IllegalStateException("progress formatter omitted transport section");
+            }
+            lines.add(transportIndex + 1, inboundTotesInFlight(runtime.lifecycle(), manifestCatalog));
+            lines.add(transportIndex + 2, closedOutboundTotesByServiceCentre(
+                    runtime.p2pLines().stream().map(line -> line.outboundAllocation()).toList(),
+                    runtime.metrics().serviceCentres().stream()
+                            .map(centre -> centre.serviceCentreId()).toList()));
+            if (wallInterval.isPresent()) {
+                lines.add(2, "WallClock: sincePreviousProgress=" + wallInterval.orElseThrow());
+            }
+            progressOutput.print(milestone, List.copyOf(lines));
         } catch (IOException exception) {
             throw new ProgressOutputFailure(exception);
         }
@@ -262,7 +302,8 @@ public final class DspFullDayAnalysisRunner {
             DspFullDayAnalysisRuntimeSnapshot runtime,
             Set<String> completedServiceCentres,
             DspFullDayLoadedInput input,
-            DspUncalibratedFullDayProfile profile) {
+            DspUncalibratedFullDayProfile profile,
+            InboundToteManifestCatalog manifestCatalog) {
         for (var completion : runtime.completions()) {
             if (completion.complete() && completedServiceCentres.add(completion.serviceCentreId())) {
                 printProgress(
@@ -270,9 +311,66 @@ public final class DspFullDayAnalysisRunner {
                         "completion=" + completion.serviceCentreId(),
                         runtime,
                         input,
-                        profile);
+                        profile,
+                        manifestCatalog,
+                        Optional.empty());
             }
         }
+    }
+
+    static String inboundTotesInFlight(
+            PhysicalToteLifecycleSnapshot lifecycle,
+            InboundToteManifestCatalog manifestCatalog) {
+        if (lifecycle == null || manifestCatalog == null) {
+            throw new IllegalArgumentException("inbound in-flight values must not be null");
+        }
+        int adapted = 0;
+        int fullPack = 0;
+        int associated = 0;
+        Set<PhysicalToteId> counted = new HashSet<>();
+        for (var assignment : lifecycle.assignments()) {
+            if (!assignment.active()
+                    || (assignment.stage() != PhysicalToteAssignmentStage.INBOUND_PACK
+                            && assignment.stage() != PhysicalToteAssignmentStage.PRE_P2P)
+                    || !counted.add(assignment.physicalToteId())) {
+                continue;
+            }
+            var manifest = manifestCatalog.findByPhysicalToteId(assignment.physicalToteId());
+            if (manifest.isEmpty()) {
+                // Generated EMPTY pre-P2P totes have no inbound manifest.
+                continue;
+            }
+            OrderType orderType = manifest.orElseThrow().orderType();
+            switch (orderType) {
+                case ADAPTED -> adapted++;
+                case FULL_PACK -> fullPack++;
+                case ASSOCIATED -> associated++;
+                case EMPTY -> throw new IllegalStateException("EMPTY inbound manifest is invalid");
+            }
+        }
+        return "InboundReleasedNotConsumed: adapted=" + adapted
+                + " fullPack=" + fullPack
+                + " associated=" + associated;
+    }
+
+    static String closedOutboundTotesByServiceCentre(
+            List<OutboundAllocationSnapshot> allocations,
+            List<String> serviceCentreIds) {
+        if (allocations == null || serviceCentreIds == null) {
+            throw new IllegalArgumentException("closed outbound count values must not be null");
+        }
+        Map<String, Integer> counts = new TreeMap<>();
+        for (String serviceCentreId : serviceCentreIds) {
+            counts.put(serviceCentreId, 0);
+        }
+        for (OutboundAllocationSnapshot allocation : allocations) {
+            for (var tote : allocation.closedTotes()) {
+                counts.merge(tote.serviceCentreId().orElseThrow(), 1, Integer::sum);
+            }
+        }
+        StringBuilder line = new StringBuilder("ClosedOutboundTotesByServiceCentre:");
+        counts.forEach((id, count) -> line.append(' ').append(id).append('=').append(count));
+        return line.toString();
     }
 
     private static List<String> failureLines(Throwable failure) {
@@ -397,6 +495,26 @@ public final class DspFullDayAnalysisRunner {
             while (!elapsed.minus(nextThreshold).isNegative()) {
                 nextThreshold = nextThreshold.plus(interval);
             }
+        }
+    }
+
+    private static final class ProgressWallClock {
+        private final LongSupplier monotonicNanos;
+        private long previousProgressNanos;
+
+        private ProgressWallClock(LongSupplier monotonicNanos) {
+            this.monotonicNanos = monotonicNanos;
+            this.previousProgressNanos = monotonicNanos.getAsLong();
+        }
+
+        private Duration sincePreviousProgress() {
+            long now = monotonicNanos.getAsLong();
+            if (now < previousProgressNanos) {
+                throw new IllegalStateException("monotonic clock moved backwards");
+            }
+            Duration interval = Duration.ofNanos(now - previousProgressNanos);
+            previousProgressNanos = now;
+            return interval;
         }
     }
 }

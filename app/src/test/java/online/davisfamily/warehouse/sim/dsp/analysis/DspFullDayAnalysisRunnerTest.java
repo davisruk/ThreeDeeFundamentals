@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -22,6 +23,18 @@ import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportTestSupport;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
+import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteClosureReason;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
 class DspFullDayAnalysisRunnerTest {
 
@@ -100,10 +113,81 @@ class DspFullDayAnalysisRunnerTest {
         assertTrue(progress.lastIndexOf("[dsp-full-day:final]")
                 > progress.lastIndexOf("[dsp-full-day:progress=PT18H]"));
         assertFalse(progress.contains("unfinishedIdentities"));
+        assertTrue(progress.contains("InboundReleasedNotConsumed: "));
+        assertTrue(progress.contains("ClosedOutboundTotesByServiceCentre: "));
         assertEquals(
                 progress,
                 consoleBytes.toString(StandardCharsets.UTF_8));
         assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, report.state());
+    }
+
+    @Test
+    void shouldCountReleasedInboundTotesUntilTheirConsumption() {
+        InboundToteManifestCatalog manifests = new InboundToteManifestCatalog(List.of(
+                manifest("adapted", OrderType.ADAPTED),
+                manifest("full-pack", OrderType.FULL_PACK),
+                manifest("associated", OrderType.ASSOCIATED),
+                manifest("unreleased", OrderType.FULL_PACK)));
+        InboundToteLifecycleController lifecycle = new InboundToteLifecycleController(
+                new PhysicalToteLifecycleLedger(), manifests);
+        lifecycle.activate(new PhysicalToteId("adapted"), Duration.ZERO);
+        lifecycle.activate(new PhysicalToteId("full-pack"), Duration.ZERO);
+        lifecycle.activate(new PhysicalToteId("associated"), Duration.ZERO);
+
+        assertEquals("InboundReleasedNotConsumed: adapted=1 fullPack=1 associated=1",
+                DspFullDayAnalysisRunner.inboundTotesInFlight(lifecycle.snapshot(), manifests));
+        lifecycle.advanceToPreP2p(new PhysicalToteId("full-pack"), Duration.ofSeconds(1));
+        lifecycle.consumeAtAdapting(new PhysicalToteId("adapted"), Duration.ofSeconds(1));
+        assertEquals("InboundReleasedNotConsumed: adapted=0 fullPack=1 associated=1",
+                DspFullDayAnalysisRunner.inboundTotesInFlight(lifecycle.snapshot(), manifests));
+        lifecycle.consumeAtP2p(new PhysicalToteId("full-pack"), Duration.ofSeconds(2));
+        assertEquals("InboundReleasedNotConsumed: adapted=0 fullPack=0 associated=1",
+                DspFullDayAnalysisRunner.inboundTotesInFlight(lifecycle.snapshot(), manifests));
+        lifecycle.advanceToPreP2p(new PhysicalToteId("associated"), Duration.ofSeconds(2));
+        lifecycle.consumeAtP2p(new PhysicalToteId("associated"), Duration.ofSeconds(3));
+        assertEquals("InboundReleasedNotConsumed: adapted=0 fullPack=0 associated=0",
+                DspFullDayAnalysisRunner.inboundTotesInFlight(lifecycle.snapshot(), manifests));
+        assertThrows(IllegalArgumentException.class,
+                () -> DspFullDayAnalysisRunner.inboundTotesInFlight(null, manifests));
+    }
+
+    @Test
+    void shouldCountOnlyClosedOutboundTotesByServiceCentreAcrossLinesIncludingZeroCentres() {
+        OutboundAllocationSnapshot firstLine = new OutboundAllocationSnapshot(
+                Map.of(new P2pLineId("line-1"), outboundTote("open", "line-1", "104", false)),
+                List.of(outboundTote("closed-1", "line-1", "104", true)), List.of());
+        OutboundAllocationSnapshot secondLine = new OutboundAllocationSnapshot(Map.of(),
+                List.of(outboundTote("closed-2", "line-2", "104", true),
+                        outboundTote("closed-3", "line-2", "108", true)), List.of());
+
+        assertEquals("ClosedOutboundTotesByServiceCentre: 104=2 108=1 109=0",
+                DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                        List.of(firstLine, secondLine), List.of("109", "108", "104")));
+    }
+
+    @Test
+    void shouldLogMonotonicWallIntervalAtEachConfiguredProgressMilestone(@TempDir Path directory)
+            throws Exception {
+        DspUncalibratedFullDayProfile profile = slowProfile(directory, Duration.ofHours(1), 3);
+        DspFullDayLoadedInput input = DspFullDayReportTestSupport.input(directory, profile);
+        Path progressLog = directory.resolve("wall-interval-progress.log");
+        AtomicLong clock = new AtomicLong();
+
+        new DspFullDayAnalysisRunner(
+                () -> clock.addAndGet(1_000_000L),
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))
+                .run(input, profile, directory.resolve("wall-interval-report.json"),
+                        Optional.empty(), Optional.of(progressLog), Duration.ofHours(2), false);
+
+        List<String> lines = Files.readAllLines(progressLog);
+        int first = lines.indexOf("[dsp-full-day:progress=PT2H]");
+        int second = lines.indexOf("[dsp-full-day:progress=PT4H]");
+        assertTrue(first >= 0);
+        assertTrue(second > first);
+        assertEquals("WallClock: sincePreviousProgress=PT0.002S", lines.get(first + 3));
+        assertEquals("WallClock: sincePreviousProgress=PT0.003S", lines.get(second + 3));
+        assertEquals(lines.stream().filter(line -> line.startsWith("[dsp-full-day:progress=")).count(),
+                lines.stream().filter(line -> line.startsWith("WallClock: ")).count());
     }
 
     @Test
@@ -197,17 +281,20 @@ class DspFullDayAnalysisRunnerTest {
                 secondDirectory, secondProfile);
         AtomicLong firstClock = new AtomicLong();
         AtomicLong secondClock = new AtomicLong();
+        ByteArrayOutputStream firstProgress = new ByteArrayOutputStream();
 
         DspFullDayAnalysisReport first = new DspFullDayAnalysisRunner(
                 () -> firstClock.addAndGet(1_000_000L),
-                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))
+                new PrintStream(firstProgress, true, StandardCharsets.UTF_8))
                 .run(firstInput, firstProfile, firstOutput, false);
         DspFullDayAnalysisReport second = new DspFullDayAnalysisRunner(
                 () -> secondClock.addAndGet(1_000_000L),
                 new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))
                 .run(secondInput, secondProfile, secondOutput, false);
 
-        long batchCount = firstClock.get() / 2_000_000L;
+        long progressClockReads = firstProgress.toString(StandardCharsets.UTF_8).lines()
+                .filter(line -> line.startsWith("[dsp-full-day:progress=")).count();
+        long batchCount = (firstClock.get() / 1_000_000L - progressClockReads - 1L) / 2L;
         double expectedSpeed = first.metrics().observedSimulationDuration().toNanos()
                 / (double) (batchCount * 1_000_000L);
         assertEquals(1d, first.metrics().requestedExecutionSpeed());
@@ -280,6 +367,18 @@ class DspFullDayAnalysisRunnerTest {
                 baseline.p2pLineDefinitions(),
                 baseline.prlCountPerLine(),
                 baseline.timetable());
+    }
+
+    private static InboundToteManifest manifest(String id, OrderType orderType) {
+        return new InboundToteManifest(new PhysicalToteId(id), new OrderSheetKey("order-" + id, 1),
+                orderType, "104", List.of(new DspOrderItem("line-" + id, "product", 1)), 1);
+    }
+
+    private static OutboundToteSnapshot outboundTote(
+            String id, String lineId, String serviceCentreId, boolean closed) {
+        return new OutboundToteSnapshot(new PhysicalToteId(id), new P2pLineId(lineId),
+                Optional.of(serviceCentreId), Optional.of("pharmacy"), 2, List.of(),
+                closed ? Optional.of(OutboundToteClosureReason.HARD_CUTOFF) : Optional.empty());
     }
 
     private static int occurrences(String value, String searched) {
