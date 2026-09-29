@@ -33,6 +33,13 @@ public class AdaptedLineStore {
         layout.stage(line, sourceOrderSheetKey, sourceServiceCentreId);
     }
 
+    public void stageAll(
+            List<DspOrderItem> lines,
+            OrderSheetKey sourceOrderSheetKey,
+            String sourceServiceCentreId) {
+        layout.stageAll(lines, sourceOrderSheetKey, sourceServiceCentreId);
+    }
+
     public void stage(AdaptedLineRecord record) {
         if (record == null) {
             throw new IllegalArgumentException("record must not be null");
@@ -65,5 +72,9 @@ public class AdaptedLineStore {
 
     public AdaptedLineStoreSnapshot snapshot() {
         return layout.snapshot();
+    }
+
+    public List<AdaptingBinSnapshot> binSnapshots() {
+        return layout.binSnapshots();
     }
 }

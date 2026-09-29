@@ -2,10 +2,15 @@ package online.davisfamily.warehouse.sim.dsp.adapting;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -156,6 +161,183 @@ class AdaptedLineStoreTest {
         AdaptedLineRecord record = store.take(PreparedLineKey.forPreparedLine(line)).orElseThrow();
         assertEquals(new PreparedLineKey("associated-target", "line-1"), record.key());
         assertEquals(new OrderSheetKey("adapted-source", 7), record.sourceOrderSheetKey());
+    }
+
+    @Test
+    void shouldKeepInterleavedSheetsInDistinctBinsAndCollectOnlyRequestedSheet() {
+        DspOrderItem a1 = adaptedLine("a1", "target", "0000310");
+        DspOrderItem b1 = adaptedLine("b1", "target", "0000310");
+        DspOrderItem a2 = adaptedLine("a2", "target", "0000310");
+        DspOrderItem b2 = adaptedLine("b2", "target", "0000310");
+        OrderSheetKey first = new OrderSheetKey("target", 1);
+        OrderSheetKey second = new OrderSheetKey("target", 2);
+        AdaptedLineStore store = strictStore(new AdaptingStorageConfig(2, 2, 2),
+                Map.of(key(a1), first, key(a2), first, key(b1), second, key(b2), second));
+
+        store.stageAll(List.of(a1, b1, a2, b2), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
+
+        List<AdaptingBinSnapshot> bins = store.binSnapshots();
+        assertEquals(List.of(first, second), bins.stream().map(AdaptingBinSnapshot::targetOrderSheetKey).toList());
+        assertNotEquals(bins.get(0).location(), bins.get(1).location());
+        assertEquals(List.of(key(a1), key(a2)), binKeys(bins.get(0)));
+        assertEquals(List.of(key(b1), key(b2)), binKeys(bins.get(1)));
+        assertEquals(2, store.snapshot().activeBinCount());
+
+        assertEquals(List.of(key(a2), key(a1)), store.takeAll(List.of(key(a2), key(a1)))
+                .stream().map(AdaptedLineRecord::key).toList());
+        assertEquals(List.of(second), store.binSnapshots().stream()
+                .map(AdaptingBinSnapshot::targetOrderSheetKey).toList());
+        assertTrue(store.contains(key(b1)));
+        assertTrue(store.contains(key(b2)));
+    }
+
+    @Test
+    void shouldLinkOverflowBinsAndAppendLaterSourceToNonFullTail() {
+        DspOrderItem a1 = adaptedLine("a1", "target", "0000310");
+        DspOrderItem a2 = adaptedLine("a2", "target", "0000310");
+        DspOrderItem a3 = adaptedLine("a3", "target", "0000310");
+        DspOrderItem a4 = adaptedLine("a4", "target", "0000310");
+        DspOrderItem a5 = adaptedLine("a5", "target", "0000310");
+        DspOrderItem a6 = adaptedLine("a6", "target", "0000310");
+        DspOrderItem b1 = adaptedLine("b1", "target", "0000310");
+        DspOrderItem b2 = adaptedLine("b2", "target", "0000310");
+        DspOrderItem b3 = adaptedLine("b3", "target", "0000310");
+        DspOrderItem b4 = adaptedLine("b4", "target", "0000310");
+        OrderSheetKey first = new OrderSheetKey("target", 1);
+        OrderSheetKey second = new OrderSheetKey("target", 2);
+        Map<PreparedLineKey, OrderSheetKey> assignments = new LinkedHashMap<>();
+        for (DspOrderItem line : List.of(a1, a2, a3, a4, a5, a6)) {
+            assignments.put(key(line), first);
+        }
+        for (DspOrderItem line : List.of(b1, b2, b3, b4)) {
+            assignments.put(key(line), second);
+        }
+        AdaptedLineStore store = strictStore(new AdaptingStorageConfig(2, 2, 2), assignments);
+
+        store.stageAll(List.of(a1, a2, b1, b2, a3, a4, b3, b4, a5),
+                SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
+        List<AdaptingBinSnapshot> firstBins = store.binSnapshots().stream()
+                .filter(bin -> bin.targetOrderSheetKey().equals(first)).toList();
+
+        assertEquals(List.of(1, 2, 3), firstBins.stream().map(AdaptingBinSnapshot::ordinal).toList());
+        assertEquals(List.of(2, 2, 1), firstBins.stream()
+                .map(bin -> bin.stagedRecords().size()).toList());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 0, 0, 0),
+                firstBins.get(0).location());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 0, 1, 0),
+                firstBins.get(1).location());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 1, 0, 0),
+                firstBins.get(2).location());
+        assertEquals(java.util.Optional.of(firstBins.get(1).location()), firstBins.get(0).nextLocation());
+        assertEquals(java.util.Optional.of(firstBins.get(2).location()), firstBins.get(1).nextLocation());
+        assertTrue(firstBins.get(2).nextLocation().isEmpty());
+
+        store.stageAll(List.of(a6), new OrderSheetKey("later-source", 1), SOURCE_SERVICE_CENTRE);
+        List<AdaptingBinSnapshot> after = store.binSnapshots().stream()
+                .filter(bin -> bin.targetOrderSheetKey().equals(first)).toList();
+        assertEquals(3, after.size());
+        assertEquals(firstBins.get(2).location(), after.get(2).location());
+        assertEquals(List.of(key(a5), key(a6)), binKeys(after.get(2)));
+        assertEquals(new OrderSheetKey("later-source", 1), after.get(2).stagedRecords().get(1).sourceOrderSheetKey());
+
+        store.takeAll(List.of(key(a1), key(a2)));
+        List<AdaptingBinSnapshot> withEmptyPredecessor = store.binSnapshots().stream()
+                .filter(bin -> bin.targetOrderSheetKey().equals(first)).toList();
+        assertEquals(3, withEmptyPredecessor.size());
+        assertTrue(withEmptyPredecessor.getFirst().stagedRecords().isEmpty());
+        assertEquals(java.util.Optional.of(withEmptyPredecessor.get(1).location()),
+                withEmptyPredecessor.getFirst().nextLocation());
+        assertEquals(8, store.snapshot().stagedLineCount());
+        assertEquals(4, store.snapshot().activeBinCount());
+
+        store.takeAll(List.of(key(a3), key(a4), key(a5), key(a6)));
+        assertEquals(List.of(second), store.binSnapshots().stream()
+                .map(AdaptingBinSnapshot::targetOrderSheetKey).distinct().toList());
+    }
+
+    @Test
+    void shouldValidateWholeStoreVisitWithoutMovingCoordinatesOrInvalidatingSnapshots() {
+        DspOrderItem first = adaptedLine("first", "target", "0000310");
+        DspOrderItem second = adaptedLine("second", "target", "0000310");
+        DspOrderItem third = adaptedLine("third", "target", "0000310");
+        DspOrderItem wrongPharmacy = adaptedLine("wrong", "target", "0000388");
+        DspOrderItem missing = adaptedLine("missing", "target", "0000310");
+        OrderSheetKey sheet = new OrderSheetKey("target", 1);
+        AdaptedLineStore store = strictStore(new AdaptingStorageConfig(2, 2, 2),
+                Map.of(key(first), sheet, key(second), sheet, key(third), sheet,
+                        key(wrongPharmacy), sheet));
+        store.stageAll(List.of(first), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
+        List<AdaptingBinSnapshot> before = store.binSnapshots();
+
+        assertThrows(IllegalStateException.class, () -> store.stageAll(List.of(second, missing),
+                SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE));
+        assertThrows(IllegalStateException.class, () -> store.stageAll(List.of(second, second),
+                SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE));
+        assertThrows(IllegalStateException.class, () -> store.stageAll(List.of(second, first),
+                SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE));
+        assertThrows(IllegalStateException.class, () -> store.stageAll(List.of(second, wrongPharmacy),
+                SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE));
+        assertSame(before, store.binSnapshots());
+        assertEquals(1, store.snapshot().stagedLineCount());
+
+        store.stageAll(List.of(second, third), SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
+        List<AdaptingBinSnapshot> after = store.binSnapshots();
+        assertNotSame(before, after);
+        assertEquals(List.of(2, 1), after.stream().map(bin -> bin.stagedRecords().size()).toList());
+        assertEquals(new AdaptingStorageLocation("0000310", new AdaptingBenchId("bench-1"), 0, 0, 1),
+                after.get(1).location());
+        assertThrows(IllegalStateException.class, () -> store.stage(
+                AdaptedLineRecord.fromPreparedLine(missing, SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE)));
+    }
+
+    @Test
+    void shouldPrevalidateCollectAndCacheImmutableInspectionAcrossUnrelatedGroups() {
+        Map<PreparedLineKey, OrderSheetKey> assignments = new LinkedHashMap<>();
+        List<DspOrderItem> lines = new java.util.ArrayList<>();
+        for (int index = 0; index < 30; index++) {
+            DspOrderItem line = adaptedLine("line-" + index, "target-" + index, "0000310");
+            lines.add(line);
+            assignments.put(key(line), new OrderSheetKey("target-" + index, 1));
+        }
+        AdaptedLineStore store = strictStore(new AdaptingStorageConfig(2, 2, 2), assignments);
+        store.stageAll(lines, SOURCE_ORDER_SHEET, SOURCE_SERVICE_CENTRE);
+        List<AdaptingBinSnapshot> before = store.binSnapshots();
+        assertSame(before, store.binSnapshots());
+        PreparedLineKey first = key(lines.getFirst());
+        PreparedLineKey second = key(lines.get(1));
+
+        assertThrows(IllegalStateException.class, () -> store.takeAll(List.of(first, first)));
+        assertThrows(IllegalStateException.class, () -> store.takeAll(List.of(first,
+                new PreparedLineKey("missing", "missing"))));
+        assertSame(before, store.binSnapshots());
+        assertEquals(30, store.snapshot().stagedLineCount());
+        assertThrows(UnsupportedOperationException.class, () -> before.clear());
+        assertThrows(UnsupportedOperationException.class, () -> before.getFirst().stagedRecords().clear());
+
+        assertEquals(List.of(second, first), store.takeAll(List.of(second, first))
+                .stream().map(AdaptedLineRecord::key).toList());
+        List<AdaptingBinSnapshot> after = store.binSnapshots();
+        assertNotSame(before, after);
+        assertEquals(28, after.size());
+        assertEquals(before.subList(2, 30), after);
+        assertFalse(store.contains(first));
+        assertFalse(store.contains(second));
+        assertSame(after, store.binSnapshots());
+    }
+
+    private static AdaptedLineStore strictStore(AdaptingStorageConfig config,
+            Map<PreparedLineKey, OrderSheetKey> assignments) {
+        return new AdaptedLineStore(new AdaptingStorageLayout(config,
+                storageMap("0000310", "bench-1", "0000388", "bench-2"),
+                new AdaptingTargetSheetCatalog(assignments)));
+    }
+
+    private static PreparedLineKey key(DspOrderItem line) {
+        return PreparedLineKey.forPreparedLine(line);
+    }
+
+    private static List<PreparedLineKey> binKeys(AdaptingBinSnapshot bin) {
+        return bin.stagedRecords().stream().map(AdaptedLineRecord::key).toList();
     }
 
     private static void stage(AdaptedLineStore store, DspOrderItem line) {

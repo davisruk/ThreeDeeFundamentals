@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -113,6 +114,40 @@ class AdaptingBenchTest {
 
         bench.clearBlocked();
         assertEquals(AdaptingBenchState.IDLE, bench.state());
+    }
+
+    @Test
+    void shouldStageWholeStoreVisitBeforeCompletionAndBlockWithoutPartialStaging() {
+        DspOrderItem first = adaptedLine("first", "target", "0000310");
+        DspOrderItem second = adaptedLine("second", "target", "0000310");
+        DspOrderItem missing = adaptedLine("missing", "target", "0000310");
+        OrderSheetKey sheet = new OrderSheetKey("target", 1);
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                new AdaptingStorageConfig(2, 2, 2),
+                storageMap("0000310", "bench-1"),
+                new AdaptingTargetSheetCatalog(Map.of(
+                        PreparedLineKey.forPreparedLine(first), sheet,
+                        PreparedLineKey.forPreparedLine(second), sheet))));
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
+
+        bench.acceptVisit(AdaptingVisit.store(new PhysicalToteId("bad-store"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID, List.of(first, missing)));
+        bench.startProcessing();
+        assertEquals(AdaptingBenchState.BLOCKED, bench.state());
+        assertFalse(bench.consumeCompletion().isPresent());
+        assertEquals(0, store.snapshot().stagedLineCount());
+        assertTrue(store.binSnapshots().isEmpty());
+
+        bench.clearBlocked();
+        bench.acceptVisit(AdaptingVisit.store(new PhysicalToteId("good-store"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID, List.of(first, second)));
+        bench.startProcessing();
+        assertEquals(AdaptingBenchState.COMPLETED, bench.state());
+        assertEquals(2, store.snapshot().stagedLineCount());
+        assertEquals(List.of(PreparedLineKey.forPreparedLine(first), PreparedLineKey.forPreparedLine(second)),
+                store.binSnapshots().getFirst().stagedRecords().stream()
+                        .map(AdaptedLineRecord::key).toList());
+        assertEquals(AdaptingVisitType.STORE, bench.consumeCompletion().orElseThrow().visit().visitType());
     }
 
     @Test
