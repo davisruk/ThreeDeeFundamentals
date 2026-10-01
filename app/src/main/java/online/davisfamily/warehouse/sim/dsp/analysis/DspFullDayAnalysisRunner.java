@@ -360,16 +360,23 @@ public final class DspFullDayAnalysisRunner {
             throw new IllegalArgumentException("closed outbound count values must not be null");
         }
         Map<String, Integer> counts = new TreeMap<>();
+        Map<String, Integer> bagCounts = new TreeMap<>();
         for (String serviceCentreId : serviceCentreIds) {
             counts.put(serviceCentreId, 0);
+            bagCounts.put(serviceCentreId, 0);
         }
         for (OutboundAllocationSnapshot allocation : allocations) {
             for (var tote : allocation.closedTotes()) {
                 counts.merge(tote.serviceCentreId().orElseThrow(), 1, Integer::sum);
             }
+            for (var bag : allocation.allocatedBags()) {
+                bagCounts.merge(bag.plannedBag().serviceCentreId(), 1, Integer::sum);
+            }
         }
         StringBuilder line = new StringBuilder("ClosedOutboundTotesByServiceCentre:");
         counts.forEach((id, count) -> line.append(' ').append(id).append('=').append(count));
+        line.append(" | AllocatedBagsByServiceCentre:");
+        bagCounts.forEach((id, count) -> line.append(' ').append(id).append('=').append(count));
         return line.toString();
     }
 

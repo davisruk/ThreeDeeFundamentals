@@ -191,10 +191,13 @@ overflow sheet for incoming Sheet 001.
 ### 5.5 Deferred unmatched inbound tote scenario
 
 In production, packs for one or more prescriptions may arrive in two physical
-totes even though only one 12N is received. That 12N describes all packs in both
-totes and identifies only one of the physical tote barcodes. Both totes are
-scanned into the OSR; the other tote has no matching 12N. Upstream monitoring
-detects this condition, and operators remove both totes, transfer the packs
+totes even though only one 12N is received. In this case the wholesaler sends
+two ASNs for the two physical totes, but the upstream 12N producer waits for
+all lines of the original purchase order and combines them into one 12N.
+That 12N describes all packs in both totes and identifies only one of the
+physical tote barcodes. Both totes are scanned into the OSR; the other tote
+has no matching 12N. Upstream monitoring detects this condition, and operators
+remove both totes, transfer the packs
 from the tote without a 12N into the tote identified by the 12N, then return
 that tote to the OSR.
 
@@ -265,18 +268,31 @@ Cencora inbound tote
 
 Adapting stores terminal prepared-line outcomes independently of the source tote. The source tote does not continue to P2P.
 
-For executable full-day work, Adapting STORE places each prepared ADAPTED line in a
-bin group owned by its fulfilment store (`pharmacyId`) and exact fulfilment
-`OrderSheetKey` (order ID and sheet number). The target sheet is resolved once
-from the validated planned pack slot, not from `referenceSheetNumber` or the
-ADAPTED source tote's sheet. Each group has its own one-based linked overflow
-bins; a new bin is allocated only after the current bin has accepted
-`AdaptingStorageConfig.linesPerBin()` prepared lines. Bins for different
-fulfilment sheets or stores never share contents. Full-day bin identity is
-store/order/sheet/overflow ordinal, without bench, rack, or shelf coordinates.
-Stored records retain their ADAPTED source sheet and service-centre provenance;
-the fulfilment sheet identifies storage and collection, not source provenance.
-ASSOCIATED and EMPTY COLLECT visits request only their own prepared-line keys.
+The required physical blue-bin group is owned by the fulfilment store
+(`pharmacyId`) and the ADAPTED line's `referenceOrderId`, which identifies the
+ASSOCIATED/EMPTY order. It is **not** owned by either the ADAPTED source tote's
+sheet or one ASSOCIATED/EMPTY sheet. A group may require linked overflow bins,
+and bins for different stores or referenced orders must never share contents.
+Once all ADAPTED work feeding that referenced order has completed, the first
+ASSOCIATED/EMPTY tote for the order to collect at Adapting receives the entire
+contents of that order's blue-bin group, even if some packs are intended for a
+different incoming sheet of the same order. Later sheets do not receive those
+already-tipped packs at Adapting.
+
+The intended ASSOCIATED/EMPTY fulfilment `OrderSheetKey` of each line remains
+distinct from physical bin ownership. It is resolved from the validated
+fulfilment line/planned pack slot, not from the ADAPTED source tote's sheet or
+`referenceSheetNumber`; source sheet, line, and service-centre provenance also
+remain available. These identities are needed to detect packs tipped into the
+wrong incoming sheet and to explain missing packs later at P2P.
+
+**Current implementation divergence:** full-day storage and collection still
+use store/order/sheet-owned bins and request only the collecting sheet's
+prepared-line keys. That deliberately sheet-sorted behavior is superseded by
+the order-owned physical-bin requirement above, but remains in code until a
+separately approved cross-boundary implementation plan replaces it. The
+completed sheet-owned bin plan records historical implementation, not the new
+production behavior.
 
 ### 8.2 FULL_PACK
 
@@ -482,6 +498,24 @@ The lifecycle foundation must allow:
 - the tote to continue outbound after Exceptions regardless of resolution outcome.
 
 Detailed Exception behavior remains defined by `docs/machines/exceptions-station-requirements.md` and is implemented only after this lifecycle foundation exists.
+
+An order-wide blue-bin tip can put packs intended for incoming sheet 002 into
+the earlier collecting sheet 001 tote. At P2P, a pack not belonging to the
+arriving tote's incoming `(orderId, sheetNumber)` is not to be claimed for that
+tote's bagging work; it runs off the PDC into a collection tote for later
+Exceptions handling. The later sheet can therefore be missing those physical
+packs. Its available packs are bagged and labelled, and any outbound physical
+tote receiving an affected bag is marked for exception handling. Missing packs
+must be counted distinctly from exception-marked bags or totes. If a bag has
+no available physical packs, no empty bag is fabricated at P2P; the future
+Exceptions Station creates it. This scenario is a physical misallocation, not
+an upstream short pick: the excess packs exist in the DSP collection tote.
+
+Until Exceptions is implemented, full-day reporting must distinguish output
+closed with known exception work from ordinary `P2P_OUTPUT_CLOSED` (proposed
+label: `P2P_OUTPUT_CLOSED_WITH_EXCEPTION`). The exact terminal-completion and
+zero-pack-bag accounting contract for that interim milestone remains to be
+settled in its own plan; the current simulator has only the ordinary milestone.
 
 ## 15. Rendering And Performance
 

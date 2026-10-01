@@ -170,7 +170,10 @@ When Cencora releases a service centre, it sends:
 1. all ADAPTED physical totes first;
 2. then FULL_PACK and ASSOCIATED physical totes.
 
-This is upstream supply order, not a global DSP preparation phase and not a permanent processing priority once totes are in OSR.
+This is upstream supply order, not a global DSP preparation phase. The
+additional downstream preference under limited processing capacity is stated
+in Section 8; upstream supply sequence alone does not prove downstream
+completion.
 
 If the OSR fills during ADAPTED supply, remaining ADAPTED and later fulfilment totes stay upstream until capacity becomes available. FULL_PACK/ASSOCIATED supply must not overtake remaining ADAPTED supply for that service centre.
 
@@ -213,6 +216,8 @@ ADAPTED and FULL_PACK work may process concurrently for authorized service centr
 An ADAPTED tote stored in OSR is eligible when its required station admissions are available. It may visit Third Party and then Adapting STORE.
 
 Its completion publishes terminal prepared-line outcomes for future ASSOCIATED/EMPTY work.
+An ADAPTED tote need not wait for any corresponding ASSOCIATED tote to become
+ready; it can normally be processed first.
 
 ### 7.3 FULL_PACK
 
@@ -220,18 +225,29 @@ FULL_PACK may be released while ADAPTED work is being processed. It does not wai
 
 ### 7.4 ASSOCIATED and EMPTY
 
-ASSOCIATED and EMPTY become eligible when every one of their own required ADAPTED dependencies has reached a terminal outcome.
+ASSOCIATED and EMPTY may proceed in parallel with other order types, but may
+not reach Adapting COLLECT until **all** ADAPTED work feeding their referenced
+order has completed. This is order-wide preparation completeness, including
+lines intended for other incoming sheets of that same order, not merely the
+arriving sheet's own prepared-line keys. It prevents a first collecting tote
+from draining only part of the order-wide blue-bin group while later ADAPTED
+packs are still being stored.
 
 Terminal outcomes include successful and incomplete preparation. Only successful outcomes add physical packs; incomplete outcomes retain fulfilment/NS metadata.
 
-Dependency readiness is per target order line. Completion of unrelated ADAPTED orders is not required.
+The prepared-line correlation remains per target order line, and unrelated
+referenced orders do not block this order. The additional order-wide
+completeness check applies to all prepared lines sharing this referenced order.
 
-The full-day Adapting storage layout groups executable prepared lines by their
-exact fulfilment store/order/sheet and keeps separate linked bins for overflow.
-This is storage and inspection ownership, not a new scheduling unit:
-STORE still publishes readiness only after completion, and ASSOCIATED/EMPTY
-release still checks each of its own `PreparedLineKey` dependencies. It does
-not change OSR eligibility, candidate ranking, or release decisions.
+Physical blue-bin ownership is by fulfilment store and referenced order, not
+by incoming sheet; all bins for that order are tipped into the first
+ASSOCIATED/EMPTY tote to collect there. Intended sheet provenance remains per
+line. See the lifecycle requirements for the resulting P2P/Exceptions case.
+STORE still publishes readiness only after completion. **Current
+implementation divergence:** operational release still checks only the
+collecting sheet's own `PreparedLineKey` dependencies and current full-day
+storage/collection sorts by sheet. This new order-wide rule is not yet an
+implemented scheduler or station admission guarantee.
 
 EMPTY additionally requires AV02 physical tote admission and consumes no OSR physical capacity before allocation.
 
@@ -248,9 +264,15 @@ line remains for an order, no physical OSR or AV02 tote is created.
 
 ## 8. Candidate Ranking
 
-There is no documented rule that ASSOCIATED/EMPTY must be released ahead of FULL_PACK. Remove that assumption from future scheduling profiles.
+There is no rule that ASSOCIATED/EMPTY must be released ahead of FULL_PACK.
+The newly confirmed operational preference is different: where downstream
+processing capacity is limited and ADAPTED totes are available, give ADAPTED
+work priority. FULL_PACK may process in parallel with ADAPTED for efficiency;
+ASSOCIATED/EMPTY may also process in parallel once their order-wide preparation
+is complete. Do not introduce a global ADAPTED-only phase or wait for
+unrelated orders to finish.
 
-The first implementation shall rank eligible work using pharmacy grouping and deterministic source order:
+The existing implementation ranks eligible work using pharmacy grouping and deterministic source order:
 
 1. remain within an authorized service centre;
 2. prefer the pharmacy already active on the selected P2P line where possible;
@@ -259,6 +281,10 @@ The first implementation shall rank eligible work using pharmacy grouping and de
 5. apply dependency and station-admission checks before release.
 
 Service-centre `orderPriority` must not be reused as individual candidate priority within the group.
+The ADAPTED preference under capacity contention is a newly documented
+requirement, not behavior supplied by the existing candidate ranking. Its
+precise admission/ranking change belongs to the forthcoming cross-boundary
+plan and must not be inferred from this historical first-profile list.
 
 ## 9. P2P Service-Centre Isolation
 
@@ -412,7 +438,15 @@ A service centre is complete only when:
 - required Exception processing is complete;
 - the totes are released from DSP toward Cencora.
 
-Until Exceptions is implemented, the temporary measurable milestone may be output-tote closure at P2P. The contract must later extend without changing identity.
+Until Exceptions is implemented, the temporary measurable milestone may be
+output-tote closure at P2P. Known exception work must not be reported as
+ordinary exception-free `P2P_OUTPUT_CLOSED`; distinguish an output-closed
+outcome with exception work (proposed label
+`P2P_OUTPUT_CLOSED_WITH_EXCEPTION`) and report missing physical packs
+separately. A bag with zero available packs is created only at the future
+Exceptions Station. The interim run-completion treatment of that missing bag
+remains an explicit decision for the implementation plan. The contract must
+later extend without changing identity.
 
 ## 13. Scheduling Policy Framework
 
@@ -678,7 +712,9 @@ These deferrals must remain configurable or behind stable policy boundaries wher
 - Authorized service-centre totes enter through a configurable rate-limited supply stream rather than appearing in OSR as a batch.
 - The 1,200-tote/hour peak and 400-tote/hour representative busy rates are available as baseline configuration.
 - ADAPTED and FULL_PACK can process concurrently.
-- ASSOCIATED/EMPTY eligibility is based only on their own terminal dependencies.
+- ASSOCIATED/EMPTY processing waits for all ADAPTED work feeding their
+  referenced order, including work intended for its other incoming sheets;
+  unrelated orders do not block it.
 - EMPTY is authorized with fulfilment work and obtains its physical tote at AV02.
 - Candidate ranking no longer hardcodes ASSOCIATED/EMPTY before FULL_PACK.
 - Five configurable P2P instances enforce sticky service-centre isolation.

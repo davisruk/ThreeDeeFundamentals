@@ -23,6 +23,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportTestSupport;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
@@ -31,9 +33,11 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.outbound.AllocatedOutboundBag;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteClosureReason;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocation;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
 class DspFullDayAnalysisRunnerTest {
@@ -115,6 +119,9 @@ class DspFullDayAnalysisRunnerTest {
         assertFalse(progress.contains("unfinishedIdentities"));
         assertTrue(progress.contains("InboundReleasedNotConsumed: "));
         assertTrue(progress.contains("ClosedOutboundTotesByServiceCentre: "));
+        assertTrue(progress.lines().filter(line -> line.startsWith(
+                "ClosedOutboundTotesByServiceCentre: ")).allMatch(
+                        line -> line.contains(" | AllocatedBagsByServiceCentre: ")));
         assertEquals(
                 progress,
                 consoleBytes.toString(StandardCharsets.UTF_8));
@@ -152,17 +159,40 @@ class DspFullDayAnalysisRunnerTest {
     }
 
     @Test
-    void shouldCountOnlyClosedOutboundTotesByServiceCentreAcrossLinesIncludingZeroCentres() {
+    void shouldCountClosedOutboundTotesAndAllocatedBagsByServiceCentre() {
+        AllocatedOutboundBag openBag = allocatedBag("open", "104", "open-prescription");
+        AllocatedOutboundBag firstClosedBag = allocatedBag(
+                "closed-1", "104", "first-closed-prescription");
+        AllocatedOutboundBag secondClosedBag = allocatedBag(
+                "closed-2", "104", "second-closed-prescription");
+        AllocatedOutboundBag otherCentreBag = allocatedBag(
+                "closed-3", "108", "other-centre-prescription");
         OutboundAllocationSnapshot firstLine = new OutboundAllocationSnapshot(
-                Map.of(new P2pLineId("line-1"), outboundTote("open", "line-1", "104", false)),
-                List.of(outboundTote("closed-1", "line-1", "104", true)), List.of());
+                Map.of(new P2pLineId("line-1"), outboundTote(
+                        "open", "line-1", "104", false, List.of(openBag))),
+                List.of(outboundTote("closed-1", "line-1", "104", true,
+                        List.of(firstClosedBag))),
+                List.of(openBag, firstClosedBag));
         OutboundAllocationSnapshot secondLine = new OutboundAllocationSnapshot(Map.of(),
-                List.of(outboundTote("closed-2", "line-2", "104", true),
-                        outboundTote("closed-3", "line-2", "108", true)), List.of());
+                List.of(outboundTote("closed-2", "line-2", "104", true,
+                                List.of(secondClosedBag)),
+                        outboundTote("closed-3", "line-2", "108", true,
+                                List.of(otherCentreBag))),
+                List.of(secondClosedBag, otherCentreBag));
 
-        assertEquals("ClosedOutboundTotesByServiceCentre: 104=2 108=1 109=0",
+        String result = DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                List.of(firstLine, secondLine), List.of("109", "108", "104"));
+        String originalToteSegment = "ClosedOutboundTotesByServiceCentre: 104=2 108=1 109=0";
+        assertTrue(result.startsWith(originalToteSegment + " | "));
+        assertEquals(originalToteSegment
+                + " | AllocatedBagsByServiceCentre: 104=3 108=1 109=0", result);
+
+        OutboundAllocationSnapshot empty = new OutboundAllocationSnapshot(
+                Map.of(), List.of(), List.of());
+        assertEquals("ClosedOutboundTotesByServiceCentre: 104=0 108=0"
+                        + " | AllocatedBagsByServiceCentre: 104=0 108=0",
                 DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
-                        List.of(firstLine, secondLine), List.of("109", "108", "104")));
+                        List.of(empty), List.of("108", "104")));
     }
 
     @Test
@@ -375,10 +405,21 @@ class DspFullDayAnalysisRunnerTest {
     }
 
     private static OutboundToteSnapshot outboundTote(
-            String id, String lineId, String serviceCentreId, boolean closed) {
+            String id, String lineId, String serviceCentreId, boolean closed,
+            List<AllocatedOutboundBag> bags) {
         return new OutboundToteSnapshot(new PhysicalToteId(id), new P2pLineId(lineId),
-                Optional.of(serviceCentreId), Optional.of("pharmacy"), 2, List.of(),
+                Optional.of(serviceCentreId), Optional.of("pharmacy"), 2, bags,
                 closed ? Optional.of(OutboundToteClosureReason.HARD_CUTOFF) : Optional.empty());
+    }
+
+    private static AllocatedOutboundBag allocatedBag(
+            String toteId, String serviceCentreId, String prescriptionId) {
+        OrderSheetKey sheet = new OrderSheetKey("order-" + prescriptionId, 1);
+        PlannedBag plannedBag = new PlannedBag(
+                new BagKey(prescriptionId, 1), serviceCentreId, "pharmacy", "patient",
+                prescriptionId, List.of("pack-" + prescriptionId), List.of(sheet));
+        return new AllocatedOutboundBag(plannedBag, new PhysicalToteId(toteId),
+                List.of(new OutputSheetAllocation(sheet, sheet)));
     }
 
     private static int occurrences(String value, String searched) {

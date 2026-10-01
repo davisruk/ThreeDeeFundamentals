@@ -59,6 +59,17 @@ unreadable/missing barcode, automation failure, or another simulated
 operational failure. The simulator may use a simplified configurable
 reason set.
 
+An order-wide Adapting blue-bin tip can also create an exception without a
+short pick: a first ASSOCIATED tote for an order receives prepared packs whose
+intended incoming sheet belongs to a later ASSOCIATED tote for that same
+order. The surplus packs fall off that first tote's PDC into a collection tote
+and are physically present in DSP; the later tote is missing those packs for
+normal P2P bagging. Preserve each pack's intended order/sheet and line
+provenance, and do not classify the collected packs as never supplied by the
+wholesaler. Reconciliation of the collection tote with the incomplete bags is
+future Exceptions Station work, not a reason to hold packs indefinitely on a
+PRL or route an outbound tote back to P2P.
+
 ### 3.2 Propagated exception state
 
 Where an order line enters exception, the simulator shall also make the
@@ -217,6 +228,11 @@ Where an order/bag has outstanding products but **no products are
 available to create the bag**, the tote shall visit the Exceptions
 Station.
 
+For the order-wide blue-bin overpick case, P2P must not invent an empty bag
+when none of that bag's packs are available. Empty-bag creation remains at
+Exceptions. Until that station is implemented, reports must distinguish
+such zero-pack work from an ordinary completed physical bag.
+
 This includes an order consisting entirely of Cencora short-picked
 products or other failures resulting in no product being available for
 the bag.
@@ -295,6 +311,17 @@ state.
 
 The tote-level exception flag is primarily a routing/operational
 indicator and does not mean every bag has an exception.
+
+Where a later ASSOCIATED sheet has some, but not all, planned packs because
+the missing packs fell into the earlier sheet's PDC collection tote, P2P bags
+and labels the available packs and marks the outbound tote(s) carrying the
+affected bag(s) for exception handling. Report the number of missing physical
+packs separately from the number of affected bags or outbound totes. Normal
+bag output that has known missing packs is not exception-free output closure;
+the proposed interim full-day label is
+`P2P_OUTPUT_CLOSED_WITH_EXCEPTION`. The exact interim terminal-completion
+accounting is to be decided before implementation. This addition does not
+implement the Exceptions Station or claim that its work is complete.
 
 A tote shall require an Exceptions Station visit if at least one
 contained bag requires physical exception-station intervention.
