@@ -565,6 +565,53 @@ class DspOperationalReleaseSchedulerTest {
     }
 
     @Test
+    void adaptedFirstRankingKeepsCentrePriorityAndLetsFullPackPassBlockedAdapted() {
+        RouteRequirements adaptingRoute = new RouteRequirements(
+                false, true, false, false, false, StartLocation.OSR);
+        DspOperationalReleaseCandidate adapted = candidate(
+                "adapted-tote",
+                logicalState("adapted-order", 1, OrderType.ADAPTED, "sc-low", 990,
+                        DspOrderLineType.ADAPTED, adaptingRoute),
+                2, OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty());
+        DspOperationalReleaseCandidate fullPack = candidate(
+                "full-pack-tote",
+                logicalState("full-pack-order", 1, OrderType.FULL_PACK, "sc-low", 990,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                1, OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty());
+        DspOperationalReleaseScheduler fullDayRanking = new DspOperationalReleaseScheduler(
+                new OperationalDependencyReadinessPolicy(),
+                new OperationalRouteEntryAdmissionPolicy(),
+                new AdaptedFirstPharmacyGroupedSourceSequenceRankingPolicy());
+        Map<StationType, StationAdmissionSnapshot> admissions = Map.of(
+                StationType.ADAPTING, openAdmission(StationType.ADAPTING, "adapting-1"),
+                StationType.P2P, openAdmission(StationType.P2P, "p2p-1"));
+
+        assertEquals(new PhysicalToteId("adapted-tote"),
+                fullDayRanking.evaluate(snapshot(List.of(fullPack, adapted), admissions, Set.of()))
+                        .releaseDecision().orElseThrow().command().physicalToteId());
+
+        DspOperationalReleaseCandidate blockedAdapted = candidate(
+                "blocked-adapted-tote", adapted.logicalOrderState(), 2,
+                OsrProcessingReleaseAvailability.BLOCKED_BY_ACTIVE_SHEET_ASSIGNMENT,
+                Optional.of(new PhysicalToteId("active-tote")));
+        DspOperationalReleaseEvaluation fallback = fullDayRanking.evaluate(snapshot(
+                List.of(blockedAdapted, fullPack), admissions, Set.of()));
+        assertEquals(new PhysicalToteId("full-pack-tote"),
+                fallback.releaseDecision().orElseThrow().command().physicalToteId());
+        assertEquals(new PhysicalToteId("blocked-adapted-tote"),
+                fallback.blockedCandidates().getFirst().physicalToteId());
+
+        DspOperationalReleaseCandidate highPriority = candidate(
+                "high-tote",
+                logicalState("high-order", 1, OrderType.FULL_PACK, "sc-high", 999,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                3, OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty());
+        assertEquals(new PhysicalToteId("high-tote"),
+                fullDayRanking.evaluate(snapshot(List.of(adapted, highPriority), admissions, Set.of()))
+                        .releaseDecision().orElseThrow().command().physicalToteId());
+    }
+
+    @Test
     void shouldReturnNothingWhenSnapshotHasNoCandidates() {
         DspOperationalReleaseEvaluation evaluation = scheduler.evaluate(
                 new DspOperationalReleaseSnapshot(List.of(), List.of(), Map.of(), Set.of()));

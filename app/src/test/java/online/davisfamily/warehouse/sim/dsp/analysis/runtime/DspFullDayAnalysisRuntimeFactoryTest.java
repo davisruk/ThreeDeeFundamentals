@@ -471,6 +471,9 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     @Test
     void shouldStoreAndCollectTwoAssociatedSheetsFromOneAdaptedTote() {
         DspUncalibratedFullDayProfile profile = sheetOwnedProfile();
+        assertEquals("ORDER_WIDE_PREPARATION_READY_OVERLAP", profile.orderEligibilityPolicyId());
+        assertEquals("ADAPTED_FIRST_PHARMACY_GROUPED_THEN_SOURCE_SEQUENCE",
+                profile.candidateRankingPolicyId());
         DspFullDayLoadedInput input = adaptedInput(profile, OrderType.ASSOCIATED);
         OrderSheetKey source = new OrderSheetKey("adapted-source", 1);
         OrderSheetKey first = new OrderSheetKey("associated-target", 1);
@@ -539,6 +542,37 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             assertTrue(runtime.adaptingBinSnapshots().isEmpty());
             assertCorrelations(input.bagPlan(), runtime, "tote-associated-2", source, List.of("B"));
         }
+    }
+
+    @Test
+    void shouldRejectConflictingPreparedStoreBeforeConstructingRuntime() {
+        DspUncalibratedFullDayProfile profile = sheetOwnedProfile();
+        DspFullDayLoadedInput valid = adaptedInput(profile, OrderType.ASSOCIATED);
+        LoadedDspData data = valid.data();
+        NotionalToteOrder firstTarget = data.orders().get(1);
+        DspOrderItem original = firstTarget.items().getFirst();
+        DspOrderItem mismatched = new DspOrderItem(
+                original.lineReference(), original.productId(), original.quantity(),
+                "different-store", original.patientId(), original.prescriptionId(),
+                original.lineType(), original.referenceOrderId(), original.referenceSheetNumber(),
+                original.numberOfPacksPicked());
+        NotionalToteOrder changedTarget = new NotionalToteOrder(
+                firstTarget.orderId(), firstTarget.notionalToteId(), firstTarget.serviceCentreId(),
+                firstTarget.sheetNumber(), firstTarget.orderType(),
+                List.of(mismatched, firstTarget.items().get(1)), firstTarget.orderPriority(),
+                firstTarget.sequenceNumber());
+        LoadedDspData conflicting = new LoadedDspData(
+                data.products(), List.of(data.orders().getFirst(), changedTarget, data.orders().get(2)),
+                data.preparedLines(), data.loadedPreparedLineKeys(), data.startupReadyPreparedLineKeys(),
+                data.inboundToteManifests(), data.report(), data.retainedInputLines());
+        DspFullDayLoadedInput input = new DspFullDayLoadedInput(
+                conflicting, valid.reportableOrders(), valid.rejectionCatalog(), valid.bagPlan(),
+                valid.report(), valid.timetable());
+        RecordingWorld world = new RecordingWorld();
+
+        assertThrows(IllegalStateException.class,
+                () -> new DspFullDayAnalysisRuntimeFactory().create(world, input, profile));
+        assertEquals(0, world.controllerCount);
     }
 
     @Test

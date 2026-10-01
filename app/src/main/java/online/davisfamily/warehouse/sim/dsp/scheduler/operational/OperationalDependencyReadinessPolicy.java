@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 import java.util.ArrayList;
 import java.util.List;
 
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingOrderPreparationCatalog;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
@@ -11,6 +12,18 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.OperationalPhysicalToteC
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
 public final class OperationalDependencyReadinessPolicy {
+    private final AdaptingOrderPreparationCatalog orderPreparationCatalog;
+
+    public OperationalDependencyReadinessPolicy() {
+        this.orderPreparationCatalog = null;
+    }
+
+    public OperationalDependencyReadinessPolicy(AdaptingOrderPreparationCatalog orderPreparationCatalog) {
+        if (orderPreparationCatalog == null) {
+            throw new IllegalArgumentException("orderPreparationCatalog must not be null");
+        }
+        this.orderPreparationCatalog = orderPreparationCatalog;
+    }
 
     public List<OperationalReleaseBlock> findBlocks(
             DspOperationalReleaseCandidate candidate,
@@ -28,6 +41,18 @@ public final class OperationalDependencyReadinessPolicy {
         NotionalToteOrder logicalOrder = candidate.logicalOrderState().order();
         OrderType orderType = logicalOrder.orderType();
         if (orderType != OrderType.ASSOCIATED && orderType != OrderType.EMPTY) {
+            return List.copyOf(blocks);
+        }
+
+        if (orderPreparationCatalog != null) {
+            for (PreparedLineKey requiredKey : orderPreparationCatalog.requiredKeysFor(logicalOrder.orderId())) {
+                if (!snapshot.preparedLineKeys().contains(requiredKey)) {
+                    blocks.add(new OperationalReleaseBlock(
+                            OperationalReleaseBlockType.ADAPTED_DEPENDENCY,
+                            "Adapted dependency is not ready for order "
+                                    + logicalOrder.orderId() + " key " + requiredKey));
+                }
+            }
             return List.copyOf(blocks);
         }
 

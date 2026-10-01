@@ -62,9 +62,9 @@ public record DspUncalibratedFullDayProfile(
     public static final String COMPLETION_MILESTONE = "P2P_OUTPUT_CLOSED";
     public static final String SERVICE_CENTRE_SUPPLY_POLICY_ID =
             "PRIORITY_ORDERED_OSR_LOW_WATERMARK";
-    public static final String ORDER_ELIGIBILITY_POLICY_ID = "DEPENDENCY_READY_OVERLAP";
+    public static final String ORDER_ELIGIBILITY_POLICY_ID = "ORDER_WIDE_PREPARATION_READY_OVERLAP";
     public static final String CANDIDATE_RANKING_POLICY_ID =
-            "PHARMACY_GROUPED_THEN_SOURCE_SEQUENCE";
+            "ADAPTED_FIRST_PHARMACY_GROUPED_THEN_SOURCE_SEQUENCE";
     public static final String OUTBOUND_ALLOCATION_POLICY_ID =
             "PHARMACY_PURE_FIXED_BAG_CAPACITY";
     public static final int P2P_LINE_COUNT = 5;

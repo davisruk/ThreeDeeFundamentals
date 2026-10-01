@@ -91,6 +91,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
             BagPlanningResult bagPlan = input.bagPlan();
             AdaptingTargetSheetCatalog targetSheetCatalog =
                     new DspFullDayAdaptingTargetSheetCatalogFactory().create(data, bagPlan);
+            AdaptingOrderPreparationCatalog orderPreparationCatalog =
+                    new AdaptingOrderPreparationCatalog(data, targetSheetCatalog);
             QueueCapacities queues = profile.queueCapacities();
 
             DspRouteDeriver routeDeriver = new DspRouteDeriver(
@@ -301,9 +303,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     requirementCatalog,
                     correlationAssignments);
             DspOperationalReleaseScheduler operationalScheduler = new DspOperationalReleaseScheduler(
-                    new OperationalDependencyReadinessPolicy(),
+                    new OperationalDependencyReadinessPolicy(orderPreparationCatalog),
                     new OperationalRouteEntryAdmissionPolicy(),
-                    new PharmacyGroupedSourceSequenceRankingPolicy(),
+                    new AdaptedFirstPharmacyGroupedSourceSequenceRankingPolicy(),
                     new DeadlineAwareElasticStickyP2pLineAllocationPolicy(),
                     requirementCatalog,
                     elasticRuntime::correlationAssignmentSnapshot);

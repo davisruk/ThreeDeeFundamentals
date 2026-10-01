@@ -11,9 +11,13 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingOrderPreparationCatalog;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingTargetSheetCatalog;
+import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
@@ -28,6 +32,47 @@ class OperationalDependencyReadinessPolicyTest {
 
     private final OperationalDependencyReadinessPolicy policy =
             new OperationalDependencyReadinessPolicy();
+
+    @Test
+    void catalogModeWaitsForAllSheetsOfTheOrderButNotOtherOrders() {
+        DspOperationalReleaseCandidate first = candidate(
+                "first-tote", "shared-order", 1, OrderType.ASSOCIATED,
+                OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty(),
+                List.of(line("first", DspOrderLineType.ADAPTED)));
+        DspOperationalReleaseCandidate second = candidate(
+                "second-tote", "shared-order", 2, OrderType.ASSOCIATED,
+                OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty(),
+                List.of(line("second", DspOrderLineType.ADAPTED)));
+        DspOperationalReleaseCandidate source = candidate(
+                "source-tote", "source-order", OrderType.ADAPTED,
+                OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty(),
+                List.of(sourceLine("first"), sourceLine("second")));
+        PreparedLineKey firstKey = new PreparedLineKey("shared-order", "first");
+        PreparedLineKey secondKey = new PreparedLineKey("shared-order", "second");
+        AdaptingOrderPreparationCatalog catalog = new AdaptingOrderPreparationCatalog(
+                new LoadedDspData(List.of(), List.of(source.logicalOrderState().order(),
+                        first.logicalOrderState().order(), second.logicalOrderState().order()),
+                        List.of(), Set.of()),
+                new AdaptingTargetSheetCatalog(Map.of(
+                        firstKey, new OrderSheetKey("shared-order", 1),
+                        secondKey, new OrderSheetKey("shared-order", 2))));
+        OperationalDependencyReadinessPolicy orderWide =
+                new OperationalDependencyReadinessPolicy(catalog);
+        List<DspOperationalReleaseCandidate> candidates = List.of(source, first, second);
+
+        assertTrue(orderWide.findBlocks(source, snapshot(candidates, Set.of())).isEmpty());
+        for (DspOperationalReleaseCandidate candidate : List.of(first, second)) {
+            List<OperationalReleaseBlock> blocks = orderWide.findBlocks(candidate,
+                    snapshot(candidates, Set.of(firstKey, new PreparedLineKey("other", "second"))));
+            assertEquals(1, blocks.size());
+            assertEquals(OperationalReleaseBlockType.ADAPTED_DEPENDENCY, blocks.getFirst().type());
+            assertTrue(blocks.getFirst().reason().contains("shared-order"));
+            assertTrue(blocks.getFirst().reason().contains("second"));
+            assertTrue(orderWide.findBlocks(candidate,
+                    snapshot(candidates, Set.of(firstKey, secondKey))).isEmpty());
+        }
+        assertEquals(0, policy.findBlocks(first, snapshot(candidates, Set.of(firstKey))).size());
+    }
 
     @Test
     void shouldAllowAdaptedAndFullPackWithoutGlobalPreparationBarrier() {
@@ -182,11 +227,23 @@ class OperationalDependencyReadinessPolicyTest {
             OsrProcessingReleaseAvailability availability,
             Optional<PhysicalToteId> blockingPhysicalToteId,
             List<DspOrderItem> items) {
+        return candidate(physicalToteId, orderId, 1, orderType, availability,
+                blockingPhysicalToteId, items);
+    }
+
+    private static DspOperationalReleaseCandidate candidate(
+            String physicalToteId,
+            String orderId,
+            int sheetNumber,
+            OrderType orderType,
+            OsrProcessingReleaseAvailability availability,
+            Optional<PhysicalToteId> blockingPhysicalToteId,
+            List<DspOrderItem> items) {
         NotionalToteOrder order = new NotionalToteOrder(
                 orderId,
                 "notional-" + orderId,
                 "sc-1",
-                1,
+                sheetNumber,
                 orderType,
                 items,
                 999,
@@ -227,5 +284,11 @@ class OperationalDependencyReadinessPolicyTest {
                 "prepared-order-" + lineReference,
                 1,
                 1);
+    }
+
+    private static DspOrderItem sourceLine(String lineReference) {
+        return new DspOrderItem(lineReference, "product-" + lineReference, 1,
+                "pharmacy-1", "patient-" + lineReference, "prescription-" + lineReference,
+                DspOrderLineType.ADAPTED, "shared-order", 1, 1);
     }
 }
