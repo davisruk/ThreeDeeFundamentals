@@ -1,6 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.p2p.allocation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -15,6 +17,43 @@ import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 
 class P2pMissingPackSnapshotTest {
+    @Test
+    void pdcUpdatesShareOnlyImmutableClassificationAndPreserveValueSemantics() {
+        BagKey bag = new BagKey("rx", 1);
+        P2pMissingPackSnapshot original = new P2pMissingPackSnapshot(3,
+                Map.of(bag, Set.of("pack")), Set.of(bag), Map.of("104", 1), Map.of(),
+                Map.of("order", new OrderSheetKey("order", 1)));
+        P2pMissingPackSnapshot first = original.withPdcCollectedPack("104");
+        P2pMissingPackSnapshot second = first.withPdcCollectedPack("108");
+
+        assertEquals(4, first.version());
+        assertEquals(5, second.version());
+        assertEquals(Map.of(), original.pdcCollectedPackCountByServiceCentreId());
+        assertEquals(Map.of("104", 1), first.pdcCollectedPackCountByServiceCentreId());
+        assertEquals(Map.of("104", 1, "108", 1), second.pdcCollectedPackCountByServiceCentreId());
+        assertNotSame(first.pdcCollectedPackCountByServiceCentreId(), second.pdcCollectedPackCountByServiceCentreId());
+        assertSame(original.missingPhysicalPackIdsByBagKey(), second.missingPhysicalPackIdsByBagKey());
+        assertSame(original.missingPhysicalPackIdsByBagKey().get(bag), second.missingPhysicalPackIdsByBagKey().get(bag));
+        assertSame(original.pendingEmptyBagKeys(), second.pendingEmptyBagKeys());
+        assertSame(original.missingPackCountByServiceCentreId(), second.missingPackCountByServiceCentreId());
+        assertSame(original.firstCollectedSheetByOrderId(), second.firstCollectedSheetByOrderId());
+        assertThrows(UnsupportedOperationException.class,
+                () -> second.pdcCollectedPackCountByServiceCentreId().put("104", 99));
+        P2pMissingPackSnapshot equal = new P2pMissingPackSnapshot(5,
+                original.missingPhysicalPackIdsByBagKey(), original.pendingEmptyBagKeys(),
+                original.missingPackCountByServiceCentreId(), Map.of("104", 1, "108", 1),
+                original.firstCollectedSheetByOrderId());
+        assertEquals(equal, second);
+        assertEquals(equal.hashCode(), second.hashCode());
+        assertEquals(equal.toString(), second.toString());
+        assertEquals("P2pMissingPackSnapshot[version=0, missingPhysicalPackIdsByBagKey={}, pendingEmptyBagKeys=[], "
+                + "missingPackCountByServiceCentreId={}, pdcCollectedPackCountByServiceCentreId={}, "
+                + "firstCollectedSheetByOrderId={}]", P2pMissingPackSnapshot.empty().toString());
+        assertNotEquals(original, first);
+        assertThrows(IllegalArgumentException.class, () -> original.withPdcCollectedPack(" 104"));
+        assertThrows(IllegalArgumentException.class, () -> original.withPdcCollectedPack(null));
+    }
+
     @Test
     void emptyIsReusableAndVersionZero() {
         assertSame(P2pMissingPackSnapshot.empty(), P2pMissingPackSnapshot.empty());

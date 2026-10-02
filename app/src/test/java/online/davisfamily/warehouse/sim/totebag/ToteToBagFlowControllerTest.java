@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.function.BooleanSupplier;
 
 import org.junit.jupiter.api.Test;
@@ -29,6 +31,7 @@ import online.davisfamily.warehouse.sim.totebag.assignment.ToteToBagAssignmentPl
 import online.davisfamily.warehouse.sim.tote.Tote;
 import online.davisfamily.warehouse.sim.tote.Tote.ToteMotionState;
 import online.davisfamily.warehouse.sim.totebag.control.PrlActivitySummary;
+import online.davisfamily.warehouse.sim.totebag.control.PdcPackDispositionPolicy;
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
@@ -54,6 +57,194 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.transfer.ReleasedPackGroup;
 
 class ToteToBagFlowControllerTest {
+
+    @Test
+    void shouldClassifyOnlyNewCorrelationsOrAnAdvancedEpochAndKeepZeroGroupsTerminal() {
+        MutableWorkPlanProvider work = new MutableWorkPlanProvider();
+        work.put("bag-a", 2);
+        work.put("bag-b", 1);
+        CountingDispositionPolicy policy = new CountingDispositionPolicy();
+        DispositionFixture fixture = dispositionFixture(work, policy);
+        fixture.controller().update(null, 0.05d);
+        assertEquals(2, fixture.controller().getOutstandingExpectedBagGroupCount());
+        assertEquals(PrlState.IDLE, fixture.prl().getAssignment().getState());
+        for (int i = 0; i < 20; i++) { fixture.controller().update(null, 0.05d); }
+        assertEquals(Map.of("bag-a", 1, "bag-b", 1), policy.countQueries);
+
+        policy.effective.put("bag-a", 0);
+        policy.epoch++;
+        fixture.controller().update(null, 0.05d);
+        assertEquals(1, fixture.controller().getOutstandingExpectedBagGroupCount());
+        for (int i = 0; i < 20; i++) { fixture.controller().update(null, 0.05d); }
+        assertEquals(Map.of("bag-a", 2, "bag-b", 2), policy.countQueries);
+        assertTrue(fixture.controller().getReleasedGroups().isEmpty());
+
+        work.put("bag-c", 1);
+        fixture.controller().update(null, 0.05d);
+        fixture.controller().update(null, 0.05d);
+        assertEquals(Map.of("bag-a", 2, "bag-b", 2, "bag-c", 1), policy.countQueries);
+        policy.effective.put("bag-a", 1);
+        policy.epoch++;
+        assertThrows(IllegalStateException.class, () -> fixture.controller().update(null, 0.05d));
+    }
+
+    @Test
+    void shouldFixEffectivePrlCountOnFirstClaimablePackAndRejectLaterChanges() {
+        MutableWorkPlanProvider work = new MutableWorkPlanProvider();
+        work.put("bag-a", 3);
+        CountingDispositionPolicy policy = new CountingDispositionPolicy();
+        policy.effective.put("bag-a", 2);
+        DispositionFixture fixture = dispositionFixture(work, policy);
+        fixture.pdc().acceptIncomingPack(new Pack("pack-a", "bag-a", candidatePackDimensions()));
+        fixture.controller().update(null, 0.05d);
+        assertEquals(2, fixture.prl().getAssignment().getExpectedPackCount());
+        assertEquals(2, policy.countQueries.get("bag-a").intValue()); // Discovery, then first claim.
+        for (int i = 0; i < 5; i++) { fixture.controller().update(null, 0.05d); }
+        assertEquals(2, policy.countQueries.get("bag-a").intValue());
+        policy.effective.put("bag-a", 1);
+        policy.epoch++;
+        assertThrows(IllegalStateException.class, () -> fixture.controller().update(null, 0.05d));
+        assertEquals(2, fixture.prl().getAssignment().getExpectedPackCount());
+    }
+
+    @Test
+    void shouldRejectClaimablePackForZeroGroupAndInvalidEffectiveCounts() {
+        for (int effective : List.of(-1, 0, 3)) {
+            MutableWorkPlanProvider work = new MutableWorkPlanProvider();
+            work.put("bag-a", 2);
+            CountingDispositionPolicy policy = new CountingDispositionPolicy();
+            policy.effective.put("bag-a", effective);
+            DispositionFixture fixture = dispositionFixture(work, policy);
+            fixture.pdc().acceptIncomingPack(new Pack("pack-a", "bag-a", candidatePackDimensions()));
+            assertThrows(IllegalStateException.class, () -> fixture.controller().update(null, 0.05d));
+            assertEquals(PrlState.IDLE, fixture.prl().getAssignment().getState());
+        }
+    }
+
+    @Test
+    void shouldAdmitBypassedPacksWithoutIdlePrlsButStillCountClaimablePacksOfTheSameBag() {
+        MutableWorkPlanProvider work = new MutableWorkPlanProvider();
+        work.put("bag-a", 2);
+        CountingDispositionPolicy policy = new CountingDispositionPolicy();
+        policy.bypassed.add("wrong");
+        policy.emptyTotes.add("empty-authorized");
+        DispositionFixture fixture = dispositionFixture(work, policy);
+        fixture.prl().assign(new PrlAssignmentPlan("prl", "busy", 2));
+        assertTrue(fixture.controller().canAdmit(new ToteLoadPlan("overpicked", List.of(
+                new PackPlan("wrong", "bag-a", candidatePackDimensions())))));
+        assertFalse(fixture.controller().canAdmit(new ToteLoadPlan("mixed", List.of(
+                new PackPlan("wrong", "bag-a", candidatePackDimensions()),
+                new PackPlan("right", "bag-a", candidatePackDimensions())))));
+        assertTrue(fixture.controller().canAdmit(new ToteLoadPlan("empty-authorized", List.of())));
+        assertFalse(fixture.controller().canAdmit(new ToteLoadPlan("other-empty", List.of())));
+    }
+
+    @Test
+    void shouldPollOnlyBypassedOutfeedHeadsOnceAndPropagateCallbackFailure() {
+        CountingDispositionPolicy policy = new CountingDispositionPolicy();
+        policy.bypassed.add("wrong");
+        DispositionFixture fixture = dispositionFixture(new MutableWorkPlanProvider(), policy);
+        Pack wrong = new Pack("wrong", "unassigned-bag", candidatePackDimensions());
+        fixture.pdc().acceptIncomingPackAtFrontDistance(wrong, 2f);
+        fixture.controller().update(null, 0d);
+        fixture.controller().update(null, 0d);
+        assertEquals(Map.of("wrong", 1), policy.collections);
+        assertTrue(fixture.controller().getPdcLaneEntries().isEmpty());
+        assertEquals(PrlState.IDLE, fixture.prl().getAssignment().getState());
+        assertTrue(fixture.controller().getReleasedGroups().isEmpty());
+
+        CountingDispositionPolicy failing = new CountingDispositionPolicy();
+        failing.bypassed.add("wrong");
+        failing.failCallback = true;
+        DispositionFixture failure = dispositionFixture(new MutableWorkPlanProvider(), failing);
+        failure.pdc().acceptIncomingPackAtFrontDistance(wrong, 2f);
+        assertThrows(IllegalStateException.class, () -> failure.controller().update(null, 0d));
+        assertTrue(failure.controller().getPdcLaneEntries().isEmpty());
+        failure.controller().update(null, 0d);
+        assertEquals(Map.of("wrong", 1), failing.collections);
+    }
+
+    @Test
+    void shouldNeverPollANormalOutfeedHeadOrTraversePdcTwice() {
+        MutableWorkPlanProvider work = new MutableWorkPlanProvider();
+        work.put("bag-a", 2);
+        CountingDispositionPolicy policy = new CountingDispositionPolicy();
+        policy.bypassed.add("wrong");
+        DispositionFixture fixture = dispositionFixture(work, policy);
+        Pack normal = new Pack("normal", "bag-a", candidatePackDimensions());
+        Pack wrong = new Pack("wrong", "bag-a", candidatePackDimensions());
+        fixture.pdc().acceptIncomingPackAtFrontDistance(normal, 2f);
+        fixture.pdc().acceptIncomingPackAtFrontDistance(wrong, 1.5f);
+        fixture.controller().update(null, 0d); // Fixture diversion point is past outfeed.
+        assertSame(normal, fixture.pdc().peekLeadingPackAtOutfeed().orElseThrow());
+        assertTrue(policy.collections.isEmpty());
+        assertEquals(1, fixture.pdc().laneReads);
+    }
+
+    @Test
+    void noOpPolicyShouldBeReusableAndPreserveEagerAssignments() {
+        PdcPackDispositionPolicy policy = PdcPackDispositionPolicy.noOp();
+        assertSame(policy, PdcPackDispositionPolicy.noOp());
+        assertFalse(policy.bypassPrl("pack"));
+        assertFalse(policy.allowEmptyTote("tote"));
+        assertFalse(policy.deferInitialPrlAssignments());
+        assertEquals(0, policy.classificationEpoch());
+        assertEquals(2, policy.effectivePackCount("bag-a", 2));
+        policy.collectedAtPdcOutfeed("pack");
+        AdmissionFixture fixture = createAdmissionFixture();
+        fixture.controller().update(null, 0.05d);
+        assertEquals("bag-a", fixture.prls().getFirst().getAssignment().getCorrelationId());
+        assertEquals(1, fixture.prls().getFirst().getAssignment().getExpectedPackCount());
+        assertFalse(fixture.controller().canAdmit(new ToteLoadPlan("empty", List.of())));
+    }
+
+    private static DispositionFixture dispositionFixture(ToteToBagWorkPlanProvider work,
+            PdcPackDispositionPolicy policy) {
+        CountingPdc pdc = new CountingPdc();
+        PrlConveyor prl = new PrlConveyor("prl", 0f,
+                new ConveyorOccupancyModel(2f, 0.05f, 0f));
+        ToteToBagFlowController controller = new ToteToBagFlowController(work, null, null, pdc,
+                new PcrConveyor("pcr", new ConveyorOccupancyModel(2f, 0.05f, 0f), 1d),
+                new UnavailablePackGroupReceiver(), new ToteToBagAssignmentPlanner(), List.of(prl),
+                List.of(new PdcDiversionDevice("diverter", "prl", 0d, 0.01d, 0.01d)),
+                ignored -> 0d, (ignored, pack) -> 3f, ignored -> 0d,
+                (ignored, pack) -> pack.getDimensions().length(), policy);
+        return new DispositionFixture(controller, prl, pdc);
+    }
+
+    private record DispositionFixture(ToteToBagFlowController controller, PrlConveyor prl, CountingPdc pdc) { }
+
+    private static final class CountingPdc extends PdcConveyor {
+        private int laneReads;
+        private CountingPdc() { super("pdc", new ConveyorOccupancyModel(2f, 0.05f, 0f), 1f); }
+        @Override
+        public List<online.davisfamily.warehouse.sim.totebag.conveyor.LinearLaneEntrySnapshot> getLaneEntries() {
+            laneReads++;
+            return super.getLaneEntries();
+        }
+    }
+
+    private static final class CountingDispositionPolicy implements PdcPackDispositionPolicy {
+        private long epoch;
+        private boolean failCallback;
+        private final Map<String, Integer> effective = new LinkedHashMap<>();
+        private final Map<String, Integer> countQueries = new LinkedHashMap<>();
+        private final Map<String, Integer> collections = new LinkedHashMap<>();
+        private final Set<String> bypassed = new LinkedHashSet<>();
+        private final Set<String> emptyTotes = new LinkedHashSet<>();
+        @Override public boolean bypassPrl(String packId) { return bypassed.contains(packId); }
+        @Override public int effectivePackCount(String correlationId, int plannedCount) {
+            countQueries.merge(correlationId, 1, Integer::sum);
+            return effective.getOrDefault(correlationId, plannedCount);
+        }
+        @Override public boolean allowEmptyTote(String toteId) { return emptyTotes.contains(toteId); }
+        @Override public void collectedAtPdcOutfeed(String packId) {
+            collections.merge(packId, 1, Integer::sum);
+            if (failCallback) { throw new IllegalStateException("Callback failure"); }
+        }
+        @Override public boolean deferInitialPrlAssignments() { return true; }
+        @Override public long classificationEpoch() { return epoch; }
+    }
 
     @Test
     void shouldCaptureToteAtSegmentLocalTipperMidpoint() {

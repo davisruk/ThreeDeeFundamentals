@@ -47,6 +47,32 @@ class DspPreparedPackExceptionLedgerTest {
     private static final BagKey FIRST_BAG = new BagKey("rx-first", 1);
 
     @Test
+    void outfeedPublishesOnceWithoutCopyingClassificationOrMutatingPriorCounts() {
+        DspPreparedPackExceptionLedger ledger = fixture();
+        ledger.commitCollect(ledger.prepareCollect(FIRST, FIRST_TOTE, allPacks()));
+        var before = ledger.snapshot();
+        ledger.confirmPdcCollection("pack-b");
+        var first = ledger.snapshot();
+        ledger.confirmPdcCollection("pack-c");
+        var second = ledger.snapshot();
+
+        assertEquals(before.version() + 1, first.version());
+        assertEquals(before.version() + 2, second.version());
+        assertSame(before.missingPhysicalPackIdsByBagKey(), second.missingPhysicalPackIdsByBagKey());
+        assertSame(before.pendingEmptyBagKeys(), second.pendingEmptyBagKeys());
+        assertSame(before.missingPackCountByServiceCentreId(), second.missingPackCountByServiceCentreId());
+        assertSame(before.firstCollectedSheetByOrderId(), second.firstCollectedSheetByOrderId());
+        assertEquals(Map.of(), before.pdcCollectedPackCountByServiceCentreId());
+        assertEquals(Map.of("104", 1), first.pdcCollectedPackCountByServiceCentreId());
+        assertEquals(Map.of("104", 2), second.pdcCollectedPackCountByServiceCentreId());
+        assertThrows(IllegalStateException.class, () -> ledger.confirmPdcCollection("pack-b"));
+        assertThrows(IllegalStateException.class, () -> ledger.confirmPdcCollection(" pack-c "));
+        assertThrows(IllegalStateException.class, () -> ledger.confirmPdcCollection("unknown"));
+        assertSame(second, ledger.snapshot());
+        assertEquals(Map.of("104", 2), ledger.snapshot().pdcCollectedPackCountByServiceCentreId());
+    }
+
+    @Test
     void publishesFirstCollectOnlyAtCommitWithExactPackBagToteAndCentreIdentity() {
         DspPreparedPackExceptionLedger ledger = fixture();
         var initial = ledger.snapshot();

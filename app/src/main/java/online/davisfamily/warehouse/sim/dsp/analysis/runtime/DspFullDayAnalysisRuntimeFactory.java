@@ -96,6 +96,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
             DspPreparedPackExceptionLedger exceptionLedger =
                     new DspPreparedPackExceptionLedger(
                             bagPlan, targetSheetCatalog, orderPreparationCatalog);
+            DspFullDayPdcPackDispositionPolicy packDispositionPolicy =
+                    new DspFullDayPdcPackDispositionPolicy(exceptionLedger);
             QueueCapacities queues = profile.queueCapacities();
 
             DspRouteDeriver routeDeriver = new DspRouteDeriver(
@@ -257,7 +259,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                         bagPlan,
                         outboundAllocator,
                         p2pCompletedListener,
-                        durations);
+                        durations,
+                        packDispositionPolicy);
                 DspHeadlessP2pLineRuntime lineRuntime = new DspHeadlessP2pLineRuntimeFactory()
                         .create(simulationWorld, lineConfig);
                 lineRuntimes.add(lineRuntime);

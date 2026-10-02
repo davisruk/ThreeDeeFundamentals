@@ -37,6 +37,7 @@ public class ToteToBagFlowController implements SimulationController {
     private final PcrConveyor pcrConveyor;
     private final PackGroupReceiver downstreamPackGroupReceiver;
     private final ToteToBagAssignmentPlanner assignmentPlanner;
+    private final PdcPackDispositionPolicy packDispositionPolicy;
     private final Map<String, PrlConveyor> prlsById = new LinkedHashMap<>();
     private final Map<String, PdcDiversionDevice> pdcDiversionDevicesByPrlId = new LinkedHashMap<>();
     private final Map<String, Pack> observedPacksById = new LinkedHashMap<>();
@@ -47,6 +48,9 @@ public class ToteToBagFlowController implements SimulationController {
     private final Set<String> completedCorrelationIds = new LinkedHashSet<>();
     private final Map<String, Integer> knownExpectedPackCountsByCorrelationId =
             new LinkedHashMap<>();
+    private final Set<String> terminalZeroPackCorrelationIds = new LinkedHashSet<>();
+    private final Map<String, Integer> fixedEffectivePackCountsByCorrelationId = new LinkedHashMap<>();
+    private long lastClassificationEpoch;
     private final PdcTransferDurationProvider pdcTransferDurationProvider;
     private final PdcDiversionDistanceProvider pdcDiversionDistanceProvider;
     private final PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider;
@@ -307,7 +311,8 @@ public class ToteToBagFlowController implements SimulationController {
                 pdcTransferDurationProvider,
                 pdcDiversionDistanceProvider,
                 prlToPcrTransferDurationProvider,
-                prlToPcrEntryDistanceProvider);
+                prlToPcrEntryDistanceProvider,
+                PdcPackDispositionPolicy.noOp());
     }
 
     /**
@@ -329,6 +334,28 @@ public class ToteToBagFlowController implements SimulationController {
             PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
             PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
             PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+        this(workPlanProvider, tippingMachine, sortingMachine, pdcConveyor, pcrConveyor,
+                downstreamPackGroupReceiver, assignmentPlanner, prlConveyors, pdcDiversionDevices,
+                pdcTransferDurationProvider, pdcDiversionDistanceProvider,
+                prlToPcrTransferDurationProvider, prlToPcrEntryDistanceProvider,
+                PdcPackDispositionPolicy.noOp());
+    }
+
+    public ToteToBagFlowController(
+            ToteToBagWorkPlanProvider workPlanProvider,
+            TippingMachine tippingMachine,
+            SortingMachine sortingMachine,
+            PdcConveyor pdcConveyor,
+            PcrConveyor pcrConveyor,
+            PackGroupReceiver downstreamPackGroupReceiver,
+            ToteToBagAssignmentPlanner assignmentPlanner,
+            List<PrlConveyor> prlConveyors,
+            List<PdcDiversionDevice> pdcDiversionDevices,
+            PdcTransferDurationProvider pdcTransferDurationProvider,
+            PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
+            PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider,
+            PdcPackDispositionPolicy packDispositionPolicy) {
         this(
                 workPlanProvider,
                 null,
@@ -343,7 +370,8 @@ public class ToteToBagFlowController implements SimulationController {
                 pdcTransferDurationProvider,
                 pdcDiversionDistanceProvider,
                 prlToPcrTransferDurationProvider,
-                prlToPcrEntryDistanceProvider);
+                prlToPcrEntryDistanceProvider,
+                packDispositionPolicy);
     }
 
     private ToteToBagFlowController(
@@ -360,7 +388,8 @@ public class ToteToBagFlowController implements SimulationController {
             PdcTransferDurationProvider pdcTransferDurationProvider,
             PdcDiversionDistanceProvider pdcDiversionDistanceProvider,
             PrlToPcrTransferDurationProvider prlToPcrTransferDurationProvider,
-            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider) {
+            PrlToPcrEntryDistanceProvider prlToPcrEntryDistanceProvider,
+            PdcPackDispositionPolicy packDispositionPolicy) {
         if (workPlanProvider == null
                 || pdcConveyor == null
                 || pcrConveyor == null
@@ -373,7 +402,8 @@ public class ToteToBagFlowController implements SimulationController {
                 || pdcTransferDurationProvider == null
                 || pdcDiversionDistanceProvider == null
                 || prlToPcrTransferDurationProvider == null
-                || prlToPcrEntryDistanceProvider == null) {
+                || prlToPcrEntryDistanceProvider == null
+                || packDispositionPolicy == null) {
             throw new IllegalArgumentException("Controller dependencies must not be null or empty");
         }
         if ((tippingMachine == null) != (sortingMachine == null)) {
@@ -387,6 +417,7 @@ public class ToteToBagFlowController implements SimulationController {
         this.pcrConveyor = pcrConveyor;
         this.downstreamPackGroupReceiver = downstreamPackGroupReceiver;
         this.assignmentPlanner = assignmentPlanner;
+        this.packDispositionPolicy = packDispositionPolicy;
         this.pdcTransferDurationProvider = pdcTransferDurationProvider;
         this.pdcDiversionDistanceProvider = pdcDiversionDistanceProvider;
         this.prlToPcrTransferDurationProvider = prlToPcrTransferDurationProvider;
@@ -444,6 +475,7 @@ public class ToteToBagFlowController implements SimulationController {
         requestPdcDiversions();
         updatePdcDiversionDevices(dtSeconds);
         startPdcTransfersFromActuatingDevices();
+        drainBypassedPdcOutfeed();
         updatePdcTransfers(dtSeconds);
         updatePrls(dtSeconds);
         attemptPrlRelease();
@@ -502,13 +534,15 @@ public class ToteToBagFlowController implements SimulationController {
         }
         synchronizeExpectedCorrelations();
         if (candidateToteLoadPlan.getPackPlans().isEmpty()) {
-            return false;
+            return packDispositionPolicy.allowEmptyTote(candidateToteLoadPlan.getToteId());
         }
         initializeIfNeeded();
 
         Set<String> distinctCorrelationIds = new LinkedHashSet<>();
         for (PackPlan packPlan : candidateToteLoadPlan.getPackPlans()) {
-            distinctCorrelationIds.add(packPlan.correlationId());
+            if (!packDispositionPolicy.bypassPrl(packPlan.packId())) {
+                distinctCorrelationIds.add(packPlan.correlationId());
+            }
         }
 
         int idlePrlCount = (int) prlsById.values().stream()
@@ -533,7 +567,8 @@ public class ToteToBagFlowController implements SimulationController {
         if (initialized) {
             return;
         }
-        if (knownExpectedPackCountsByCorrelationId.isEmpty()) {
+        if (packDispositionPolicy.deferInitialPrlAssignments()
+                || knownExpectedPackCountsByCorrelationId.isEmpty()) {
             initialized = true;
             return;
         }
@@ -587,6 +622,9 @@ public class ToteToBagFlowController implements SimulationController {
         for (LinearLaneEntrySnapshot entry : pdcConveyor.getLaneEntries()) {
             Pack pack = entry.pack();
             observedPacksById.putIfAbsent(pack.getId(), pack);
+            if (packDispositionPolicy.bypassPrl(pack.getId())) {
+                continue;
+            }
             PrlConveyor prl = findOrAssignPrlForCorrelation(pack.getCorrelationId());
             float diversionFrontDistance = pdcDiversionDistanceProvider.frontDistanceFor(prl.getId(), pack);
             if (entry.frontDistance() < diversionFrontDistance || !prl.accepts(pack)) {
@@ -643,6 +681,22 @@ public class ToteToBagFlowController implements SimulationController {
             }
             prl.acceptPack(transfer.getPack());
             iterator.remove();
+        }
+    }
+
+    private void drainBypassedPdcOutfeed() {
+        while (true) {
+            Pack head = pdcConveyor.peekLeadingPackAtOutfeed().orElse(null);
+            if (head == null || !packDispositionPolicy.bypassPrl(head.getId())) {
+                return;
+            }
+            Pack polled = pdcConveyor.pollLeadingPackAtOutfeed()
+                    .orElseThrow(() -> new IllegalStateException("Expected bypassed pack at PDC outfeed"));
+            if (polled != head) {
+                throw new IllegalStateException("PDC outfeed pack identity changed");
+            }
+            // A failure after physical removal is fatal, never retried as a second collection.
+            packDispositionPolicy.collectedAtPdcOutfeed(head.getId());
         }
     }
 
@@ -758,17 +812,37 @@ public class ToteToBagFlowController implements SimulationController {
         if (assignedPrl != null) {
             return assignedPrl;
         }
+        if (packDispositionPolicy.deferInitialPrlAssignments()) {
+            int effective = packDispositionPolicy.effectivePackCount(correlationId, expectedPackCount);
+            validateEffectivePackCount(correlationId, expectedPackCount, effective);
+            if (effective == 0 || terminalZeroPackCorrelationIds.contains(correlationId)) {
+                throw new IllegalStateException("Claimable pack for zero-pack correlation " + correlationId);
+            }
+            Integer fixed = fixedEffectivePackCountsByCorrelationId.get(correlationId);
+            if (fixed != null && fixed != effective) {
+                throw new IllegalStateException("Effective pack count changed for correlation " + correlationId);
+            }
+            expectedPackCount = effective;
+        }
         PrlConveyor idlePrl = prlsById.values().stream()
                 .sorted(Comparator.comparing(PrlConveyor::getId))
                 .filter(prl -> prl.getAssignment().getState() == PrlState.IDLE)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No idle PRL available for correlation " + correlationId));
         idlePrl.assign(new PrlAssignmentPlan(idlePrl.getId(), correlationId, expectedPackCount));
+        if (packDispositionPolicy.deferInitialPrlAssignments()) {
+            fixedEffectivePackCountsByCorrelationId.put(correlationId, expectedPackCount);
+        }
         outstandingExpectedCorrelationIds.add(correlationId);
         return idlePrl;
     }
 
     private void synchronizeExpectedCorrelations() {
+        long epoch = packDispositionPolicy.classificationEpoch();
+        if (epoch < lastClassificationEpoch) {
+            throw new IllegalStateException("Pack classification epoch regressed");
+        }
+        boolean classificationChanged = epoch != lastClassificationEpoch;
         Set<String> expectedCorrelationIds = workPlanProvider.expectedCorrelationIds();
         if (expectedCorrelationIds == null) {
             throw new IllegalStateException("workPlanProvider returned null correlation ids");
@@ -794,9 +868,32 @@ public class ToteToBagFlowController implements SimulationController {
                         "Expected pack count changed for correlation "
                                 + normalizedCorrelationId);
             }
-            if (!completedCorrelationIds.contains(normalizedCorrelationId)) {
+            if (previous == null || classificationChanged) {
+                int effective = packDispositionPolicy.effectivePackCount(
+                        normalizedCorrelationId, expectedPackCount.getAsInt());
+                validateEffectivePackCount(normalizedCorrelationId, expectedPackCount.getAsInt(), effective);
+                Integer fixed = fixedEffectivePackCountsByCorrelationId.get(normalizedCorrelationId);
+                if ((fixed != null && fixed != effective)
+                        || (effective != 0 && terminalZeroPackCorrelationIds.contains(normalizedCorrelationId))) {
+                    throw new IllegalStateException("Effective pack count changed for correlation "
+                            + normalizedCorrelationId);
+                }
+                if (effective == 0) {
+                    terminalZeroPackCorrelationIds.add(normalizedCorrelationId);
+                    outstandingExpectedCorrelationIds.remove(normalizedCorrelationId);
+                }
+            }
+            if (!completedCorrelationIds.contains(normalizedCorrelationId)
+                    && !terminalZeroPackCorrelationIds.contains(normalizedCorrelationId)) {
                 outstandingExpectedCorrelationIds.add(normalizedCorrelationId);
             }
+        }
+        lastClassificationEpoch = epoch;
+    }
+
+    private static void validateEffectivePackCount(String correlationId, int planned, int effective) {
+        if (effective < 0 || effective > planned) {
+            throw new IllegalStateException("Invalid effective pack count for correlation " + correlationId);
         }
     }
 

@@ -11,6 +11,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
 import online.davisfamily.warehouse.sim.totebag.control.TipperToteCompletedListener;
+import online.davisfamily.warehouse.sim.totebag.control.PdcPackDispositionPolicy;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagWorkPlanProvider;
 
 /**
@@ -35,6 +36,7 @@ public final class DspHeadlessP2pLineConfig {
     private final OutboundToteAllocator outboundToteAllocator;
     private final TipperToteCompletedListener toteCompletedListener;
     private final P2pPlaceholderDurations durations;
+    private final PdcPackDispositionPolicy packDispositionPolicy;
 
     public DspHeadlessP2pLineConfig(
             P2pLineDefinition lineDefinition,
@@ -50,6 +52,27 @@ public final class DspHeadlessP2pLineConfig {
             OutboundToteAllocator outboundToteAllocator,
             TipperToteCompletedListener toteCompletedListener,
             P2pPlaceholderDurations durations) {
+        this(lineDefinition, stationArrivalQueue, tipperInputQueueCapacity, admissionPolicy,
+                routeBinding, tipperSegment, payloadFactory, stationProcessingCoordinator,
+                workPlanProvider, bagPlanningResult, outboundToteAllocator, toteCompletedListener,
+                durations, PdcPackDispositionPolicy.noOp());
+    }
+
+    public DspHeadlessP2pLineConfig(
+            P2pLineDefinition lineDefinition,
+            StationRoutedToteArrivalQueue stationArrivalQueue,
+            int tipperInputQueueCapacity,
+            P2pArrivalAdmissionPolicy admissionPolicy,
+            P2pArrivalRouteBinding routeBinding,
+            RouteSegment tipperSegment,
+            P2pTipperPayloadFactory payloadFactory,
+            StationProcessingCoordinator stationProcessingCoordinator,
+            ToteToBagWorkPlanProvider workPlanProvider,
+            BagPlanningResult bagPlanningResult,
+            OutboundToteAllocator outboundToteAllocator,
+            TipperToteCompletedListener toteCompletedListener,
+            P2pPlaceholderDurations durations,
+            PdcPackDispositionPolicy packDispositionPolicy) {
         requireNonNull(lineDefinition, "lineDefinition");
         requireNonNull(stationArrivalQueue, "stationArrivalQueue");
         if (tipperInputQueueCapacity <= 0) {
@@ -65,6 +88,7 @@ public final class DspHeadlessP2pLineConfig {
         requireNonNull(outboundToteAllocator, "outboundToteAllocator");
         requireNonNull(toteCompletedListener, "toteCompletedListener");
         requireNonNull(durations, "durations");
+        requireNonNull(packDispositionPolicy, "packDispositionPolicy");
 
         if (!lineDefinition.destination().equals(stationArrivalQueue.destination())) {
             throw new IllegalArgumentException(
@@ -92,6 +116,7 @@ public final class DspHeadlessP2pLineConfig {
         this.outboundToteAllocator = outboundToteAllocator;
         this.toteCompletedListener = toteCompletedListener;
         this.durations = durations;
+        this.packDispositionPolicy = packDispositionPolicy;
     }
 
     public P2pLineDefinition lineDefinition() {
@@ -144,6 +169,10 @@ public final class DspHeadlessP2pLineConfig {
 
     public P2pPlaceholderDurations durations() {
         return durations;
+    }
+
+    public PdcPackDispositionPolicy packDispositionPolicy() {
+        return packDispositionPolicy;
     }
 
     private static void requireNonNull(Object value, String fieldName) {

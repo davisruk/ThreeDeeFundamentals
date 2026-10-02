@@ -196,7 +196,8 @@ public final class DspHeadlessP2pLineRuntimeFactory {
                 pdcTransferDurationProvider(durations),
                 pdcDiversionDistanceProvider(),
                 prlToPcrTransferDurationProvider(durations),
-                prlToPcrEntryDistanceProvider());
+                prlToPcrEntryDistanceProvider(),
+                config.packDispositionPolicy());
         tipperFlowController.setToteAdmissionPredicate(toteToBagFlowController::canAdmit);
 
         TipperInputQueueController tipperInputQueueController = new TipperInputQueueController(

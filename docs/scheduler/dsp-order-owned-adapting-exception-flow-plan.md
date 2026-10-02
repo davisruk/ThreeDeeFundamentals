@@ -1,9 +1,9 @@
 # Order-Owned Adapting Bins and P2P Exception Handoff Plan
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection` (or a new feature branch
-based on its committed tip). Step 1 is committed at `f2f50ad`. Step 2 was
-revised after the pre-drain validation and sheet-order discussion; its
-implementation has not started. The user starts each step separately.
+based on its committed tip). Step 1 is committed at `f2f50ad`; Step 2 is
+committed and verified at `ede909f`. Step 3 has not started. The user starts
+each step separately.
 
 ## Purpose and authority
 
@@ -401,64 +401,149 @@ remain unchanged; broad regression is reserved for Step 5.
 
 ## Step 3 — PDC collection and partial/zero physical bag thresholds
 
-Create a generic `PdcPackDispositionPolicy` in `totebag/control` with a
-default no-op implementation. Its read-only methods identify an unclaimable
-physical pack ID, supply the effective positive pack count for a planned bag
-correlation after known missing IDs are removed, and explicitly authorize a
-known zero-load tote; its outfeed callback records a collected physical pack
-exactly once. Implement the full-day policy as a thin adapter over the Step 2
-ledger and bag plan; do not put DSP imports in the generic machine package.
-Use the exact interface methods `bypassPrl(String packId)`,
-`effectivePackCount(String correlationId, int plannedCount)`,
-`allowEmptyTote(String toteId)`, and
-`collectedAtPdcOutfeed(String packId)`. Only the last method mutates state.
+Create `totebag/control/PdcPackDispositionPolicy` with exactly these methods:
+
+```java
+boolean bypassPrl(String packId);
+int effectivePackCount(String correlationId, int plannedCount);
+boolean allowEmptyTote(String toteId);
+void collectedAtPdcOutfeed(String packId);
+boolean deferInitialPrlAssignments();
+long classificationEpoch();
+```
+
+Provide one reusable static `noOp()` singleton: it never
+bypasses a pack or admits an empty tote, returns the original planned count,
+does nothing on the outfeed callback, returns `false` for deferral, and returns
+zero for the epoch. Only `collectedAtPdcOutfeed` may mutate policy-owned state.
+Create `dsp/analysis/runtime/DspFullDayPdcPackDispositionPolicy` as a thin
+adapter over the Step 2 `DspPreparedPackExceptionLedger`; that ledger already
+indexes `BagPlanningResult`, so do not build a second bag/pack index. It
+delegates the first four methods to the ledger, returns `true` for deferral,
+and returns `ledger.snapshot().firstCollectedSheetByOrderId().size()` for the
+epoch. This is an O(1), monotonic first-COLLECT count: later COLLECT visits
+and PDC collection must not advance it. Do not put DSP imports in the generic
+machine package.
+
 Add one policy-bearing overload to the canonical live-input
 `ToteToBagFlowController` constructor; all existing constructors delegate to
-the no-op policy. Add a delegating compatible constructor to
-`DspHeadlessP2pLineConfig`; only full-day composition supplies the ledger
-adapter to `DspHeadlessP2pLineRuntimeFactory`.
+the no-op singleton. Add a final policy argument to a new
+`DspHeadlessP2pLineConfig` constructor and keep its existing constructor as a
+delegate supplying the no-op singleton. `DspHeadlessP2pLineRuntimeFactory`
+passes the config policy to the new controller overload. Full-day composition
+constructs one adapter over its one ledger and supplies that same adapter to
+all headless lines; isolated/legacy factory callers retain the no-op policy.
 
-`canAdmit` ignores wrong-sheet pack correlations for PRL capacity, but still
-admits a physically nonempty tote containing only wrong-sheet packs; it
-admits an empty load plan **only** when the policy names that exact physical
-tote as zero-pack exception work. At PDC, skip PRL assignment/diversion for
-marked pack IDs. After diversion activity, poll marked leading packs at the
-PDC outfeed into the ledger's collection-tote count. Never remove a normal
-claimable pack as an exception. Do not change PDC speed, PRL diversion
-timings, PCR, or bagger sequencing.
+In `ToteToBagFlowController.initializeIfNeeded`, keep the existing
+`ToteToBagAssignmentPlanner.createPlans` path unchanged when
+`deferInitialPrlAssignments()` is false. When true, mark initialization done
+without seeding any PRL, even if assigned correlations are already known.
+The existing `synchronizeExpectedCorrelations` retains original positive
+planned counts in `knownExpectedPackCountsByCorrelationId`; do not replace
+those counts with effective counts or create another full-work-plan scan.
+Keep a controller-local set of terminal zero-pack correlation IDs, a map of
+effective counts fixed at first claimable-pack assignment, and the last
+observed classification epoch. During the existing synchronization traversal,
+check effective counts only for newly seen assigned correlations or when the
+classification epoch advances. If the effective count is zero, add that
+correlation to the terminal zero-pack set and remove it from
+`outstandingExpectedCorrelationIds`; every later synchronization must skip
+re-adding it. This is how an all-missing bag becomes terminal even though it
+will never present a first claimable pack. Do not add it to
+`completedCorrelationIds`: no physical bag completed. A later nonzero count
+for a terminal zero-pack correlation is an invariant failure. On an epoch
+change, a count differing from one already fixed for a PRL assignment is
+also an invariant failure, not a silent PRL expected-count rewrite. A
+PDC-only snapshot version change must not trigger this classification work.
+The line's existing `ToteToBagWorkPlanProvider` limits the traversal to
+correlations assigned to that line; do not scan all planned bags or query
+another line's assignments. No new set, map, stream, or immutable snapshot is
+built per fixed step by these checks.
 
-For full-day lines, do not eagerly assign PRLs merely because a bag
-correlation was published by a line assignment. The effective count is fixed
-when its first **claimable** pack is considered for PDC diversion; at that point the order's
-first COLLECT has already classified every missing adapted pack. Validate
-`0 < effective <= original planned count`; an effective-zero correlation
-enters a terminal logical pending-Exceptions set with **no** PRL/bagger
-group, and is excluded from `outstandingExpectedCorrelationIds` even if it
-was published before the first COLLECT. Recheck zero correlations only when
-the ledger mutation version changes, not by rescanning all planned bags on
-every fixed step. Keep
-generic debug eager assignment behavior. A late missing-pack adjustment
-after the first pack/PRL assignment for that bag is an invariant failure,
-never a silent expected-count rewrite. Preserve stable sticky P2P
-correlation-to-line assignment; no cross-line pack transfer or holding PRL.
-The standard `TippingMachine` may process an admitted empty plan and complete
-the physical tote lifecycle without emitting a pack.
+For a nonempty candidate tote, `canAdmit` uses its existing distinct-
+correlation set but excludes packs for which `bypassPrl(packId)` is true from
+PRL capacity demand. A physically nonempty tote containing only bypassed
+packs is admissible without an idle PRL. For an empty load plan, return true
+only when `allowEmptyTote` names its exact physical tote ID; otherwise retain
+the legacy rejection. Do not classify a bypassed pack by correlation alone:
+another pack of the same bag may be claimable. At PDC, in the existing
+`requestPdcDiversions` lane-entry traversal, test `bypassPrl` before
+`findOrAssignPrlForCorrelation` and skip PRL assignment/diversion for that
+pack. Do not add a second whole-lane traversal or call `getLaneEntries()`
+again for exception handling. For a first claimable pack in deferred mode,
+`findOrAssignPrlForCorrelation` reads the current `effectivePackCount`, requires
+`0 < effective <= original planned count`, assigns its PRL with that fixed
+effective count, and retains the count for later epoch validation. Existing
+PRL assignments reuse their fixed count. A supposedly claimable pack whose
+effective count is zero is an invariant failure. Keep the no-op policy's
+existing eager assignment and count behavior unchanged.
 
-Files: create the generic policy and full-day adapter; modify
-`ToteToBagFlowController`, `DspHeadlessP2pLineConfig`,
-`DspHeadlessP2pLineRuntimeFactory`, full-day composition, and the ledger's
-collection callback. Tests: extend `ToteToBagFlowControllerTest` and
-`DspHeadlessP2pLineRuntimeFactoryTest`; create
-`DspFullDayPdcPackDispositionTest`. Cover same-line and different-line
-ASSOCIATED sheets, wrong-pack PDC outfeed exactly once, no PRL claim for that
-pack, partially available bag release, zero-available bag with no physical
-bag, admitted empty later tote, unchanged debug admission, and no premature
-lease quiescence while a marked pack is still on PDC.
+After `startPdcTransfersFromActuatingDevices` in the existing update order,
+add one outfeed-head drain: repeatedly use
+`PdcConveyor.peekLeadingPackAtOutfeed`, stop on an absent or non-bypassed
+head, and for a bypassed head require the exact same pack from
+`pollLeadingPackAtOutfeed` before calling `collectedAtPdcOutfeed(packId)`
+once. A callback failure after the physical poll is fatal; do not retry or
+count it twice. This path must never remove a normal claimable pack. Do not
+change PDC speed, diversion timings, PRL/PCR/bagger sequencing, sticky line
+ownership, or `TippingMachine`; the existing tipper may process an admitted
+empty plan and complete its physical tote lifecycle without emitting a pack.
+
+Replace the ledger's per-outfeed full-set copy: `collectedAtPdc` becomes a
+simulation-thread-owned mutable `LinkedHashSet` used only for O(1) duplicate
+checks and inserts. Preserve no-mutation failure semantics by validating the
+misplaced pack and duplicate first, then preparing the next immutable
+projection, then inserting the pack ID and publishing that projection.
+`P2pMissingPackSnapshot` is currently a record whose public constructor
+deep-copies every missing-pack map/set on each call; do not call it for every
+PDC pack. Convert it to a final immutable class while preserving its public
+six-argument constructor, six accessor names and return types, `empty()`
+singleton, and value equality/hash/toString behavior. Its public constructor
+still validates and defensively copies every caller-supplied collection.
+Add `withPdcCollectedPack(String serviceCentreId)`: it increments version
+and only that centre's PDC count, copies and freezes the small per-centre PDC
+count map, and shares by reference the already validated immutable missing-
+pack map/sets, pending-empty set, missing-count map, and first-COLLECT map
+through a private trusted constructor. Never share mutable ledger maps.
+`confirmPdcCollection` uses that method, so one outfeed event is O(1) set
+work plus O(number of service centres), not O(total missing or already
+collected packs). `snapshot()` still returns the cached immutable instance
+until a real COLLECT or outfeed mutation occurs; neither fixed-step polling
+nor policy queries rebuild it.
+
+Files: create `PdcPackDispositionPolicy` and
+`DspFullDayPdcPackDispositionPolicy`; modify `ToteToBagFlowController`,
+`DspHeadlessP2pLineConfig`, `DspHeadlessP2pLineRuntimeFactory`,
+`DspFullDayAnalysisRuntimeFactory`, `DspPreparedPackExceptionLedger`, and
+`P2pMissingPackSnapshot`. Tests: extend `ToteToBagFlowControllerTest`,
+`DspHeadlessP2pLineRuntimeFactoryTest`, `DspPreparedPackExceptionLedgerTest`,
+and `P2pMissingPackSnapshotTest`;
+create `DspFullDayPdcPackDispositionTest`. Cover same-line and different-line
+ASSOCIATED sheets, wrong-pack PDC outfeed exactly once with no PRL claim,
+partially available bag release, a previously published zero-pack
+correlation becoming terminal after first COLLECT without any arriving pack
+or physical bag, admitted empty later tote, unchanged debug eager assignment
+and empty-tote rejection, and no premature lease quiescence while a bypassed
+pack is on PDC. Use a counting policy to prove repeated fixed steps at one
+classification epoch do not re-query effective counts or rebuild snapshots;
+a PDC-only count change publishes one cheap new snapshot but does not
+re-query effective counts, and a newly assigned correlation is checked once.
+The partial-bag test uses an isolated `ToteToBagFlowController`/bagger fixture
+without a registered `OutboundToteAllocationController` and stops at its
+`StoredBagReceiver` output. The headless factory test verifies policy wiring,
+not partial-bag allocation through the complete registered controller set.
+Step 4, not this step, changes outbound allocation's exact planned-pack
+validation. Do not weaken that validation or modify outbound allocation now.
+Prove a late effective-count change after PRL assignment fails, and that
+successive outfeed snapshots share the immutable classification maps while
+old counts stay unchanged and duplicate collection leaves both ledger and
+snapshot unchanged. Use state/identity/counter assertions, not wall-clock
+thresholds.
 
 Implementation verification:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspHeadlessP2pLineRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayPdcPackDispositionTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.totebag.ToteToBagFlowControllerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspHeadlessP2pLineRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspPreparedPackExceptionLedgerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayPdcPackDispositionTest
 ```
 
 User verification: no additional check for this step.
@@ -539,9 +624,13 @@ allocated plus explicit zero-pack pending keys as terminal at the P2P output
 boundary. Add an overload to `P2pWorkloadSnapshotFactory.create` accepting
 the immutable `P2pMissingPackSnapshot`; existing overloads delegate with its
 empty singleton. Do not
-count confirmed missing packs/zero-pack bags as executable P2P work; include
-its mutation version in existing reuse/invalidation logic. Do not repeatedly
-build full bag/pack maps inside fixed-step evaluation.
+count confirmed missing packs/zero-pack bags as executable P2P work. Use the
+first-COLLECT classification epoch (the immutable first-collected-order map's
+size), not the general snapshot version, to invalidate *workload* reuse:
+PDC-only count changes cannot change executable pack/bag demand. Completion
+and report projections must still observe the general snapshot version so
+new PDC collection counts are visible. Do not repeatedly build full bag/pack
+maps inside fixed-step evaluation.
 Pass the cached projection through a new
 `DspP2pElasticAllocationRuntimeFactory.createWithoutArrivalConsumers`
 overload accepting `Supplier<P2pMissingPackSnapshot>`; its existing signature

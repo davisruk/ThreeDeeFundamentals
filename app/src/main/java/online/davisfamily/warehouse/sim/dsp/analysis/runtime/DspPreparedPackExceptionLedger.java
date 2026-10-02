@@ -30,7 +30,7 @@ public final class DspPreparedPackExceptionLedger {
 
     private Map<String, MisplacedPack> misplacedByPackId = Map.of();
     private Map<String, OrderSheetKey> visitedSheetByToteId = Map.of();
-    private Set<String> collectedAtPdc = Set.of();
+    private final Set<String> collectedAtPdc = new LinkedHashSet<>();
     private P2pMissingPackSnapshot snapshot = P2pMissingPackSnapshot.empty();
 
     public DspPreparedPackExceptionLedger(
@@ -196,19 +196,13 @@ public final class DspPreparedPackExceptionLedger {
     }
 
     public void confirmPdcCollection(String packId) {
-        MisplacedPack pack = misplacedByPackId.get(requireId(packId, "packId"));
-        if (pack == null || collectedAtPdc.contains(packId)) {
+        String normalizedPackId = requireId(packId, "packId");
+        MisplacedPack pack = misplacedByPackId.get(normalizedPackId);
+        if (pack == null || collectedAtPdc.contains(normalizedPackId)) {
             throw new IllegalStateException("Unknown or already collected misplaced pack: " + packId);
         }
-        Set<String> nextCollected = new LinkedHashSet<>(collectedAtPdc);
-        nextCollected.add(packId);
-        Map<String, Integer> counts = new LinkedHashMap<>(snapshot.pdcCollectedPackCountByServiceCentreId());
-        counts.merge(pack.serviceCentreId(), 1, Integer::sum);
-        P2pMissingPackSnapshot nextSnapshot = new P2pMissingPackSnapshot(
-                snapshot.version() + 1, snapshot.missingPhysicalPackIdsByBagKey(),
-                snapshot.pendingEmptyBagKeys(), snapshot.missingPackCountByServiceCentreId(),
-                counts, snapshot.firstCollectedSheetByOrderId());
-        collectedAtPdc = Collections.unmodifiableSet(nextCollected);
+        P2pMissingPackSnapshot nextSnapshot = snapshot.withPdcCollectedPack(pack.serviceCentreId());
+        collectedAtPdc.add(normalizedPackId);
         snapshot = nextSnapshot;
     }
 

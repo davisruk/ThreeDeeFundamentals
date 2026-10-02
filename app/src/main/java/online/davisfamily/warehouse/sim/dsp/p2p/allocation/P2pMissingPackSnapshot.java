@@ -10,18 +10,24 @@ import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 
 /** Immutable exception and first-COLLECT publication for worker-side evaluation. */
-public record P2pMissingPackSnapshot(
-        long version,
-        Map<BagKey, Set<String>> missingPhysicalPackIdsByBagKey,
-        Set<BagKey> pendingEmptyBagKeys,
-        Map<String, Integer> missingPackCountByServiceCentreId,
-        Map<String, Integer> pdcCollectedPackCountByServiceCentreId,
-        Map<String, OrderSheetKey> firstCollectedSheetByOrderId) {
+public final class P2pMissingPackSnapshot {
+    private final long version;
+    private final Map<BagKey, Set<String>> missingPhysicalPackIdsByBagKey;
+    private final Set<BagKey> pendingEmptyBagKeys;
+    private final Map<String, Integer> missingPackCountByServiceCentreId;
+    private final Map<String, Integer> pdcCollectedPackCountByServiceCentreId;
+    private final Map<String, OrderSheetKey> firstCollectedSheetByOrderId;
 
     private static final P2pMissingPackSnapshot EMPTY = new P2pMissingPackSnapshot(
             0, Map.of(), Set.of(), Map.of(), Map.of(), Map.of());
 
-    public P2pMissingPackSnapshot {
+    public P2pMissingPackSnapshot(
+            long version,
+            Map<BagKey, Set<String>> missingPhysicalPackIdsByBagKey,
+            Set<BagKey> pendingEmptyBagKeys,
+            Map<String, Integer> missingPackCountByServiceCentreId,
+            Map<String, Integer> pdcCollectedPackCountByServiceCentreId,
+            Map<String, OrderSheetKey> firstCollectedSheetByOrderId) {
         if (version < 0) {
             throw new IllegalArgumentException("version must be nonnegative");
         }
@@ -46,7 +52,8 @@ public record P2pMissingPackSnapshot(
             }
             missingCopy.put(entry.getKey(), Collections.unmodifiableSet(ids));
         }
-        missingPhysicalPackIdsByBagKey = Collections.unmodifiableMap(missingCopy);
+        this.version = version;
+        this.missingPhysicalPackIdsByBagKey = Collections.unmodifiableMap(missingCopy);
         Set<BagKey> pendingCopy = new LinkedHashSet<>();
         for (BagKey key : pendingEmptyBagKeys) {
             if (key == null || !missingCopy.containsKey(key)) {
@@ -54,9 +61,9 @@ public record P2pMissingPackSnapshot(
             }
             pendingCopy.add(key);
         }
-        pendingEmptyBagKeys = Collections.unmodifiableSet(pendingCopy);
-        missingPackCountByServiceCentreId = copyCounts(missingPackCountByServiceCentreId);
-        pdcCollectedPackCountByServiceCentreId = copyCounts(pdcCollectedPackCountByServiceCentreId);
+        this.pendingEmptyBagKeys = Collections.unmodifiableSet(pendingCopy);
+        this.missingPackCountByServiceCentreId = copyCounts(missingPackCountByServiceCentreId);
+        this.pdcCollectedPackCountByServiceCentreId = copyCounts(pdcCollectedPackCountByServiceCentreId);
         Map<String, OrderSheetKey> firstCopy = new LinkedHashMap<>();
         for (var entry : firstCollectedSheetByOrderId.entrySet()) {
             requireId(entry.getKey(), "orderId");
@@ -65,7 +72,65 @@ public record P2pMissingPackSnapshot(
             }
             firstCopy.put(entry.getKey(), entry.getValue());
         }
-        firstCollectedSheetByOrderId = Collections.unmodifiableMap(firstCopy);
+        this.firstCollectedSheetByOrderId = Collections.unmodifiableMap(firstCopy);
+    }
+
+    /** Trusted path: previous owns only validated immutable collections, counts is freshly frozen. */
+    private P2pMissingPackSnapshot(P2pMissingPackSnapshot previous, long version,
+            Map<String, Integer> pdcCounts) {
+        this.version = version;
+        missingPhysicalPackIdsByBagKey = previous.missingPhysicalPackIdsByBagKey;
+        pendingEmptyBagKeys = previous.pendingEmptyBagKeys;
+        missingPackCountByServiceCentreId = previous.missingPackCountByServiceCentreId;
+        firstCollectedSheetByOrderId = previous.firstCollectedSheetByOrderId;
+        pdcCollectedPackCountByServiceCentreId = pdcCounts;
+    }
+
+    public P2pMissingPackSnapshot withPdcCollectedPack(String serviceCentreId) {
+        requireId(serviceCentreId, "serviceCentreId");
+        Map<String, Integer> counts = new LinkedHashMap<>(pdcCollectedPackCountByServiceCentreId);
+        counts.put(serviceCentreId, Math.addExact(counts.getOrDefault(serviceCentreId, 0), 1));
+        return new P2pMissingPackSnapshot(this, Math.addExact(version, 1),
+                Collections.unmodifiableMap(counts));
+    }
+
+    public long version() { return version; }
+    public Map<BagKey, Set<String>> missingPhysicalPackIdsByBagKey() { return missingPhysicalPackIdsByBagKey; }
+    public Set<BagKey> pendingEmptyBagKeys() { return pendingEmptyBagKeys; }
+    public Map<String, Integer> missingPackCountByServiceCentreId() { return missingPackCountByServiceCentreId; }
+    public Map<String, Integer> pdcCollectedPackCountByServiceCentreId() { return pdcCollectedPackCountByServiceCentreId; }
+    public Map<String, OrderSheetKey> firstCollectedSheetByOrderId() { return firstCollectedSheetByOrderId; }
+
+    @Override
+    public boolean equals(Object object) {
+        if (object == this) { return true; }
+        if (!(object instanceof P2pMissingPackSnapshot other)) { return false; }
+        return version == other.version
+                && missingPhysicalPackIdsByBagKey.equals(other.missingPhysicalPackIdsByBagKey)
+                && pendingEmptyBagKeys.equals(other.pendingEmptyBagKeys)
+                && missingPackCountByServiceCentreId.equals(other.missingPackCountByServiceCentreId)
+                && pdcCollectedPackCountByServiceCentreId.equals(other.pdcCollectedPackCountByServiceCentreId)
+                && firstCollectedSheetByOrderId.equals(other.firstCollectedSheetByOrderId);
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = Long.hashCode(version);
+        hash = 31 * hash + missingPhysicalPackIdsByBagKey.hashCode();
+        hash = 31 * hash + pendingEmptyBagKeys.hashCode();
+        hash = 31 * hash + missingPackCountByServiceCentreId.hashCode();
+        hash = 31 * hash + pdcCollectedPackCountByServiceCentreId.hashCode();
+        return 31 * hash + firstCollectedSheetByOrderId.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "P2pMissingPackSnapshot[version=" + version
+                + ", missingPhysicalPackIdsByBagKey=" + missingPhysicalPackIdsByBagKey
+                + ", pendingEmptyBagKeys=" + pendingEmptyBagKeys
+                + ", missingPackCountByServiceCentreId=" + missingPackCountByServiceCentreId
+                + ", pdcCollectedPackCountByServiceCentreId=" + pdcCollectedPackCountByServiceCentreId
+                + ", firstCollectedSheetByOrderId=" + firstCollectedSheetByOrderId + "]";
     }
 
     public static P2pMissingPackSnapshot empty() {
