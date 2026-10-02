@@ -7,12 +7,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
+import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
+import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 
@@ -122,12 +126,22 @@ class AdaptingBenchTest {
         DspOrderItem second = adaptedLine("second", "target", "0000310");
         DspOrderItem missing = adaptedLine("missing", "target", "0000310");
         OrderSheetKey sheet = new OrderSheetKey("target", 1);
+        AdaptingTargetSheetCatalog targetCatalog = new AdaptingTargetSheetCatalog(Map.of(
+                PreparedLineKey.forPreparedLine(first), sheet,
+                PreparedLineKey.forPreparedLine(second), sheet));
+        AdaptingOrderPreparationCatalog orderCatalog = new AdaptingOrderPreparationCatalog(
+                new LoadedDspData(List.of(), List.of(
+                        new NotionalToteOrder("adapted-source", "adapted-source", SERVICE_CENTRE_ID, 7,
+                                OrderType.ADAPTED, List.of(first, second), 999, 7),
+                        new NotionalToteOrder("target", "target", SERVICE_CENTRE_ID, 1,
+                                OrderType.ASSOCIATED, List.of(
+                                        adaptedLine("first", "adapted-source", "0000310"),
+                                        adaptedLine("second", "adapted-source", "0000310")), 999, 1)),
+                        List.of(), Set.of()), targetCatalog);
         AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
                 new AdaptingStorageConfig(2, 2, 2),
                 storageMap("0000310", "bench-1"),
-                new AdaptingTargetSheetCatalog(Map.of(
-                        PreparedLineKey.forPreparedLine(first), sheet,
-                        PreparedLineKey.forPreparedLine(second), sheet))));
+                targetCatalog, orderCatalog));
         AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
 
         bench.acceptVisit(AdaptingVisit.store(new PhysicalToteId("bad-store"),

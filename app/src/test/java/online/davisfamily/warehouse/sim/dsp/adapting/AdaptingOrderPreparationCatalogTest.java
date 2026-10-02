@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,24 @@ class AdaptingOrderPreparationCatalogTest {
         assertEquals("store-1", catalog.requireStoreId("target"));
         assertEquals(new OrderSheetKey("target", 2),
                 catalog.requireTargetSheet(new PreparedLineKey("target", "B")));
+        assertEquals(Optional.of(new OrderSheetKey("target", 1)), catalog.firstCollectSheetFor("target"));
+        assertEquals(Optional.empty(), catalog.firstCollectSheetFor("direct"));
         assertThrows(UnsupportedOperationException.class, () -> catalog.requiredKeysFor("target").clear());
+    }
+
+    @Test
+    void lowestExecutablePreparedSheetCanBeTwoWhenOneIsAbsent() {
+        DspOrderItem prepared = line("A", "store-1", "target", DspOrderLineType.ADAPTED);
+        LoadedDspData data = data(List.of(
+                order("source", 1, OrderType.ADAPTED, List.of(prepared)),
+                order("target", 2, OrderType.ASSOCIATED,
+                        List.of(line("A", "store-1", "source", DspOrderLineType.ADAPTED)))));
+        AdaptingOrderPreparationCatalog catalog = new AdaptingOrderPreparationCatalog(data,
+                new AdaptingTargetSheetCatalog(Map.of(new PreparedLineKey("target", "A"),
+                        new OrderSheetKey("target", 2))));
+
+        assertEquals(Optional.of(new OrderSheetKey("target", 2)), catalog.firstCollectSheetFor("target"));
+        assertThrows(IllegalArgumentException.class, () -> catalog.firstCollectSheetFor(" "));
     }
 
     @Test

@@ -15,6 +15,7 @@ import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
@@ -29,6 +30,7 @@ public final class DspOperationalReleaseSnapshot {
     private final P2pLineLeaseCatalogSnapshot p2pLineLeases;
     private final Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions;
     private final Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation;
+    private final P2pMissingPackSnapshot missingPacks;
     private final Map<PhysicalToteId, DspOperationalReleaseCandidate>
             candidatesByPhysicalToteId;
     private final Map<PhysicalToteId, Integer> groupIndexByPhysicalToteId;
@@ -101,6 +103,21 @@ public final class DspOperationalReleaseSnapshot {
                 elasticP2pAllocation);
     }
 
+    public DspOperationalReleaseSnapshot(
+            List<DspOperationalReleaseCandidate> candidates,
+            List<ServiceCentrePharmacyGroup> pharmacyGroups,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
+            Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation,
+            P2pMissingPackSnapshot missingPacks) {
+        this(validatedCandidateState(candidates, pharmacyGroups), stationAdmissions,
+                preparedLineKeys, routeAdmissions, p2pLineLeases, p2pRouteAdmissions,
+                elasticP2pAllocation, missingPacks);
+    }
+
     private DspOperationalReleaseSnapshot(
             CandidateState candidateState,
             Map<StationType, StationAdmissionSnapshot> stationAdmissions,
@@ -109,6 +126,20 @@ public final class DspOperationalReleaseSnapshot {
             P2pLineLeaseCatalogSnapshot p2pLineLeases,
             Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
             Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation) {
+        this(candidateState, stationAdmissions, preparedLineKeys, routeAdmissions,
+                p2pLineLeases, p2pRouteAdmissions, elasticP2pAllocation,
+                P2pMissingPackSnapshot.empty());
+    }
+
+    private DspOperationalReleaseSnapshot(
+            CandidateState candidateState,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
+            Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation,
+            P2pMissingPackSnapshot missingPacks) {
         if (candidateState == null) {
             throw new IllegalArgumentException("candidateState must not be null");
         }
@@ -130,6 +161,10 @@ public final class DspOperationalReleaseSnapshot {
             throw new IllegalArgumentException("elasticP2pAllocation must not be null");
         }
         this.elasticP2pAllocation = elasticP2pAllocation;
+        if (missingPacks == null) {
+            throw new IllegalArgumentException("missingPacks must not be null");
+        }
+        this.missingPacks = missingPacks;
         validateElasticAllocation(this.candidates, p2pLineLeases, elasticP2pAllocation);
         this.groupIndexByPhysicalToteId = candidateState.groupIndexByPhysicalToteId();
     }
@@ -167,6 +202,20 @@ public final class DspOperationalReleaseSnapshot {
                 elasticP2pAllocation);
     }
 
+    static DspOperationalReleaseSnapshot fromValidatedCandidateState(
+            CandidateState candidateState,
+            Map<StationType, StationAdmissionSnapshot> stationAdmissions,
+            Set<PreparedLineKey> preparedLineKeys,
+            List<OperationalCandidateRouteAdmission> routeAdmissions,
+            P2pLineLeaseCatalogSnapshot p2pLineLeases,
+            Map<OperationalRouteDestination, Boolean> p2pRouteAdmissions,
+            Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation,
+            P2pMissingPackSnapshot missingPacks) {
+        return new DspOperationalReleaseSnapshot(candidateState, stationAdmissions,
+                preparedLineKeys, routeAdmissions, p2pLineLeases, p2pRouteAdmissions,
+                elasticP2pAllocation, missingPacks);
+    }
+
     public List<DspOperationalReleaseCandidate> candidates() {
         return candidates;
     }
@@ -197,6 +246,10 @@ public final class DspOperationalReleaseSnapshot {
 
     public Optional<P2pElasticAllocationSnapshot> elasticP2pAllocation() {
         return elasticP2pAllocation;
+    }
+
+    public P2pMissingPackSnapshot missingPacks() {
+        return missingPacks;
     }
 
     public Optional<DspOperationalReleaseCandidate> findByPhysicalToteId(
@@ -260,7 +313,8 @@ public final class DspOperationalReleaseSnapshot {
                 && routeAdmissions.equals(that.routeAdmissions)
                 && p2pLineLeases.equals(that.p2pLineLeases)
                 && p2pRouteAdmissions.equals(that.p2pRouteAdmissions)
-                && elasticP2pAllocation.equals(that.elasticP2pAllocation);
+                && elasticP2pAllocation.equals(that.elasticP2pAllocation)
+                && missingPacks.equals(that.missingPacks);
     }
 
     @Override
@@ -273,7 +327,8 @@ public final class DspOperationalReleaseSnapshot {
                 routeAdmissions,
                 p2pLineLeases,
                 p2pRouteAdmissions,
-                elasticP2pAllocation);
+                elasticP2pAllocation,
+                missingPacks);
     }
 
     @Override
@@ -285,7 +340,8 @@ public final class DspOperationalReleaseSnapshot {
                 + ", routeAdmissions=" + routeAdmissions
                 + ", p2pLineLeases=" + p2pLineLeases
                 + ", p2pRouteAdmissions=" + p2pRouteAdmissions
-                + ", elasticP2pAllocation=" + elasticP2pAllocation + "]";
+                + ", elasticP2pAllocation=" + elasticP2pAllocation
+                + ", missingPacks=" + missingPacks + "]";
     }
 
     private static void validateElasticAllocation(

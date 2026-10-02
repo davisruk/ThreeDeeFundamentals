@@ -12,12 +12,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
+import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
@@ -52,6 +54,63 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 class AdaptingStationProcessingControllerTest {
+
+    @Test
+    void shouldPublishStrictCollectObserverOnlyAfterExactStationContinuation() {
+        NotionalToteOrder collecting = order("strict-collect", OrderType.ASSOCIATED);
+        DspOrderItem sourceLine = collecting.items().getFirst();
+        NotionalToteOrder source = new NotionalToteOrder(
+                "strict-source", "strict-source", "SC-1", 1, OrderType.ADAPTED,
+                List.of(sourceLine), 1, 0);
+        PreparedLineKey key = PreparedLineKey.forPreparedLine(sourceLine);
+        AdaptingTargetSheetCatalog targets = new AdaptingTargetSheetCatalog(
+                Map.of(key, collecting.orderSheetKey()));
+        AdaptingOrderPreparationCatalog orders = new AdaptingOrderPreparationCatalog(
+                new LoadedDspData(List.of(), List.of(source, collecting), List.of(), Set.of()), targets);
+        AdaptingStorageMap storageMap = new AdaptingStorageMap();
+        storageMap.configureAvailableBenches(List.of(new AdaptingBenchId("bench-1")));
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(), storageMap, targets, orders));
+        store.stageAll(List.of(sourceLine), source.orderSheetKey(), "SC-1");
+        AdaptingArea area = new AdaptingArea(
+                List.of(new AdaptingBench("bench-1", store, 0d)), 1, storageMap);
+        MapBackedToteLoadPlanRegistry registry = new MapBackedToteLoadPlanRegistry();
+        PhysicalToteId physical = new PhysicalToteId("strict-physical");
+        ToteLoadPlan original = new ToteLoadPlan(physical, List.of());
+        registry.putLoadPlan(original);
+        StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
+        PackProvenanceRegistry provenance = new PackProvenanceRegistry();
+        AtomicBoolean observerCommitted = new AtomicBoolean();
+        AdaptingAreaController areaController = new AdaptingAreaController(
+                area, new DspSchedulerRuntimeState(new WarehouseSchedulerSnapshot(
+                        List.of(), Map.of(), Set.of(), Optional.empty())), registry,
+                new DefaultCollectedPackPlanFactory(dimensions(), new DspPackPlanFactory(provenance)),
+                provenance, (sheet, tote, packs) -> () -> {
+                    assertEquals(physical, tote);
+                    assertSame(registry.getLoadPlanFor(physical),
+                            coordinator.peekDisposition().orElseThrow().currentLoadPlan());
+                    assertTrue(store.binSnapshots().isEmpty());
+                    assertTrue(provenance.find(packs.getFirst().packId()).isPresent());
+                    observerCommitted.set(true);
+                });
+        OperationalRouteDestination destination = destination("bench-1");
+        RoutedPhysicalTote routed = routedTote(collecting, physical, destination,
+                original, OperationalPhysicalToteSource.OSR);
+        AdaptingStationProcessingTarget target = new AdaptingStationProcessingTarget(
+                destination, new StationProcessingOrderCatalog(List.of(collecting)),
+                registry, new AdaptingVisitFactory(), area, coordinator);
+        AdaptingStationProcessingController controller = new AdaptingStationProcessingController(
+                "strict-controller", Set.of(destination), registry, area, areaController,
+                lifecycleController(), coordinator);
+
+        target.accept(routed, Duration.ZERO);
+        controller.update(context(1d), 0d);
+
+        assertTrue(observerCommitted.get());
+        assertEquals(StationProcessingDispositionType.CONTINUE,
+                coordinator.peekDisposition().orElseThrow().type());
+        assertTrue(registry.getLoadPlanFor(physical) != original);
+    }
 
     @Test
     void shouldContinueAssociatedAndEmptyCollectWithExactReplacementPlans() {

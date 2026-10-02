@@ -23,6 +23,8 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseAvailability;
 import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCandidate;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
@@ -68,8 +70,19 @@ class OperationalDependencyReadinessPolicyTest {
             assertEquals(OperationalReleaseBlockType.ADAPTED_DEPENDENCY, blocks.getFirst().type());
             assertTrue(blocks.getFirst().reason().contains("shared-order"));
             assertTrue(blocks.getFirst().reason().contains("second"));
-            assertTrue(orderWide.findBlocks(candidate,
-                    snapshot(candidates, Set.of(firstKey, secondKey))).isEmpty());
+            List<OperationalReleaseBlock> ready = orderWide.findBlocks(candidate,
+                    snapshot(candidates, Set.of(firstKey, secondKey)));
+            if (candidate == first) {
+                assertTrue(ready.isEmpty());
+            } else {
+                assertEquals(List.of(OperationalReleaseBlockType.FIRST_COLLECT_PENDING),
+                        ready.stream().map(OperationalReleaseBlock::type).toList());
+                assertTrue(orderWide.findBlocks(candidate,
+                        snapshot(candidates, Set.of(firstKey, secondKey),
+                                new P2pMissingPackSnapshot(1, Map.of(), Set.of(), Map.of(),
+                                        Map.of(), Map.of("shared-order", new OrderSheetKey("shared-order", 1)))))
+                        .isEmpty());
+            }
         }
         assertEquals(0, policy.findBlocks(first, snapshot(candidates, Set.of(firstKey))).size());
     }
@@ -213,11 +226,23 @@ class OperationalDependencyReadinessPolicyTest {
     private static DspOperationalReleaseSnapshot snapshot(
             List<DspOperationalReleaseCandidate> candidates,
             Set<PreparedLineKey> preparedLineKeys) {
+        return snapshot(candidates, preparedLineKeys, P2pMissingPackSnapshot.empty());
+    }
+
+    private static DspOperationalReleaseSnapshot snapshot(
+            List<DspOperationalReleaseCandidate> candidates,
+            Set<PreparedLineKey> preparedLineKeys,
+            P2pMissingPackSnapshot missingPacks) {
         return new DspOperationalReleaseSnapshot(
                 candidates,
                 List.of(new ServiceCentrePharmacyGroup("sc-1", "pharmacy-1", 0, 1)),
                 Map.of(),
-                preparedLineKeys);
+                preparedLineKeys,
+                List.of(),
+                new P2pLineLeaseCatalogSnapshot(List.of()),
+                Map.of(),
+                Optional.empty(),
+                missingPacks);
     }
 
     private static DspOperationalReleaseCandidate candidate(

@@ -4,6 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
@@ -14,6 +15,9 @@ public class AdaptingAreaController {
     private final DspSchedulerRuntimeState runtimeState;
     private final MutableToteLoadPlanRegistry toteLoadPlanRegistry;
     private final CollectedPackPlanFactory collectedPackPlanFactory;
+    private final DefaultCollectedPackPlanFactory strictPackPlanFactory;
+    private final PackProvenanceRegistry provenanceRegistry;
+    private final AdaptingCollectObserver collectObserver;
 
     public AdaptingAreaController(AdaptingArea area, DspSchedulerRuntimeState runtimeState) {
         this(area, runtimeState, null, null);
@@ -38,6 +42,30 @@ public class AdaptingAreaController {
         this.runtimeState = runtimeState;
         this.toteLoadPlanRegistry = toteLoadPlanRegistry;
         this.collectedPackPlanFactory = collectedPackPlanFactory;
+        this.strictPackPlanFactory = null;
+        this.provenanceRegistry = null;
+        this.collectObserver = AdaptingCollectObserver.noOp();
+    }
+
+    public AdaptingAreaController(
+            AdaptingArea area,
+            DspSchedulerRuntimeState runtimeState,
+            MutableToteLoadPlanRegistry toteLoadPlanRegistry,
+            DefaultCollectedPackPlanFactory collectedPackPlanFactory,
+            PackProvenanceRegistry provenanceRegistry,
+            AdaptingCollectObserver collectObserver) {
+        if (area == null || runtimeState == null || toteLoadPlanRegistry == null
+                || collectedPackPlanFactory == null || provenanceRegistry == null
+                || collectObserver == null) {
+            throw new IllegalArgumentException("strict Adapting controller inputs must not be null");
+        }
+        this.area = area;
+        this.runtimeState = runtimeState;
+        this.toteLoadPlanRegistry = toteLoadPlanRegistry;
+        this.collectedPackPlanFactory = collectedPackPlanFactory;
+        this.strictPackPlanFactory = collectedPackPlanFactory;
+        this.provenanceRegistry = provenanceRegistry;
+        this.collectObserver = collectObserver;
     }
 
     public Optional<AdaptingBenchCompletion> applyBenchCompletion(AdaptingBenchId benchId) {
@@ -45,7 +73,21 @@ public class AdaptingAreaController {
             throw new IllegalArgumentException("benchId must not be null");
         }
 
-        Optional<AdaptingBenchCompletion> completion = area.bench(benchId).consumeCompletion();
+        AdaptingBench bench = area.bench(benchId);
+        Optional<AdaptingBenchCompletion> preview = bench.peekCompletion();
+        if (preview.isPresent() && preview.orElseThrow().preparedOrderGroup().isPresent()) {
+            AdaptingBenchCompletion pending = preview.orElseThrow();
+            ToteLoadPlan current = toteLoadPlanRegistry.getLoadPlanFor(pending.visit().physicalToteId());
+            if (current == null) {
+                throw new IllegalStateException("Missing current load plan for strict COLLECT");
+            }
+            PreparedAdaptingCollect decision = prepareBenchCollect(benchId, current);
+            Runnable action = commitBenchCollect(decision);
+            action.run();
+            return Optional.of(pending);
+        }
+
+        Optional<AdaptingBenchCompletion> completion = bench.consumeCompletion();
         if (completion.isEmpty()) {
             return Optional.empty();
         }
@@ -62,6 +104,72 @@ public class AdaptingAreaController {
         }
 
         return completion;
+    }
+
+    public PreparedAdaptingCollect prepareBenchCollect(
+            AdaptingBenchId benchId,
+            ToteLoadPlan currentLoadPlan) {
+        if (strictPackPlanFactory == null) {
+            throw new IllegalStateException("Strict COLLECT preparation requires full-day composition");
+        }
+        if (benchId == null || currentLoadPlan == null) {
+            throw new IllegalArgumentException("benchId and currentLoadPlan must not be null");
+        }
+        AdaptingBenchCompletion completion = area.bench(benchId).peekCompletion()
+                .orElseThrow(() -> new IllegalStateException("No pending bench COLLECT completion"));
+        if (completion.visit().visitType() != AdaptingVisitType.COLLECT
+                || completion.preparedOrderGroup().isEmpty()) {
+            throw new IllegalStateException("Pending bench completion is not strict COLLECT");
+        }
+        var physicalToteId = completion.visit().physicalToteId();
+        if (!physicalToteId.equals(currentLoadPlan.physicalToteId())
+                || toteLoadPlanRegistry.getLoadPlanFor(physicalToteId) != currentLoadPlan) {
+            throw new IllegalStateException("Strict COLLECT load plan is not the exact registered plan");
+        }
+        String storeId = completion.visit().profile().pharmacyIds().getFirst();
+        if (!completion.visit().profile().pharmacyIds().stream().allMatch(storeId::equals)) {
+            throw new IllegalStateException("Strict COLLECT visit mixes stores");
+        }
+        AdaptingPreparedOrderGroup group = completion.preparedOrderGroup().orElseThrow();
+        if (!group.storeId().equals(storeId)
+                || !group.referenceOrderId().equals(completion.visit().profile().orderSheetKey().orderId())) {
+            throw new IllegalStateException("Strict COLLECT group identity changed");
+        }
+        PreparedCollectedPackPlans prepared = strictPackPlanFactory.preparePackPlans(
+                completion.collectedLines());
+        provenanceRegistry.validateBatch(prepared.provenanceByPackId());
+        Runnable observerAction = collectObserver.prepare(
+                completion.visit().profile().orderSheetKey(), physicalToteId, prepared.packPlans());
+        if (observerAction == null) {
+            throw new IllegalStateException("COLLECT observer returned no commit action");
+        }
+        ToteLoadPlan prospective = currentLoadPlan.withAdditionalPackPlans(prepared.packPlans());
+        return new PreparedAdaptingCollect(
+                benchId, completion, currentLoadPlan, prospective, prepared, observerAction);
+    }
+
+    public Runnable commitBenchCollect(PreparedAdaptingCollect decision) {
+        if (decision == null) {
+            throw new IllegalArgumentException("decision must not be null");
+        }
+        AdaptingBench bench = area.bench(decision.benchId());
+        if (bench.peekCompletion().orElse(null) != decision.completion()) {
+            throw new IllegalStateException("Strict COLLECT bench completion changed before commit");
+        }
+        var physicalToteId = decision.completion().visit().physicalToteId();
+        if (toteLoadPlanRegistry.getLoadPlanFor(physicalToteId) != decision.currentLoadPlan()) {
+            throw new IllegalStateException("Strict COLLECT registered load plan changed before commit");
+        }
+        provenanceRegistry.validateBatch(decision.preparedPacks().provenanceByPackId());
+        // The storage owner rechecks its mutation version and complete group before removing it.
+        area.bench(decision.benchId()).commitOrderGroup(
+                decision.completion().preparedOrderGroup().orElseThrow());
+        provenanceRegistry.registerBatch(decision.preparedPacks().provenanceByPackId());
+        toteLoadPlanRegistry.putLoadPlan(decision.replacementLoadPlan());
+        if (bench.consumeCompletion().orElse(null) != decision.completion()) {
+            throw new IllegalStateException("Strict COLLECT completion changed after drain");
+        }
+        return decision.observerCommit();
     }
 
     private void applyCollectCompletion(AdaptingBenchCompletion completion) {

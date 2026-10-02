@@ -93,6 +93,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     new DspFullDayAdaptingTargetSheetCatalogFactory().create(data, bagPlan);
             AdaptingOrderPreparationCatalog orderPreparationCatalog =
                     new AdaptingOrderPreparationCatalog(data, targetSheetCatalog);
+            DspPreparedPackExceptionLedger exceptionLedger =
+                    new DspPreparedPackExceptionLedger(
+                            bagPlan, targetSheetCatalog, orderPreparationCatalog);
             QueueCapacities queues = profile.queueCapacities();
 
             DspRouteDeriver routeDeriver = new DspRouteDeriver(
@@ -176,7 +179,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
             storageMap.configureAvailableBenches(adaptingBenchIds);
             AdaptedLineStore adaptedLineStore = new AdaptedLineStore(
                     new AdaptingStorageLayout(
-                            profile.adaptingStorageConfig(), storageMap, targetSheetCatalog));
+                            profile.adaptingStorageConfig(), storageMap,
+                            targetSheetCatalog, orderPreparationCatalog));
             List<AdaptingBench> adaptingBenches = new ArrayList<>();
             for (AdaptingBenchDefinition definition : profile.adaptingBenchDefinitions()) {
                 adaptingBenches.add(new AdaptingBench(
@@ -192,7 +196,12 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     loadPlans,
                     new DefaultCollectedPackPlanFactory(
                             packPlanFactory,
-                            new PlannedSlotCollectedPackCorrelationResolver(bagPlan)));
+                            new PlannedSlotCollectedPackCorrelationResolver(bagPlan)),
+                    provenanceRegistry,
+                    (sheet, tote, packs) -> {
+                        var decision = exceptionLedger.prepareCollect(sheet, tote, packs);
+                        return () -> exceptionLedger.commitCollect(decision);
+                    });
 
             RouteTopology topology = buildRouteTopology(destinations, profile);
             Map<OperationalRouteDestination, StationRoutedToteArrivalQueue> arrivalQueues =
@@ -322,7 +331,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             av02Inventory,
                             lifecycleLedger,
                             loadPlans,
-                            elasticRuntime);
+                            elasticRuntime,
+                            exceptionLedger::snapshot);
             simulationWorld.addController(operationalRuntime.controller());
             closeables.add(operationalRuntime);
 

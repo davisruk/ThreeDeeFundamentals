@@ -25,6 +25,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.DspP2pStickyLeaseRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshot;
@@ -120,6 +121,26 @@ public final class DspOperationalReleaseRuntimeFactory {
             PhysicalToteLifecycleLedger lifecycleLedger,
             MutableToteLoadPlanRegistry loadPlanRegistry,
             DspP2pElasticAllocationRuntime elasticRuntime) {
+        return createElasticWithAv02(evaluationSource, inventory, lifecycleController,
+                manifestCatalog, logicalSnapshotSupplier, clockSnapshotSupplier,
+                stationAdmissionResolver, routeTargetRegistry, av02Inventory,
+                lifecycleLedger, loadPlanRegistry, elasticRuntime, P2pMissingPackSnapshot::empty);
+    }
+
+    public DspOperationalReleaseRuntime createElasticWithAv02(
+            OperationalReleaseEvaluationSource evaluationSource,
+            OsrPhysicalInventory inventory,
+            InboundToteLifecycleController lifecycleController,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<WarehouseSchedulerSnapshot> logicalSnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            StationAdmissionResolver stationAdmissionResolver,
+            OsrOutboundRouteLaunchTargetRegistry routeTargetRegistry,
+            Av02PhysicalToteInventory av02Inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            DspP2pElasticAllocationRuntime elasticRuntime,
+            Supplier<P2pMissingPackSnapshot> missingPacksSupplier) {
         requireNonNull(elasticRuntime, "elasticRuntime");
         requireNonNull(evaluationSource, "evaluationSource");
         requireNonNull(inventory, "inventory");
@@ -132,6 +153,7 @@ public final class DspOperationalReleaseRuntimeFactory {
         requireNonNull(av02Inventory, "av02Inventory");
         requireNonNull(lifecycleLedger, "lifecycleLedger");
         requireNonNull(loadPlanRegistry, "loadPlanRegistry");
+        requireNonNull(missingPacksSupplier, "missingPacksSupplier");
         if (!evaluationSource.p2pAllocationProfileId()
                 .filter(P2pElasticAllocationSnapshot
                         .DEADLINE_AWARE_ELASTIC_STICKY_LEASES::equals)
@@ -171,7 +193,8 @@ public final class DspOperationalReleaseRuntimeFactory {
                     routeTargetRegistry.snapshotAdmissions().stream()
                             .filter(admission -> admission.stationType() == StationType.P2P)
                             .toList(),
-                    elasticSnapshot.allocation());
+                    elasticSnapshot.allocation(),
+                    requireSnapshot(missingPacksSupplier.get()));
         };
 
         OsrProcessingReleaseCommandHandler osrHandler =
@@ -193,6 +216,13 @@ public final class DspOperationalReleaseRuntimeFactory {
                 operationalSnapshotSupplier,
                 new CompositeOperationalCommandHandler(osrHandler, av02Handler));
         return new DspOperationalReleaseRuntime(controller, routeTargetRegistry);
+    }
+
+    private static P2pMissingPackSnapshot requireSnapshot(P2pMissingPackSnapshot snapshot) {
+        if (snapshot == null) {
+            throw new IllegalStateException("missingPacksSupplier returned null");
+        }
+        return snapshot;
     }
 
     public DspOperationalReleaseRuntime createSticky(

@@ -469,7 +469,7 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     }
 
     @Test
-    void shouldStoreAndCollectTwoAssociatedSheetsFromOneAdaptedTote() {
+    void shouldTipOrderOwnedBinsIntoFirstAssociatedSheet() {
         DspUncalibratedFullDayProfile profile = sheetOwnedProfile();
         assertEquals("ORDER_WIDE_PREPARATION_READY_OVERLAP", profile.orderEligibilityPolicyId());
         assertEquals("ADAPTED_FIRST_PHARMACY_GROUPED_THEN_SOURCE_SEQUENCE",
@@ -505,16 +505,16 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                     () -> "Prepared lines not published: " + runtime.snapshot());
             List<AdaptingBinSnapshot> stored = runtime.adaptingBinSnapshots();
             assertSame(stored, runtime.adaptingBinSnapshots());
-            assertEquals(List.of(first, first, second), stored.stream()
-                    .map(bin -> bin.id().targetOrderSheetKey()).toList());
-            assertEquals(List.of(1, 2, 1), stored.stream().map(bin -> bin.id().ordinal()).toList());
+            assertEquals(List.of("associated-target", "associated-target", "associated-target"),
+                    stored.stream().map(bin -> bin.id().referenceOrderId()).toList());
+            assertEquals(List.of(1, 2, 3), stored.stream().map(bin -> bin.id().ordinal()).toList());
             assertEquals(List.of(
-                    new AdaptingBinId("pharmacy-1", first, 1),
-                    new AdaptingBinId("pharmacy-1", first, 2),
-                    new AdaptingBinId("pharmacy-1", second, 1)),
+                    new AdaptingBinId("pharmacy-1", "associated-target", 1),
+                    new AdaptingBinId("pharmacy-1", "associated-target", 2),
+                    new AdaptingBinId("pharmacy-1", "associated-target", 3)),
                     stored.stream().map(AdaptingBinSnapshot::id).toList());
             assertSame(stored.get(1).id(), stored.getFirst().nextBinId().orElseThrow());
-            assertTrue(stored.get(1).nextBinId().isEmpty());
+            assertSame(stored.get(2).id(), stored.get(1).nextBinId().orElseThrow());
             assertTrue(stored.get(2).nextBinId().isEmpty());
             assertTrue(stored.stream().flatMap(bin -> bin.stagedRecords().stream())
                     .allMatch(record -> record.location().isEmpty()));
@@ -525,22 +525,14 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                     .allMatch(record -> record.sourceOrderSheetKey().equals(source)
                             && record.sourceServiceCentreId().equals("104")));
 
-            for (int step = 0; step < 500
-                    && !runtime.adaptingBinSnapshots().stream()
-                            .allMatch(bin -> bin.id().targetOrderSheetKey().equals(second)); step++) {
-                runtime.update(1d);
-            }
-            assertEquals(List.of(second), runtime.adaptingBinSnapshots().stream()
-                    .map(bin -> bin.id().targetOrderSheetKey()).toList());
-            assertEquals("B", runtime.adaptingBinSnapshots().getFirst()
-                    .stagedRecords().getFirst().line().lineReference());
-            assertCorrelations(input.bagPlan(), runtime, "tote-associated-1", source, List.of("A1", "A2"));
-
             for (int step = 0; step < 500 && !runtime.adaptingBinSnapshots().isEmpty(); step++) {
                 runtime.update(1d);
             }
             assertTrue(runtime.adaptingBinSnapshots().isEmpty());
-            assertCorrelations(input.bagPlan(), runtime, "tote-associated-2", source, List.of("B"));
+            assertCorrelations(input.bagPlan(), runtime, "tote-associated-1", source,
+                    List.of("A1", "A2", "B"));
+            assertTrue(runtime.loadPlanRegistry().getLoadPlanFor("tote-associated-2")
+                    .getPackPlans().isEmpty());
         }
     }
 
@@ -576,7 +568,7 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     }
 
     @Test
-    void shouldCollectEmptyTargetThroughStrictSheetOwnedStorage() {
+    void shouldUseSheet002AsFirstCollectorWhenSheet001IsNotExecutable() {
         DspUncalibratedFullDayProfile profile = sheetOwnedProfile();
         DspFullDayLoadedInput input = adaptedInput(profile, OrderType.EMPTY);
         OrderSheetKey emptySheet = new OrderSheetKey("associated-target", 2);
@@ -589,11 +581,10 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                             .contains(new PreparedLineKey("associated-target", "B")); step++) {
                 runtime.update(1d);
             }
-            assertEquals(List.of(emptySheet), runtime.adaptingBinSnapshots().stream()
-                    .filter(bin -> bin.id().targetOrderSheetKey().equals(emptySheet))
-                    .map(bin -> bin.id().targetOrderSheetKey()).toList());
+            assertEquals(List.of("associated-target"), runtime.adaptingBinSnapshots().stream()
+                    .map(bin -> bin.id().referenceOrderId()).toList());
             List<AdaptingBinSnapshot> emptyBins = runtime.adaptingBinSnapshots();
-            assertEquals(List.of(new AdaptingBinId("pharmacy-1", emptySheet, 1)),
+            assertEquals(List.of(new AdaptingBinId("pharmacy-1", "associated-target", 1)),
                     emptyBins.stream().map(AdaptingBinSnapshot::id).toList());
             assertTrue(emptyBins.getFirst().nextBinId().isEmpty());
             assertEquals(List.of("B"), emptyBins.stream()
@@ -603,12 +594,10 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                     .allMatch(record -> record.location().isEmpty()));
 
             for (int step = 0; step < 500
-                    && runtime.adaptingBinSnapshots().stream()
-                            .anyMatch(bin -> bin.id().targetOrderSheetKey().equals(emptySheet)); step++) {
+                    && !runtime.adaptingBinSnapshots().isEmpty(); step++) {
                 runtime.update(1d);
             }
-            assertFalse(runtime.adaptingBinSnapshots().stream()
-                    .anyMatch(bin -> bin.id().targetOrderSheetKey().equals(emptySheet)),
+            assertTrue(runtime.adaptingBinSnapshots().isEmpty(),
                     () -> "EMPTY collection did not complete: state=" + runtime.state()
                             + ", av02=" + runtime.av02AllocationRuntimeController().snapshot()
                             + ", operational=" + runtime.operationalReleaseRuntime().controller().snapshot()

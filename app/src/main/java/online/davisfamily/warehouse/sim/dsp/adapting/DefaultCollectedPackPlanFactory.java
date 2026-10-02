@@ -1,7 +1,9 @@
 package online.davisfamily.warehouse.sim.dsp.adapting;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
@@ -86,5 +88,40 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
                             collectedLine.line().prescriptionId())));
         }
         return List.copyOf(packPlans);
+    }
+
+    /** Builds the exact prospective batch without registering provenance. */
+    public PreparedCollectedPackPlans preparePackPlans(List<AdaptedLineRecord> collectedLines) {
+        if (collectedLines == null) {
+            throw new IllegalArgumentException("collectedLines must not be null");
+        }
+        List<PackPlan> plans = new ArrayList<>(collectedLines.size());
+        Map<String, PackSourceProvenance> provenance = new LinkedHashMap<>();
+        for (AdaptedLineRecord line : collectedLines) {
+            if (line == null) {
+                throw new IllegalArgumentException("collectedLines must not contain null");
+            }
+            int ordinal = 1;
+            String lineReference = line.line().lineReference();
+            String correlationId = correlationResolver.resolve(line, ordinal);
+            if (correlationId == null || correlationId.isBlank()) {
+                throw new IllegalStateException("Resolved correlationId must not be blank");
+            }
+            String packId = "pack-" + lineReference + "-" + ordinal;
+            plans.add(new PackPlan(packId, correlationId.trim(), packDimensions));
+            PackSourceProvenance prior = provenance.putIfAbsent(packId,
+                    new PackSourceProvenance(
+                            line.sourceOrderSheetKey(),
+                            lineReference,
+                            line.line().productId(),
+                            line.sourceServiceCentreId(),
+                            line.line().pharmacyId(),
+                            line.line().patientId(),
+                            line.line().prescriptionId()));
+            if (prior != null) {
+                throw new IllegalArgumentException("Duplicate collected physical pack ID: " + packId);
+            }
+        }
+        return new PreparedCollectedPackPlans(plans, provenance);
     }
 }

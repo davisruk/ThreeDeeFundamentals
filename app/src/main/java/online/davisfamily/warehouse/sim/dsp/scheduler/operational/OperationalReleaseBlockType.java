@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.scheduler.operational;
 public enum OperationalReleaseBlockType {
     ACTIVE_SHEET_ASSIGNMENT,
     ADAPTED_DEPENDENCY,
+    FIRST_COLLECT_PENDING,
     ROUTE_ENTRY,
     STATION_ADMISSION,
     TARGET_SELECTION,

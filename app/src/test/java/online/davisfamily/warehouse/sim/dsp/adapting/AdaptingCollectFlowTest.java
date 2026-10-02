@@ -15,6 +15,8 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
+import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
@@ -156,6 +158,97 @@ class AdaptingCollectFlowTest {
                 () -> visitFactory.create(new PhysicalToteId("collect-tote-3"), fullPackOrder));
         assertTrue(ex.getMessage().contains("FULL_PACK"));
     }
+
+    @Test
+    void shouldPrepareStrictCollectWithoutDrainingAndCommitExactReplacement() {
+        StrictFixture fixture = strictFixture(AdaptingCollectObserver.noOp(), List.of());
+        AdaptingBenchId benchId = new AdaptingBenchId("bench-1");
+        ToteLoadPlan current = fixture.registry().getLoadPlanFor("collect-physical");
+        List<AdaptingBinSnapshot> beforeBins = fixture.store().binSnapshots();
+
+        PreparedAdaptingCollect decision = fixture.controller().prepareBenchCollect(benchId, current);
+
+        assertEquals(AdaptingBenchState.COMPLETED, fixture.bench().state());
+        assertTrue(fixture.store().contains(new PreparedLineKey("dispatch", "line-1")));
+        assertTrue(fixture.provenance().find("pack-line-1-1").isEmpty());
+        assertTrue(fixture.registry().getLoadPlanFor("collect-physical") == current);
+        assertTrue(fixture.store().binSnapshots() == beforeBins);
+
+        Runnable observerCommit = fixture.controller().commitBenchCollect(decision);
+        observerCommit.run();
+        assertEquals(AdaptingBenchState.IDLE, fixture.bench().state());
+        assertFalse(fixture.store().contains(new PreparedLineKey("dispatch", "line-1")));
+        assertEquals(List.of("pack-line-1-1"), fixture.registry()
+                .getLoadPlanFor("collect-physical").getPackPlans().stream().map(PackPlan::packId).toList());
+        assertTrue(fixture.provenance().find("pack-line-1-1").isPresent());
+    }
+
+    @Test
+    void shouldRejectProspectivePlanAndObserverBeforeStrictDrain() {
+        StrictFixture duplicate = strictFixture(AdaptingCollectObserver.noOp(),
+                List.of(new PackPlan("pack-line-1-1", "old", testDimensions())));
+        assertStrictPreparationFailsWithoutMutation(duplicate);
+
+        StrictFixture observerFailure = strictFixture((sheet, tote, packs) -> {
+            throw new IllegalStateException("observer rejected");
+        }, List.of());
+        assertStrictPreparationFailsWithoutMutation(observerFailure);
+
+        StrictFixture provenanceConflict = strictFixture(AdaptingCollectObserver.noOp(), List.of());
+        provenanceConflict.provenance().register("pack-line-1-1", new PackSourceProvenance(
+                new OrderSheetKey("other-source", 1), "line-1", "product-line-1", "SC-1",
+                "0000310", "patient", "prescription"));
+        assertStrictPreparationFailsWithoutMutation(provenanceConflict);
+    }
+
+    private static void assertStrictPreparationFailsWithoutMutation(StrictFixture fixture) {
+        ToteLoadPlan current = fixture.registry().getLoadPlanFor("collect-physical");
+        List<AdaptingBinSnapshot> bins = fixture.store().binSnapshots();
+        var provenanceBefore = fixture.provenance().snapshot();
+        assertThrows(RuntimeException.class, () -> fixture.controller().prepareBenchCollect(
+                new AdaptingBenchId("bench-1"), current));
+        assertTrue(fixture.store().binSnapshots() == bins);
+        assertTrue(fixture.registry().getLoadPlanFor("collect-physical") == current);
+        assertEquals(provenanceBefore, fixture.provenance().snapshot());
+        assertEquals(AdaptingBenchState.COMPLETED, fixture.bench().state());
+        assertTrue(fixture.bench().peekCompletion().isPresent());
+    }
+
+    private static StrictFixture strictFixture(AdaptingCollectObserver observer,
+            List<PackPlan> initialPacks) {
+        DspOrderItem sourceLine = adaptedPreparedLine("line-1", "dispatch", 1, 1);
+        DspOrderItem dispatchLine = adaptedPreparedLine("line-1", "dispatch", 1, 1);
+        NotionalToteOrder source = new NotionalToteOrder("source", "source", "SC-1", 1,
+                OrderType.ADAPTED, List.of(sourceLine), 1, 0);
+        NotionalToteOrder dispatch = new NotionalToteOrder("dispatch", "dispatch", "SC-1", 1,
+                OrderType.ASSOCIATED, List.of(dispatchLine), 1, 1);
+        PreparedLineKey key = PreparedLineKey.forPreparedLine(sourceLine);
+        AdaptingTargetSheetCatalog targets = new AdaptingTargetSheetCatalog(
+                Map.of(key, dispatch.orderSheetKey()));
+        AdaptingOrderPreparationCatalog orders = new AdaptingOrderPreparationCatalog(
+                new LoadedDspData(List.of(), List.of(source, dispatch), List.of(), Set.of()), targets);
+        AdaptingStorageMap storageMap = new AdaptingStorageMap();
+        storageMap.configureAvailableBenches(List.of(new AdaptingBenchId("bench-1")));
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(), storageMap, targets, orders));
+        store.stageAll(List.of(sourceLine), source.orderSheetKey(), "SC-1");
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 0d);
+        AdaptingArea area = new AdaptingArea(List.of(bench), 0, storageMap);
+        MapBackedToteLoadPlanRegistry registry = new MapBackedToteLoadPlanRegistry();
+        registry.putLoadPlan(new ToteLoadPlan("collect-physical", initialPacks));
+        PackProvenanceRegistry provenance = new PackProvenanceRegistry();
+        AdaptingAreaController controller = new AdaptingAreaController(area, emptyRuntimeState(),
+                registry, new DefaultCollectedPackPlanFactory(testDimensions(),
+                        new DspPackPlanFactory(provenance)), provenance, observer);
+        bench.acceptVisit(new AdaptingVisit(new PhysicalToteId("collect-physical"),
+                new AdaptingVisitFactory().profileFor(dispatch)));
+        bench.startProcessing();
+        return new StrictFixture(store, bench, registry, provenance, controller);
+    }
+
+    private record StrictFixture(AdaptedLineStore store, AdaptingBench bench,
+            MapBackedToteLoadPlanRegistry registry, PackProvenanceRegistry provenance,
+            AdaptingAreaController controller) { }
 
     private static DspSchedulerRuntimeState emptyRuntimeState() {
         return new DspSchedulerRuntimeState(new WarehouseSchedulerSnapshot(

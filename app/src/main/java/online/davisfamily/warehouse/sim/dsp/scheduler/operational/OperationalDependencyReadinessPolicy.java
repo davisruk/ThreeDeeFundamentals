@@ -45,14 +45,29 @@ public final class OperationalDependencyReadinessPolicy {
         }
 
         if (orderPreparationCatalog != null) {
+            boolean prepared = true;
             for (PreparedLineKey requiredKey : orderPreparationCatalog.requiredKeysFor(logicalOrder.orderId())) {
                 if (!snapshot.preparedLineKeys().contains(requiredKey)) {
+                    prepared = false;
                     blocks.add(new OperationalReleaseBlock(
                             OperationalReleaseBlockType.ADAPTED_DEPENDENCY,
                             "Adapted dependency is not ready for order "
                                     + logicalOrder.orderId() + " key " + requiredKey));
                 }
             }
+            if (!prepared) {
+                return List.copyOf(blocks);
+            }
+            orderPreparationCatalog.firstCollectSheetFor(logicalOrder.orderId()).ifPresent(first -> {
+                if (!first.equals(logicalOrder.orderSheetKey())
+                        && !first.equals(snapshot.missingPacks().firstCollectedSheetByOrderId()
+                                .get(logicalOrder.orderId()))) {
+                    blocks.add(new OperationalReleaseBlock(
+                            OperationalReleaseBlockType.FIRST_COLLECT_PENDING,
+                            "First COLLECT has not committed for order " + logicalOrder.orderId()
+                                    + " sheet " + first.sheetNumber()));
+                }
+            });
             return List.copyOf(blocks);
         }
 

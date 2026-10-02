@@ -12,11 +12,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
+import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationConfig;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02PhysicalToteInventory;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
@@ -24,6 +29,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderItem;
 import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
@@ -42,6 +48,7 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTa
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticStickyP2pLineAllocationPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.ElasticRuntimeTestFixture;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
@@ -55,6 +62,45 @@ import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClock;
 import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockConfig;
 
 class DspOperationalReleaseRuntimeFactoryTest {
+
+    @Test
+    void shouldReadImmutableFirstCollectPublicationFromSimulationThreadSupplier() {
+        ElasticRuntimeTestFixture elasticFixture = new ElasticRuntimeTestFixture();
+        DspP2pElasticAllocationRuntime elastic = elasticFixture.createRuntime();
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        InboundToteManifestCatalog manifests = new InboundToteManifestCatalog(List.of());
+        InboundToteLifecycleController lifecycle = new InboundToteLifecycleController(ledger, manifests);
+        OsrPhysicalInventory inventory = new OsrPhysicalInventory(new OsrInventoryConfig(1, List.of()));
+        OsrOutboundRouteLaunchTargetRegistry targets = new OsrOutboundRouteLaunchTargetRegistry(
+                new OsrOutboundRouteLaunchQueue("launch", 5),
+                elasticFixture.definitions().stream().map(definition -> definition.destination()).toList());
+        DspOperationalClock clock = new DspOperationalClock(
+                DspOperationalClockConfig.productionBaseline(LocalDate.of(2026, 8, 21)));
+        AtomicInteger reads = new AtomicInteger();
+        AtomicReference<P2pMissingPackSnapshot> current = new AtomicReference<>(
+                P2pMissingPackSnapshot.empty());
+        DspOperationalReleaseScheduler scheduler = new DspOperationalReleaseScheduler(
+                new online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalDependencyReadinessPolicy(),
+                new online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalRouteEntryAdmissionPolicy(),
+                new online.davisfamily.warehouse.sim.dsp.scheduler.operational.PharmacyGroupedSourceSequenceRankingPolicy(),
+                new DeadlineAwareElasticStickyP2pLineAllocationPolicy());
+        try (DspOperationalReleaseRuntime runtime = new DspOperationalReleaseRuntimeFactory()
+                .createElasticWithAv02(new SynchronousOperationalReleaseEvaluationSource(scheduler),
+                        inventory, lifecycle, manifests,
+                        () -> new WarehouseSchedulerSnapshot(List.of(), Map.of(), Set.of(), Optional.empty()),
+                        clock::initialSnapshot, (type, candidate, snapshot) -> null,
+                        targets, new Av02PhysicalToteInventory(Av02AllocationConfig.productionBaseline()),
+                        ledger, new MapBackedToteLoadPlanRegistry(), elastic,
+                        () -> { reads.incrementAndGet(); return current.get(); })) {
+            runtime.controller().update(new SimulationContext(), 0.1d);
+            current.set(new P2pMissingPackSnapshot(1, Map.of(), Set.of(), Map.of(), Map.of(),
+                    Map.of("order", new OrderSheetKey("order", 2))));
+            runtime.controller().update(new SimulationContext(), 0.1d);
+            assertEquals(2, reads.get());
+        } finally {
+            elastic.close();
+        }
+    }
 
     @Test
     void shouldWireFreshCandidateAdmissionAndApplyThroughExactQueueRegistry() {

@@ -43,6 +43,7 @@ import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationCalibrationStatus;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
@@ -62,6 +63,32 @@ class DspOperationalReleaseSnapshotFactoryTest {
 
     private final DspOperationalReleaseSnapshotFactory factory =
             new DspOperationalReleaseSnapshotFactory();
+
+    @Test
+    void shouldRetainExactImmutableFirstCollectPublicationAcrossFactoryBoundary() {
+        P2pMissingPackSnapshot first = new P2pMissingPackSnapshot(1, Map.of(), Set.of(),
+                Map.of(), Map.of(), Map.of("order", new OrderSheetKey("order", 2)));
+        OsrProcessingReleaseSnapshot physical = new OsrProcessingReleaseSnapshot(List.of());
+        InboundToteManifestCatalog manifests = new InboundToteManifestCatalog(List.of());
+        Av02InventorySnapshot av02 = new Av02InventorySnapshot(1, List.of(), List.of());
+        WarehouseSchedulerSnapshot logical = logicalSnapshot(List.of());
+        var admissions = List.of(new OperationalRouteTargetAdmissionSnapshot(
+                StationType.P2P, "p2p-line-1", 1, 0));
+
+        DspOperationalReleaseSnapshot captured = factory.create(physical, manifests, av02,
+                logical, noResolutionAdmissionFactory(), singleLineLeases(), admissions,
+                singleLineElasticAllocation(), first);
+        assertSame(first, captured.missingPacks());
+        assertEquals(new OrderSheetKey("order", 2),
+                captured.missingPacks().firstCollectedSheetByOrderId().get("order"));
+        assertSame(P2pMissingPackSnapshot.empty(), factory.create(physical, manifests, av02,
+                logical, noResolutionAdmissionFactory(), singleLineLeases(), admissions,
+                singleLineElasticAllocation()).missingPacks());
+        assertThrows(IllegalArgumentException.class,
+                () -> factory.create(physical, manifests, av02, logical,
+                        noResolutionAdmissionFactory(), singleLineLeases(), admissions,
+                        singleLineElasticAllocation(), null));
+    }
 
     @Test
     void shouldBuildDetachedStickyLineAndTargetAdmissionSnapshot() {

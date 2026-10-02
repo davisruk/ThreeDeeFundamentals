@@ -51,6 +51,22 @@ public class AdaptedLineStore {
         return layout.contains(key);
     }
 
+    public boolean strictStorage() {
+        return layout.strictStorage();
+    }
+
+    public AdaptingPreparedOrderGroup prepareOrderGroup(String storeId, String referenceOrderId) {
+        return layout.prepareOrderGroup(storeId, referenceOrderId);
+    }
+
+    public List<AdaptedLineRecord> commitOrderGroup(AdaptingPreparedOrderGroup decision) {
+        return layout.commitOrderGroup(decision);
+    }
+
+    public List<AdaptedLineRecord> takeOrderGroup(String storeId, String referenceOrderId) {
+        return commitOrderGroup(prepareOrderGroup(storeId, referenceOrderId));
+    }
+
     public Optional<AdaptedLineRecord> take(PreparedLineKey key) {
         return Optional.ofNullable(layout.take(key));
     }

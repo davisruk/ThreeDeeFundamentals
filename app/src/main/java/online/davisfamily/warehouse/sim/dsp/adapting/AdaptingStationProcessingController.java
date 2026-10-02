@@ -243,6 +243,29 @@ public final class AdaptingStationProcessingController
                 currentLoadPlan,
                 completedAt);
 
+        AdaptingBenchCompletion preview = area.bench(benchId).peekCompletion()
+                .orElseThrow(() -> new IllegalStateException("COLLECT completion disappeared"));
+        if (preview.preparedOrderGroup().isPresent()) {
+            PreparedAdaptingCollect prepared = areaController.prepareBenchCollect(
+                    benchId, currentLoadPlan);
+            requireMatchingVisitIdentity(claim, prepared.completion().visit());
+            ToteLoadPlan prospective = prepared.replacementLoadPlan();
+            coordinator.validateCanComplete(
+                    physicalToteId,
+                    StationProcessingDispositionType.CONTINUE,
+                    prospective,
+                    completedAt);
+            Runnable observerCommit = areaController.commitBenchCollect(prepared);
+            coordinator.complete(
+                    physicalToteId,
+                    StationProcessingDispositionType.CONTINUE,
+                    prospective,
+                    completedAt);
+            // First-COLLECT readiness is published only after the exact continuation succeeds.
+            observerCommit.run();
+            return;
+        }
+
         AdaptingBenchCompletion applied = areaController.applyBenchCompletion(benchId)
                 .orElseThrow(() -> new IllegalStateException(
                         "Adapting COLLECT completion disappeared before application"));

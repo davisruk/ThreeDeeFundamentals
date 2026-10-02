@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
@@ -20,6 +21,7 @@ public final class AdaptingOrderPreparationCatalog {
     private final Map<String, List<PreparedLineKey>> keysByOrderId;
     private final Map<String, String> storeByOrderId;
     private final Map<PreparedLineKey, OrderSheetKey> targetSheetByKey;
+    private final Map<String, OrderSheetKey> firstCollectSheetByOrderId;
 
     public AdaptingOrderPreparationCatalog(
             LoadedDspData executableData,
@@ -76,6 +78,11 @@ public final class AdaptingOrderPreparationCatalog {
         keysByOrderId = Collections.unmodifiableMap(immutableKeys);
         storeByOrderId = Collections.unmodifiableMap(new LinkedHashMap<>(stores));
         targetSheetByKey = Collections.unmodifiableMap(targets);
+        Map<String, OrderSheetKey> firstSheets = new LinkedHashMap<>();
+        targets.forEach((key, sheet) -> firstSheets.merge(key.targetOrderId(), sheet,
+                (current, candidate) -> current.sheetNumber() <= candidate.sheetNumber()
+                        ? current : candidate));
+        firstCollectSheetByOrderId = Collections.unmodifiableMap(firstSheets);
     }
 
     public List<PreparedLineKey> requiredKeysFor(String orderId) {
@@ -99,5 +106,12 @@ public final class AdaptingOrderPreparationCatalog {
             throw new IllegalStateException("No executable prepared line " + key);
         }
         return target;
+    }
+
+    public Optional<OrderSheetKey> firstCollectSheetFor(String orderId) {
+        if (orderId == null || orderId.isBlank()) {
+            throw new IllegalArgumentException("orderId must not be blank");
+        }
+        return Optional.ofNullable(firstCollectSheetByOrderId.get(orderId));
     }
 }

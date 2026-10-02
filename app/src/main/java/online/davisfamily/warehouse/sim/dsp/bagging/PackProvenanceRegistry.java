@@ -20,6 +20,34 @@ public final class PackProvenanceRegistry {
         }
     }
 
+    /** Validates an entire prospective batch without changing any registered provenance. */
+    public void validateBatch(Map<String, PackSourceProvenance> batch) {
+        if (batch == null) {
+            throw new IllegalArgumentException("batch must not be null");
+        }
+        Map<String, PackSourceProvenance> normalized = new LinkedHashMap<>();
+        batch.forEach((packId, provenance) -> {
+            String id = requireTrimmedPackId(packId);
+            if (provenance == null) {
+                throw new IllegalArgumentException("batch provenance must not be null");
+            }
+            if (normalized.putIfAbsent(id, provenance) != null) {
+                throw new IllegalArgumentException("Duplicate pack ID in provenance batch: " + id);
+            }
+            PackSourceProvenance existing = provenanceByPackId.get(id);
+            if (existing != null && !existing.equals(provenance)) {
+                throw new IllegalArgumentException(
+                        "Conflicting source provenance is already registered for pack ID: " + id);
+            }
+        });
+    }
+
+    /** Registers only after the entire batch passes validation. */
+    public void registerBatch(Map<String, PackSourceProvenance> batch) {
+        validateBatch(batch);
+        batch.forEach(this::register);
+    }
+
     public Optional<PackSourceProvenance> find(String packId) {
         return Optional.ofNullable(provenanceByPackId.get(requireTrimmedPackId(packId)));
     }

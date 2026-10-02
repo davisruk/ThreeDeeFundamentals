@@ -112,6 +112,14 @@ public class AdaptingBench {
                 : Optional.empty();
     }
 
+    void commitOrderGroup(AdaptingPreparedOrderGroup decision) {
+        if (state != AdaptingBenchState.COMPLETED || lastCompletion == null
+                || lastCompletion.preparedOrderGroup().orElse(null) != decision) {
+            throw new IllegalStateException("Bench has no matching strict COLLECT decision");
+        }
+        store.commitOrderGroup(decision);
+    }
+
     public void clearBlocked() {
         if (state != AdaptingBenchState.BLOCKED) {
             throw new IllegalStateException("Bench is not blocked: " + id);
@@ -144,6 +152,16 @@ public class AdaptingBench {
                         activeVisit.profile().orderSheetKey(),
                         activeVisit.profile().serviceCentreId());
                 lastCompletion = new AdaptingBenchCompletion(activeVisit, List.of());
+            } else if (store.strictStorage()) {
+                List<String> pharmacies = activeVisit.profile().pharmacyIds();
+                String storeId = pharmacies.getFirst();
+                if (pharmacies.stream().anyMatch(pharmacy -> !pharmacy.equals(storeId))) {
+                    throw new IllegalStateException("COLLECT visit mixes stores");
+                }
+                AdaptingPreparedOrderGroup prepared = store.prepareOrderGroup(
+                        storeId, activeVisit.profile().orderSheetKey().orderId());
+                lastCompletion = new AdaptingBenchCompletion(
+                        activeVisit, prepared.records(), Optional.of(prepared));
             } else {
                 lastCompletion = new AdaptingBenchCompletion(
                         activeVisit,
