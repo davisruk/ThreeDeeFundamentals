@@ -1,8 +1,9 @@
 # Order-Owned Adapting Bins and P2P Exception Handoff Plan
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection` (or a new feature branch
-based on its committed tip). Status: proposed; no implementation is authorized
-by this document. The user starts each step separately.
+based on its committed tip). Step 1 is committed at `f2f50ad`. Step 2 was
+revised after the pre-drain validation and sheet-order discussion; its
+implementation has not started. The user starts each step separately.
 
 ## Purpose and authority
 
@@ -51,10 +52,15 @@ and do not commit. Do not advance to another step without the user.
    FULL_PACK and eligible ASSOCIATED/EMPTY may still run concurrently with
    ADAPTED; there is no global preparation phase. Preserve the existing
    service-centre priority and sticky P2P rules.
-3. First completed COLLECT for a store/order drains *all* its staged bins
-   into that physical tote, regardless of intended incoming sheet. Subsequent
-   COLLECT visits for that same group receive no already-drained packs and
-   complete normally. A late STORE after first drain is an invariant failure.
+3. The lowest-numbered executable ASSOCIATED/EMPTY sheet with prepared work
+   for an order is its designated first COLLECT sheet; it need not be 001 when
+   lower sheets were excluded from executable input. Later sheets of that
+   order remain at their operational release boundary until the designated
+   COLLECT has committed. All sheets still visit Adapting as in production;
+   do not route later sheets directly to P2P. The designated COLLECT drains
+   *all* staged bins into its physical tote, regardless of intended incoming
+   sheet. Later COLLECT visits receive no already-drained packs and complete
+   normally. A late STORE after first drain is an invariant failure.
    No two stores/orders mix. Full-day bin inspection and occupied-bin counts
    reflect the physical order-owned groups; no per-tick bin snapshots or
    new renderables. Legacy debug storage/rig keeps its existing behavior.
@@ -91,6 +97,15 @@ and do not commit. Do not advance to another step without the user.
    station-arrival, scheduler evaluation/command, and outbound purity
    boundaries. Do not implement exception resolution, collection-tote
    transport, NS labels, or bag creation at Exceptions in this feature.
+8. Full-day COLLECT has a read-only preparation phase before the bin drain:
+   validate the entire order group, prospective pack plans/provenance,
+   observer decision, replacement tote load plan, and generic continuation.
+   Provenance registration is a commit action, never a side effect of pack-plan
+   preparation. Only after those checks pass may the simulation thread drain
+   bins and publish the replacement plan and provenance, complete the station
+   continuation, then publish the ledger decision and first-COLLECT marker.
+   An unexpected post-drain failure is fatal, not a recoverable partial
+   success; it must not publish first-COLLECT readiness.
 
 ## Step 1 — Order-wide preparation eligibility and ADAPTED preference
 
@@ -153,12 +168,10 @@ In strict full-day storage only, replace `AdaptingBinId`'s sheet key with
 retain key-to-bin and staged-line indexes. Validate every STORE visit before
 mutation, including group store, unique keys, catalog target, and the catalog
 of expected keys. Allocate overflow bins only when the current bin reaches
-`linesPerBin`. Add `takeOrderGroup(storeId, referenceOrderId)` through
-`AdaptedLineStore`: before mutation require all expected keys staged, then
-drain all lines in deterministic staging order and mark the group collected.
-The second/later visit returns an empty immutable list; a STORE after drain
-fails. Cache bin snapshots by mutation version as now. Keep legacy
-`stage/takeAll` and its debug layout unchanged.
+`linesPerBin`. A late STORE after a completed group drain fails before any
+mutation. Cache bin snapshots by mutation version as now. In strict mode,
+direct `take`/`takeAll` must reject partial removal; the two-argument legacy
+layout retains `stage`, `take`, `takeAll`, and its debug coordinates unchanged.
 
 Use a new four-argument strict `AdaptingStorageLayout(config, storageMap,
 targetSheetCatalog, orderPreparationCatalog)` constructor in full-day
@@ -166,43 +179,99 @@ composition and strict test fixtures. Remove the old three-argument strict
 constructor, which cannot prove order-wide completeness without the catalog;
 this is an intentional replacement of the superseded internal API. Keep the
 two-argument legacy constructor unchanged. Do not add an all-order scan to
-`AdaptingTargetSheetCatalog` or change its lookup API.
+`AdaptingTargetSheetCatalog` or change its lookup API. Extend the already
+committed `AdaptingOrderPreparationCatalog` with
+`Optional<OrderSheetKey> firstCollectSheetFor(String orderId)`, computed once
+as the lowest target sheet among that order's executable prepared keys.
+Orders with no prepared keys return empty. For this feature, every executable
+ASSOCIATED/EMPTY sheet requiring Adapting has ADAPTED aliases; a FULL_PACK
+tote is not a collecting sheet. If sheet 001 is not executable, the lowest
+remaining executable sheet (for example 002) is the designated collector.
 
-`AdaptingBench.completeActiveVisit` calls new
-`AdaptedLineStore.collectFor(AdaptingVisit)`: strict storage dispatches to
-`takeOrderGroup` using the visit's validated sole
-`profile().pharmacyIds().getFirst()` store and `orderSheetKey().orderId()`;
-legacy storage dispatches to its existing key-specific `takeAll` path.
-Strict collection rejects a mixed-store profile before drain.
-`AdaptingVisitFactory`
-continues to create COLLECT only when that sheet has ADAPTED aliases; do not
-route a direct-only sheet through Adapting solely to inspect bins. All
-order-wide preparation is complete before the first COLLECT via Step 1, and
-the store enforces the same condition locally. `AdaptingAreaController`
-continues to append the collected pack plans to the exact arriving physical
-tote; an empty later collection appends none.
+Add an immutable `AdaptingPreparedOrderGroup` in `dsp/adapting` containing
+`storeId`, `referenceOrderId`, the storage mutation version, the ordered
+preview records, and whether this is the first collection. In strict mode,
+`AdaptingStorageLayout.prepareOrderGroup(storeId, referenceOrderId)` validates
+the catalog's complete expected-key set against staged records and returns
+that decision without removing a record, bin, or count. The store validates
+the visit's sole `profile().pharmacyIds().getFirst()` store, rejects mixed
+stores, and checks the order ID. `commitOrderGroup(decision)` rechecks the
+exact mutation version and group state, then drains all records in staging
+order, updates direct indexes/occupied-bin counts, removes the group, and
+marks it collected. It returns the same immutable record list. After that,
+preparation and commit for a later visit return an empty immutable list
+without reopening the group; a stale decision or missing expected key fails
+before drain. Keep `takeOrderGroup(storeId, referenceOrderId)` as a
+prepare/commit convenience through `AdaptedLineStore` for direct strict
+callers, but full-day completion uses the split preparation and commit APIs.
+
+Extend `AdaptingBenchCompletion` with an optional prepared-order-group
+decision and retain its existing two-argument constructor as a delegating
+legacy constructor. `AdaptingBench.completeActiveVisit` still stages STORE
+as now. For strict COLLECT it stores a read-only preview completion and
+enters COMPLETED **without draining**; for legacy COLLECT it keeps the
+existing key-specific `takeAll` behavior. `AdaptingVisitFactory` continues
+to create COLLECT only when that sheet has ADAPTED aliases. Every later
+ASSOCIATED/EMPTY sheet still visits Adapting and receives an empty preview
+after the designated drain; do not change route derivation or send it
+directly to P2P.
+
+Add an order-local release gate in the existing catalog-enabled
+`OperationalDependencyReadinessPolicy`, after its active-sheet and
+order-wide STORE-key checks. A candidate for the designated first sheet is
+not held by this gate. A later ASSOCIATED/EMPTY sheet is blocked with new
+`FIRST_COLLECT_PENDING` `OperationalReleaseBlockType` until the immutable
+operational snapshot records that this order's designated sheet completed
+COLLECT. Do not hold ADAPTED, FULL_PACK, unrelated orders, or the designated
+sheet. Gate OSR and AV02 candidates identically; do not rely on source
+sequence, release order, travel times, bench queue order, or a route change
+to guarantee who collects first. If the designated collector never commits,
+later sheets remain blocked through cutoff, with an observable block reason.
+Repeated physical manifests of the same sheet retain their existing active-
+sheet assignment rule. The committed-first marker is monotonic, so a command
+evaluated against a marker cannot become invalid solely because of this
+gate; live inventory/target revalidation remains unchanged.
+
+Use the Step 2 `P2pMissingPackSnapshot` as the immutable gate publication:
+add `firstCollectedSheetByOrderId` (order ID to exact `OrderSheetKey`) and
+validate that each value has the same order ID as its key. The ledger updates
+this map only when the designated first COLLECT's complete commit succeeds.
+`DspOperationalReleaseSnapshot` stores a reference to that immutable value;
+existing constructors and `fromValidatedCandidateState` delegate to its
+empty singleton. Add a final `DspOperationalReleaseSnapshotFactory.create`
+overload for the elastic-with-AV02 path accepting this snapshot, and a
+`DspOperationalReleaseRuntimeFactory.createElasticWithAv02` overload accepting
+`Supplier<P2pMissingPackSnapshot>`; existing signatures delegate with the
+empty singleton. Full-day composition alone supplies the ledger's cached
+snapshot. The supplier is read on the simulation thread while building the
+operational snapshot; the scheduler worker reads only that frozen reference.
+Do not deep-copy the cached exception snapshot per candidate or fixed step.
 
 Create simulation-thread-owned `DspPreparedPackExceptionLedger` in
-`dsp/analysis/runtime`, initialized from `BagPlanningResult` and the target
-sheet catalog once. On the first COLLECT, classify each collected physical
-pack ID against the visit's incoming `OrderSheetKey`. For a different sheet
-of the **same** referenced order, record the physical pack ID, intended
-sheet, actual receiving tote ID, planned bag correlation, service centre,
-and store; derive affected bag/zero-pack counts from this indexed state.
-Reject unknown pack IDs, different-order transfers, duplicate recording,
-and inconsistent bag identity before ledger mutation. Later COLLECT does not
-record another deficit, but it records the visiting physical tote ID against
-its own sheet so a physically empty tote with all its planned bag packs
-missing is explicitly authorized for P2P. The ledger exposes O(1) pack/bag lookups and a
-mutation-versioned immutable summary; it does not construct snapshots during
-fixed-step polling.
+`dsp/analysis/runtime`, initialized once from `BagPlanningResult`, the target
+sheet catalog, and `AdaptingOrderPreparationCatalog`. On the designated
+first COLLECT, classify each collected physical pack ID against the visit's
+incoming `OrderSheetKey`. For a different sheet of the **same** referenced
+order, record the physical pack ID, intended sheet, actual receiving tote ID,
+planned bag correlation, service centre, and store; derive affected bag/
+zero-pack counts from this indexed state. Reject unknown pack IDs, different-
+order transfers, duplicate recording, inconsistent bag identity, and an
+attempted first drain by a non-designated sheet before ledger or storage
+mutation. Later COLLECT does not record another deficit, but records the
+visiting physical tote ID against its own sheet so a physically empty tote
+with all its planned bag packs missing is explicitly authorized for P2P. The
+ledger exposes O(1) pack/bag lookups and a mutation-versioned immutable
+summary; it does not construct snapshots during fixed-step polling. Its
+committed-first marker is distinct from STORE-key readiness and a bench's
+read-only COMPLETED preview.
 
 Create the immutable `P2pMissingPackSnapshot` in `dsp/p2p/allocation` as the
 cross-boundary read model: `version`, missing physical pack IDs by `BagKey`,
-pending zero-pack bag keys, missing-pack counts by service centre, and
-PDC-collected-pack counts by service centre. The ledger caches this snapshot
-until a COLLECT or PDC outfeed changes state. It is the only exception-work
-value read by scheduler/workload evaluation; the mutable ledger never crosses
+pending zero-pack bag keys, missing-pack counts by service centre,
+PDC-collected-pack counts by service centre, and exact first-collected sheet
+by order ID. The ledger caches this snapshot until a COLLECT or PDC outfeed
+changes state. It is the only exception-work and first-COLLECT value read by
+scheduler/workload evaluation; the mutable ledger never crosses
 the worker/snapshot boundary. Affected *allocated* bag and outbound-tote
 counts instead come from immutable outbound allocation snapshots, not
 duplicated ledger state. Deep-copy and validate its maps/sets once on
@@ -215,35 +284,116 @@ immutable validated decision, followed by `commitCollect(decision)`, plus
 `effectivePackCount(String correlationId, int plannedCount)`,
 `allowEmptyTote(String physicalToteId)`,
 `confirmPdcCollection(String packId)`, `pendingEmptyBagKeys()`, and a cached
-`snapshot()`. Keep `AdaptingAreaController` independent of analysis runtime:
-add an `AdaptingCollectObserver` interface in `dsp/adapting` whose
+`snapshot()`. `prepareCollect` validates that a nonempty first preview belongs
+to the designated sheet and that a later empty visit is for an already
+committed order. Its immutable decision carries the ledger version and the
+complete prospective ledger change, including the next immutable snapshot;
+`commitCollect` rejects a stale decision before mutation, then installs that
+change in one simulation-thread commit. Publish the first-collected sheet
+only in `commitCollect`, after the replacement load plan, provenance, and
+station continuation have been committed; no later work in that completion
+may throw after the marker is visible.
+
+Keep `AdaptingAreaController` independent of analysis runtime: add an
+`AdaptingCollectObserver` interface in `dsp/adapting` whose
 `prepare(OrderSheetKey, PhysicalToteId, List<PackPlan>)` returns a
 prevalidated `Runnable` commit action. Existing controller constructors use
 a shared no-op observer; only full-day composition supplies an adapter that
-calls the ledger's prepare/commit methods. In the controller, first prepare
-the collected pack plans and observer action without mutation, then publish
-the combined load plan, then run the prevalidated action. This is one simulation-thread
-completion; any publication failure is fatal and cannot silently accept a
-partial visit. The first COLLECT's physical tote ID, not the planned
-target sheet, is the receiver recorded for a misplaced pack.
+calls the ledger's prepare/commit methods. Add immutable
+`PreparedCollectedPackPlans` in `dsp/adapting`, containing ordered `PackPlan`
+values and exact pack-ID-to-`PackSourceProvenance` entries. Add
+`DefaultCollectedPackPlanFactory.preparePackPlans(List<AdaptedLineRecord>)`:
+use the existing planned-slot correlation resolver and source facts, but
+construct prospective `PackPlan`/provenance values **without** calling
+`DspPackPlanFactory.createPackPlan`, which currently registers provenance.
+Keep `createPackPlans` and `DspPackPlanFactory` unchanged for legacy callers.
+Add read-only `PackProvenanceRegistry.validateBatch(map)` and a corresponding
+`registerBatch(map)` that validates before registering; reject duplicate
+pack IDs within the prepared batch and conflicting existing registrations.
+The full-day commit uses the same registry instance already constructed in
+`DspFullDayAnalysisRuntimeFactory`; do not pre-register prepared packs at
+runtime construction.
+
+Add a full-day-only `AdaptingAreaController` constructor accepting the
+existing area, scheduler state, load-plan registry, concrete
+`DefaultCollectedPackPlanFactory`, `PackProvenanceRegistry`, and
+`AdaptingCollectObserver`. Retain the existing two- and four-argument
+constructors and their legacy completion behavior. Add
+`prepareBenchCollect(AdaptingBenchId, ToteLoadPlan)` returning an immutable
+`PreparedAdaptingCollect` decision and
+`commitBenchCollect(PreparedAdaptingCollect)` returning the prevalidated
+observer commit action. Preparation reads the bench's
+exact pending strict preview without consuming it, checks visit/store and
+registry identity, prepares pack plans, validates the entire provenance
+batch, calls the observer's read-only `prepare`, and constructs the
+replacement `ToteLoadPlan` from the current plan plus prepared plans.
+`ToteLoadPlan` itself rejects duplicate physical pack IDs. No bin, bench,
+provenance-registry, load-plan-registry, or ledger mutation occurs in this
+phase. A rejected preparation leaves the pending completion and all those
+owners unchanged. The existing `applyBenchCompletion` delegates to this
+prepare/commit pair for direct strict COLLECT callers, running the returned
+observer action after its domain commit; it retains its old STORE and legacy
+COLLECT behavior. The station controller uses the split API so its generic
+continuation can finish before observer publication.
+
+In `AdaptingStationProcessingController.completeCollect`, keep its existing
+claim/current-load-plan identity checks. For a strict preview, call
+`prepareBenchCollect`, then `coordinator.validateCanComplete` with the
+*prospective replacement plan* before invoking `commitBenchCollect`; keep
+the current-plan validation too. Legacy completions retain the existing
+path. At strict commit, recheck the exact bench completion, current
+registered load-plan identity, and storage version; drain the prepared order
+group, register the prevalidated provenance batch, publish the exact
+prospective replacement load plan, and consume the bench completion. Return
+the prevalidated observer action without running it. The station controller
+calls `coordinator.complete` with that replacement plan, then runs the
+observer action as the **last** operation of the COLLECT completion. This
+ordered sequence is one simulation-thread completion; after the drain, any
+unexpected registry, load-plan publication, coordinator, or ledger failure
+is fatal rather than recoverable, and no success is returned. The marker is
+published last so later sheets cannot release against a partial COLLECT. The
+first COLLECT's physical tote ID, not the planned target sheet, is the
+receiver recorded for a misplaced pack.
 
 Files: modify `AdaptingBinId`, `AdaptingStorageLayout`, `AdaptedLineStore`,
-`AdaptingBench`, `AdaptingAreaController`, and full-day runtime composition;
-create the observer, ledger, and `P2pMissingPackSnapshot`. Keep
-`AdaptingTargetSheetCatalog` and planned slots
-unchanged. Tests: update `AdaptingBinIdTest`, `AdaptedLineStoreTest`,
-`AdaptingCollectFlowTest`, and `DspFullDayAnalysisRuntimeFactoryTest`;
-create `DspPreparedPackExceptionLedgerTest` and
-`P2pMissingPackSnapshotTest`. Prove two incoming sheets share
-one bin chain, first COLLECT receives all lines, second gets none, overflow
-links/counts remain correct, a late STORE fails without mutation, a missing
-expected key fails before drain, the ledger names exact wrong-sheet pack and
-bag, and legacy debug collect remains key-specific.
+`AdaptingBenchCompletion`, `AdaptingBench`, `AdaptingAreaController`,
+`AdaptingStationProcessingController`, `AdaptingOrderPreparationCatalog`,
+`DefaultCollectedPackPlanFactory`, `PackProvenanceRegistry`,
+`OperationalDependencyReadinessPolicy`, `OperationalReleaseBlockType`,
+`DspOperationalReleaseSnapshot`, `DspOperationalReleaseSnapshotFactory`,
+`DspOperationalReleaseRuntimeFactory`, and
+`DspFullDayAnalysisRuntimeFactory`; create `AdaptingPreparedOrderGroup`,
+`PreparedCollectedPackPlans`, `PreparedAdaptingCollect`,
+`AdaptingCollectObserver`, `DspPreparedPackExceptionLedger`, and
+`P2pMissingPackSnapshot`. Keep `AdaptingTargetSheetCatalog`, planned slots,
+`DspPackPlanFactory`, generic route derivation, and debug rig unchanged.
+Tests: update `AdaptingBinIdTest`, `AdaptedLineStoreTest`,
+`AdaptingBenchTest`, `AdaptingCollectFlowTest`,
+`AdaptingStationProcessingControllerTest`,
+`AdaptingOrderPreparationCatalogTest`, `PackProvenanceRegistryTest`,
+`OperationalDependencyReadinessPolicyTest`,
+`DspOperationalReleaseSchedulerTest`,
+`DspOperationalReleaseSnapshotFactoryTest`,
+`DspOperationalReleaseRuntimeFactoryTest`, and
+`DspFullDayAnalysisRuntimeFactoryTest`; create
+`DspPreparedPackExceptionLedgerTest` and `P2pMissingPackSnapshotTest`.
+Prove two incoming sheets share one bin chain, the lowest executable sheet
+(including 002 when 001 is absent) drains all staged lines, and later sheets
+remain blocked through the bench's read-only preview and release only after
+the full first-COLLECT commit. The later sheets still visit Adapting and
+collect none; overflow links/counts remain correct. Prove that a late STORE,
+missing expected key, wrong collecting sheet, duplicate/conflicting
+provenance, prospective load-plan failure, and observer-preparation failure
+all fail **before drain** without changing bin, provenance, load-plan,
+ledger, or pending bench completion. Prove exact wrong-sheet pack, bag, and
+receiving-tote identity; a versioned immutable marker reaches the worker
+only through the operational snapshot. Preserve key-specific legacy debug
+COLLECT and ordinary scheduler behavior outside the full-day catalog mode.
 
 Implementation verification:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBinIdTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineStoreTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingCollectFlowTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspPreparedPackExceptionLedgerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBinIdTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptedLineStoreTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingCollectFlowTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingStationProcessingControllerTest --tests online.davisfamily.warehouse.sim.dsp.adapting.AdaptingOrderPreparationCatalogTest --tests online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistryTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalDependencyReadinessPolicyTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSchedulerTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotFactoryTest --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspPreparedPackExceptionLedgerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest
 ```
 
 User verification: no additional check for this step. The debug rig must
