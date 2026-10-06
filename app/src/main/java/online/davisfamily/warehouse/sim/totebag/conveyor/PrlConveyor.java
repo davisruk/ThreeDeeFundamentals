@@ -81,6 +81,32 @@ public class PrlConveyor {
                 && lane.canAcceptAtInfeed(pack);
     }
 
+    public boolean requestInfeedSpaceFor(Pack pack) {
+        PrlState state = assignment.getState();
+        if (pack == null
+                || assignment.getCorrelationId() == null
+                || !assignment.getCorrelationId().equals(pack.getCorrelationId())
+                || (state != PrlState.ASSIGNED && state != PrlState.ACCUMULATING)) {
+            return false;
+        }
+
+        float requiredDistance = lane.additionalTravelRequiredForInfeed(pack);
+        if (!Float.isFinite(requiredDistance)) {
+            return false;
+        }
+        if (requiredDistance <= 0f) {
+            return true;
+        }
+        if (lane.getSpeedMetersPerSecond() == 0f) {
+            return false;
+        }
+
+        remainingControlledTravelDistance = Math.max(
+                remainingControlledTravelDistance,
+                requiredDistance);
+        return true;
+    }
+
     public void acceptPack(Pack pack) {
         if (!accepts(pack)) {
             throw new IllegalArgumentException("Pack does not belong to this PRL assignment");

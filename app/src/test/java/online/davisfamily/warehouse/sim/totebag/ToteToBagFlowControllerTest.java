@@ -35,6 +35,7 @@ import online.davisfamily.warehouse.sim.totebag.control.PdcPackDispositionPolicy
 import online.davisfamily.warehouse.sim.totebag.control.ToteTrackTipperFlowController;
 import online.davisfamily.warehouse.sim.totebag.control.ToteToBagFlowController;
 import online.davisfamily.warehouse.sim.totebag.conveyor.ConveyorOccupancyModel;
+import online.davisfamily.warehouse.sim.totebag.conveyor.LinearLaneEntrySnapshot;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PdcConveyor;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PcrConveyor;
 import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
@@ -55,6 +56,7 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagWorkPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlanProvider;
 import online.davisfamily.warehouse.sim.totebag.transfer.ReleasedPackGroup;
+import online.davisfamily.warehouse.sim.totebag.transfer.PdcTransfer;
 
 class ToteToBagFlowControllerTest {
 
@@ -375,7 +377,9 @@ class ToteToBagFlowControllerTest {
         firstPrl.acceptPack(new Pack("pack-a1", "bag-a", candidatePackDimensions()));
         secondPrl.acceptPack(new Pack("pack-b1", "bag-b", candidatePackDimensions()));
         secondPrl.update(0.2d);
-        secondPrl.acceptPack(new Pack("pack-b2", "bag-b", candidatePackDimensions()));
+        Pack secondPack = new Pack("pack-b2", "bag-b", candidatePackDimensions());
+        requestAndMoveUntilAccepted(secondPrl, secondPack);
+        secondPrl.acceptPack(secondPack);
 
         PrlActivitySummary firstRead = controller.prlActivitySummary();
         PrlActivitySummary secondRead = controller.prlActivitySummary();
@@ -780,6 +784,7 @@ class ToteToBagFlowControllerTest {
         assertTrue(controller.getReleasedGroups().isEmpty());
 
         Pack secondPack = new Pack("pack-a2", "bag-a", packDimensions);
+        requestAndMoveUntilAccepted(prl1, secondPack);
         prl1.acceptPack(secondPack);
 
         controller.update(null, 0.05d);
@@ -792,6 +797,155 @@ class ToteToBagFlowControllerTest {
         downstreamReceiver.setAvailable(true);
         sim.update(0.05d);
         assertTrue(controller.getReleasedGroups().stream().anyMatch(group -> group.correlationId().equals("bag-a")));
+    }
+
+    @Test
+    void shouldRecoverMixedLengthPackWaitingOnPdcWithoutReassignment() {
+        PackDimensions shortDimensions = new PackDimensions(0.030f, 0.050f, 0.040f);
+        PackDimensions longDimensions = new PackDimensions(0.174f, 0.050f, 0.040f);
+        ToteLoadPlan totePlan = new ToteLoadPlan("mixed-tote", List.of(
+                new PackPlan("short-pack", "bag-a", shortDimensions),
+                new PackPlan("long-pack", "bag-a", longDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(totePlan);
+        PdcConveyor pdc = new PdcConveyor(
+                "pdc", new ConveyorOccupancyModel(2f, 0.015f, 0f), 1f);
+        PcrConveyor pcr = new PcrConveyor(
+                "pcr", new ConveyorOccupancyModel(2f, 0.015f, 0f), 1d);
+        PrlConveyor prl = new PrlConveyor(
+                "prl-1", 0.100f, new ConveyorOccupancyModel(1.8f, 0.015f, 0f), 1.8f);
+        ToteToBagFlowController controller = recoveryController(
+                totePlan, batchPlan, pdc, pcr, prl, 0d);
+
+        controller.update(null, 0d);
+        Pack shortPack = new Pack("short-pack", "bag-a", shortDimensions);
+        Pack longPack = new Pack("long-pack", "bag-a", longDimensions);
+        prl.acceptPack(shortPack);
+        prl.update(1d);
+        pdc.acceptIncomingPack(longPack);
+        controller.update(null, 0d);
+
+        assertEquals(List.of(longPack), pdc.getLaneEntries().stream().map(LinearLaneEntrySnapshot::pack).toList());
+        assertTrue(controller.getActivePdcTransfers().isEmpty());
+        assertEquals(PdcDiversionDeviceState.IDLE, controller.getPdcDiversionDevices().getFirst().getState());
+        assertEquals(1, prl.getAssignment().getReceivedPackCount());
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcr);
+        sim.addController(controller);
+        advanceUntilReleased(sim, controller, "bag-a");
+
+        ReleasedPackGroup released = releasedGroupFor(controller, "bag-a");
+        assertEquals("prl-1", released.sourcePrlId());
+        assertEquals(2, released.packs().size());
+        assertSame(shortPack, released.packs().get(0));
+        assertSame(longPack, released.packs().get(1));
+        assertEquals(1, controller.getReleasedGroups().stream()
+                .filter(group -> group.correlationId().equals("bag-a")).count());
+        assertTrue(pdc.getLaneEntries().isEmpty());
+        assertTrue(controller.getActivePdcTransfers().isEmpty());
+    }
+
+    @Test
+    void shouldRecoverCompletedPdcTransferWaitingForPrlIntake() {
+        PackDimensions dimensions = new PackDimensions(0.080f, 0.050f, 0.040f);
+        ToteLoadPlan totePlan = new ToteLoadPlan("three-packs", List.of(
+                new PackPlan("pack-1", "bag-a", dimensions),
+                new PackPlan("pack-2", "bag-a", dimensions),
+                new PackPlan("pack-3", "bag-a", dimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(totePlan);
+        PdcConveyor pdc = new PdcConveyor(
+                "pdc", new ConveyorOccupancyModel(2f, 0.015f, 0f), 1f);
+        PcrConveyor pcr = new PcrConveyor(
+                "pcr", new ConveyorOccupancyModel(2f, 0.015f, 0f), 1d);
+        PrlConveyor prl = new PrlConveyor(
+                "prl-1", 0f, new ConveyorOccupancyModel(1.8f, 0.015f, 0f), 1.8f);
+        ToteToBagFlowController controller = recoveryController(
+                totePlan, batchPlan, pdc, pcr, prl, 0.50d);
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcr);
+        sim.addController(controller);
+
+        controller.update(null, 0d);
+        Pack first = new Pack("pack-1", "bag-a", dimensions);
+        Pack second = new Pack("pack-2", "bag-a", dimensions);
+        Pack third = new Pack("pack-3", "bag-a", dimensions);
+        pdc.acceptIncomingPackAtFrontDistance(first, 1.5f);
+        controller.update(null, 0.05d);
+        assertEquals(1, controller.getActivePdcTransfers().size());
+
+        pdc.acceptIncomingPackAtFrontDistance(second, 1.5f);
+        for (int i = 0; i < 8 && controller.getActivePdcTransfers().size() < 2; i++) {
+            sim.update(0.05d);
+        }
+        assertEquals(2, controller.getActivePdcTransfers().size());
+        assertTrue(controller.getActivePdcTransfers().stream().noneMatch(PdcTransfer::isComplete));
+
+        boolean observedCompletedTransferWaitingForSpace = false;
+        for (int i = 0; i < 400 && prl.getAssignment().getReceivedPackCount() < 2; i++) {
+            for (PdcTransfer transfer : controller.getActivePdcTransfers()) {
+                if (transfer.isComplete() && !prl.accepts(transfer.getPack())) {
+                    observedCompletedTransferWaitingForSpace = true;
+                }
+            }
+            sim.update(0.05d);
+            for (PdcTransfer transfer : controller.getActivePdcTransfers()) {
+                if (transfer.isComplete() && !prl.accepts(transfer.getPack())) {
+                    observedCompletedTransferWaitingForSpace = true;
+                }
+            }
+        }
+        assertEquals(2, prl.getAssignment().getReceivedPackCount());
+        assertTrue(observedCompletedTransferWaitingForSpace);
+        assertEquals(List.of("pack-1", "pack-2"), prl.getAssignment().getReceivedPackIds());
+        assertTrue(controller.getActivePdcTransfers().isEmpty());
+        assertTrue(controller.getReleasedGroups().isEmpty());
+
+        pdc.acceptIncomingPack(third);
+        advanceUntilReleased(sim, controller, "bag-a");
+        ReleasedPackGroup released = releasedGroupFor(controller, "bag-a");
+        assertEquals(3, released.packs().size());
+        assertSame(first, released.packs().get(0));
+        assertSame(second, released.packs().get(1));
+        assertSame(third, released.packs().get(2));
+        assertEquals(List.of("pack-1", "pack-2", "pack-3"), prl.getAssignment().getReceivedPackIds());
+    }
+
+    @Test
+    void shouldRetainPdcPackWhenPrlCannotPhysicallyFitIt() {
+        PackDimensions shortDimensions = new PackDimensions(0.030f, 0.050f, 0.040f);
+        PackDimensions longDimensions = new PackDimensions(0.174f, 0.050f, 0.040f);
+        ToteLoadPlan totePlan = new ToteLoadPlan("capacity-limited", List.of(
+                new PackPlan("short-pack", "bag-a", shortDimensions),
+                new PackPlan("long-pack", "bag-a", longDimensions)));
+        ToteToBagBatchPlan batchPlan = ToteToBagBatchPlan.fromToteLoadPlan(totePlan);
+        PdcConveyor pdc = new PdcConveyor(
+                "pdc", new ConveyorOccupancyModel(2f, 0.015f, 0f), 1f);
+        PcrConveyor pcr = new PcrConveyor(
+                "pcr", new ConveyorOccupancyModel(2f, 0.015f, 0f), 1d);
+        PrlConveyor prl = new PrlConveyor(
+                "prl-1", 0.100f, new ConveyorOccupancyModel(0.200f, 0.015f, 0f), 1.8f);
+        ToteToBagFlowController controller = recoveryController(
+                totePlan, batchPlan, pdc, pcr, prl, 0d);
+        controller.update(null, 0d);
+        Pack shortPack = new Pack("short-pack", "bag-a", shortDimensions);
+        Pack longPack = new Pack("long-pack", "bag-a", longDimensions);
+        prl.acceptPack(shortPack);
+        prl.update(1d);
+        pdc.acceptIncomingPack(longPack);
+
+        SimulationWorld sim = new SimulationWorld();
+        sim.addSimObject(pcr);
+        sim.addController(controller);
+        for (int i = 0; i < 100; i++) {
+            sim.update(0.05d);
+            List<LinearLaneEntrySnapshot> pdcEntries = controller.getPdcLaneEntries();
+            assertEquals(1, pdcEntries.size());
+            assertSame(longPack, pdcEntries.getFirst().pack());
+            assertTrue(controller.getActivePdcTransfers().isEmpty());
+            assertTrue(controller.getPdcDiversionDevices().getFirst().isIdle());
+            assertEquals(1, prl.getAssignment().getReceivedPackCount());
+            assertTrue(controller.getReleasedGroups().isEmpty());
+        }
     }
 
     @Test
@@ -1139,6 +1293,57 @@ class ToteToBagFlowControllerTest {
         assertEquals(0, controller.getOutstandingExpectedBagGroupCount());
         sim.update(0.05d);
         assertEquals(0, controller.getOutstandingExpectedBagGroupCount());
+    }
+
+    private static void requestAndMoveUntilAccepted(PrlConveyor prl, Pack pack) {
+        assertTrue(prl.requestInfeedSpaceFor(pack));
+        for (int i = 0; i < 100 && !prl.accepts(pack); i++) {
+            prl.update(0.05d);
+        }
+        assertTrue(prl.accepts(pack));
+    }
+
+    private static ToteToBagFlowController recoveryController(
+            ToteLoadPlan totePlan,
+            ToteToBagBatchPlan batchPlan,
+            PdcConveyor pdc,
+            PcrConveyor pcr,
+            PrlConveyor prl,
+            double pdcTransferDurationSeconds) {
+        return new ToteToBagFlowController(
+                totePlan,
+                batchPlan,
+                pdc,
+                pcr,
+                new UnavailablePackGroupReceiver(),
+                new ToteToBagAssignmentPlanner(),
+                List.of(prl),
+                List.of(new PdcDiversionDevice("diverter-1", "prl-1", 0d, 0.01d, 0.01d)),
+                ignored -> pdcTransferDurationSeconds,
+                (ignored, pack) -> 0f,
+                ignored -> 0d,
+                (ignored, pack) -> pack.getDimensions().length());
+    }
+
+    private static void advanceUntilReleased(
+            SimulationWorld sim,
+            ToteToBagFlowController controller,
+            String correlationId) {
+        for (int i = 0; i < 400 && controller.getReleasedGroups().stream()
+                .noneMatch(group -> group.correlationId().equals(correlationId)); i++) {
+            sim.update(0.05d);
+        }
+        assertTrue(controller.getReleasedGroups().stream()
+                .anyMatch(group -> group.correlationId().equals(correlationId)));
+    }
+
+    private static ReleasedPackGroup releasedGroupFor(
+            ToteToBagFlowController controller,
+            String correlationId) {
+        return controller.getReleasedGroups().stream()
+                .filter(group -> group.correlationId().equals(correlationId))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static void advanceUntil(SimulationWorld sim, BooleanSupplier condition) {

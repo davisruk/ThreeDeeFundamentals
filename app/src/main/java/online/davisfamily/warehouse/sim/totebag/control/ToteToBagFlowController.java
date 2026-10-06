@@ -627,7 +627,11 @@ public class ToteToBagFlowController implements SimulationController {
             }
             PrlConveyor prl = findOrAssignPrlForCorrelation(pack.getCorrelationId());
             float diversionFrontDistance = pdcDiversionDistanceProvider.frontDistanceFor(prl.getId(), pack);
-            if (entry.frontDistance() < diversionFrontDistance || !prl.accepts(pack)) {
+            if (entry.frontDistance() < diversionFrontDistance) {
+                continue;
+            }
+            if (!prl.accepts(pack)) {
+                prl.requestInfeedSpaceFor(pack);
                 continue;
             }
             PdcDiversionDevice device = pdcDiversionDevicesByPrlId.get(prl.getId());
@@ -677,6 +681,7 @@ public class ToteToBagFlowController implements SimulationController {
                 throw new IllegalStateException("Unknown PRL id " + transfer.getTargetPrlId());
             }
             if (!prl.accepts(transfer.getPack())) {
+                prl.requestInfeedSpaceFor(transfer.getPack());
                 continue;
             }
             prl.acceptPack(transfer.getPack());

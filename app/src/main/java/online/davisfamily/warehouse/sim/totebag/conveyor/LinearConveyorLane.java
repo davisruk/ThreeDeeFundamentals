@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Optional;
 
 public class LinearConveyorLane {
+    private static final float POSITION_EPSILON = 0.000001f;
+
     private static final class LaneEntry {
         private final Pack pack;
         private float frontDistance;
@@ -136,14 +138,23 @@ public class LinearConveyorLane {
         if (pack == null) {
             return false;
         }
-        return canAcceptAtFrontDistance(pack, pack.getDimensions().length());
+        float incomingLength = pack.getDimensions().length();
+        if (incomingLength > usableLength) {
+            return false;
+        }
+        if (entries.isEmpty()) {
+            return true;
+        }
+        LaneEntry trailing = entries.getLast();
+        return incomingLength <= trailing.rearDistance() - minimumGap + POSITION_EPSILON;
     }
 
     public boolean canAcceptAtFrontDistance(Pack pack, float candidateFrontDistance) {
         if (pack == null) {
             return false;
         }
-        if (candidateFrontDistance < pack.getDimensions().length() || candidateFrontDistance > usableLength) {
+        float incomingLength = pack.getDimensions().length();
+        if (candidateFrontDistance < incomingLength || candidateFrontDistance > usableLength) {
             return false;
         }
         LaneEntry ahead = null;
@@ -158,19 +169,46 @@ public class LinearConveyorLane {
         }
 
         if (ahead != null) {
-            float maxFrontDistance = ahead.rearDistance() - minimumGap + pack.getDimensions().length();
-            if (candidateFrontDistance > maxFrontDistance) {
+            float maxFrontDistance = ahead.rearDistance() - minimumGap;
+            if (candidateFrontDistance > maxFrontDistance + POSITION_EPSILON) {
                 return false;
             }
         }
 
         if (behind != null) {
-            float minFrontDistance = behind.frontDistance + minimumGap + pack.getDimensions().length();
-            if (candidateFrontDistance < minFrontDistance) {
+            float minFrontDistance = behind.frontDistance + minimumGap + incomingLength;
+            if (candidateFrontDistance < minFrontDistance - POSITION_EPSILON) {
                 return false;
             }
         }
         return true;
+    }
+
+    public float additionalTravelRequiredForInfeed(Pack pack) {
+        if (pack == null) {
+            return Float.POSITIVE_INFINITY;
+        }
+        float incomingLength = pack.getDimensions().length();
+        if (incomingLength > usableLength) {
+            return Float.POSITIVE_INFINITY;
+        }
+        if (entries.isEmpty()) {
+            return 0f;
+        }
+
+        LaneEntry trailing = entries.getLast();
+        float requiredDistance = Math.max(
+                0f,
+                incomingLength + minimumGap - trailing.rearDistance());
+        if (requiredDistance <= POSITION_EPSILON) {
+            return 0f;
+        }
+
+        float availableDistance = Math.max(0f, usableLength - entries.getFirst().frontDistance);
+        if (requiredDistance > availableDistance + POSITION_EPSILON) {
+            return Float.POSITIVE_INFINITY;
+        }
+        return Math.min(requiredDistance, availableDistance);
     }
 
     public void acceptAtInfeed(Pack pack) {
@@ -201,10 +239,15 @@ public class LinearConveyorLane {
         if (appliedDistance <= 0f) {
             return 0f;
         }
+        LaneEntry previous = null;
         for (LaneEntry entry : entries) {
-            entry.frontDistance += appliedDistance;
+            entry.frontDistance = Math.min(entry.frontDistance + appliedDistance, usableLength);
+            if (previous != null) {
+                float maximumFrontDistance = previous.rearDistance() - minimumGap;
+                entry.frontDistance = Math.min(entry.frontDistance, maximumFrontDistance);
+            }
+            previous = entry;
         }
-        clampSpacingFromFront();
         return appliedDistance;
     }
 
@@ -259,19 +302,6 @@ public class LinearConveyorLane {
             }
         }
         return false;
-    }
-
-    private void clampSpacingFromFront() {
-        LaneEntry previous = null;
-        for (LaneEntry entry : entries) {
-            entry.frontDistance = Math.min(entry.frontDistance, usableLength);
-            if (previous != null) {
-                float maxFrontDistance = previous.rearDistance() - minimumGap + entry.pack.getDimensions().length();
-                entry.frontDistance = Math.min(entry.frontDistance, maxFrontDistance);
-            }
-            previous = entry;
-        }
-        sortEntries();
     }
 
     private void sortEntries() {
