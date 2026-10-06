@@ -121,7 +121,8 @@ class DspFullDayAnalysisRunnerTest {
         assertTrue(progress.contains("ClosedOutboundTotesByServiceCentre: "));
         assertTrue(progress.lines().filter(line -> line.startsWith(
                 "ClosedOutboundTotesByServiceCentre: ")).allMatch(
-                        line -> line.contains(" | AllocatedBagsByServiceCentre: ")));
+                        line -> line.contains(" | AllocatedBagsByServiceCentre: ")
+                                && line.contains(" | MissingPacksByServiceCentre: ")));
         assertEquals(
                 progress,
                 consoleBytes.toString(StandardCharsets.UTF_8));
@@ -181,16 +182,19 @@ class DspFullDayAnalysisRunnerTest {
                 List.of(secondClosedBag, otherCentreBag));
 
         String result = DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
-                List.of(firstLine, secondLine), List.of("109", "108", "104"));
+                List.of(firstLine, secondLine), List.of("109", "108", "104"),
+                Map.of("104", 2, "108", 1));
         String originalToteSegment = "ClosedOutboundTotesByServiceCentre: 104=2 108=1 109=0";
         assertTrue(result.startsWith(originalToteSegment + " | "));
         assertEquals(originalToteSegment
-                + " | AllocatedBagsByServiceCentre: 104=3 108=1 109=0", result);
+                + " | AllocatedBagsByServiceCentre: 104=3 108=1 109=0"
+                + " | MissingPacksByServiceCentre: 104=2 108=1 109=0", result);
 
         OutboundAllocationSnapshot empty = new OutboundAllocationSnapshot(
                 Map.of(), List.of(), List.of());
         assertEquals("ClosedOutboundTotesByServiceCentre: 104=0 108=0"
-                        + " | AllocatedBagsByServiceCentre: 104=0 108=0",
+                        + " | AllocatedBagsByServiceCentre: 104=0 108=0"
+                        + " | MissingPacksByServiceCentre: 104=0 108=0",
                 DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
                         List.of(empty), List.of("108", "104")));
     }

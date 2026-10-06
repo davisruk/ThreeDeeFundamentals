@@ -101,6 +101,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                 config,
                 requirementCatalog,
                 correlationAssignmentRegistry,
+                P2pMissingPackSnapshot::empty,
                 true);
     }
 
@@ -121,6 +122,43 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             P2pElasticAllocationConfig config,
             P2pBagCorrelationRequirementCatalog requirementCatalog,
             P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry) {
+        return createWithoutArrivalConsumers(
+                simulationWorld,
+                lineDefinitions,
+                activityProbes,
+                schedulerSnapshotSupplier,
+                manifestCatalog,
+                lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier,
+                clockSnapshotSupplier,
+                supplySnapshotSupplier,
+                timetable,
+                bagPlanningResultSupplier,
+                outboundToteAllocator,
+                config,
+                requirementCatalog,
+                correlationAssignmentRegistry,
+                P2pMissingPackSnapshot::empty);
+    }
+
+    /** Creates the caller-owned-arrival runtime with immutable exception publication. */
+    public DspP2pElasticAllocationRuntime createWithoutArrivalConsumers(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            DspServiceCentreTimetable timetable,
+            Supplier<BagPlanningResult> bagPlanningResultSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            P2pElasticAllocationConfig config,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry,
+            Supplier<P2pMissingPackSnapshot> missingPackSnapshotSupplier) {
         return createInternal(
                 simulationWorld,
                 lineDefinitions,
@@ -138,6 +176,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                 config,
                 requirementCatalog,
                 correlationAssignmentRegistry,
+                missingPackSnapshotSupplier,
                 false);
     }
 
@@ -158,6 +197,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             P2pElasticAllocationConfig config,
             P2pBagCorrelationRequirementCatalog requirementCatalog,
             P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry,
+            Supplier<P2pMissingPackSnapshot> missingPackSnapshotSupplier,
             boolean registerArrivalConsumers) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
@@ -175,6 +215,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
         requireNonNull(config, "config");
         requireNonNull(requirementCatalog, "requirementCatalog");
         requireNonNull(correlationAssignmentRegistry, "correlationAssignmentRegistry");
+        requireNonNull(missingPackSnapshotSupplier, "missingPackSnapshotSupplier");
         if (lineDefinitions.size() != DspP2pStickyLeaseRuntimeFactory.DSP_P2P_LINE_COUNT
                 || config.p2pLineCount()
                         != DspP2pStickyLeaseRuntimeFactory.DSP_P2P_LINE_COUNT) {
@@ -191,6 +232,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
         DspSupplySnapshot initialSupply = requireSupplied(
                 supplySnapshotSupplier, "supplySnapshotSupplier");
         requireSupplied(bagPlanningResultSupplier, "bagPlanningResultSupplier");
+        requireSupplied(missingPackSnapshotSupplier, "missingPackSnapshotSupplier");
 
         P2pServiceCentreWorkSnapshotFactory workFactory =
                 new P2pServiceCentreWorkSnapshotFactory();
@@ -222,7 +264,10 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                             outboundToteAllocator.snapshot(),
                             config.workloadCostConfig(),
                             av02Inventory,
-                            lifecycle);
+                            lifecycle,
+                            requireSupplied(
+                                    missingPackSnapshotSupplier,
+                                    "missingPackSnapshotSupplier"));
                     return planner.create(
                             requireSupplied(clockSnapshotSupplier, "clockSnapshotSupplier"),
                             supply,

@@ -39,9 +39,12 @@ class P2pMissingPackSnapshotTest {
         assertSame(original.firstCollectedSheetByOrderId(), second.firstCollectedSheetByOrderId());
         assertThrows(UnsupportedOperationException.class,
                 () -> second.pdcCollectedPackCountByServiceCentreId().put("104", 99));
+        Map<String, Integer> expectedPdcCounts = new LinkedHashMap<>();
+        expectedPdcCounts.put("104", 1);
+        expectedPdcCounts.put("108", 1);
         P2pMissingPackSnapshot equal = new P2pMissingPackSnapshot(5,
                 original.missingPhysicalPackIdsByBagKey(), original.pendingEmptyBagKeys(),
-                original.missingPackCountByServiceCentreId(), Map.of("104", 1, "108", 1),
+                original.missingPackCountByServiceCentreId(), expectedPdcCounts,
                 original.firstCollectedSheetByOrderId());
         assertEquals(equal, second);
         assertEquals(equal.hashCode(), second.hashCode());

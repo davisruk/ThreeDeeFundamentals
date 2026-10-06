@@ -19,6 +19,7 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventorySnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.PhysicalToteSupplyState;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
@@ -43,6 +44,7 @@ final class DspFullDayCompletionProjectionCache {
     private Av02InventorySnapshot lastAv02Snapshot;
     private Av02Projection lastAv02Projection;
     private OutboundAllocationSnapshot lastOutboundSnapshot;
+    private P2pMissingPackSnapshot lastMissingPackSnapshot;
     private OutboundProjection lastOutboundProjection;
 
     DspFullDayCompletionProjectionCache(
@@ -103,12 +105,22 @@ final class DspFullDayCompletionProjectionCache {
     }
 
     OutboundProjection outboundProjection(OutboundAllocationSnapshot snapshot) {
+        return outboundProjection(snapshot, P2pMissingPackSnapshot.empty());
+    }
+
+    OutboundProjection outboundProjection(
+            OutboundAllocationSnapshot snapshot,
+            P2pMissingPackSnapshot missingPackSnapshot) {
         requireSnapshot(snapshot, "outboundSnapshot");
-        if (snapshot == lastOutboundSnapshot && lastOutboundProjection != null) {
+        requireSnapshot(missingPackSnapshot, "missingPackSnapshot");
+        if (snapshot == lastOutboundSnapshot
+                && missingPackSnapshot == lastMissingPackSnapshot
+                && lastOutboundProjection != null) {
             return lastOutboundProjection;
         }
-        OutboundProjection replacement = buildOutboundProjection(snapshot);
+        OutboundProjection replacement = buildOutboundProjection(snapshot, missingPackSnapshot);
         lastOutboundSnapshot = snapshot;
+        lastMissingPackSnapshot = missingPackSnapshot;
         lastOutboundProjection = replacement;
         return replacement;
     }
@@ -163,33 +175,96 @@ final class DspFullDayCompletionProjectionCache {
                 snapshot.waitingTotes(), Av02AllocatedTote::serviceCentreId));
     }
 
-    private OutboundProjection buildOutboundProjection(OutboundAllocationSnapshot snapshot) {
+    private OutboundProjection buildOutboundProjection(
+            OutboundAllocationSnapshot snapshot,
+            P2pMissingPackSnapshot missingPackSnapshot) {
         Set<BagKey> allocatedBagKeys = new LinkedHashSet<>(snapshot.allocatedBagKeys());
+        Map<BagKey, Set<String>> missingPackIdsByBagKey =
+                missingPackSnapshot.missingPhysicalPackIdsByBagKey();
+        Set<BagKey> pendingEmptyBagKeys = missingPackSnapshot.pendingEmptyBagKeys();
         Map<String, Integer> remainingPlannedBagCounts = new LinkedHashMap<>();
         Map<String, Integer> remainingPlannedPackCounts = new LinkedHashMap<>();
+        Map<String, Integer> affectedAllocatedBagCounts = new LinkedHashMap<>();
+        Map<String, Integer> pendingEmptyBagCounts = new LinkedHashMap<>();
+        int classifiedMissingBagCount = 0;
+        int classifiedPendingEmptyBagCount = 0;
         for (Map.Entry<String, List<PlannedBag>> entry : plannedBagsByServiceCentre.entrySet()) {
             int remainingBags = 0;
             int remainingPacks = 0;
             for (PlannedBag plannedBag : entry.getValue()) {
-                if (!allocatedBagKeys.contains(plannedBag.bagKey())) {
+                BagKey bagKey = plannedBag.bagKey();
+                Set<String> missingPackIds = missingPackIdsByBagKey.getOrDefault(bagKey, Set.of());
+                if (!plannedBag.physicalPackIds().containsAll(missingPackIds)) {
+                    throw new IllegalStateException(
+                            "Missing exception packs are absent from the planned bag: " + bagKey);
+                }
+                if (!missingPackIds.isEmpty()) {
+                    classifiedMissingBagCount++;
+                }
+                boolean pendingEmpty = pendingEmptyBagKeys.contains(bagKey);
+                if (pendingEmpty) {
+                    classifiedPendingEmptyBagCount++;
+                    if (missingPackIds.size() != plannedBag.physicalPackIds().size()) {
+                        throw new IllegalStateException(
+                                "Pending empty exception bag is not fully missing: " + bagKey);
+                    }
+                    if (allocatedBagKeys.contains(bagKey)) {
+                        throw new IllegalStateException(
+                                "Pending empty exception bag must not be allocated: " + bagKey);
+                    }
+                    pendingEmptyBagCounts.merge(entry.getKey(), 1, Integer::sum);
+                }
+                if (allocatedBagKeys.contains(bagKey)) {
+                    if (!missingPackIds.isEmpty()) {
+                        affectedAllocatedBagCounts.merge(entry.getKey(), 1, Integer::sum);
+                    }
+                    continue;
+                }
+                if (!pendingEmpty) {
                     remainingBags++;
-                    remainingPacks += plannedBag.physicalPackIds().size();
+                    remainingPacks = Math.addExact(
+                            remainingPacks,
+                            plannedBag.physicalPackIds().size() - missingPackIds.size());
                 }
             }
             remainingPlannedBagCounts.put(entry.getKey(), remainingBags);
             remainingPlannedPackCounts.put(entry.getKey(), remainingPacks);
         }
+        if (classifiedMissingBagCount != missingPackIdsByBagKey.size()
+                || classifiedPendingEmptyBagCount != pendingEmptyBagKeys.size()) {
+            throw new IllegalStateException(
+                    "Missing-pack snapshot contains bag keys absent from the bag plan");
+        }
 
         Map<String, Integer> openOutboundCounts = new LinkedHashMap<>();
+        Map<String, Integer> markedOutboundToteCounts = new LinkedHashMap<>();
         for (OutboundToteSnapshot tote : snapshot.openTotesByLine().values()) {
             tote.serviceCentreId().ifPresent(serviceCentreId ->
                     openOutboundCounts.merge(serviceCentreId, 1, Integer::sum));
+            countMarkedExceptionTote(tote, markedOutboundToteCounts);
+        }
+        for (OutboundToteSnapshot tote : snapshot.closedTotes()) {
+            countMarkedExceptionTote(tote, markedOutboundToteCounts);
         }
         return new OutboundProjection(
                 allocatedBagKeys,
                 remainingPlannedBagCounts,
                 remainingPlannedPackCounts,
-                openOutboundCounts);
+                openOutboundCounts,
+                missingPackSnapshot.missingPackCountByServiceCentreId(),
+                missingPackSnapshot.pdcCollectedPackCountByServiceCentreId(),
+                affectedAllocatedBagCounts,
+                markedOutboundToteCounts,
+                pendingEmptyBagCounts);
+    }
+
+    private static void countMarkedExceptionTote(
+            OutboundToteSnapshot tote,
+            Map<String, Integer> counts) {
+        if (tote.requiresExceptionProcessing()) {
+            tote.serviceCentreId().ifPresent(serviceCentreId ->
+                    counts.merge(serviceCentreId, 1, Integer::sum));
+        }
     }
 
     private static <T> Map<String, Integer> countByServiceCentre(
@@ -311,7 +386,12 @@ final class DspFullDayCompletionProjectionCache {
             Set<BagKey> allocatedBagKeys,
             Map<String, Integer> remainingPlannedBagCounts,
             Map<String, Integer> remainingPlannedPackCounts,
-            Map<String, Integer> openOutboundCounts) {
+            Map<String, Integer> openOutboundCounts,
+            Map<String, Integer> missingPackCounts,
+            Map<String, Integer> pdcCollectedPackCounts,
+            Map<String, Integer> affectedAllocatedBagCounts,
+            Map<String, Integer> markedOutboundToteCounts,
+            Map<String, Integer> pendingEmptyBagCounts) {
 
         OutboundProjection {
             allocatedBagKeys = immutableBagKeys(allocatedBagKeys);
@@ -320,6 +400,15 @@ final class DspFullDayCompletionProjectionCache {
             remainingPlannedPackCounts = immutableCounts(
                     remainingPlannedPackCounts, "remainingPlannedPackCounts");
             openOutboundCounts = immutableCounts(openOutboundCounts, "openOutboundCounts");
+            missingPackCounts = immutableCounts(missingPackCounts, "missingPackCounts");
+            pdcCollectedPackCounts = immutableCounts(
+                    pdcCollectedPackCounts, "pdcCollectedPackCounts");
+            affectedAllocatedBagCounts = immutableCounts(
+                    affectedAllocatedBagCounts, "affectedAllocatedBagCounts");
+            markedOutboundToteCounts = immutableCounts(
+                    markedOutboundToteCounts, "markedOutboundToteCounts");
+            pendingEmptyBagCounts = immutableCounts(
+                    pendingEmptyBagCounts, "pendingEmptyBagCounts");
         }
     }
 }

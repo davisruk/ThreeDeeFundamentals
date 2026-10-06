@@ -50,6 +50,10 @@ class DspFullDayProgressFormatterTest {
             assertTrue(first.get(centre104).contains("OSR_STATE["));
             assertTrue(first.get(centre104).contains("P2P_ASSIGNMENT["));
             assertTrue(first.get(centre104).contains("UNSUPPORTED_WORK["));
+            assertTrue(first.get(centre104).contains(
+                    "p2pOutputClosure=NOT_CLOSED exceptions=missingPacks:0"
+                            + ",pdcCollectedPacks:0,affectedAllocatedBags:0"
+                            + ",markedOutboundTotes:0,pendingEmptyBags:0"));
 
             int firstP2p = indexOfPrefix(first, "P2P[dsp-p2p-line-1]: ");
             assertTrue(centre108 < firstP2p);

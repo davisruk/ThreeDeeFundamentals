@@ -31,6 +31,10 @@ class DspFullDayInspectionFormatterTest {
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Speed: ")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("OSR: ")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("ServiceCentre[104]: ")));
+        assertTrue(first.stream().anyMatch(value -> value.startsWith("ServiceCentre[104]: ")
+                && value.contains("p2pOutputClosure=P2P_OUTPUT_CLOSED")
+                && value.contains("exceptions=missingPacks:0,pdcCollectedPacks:0"
+                        + ",affectedAllocatedBags:0,markedOutboundTotes:0,pendingEmptyBags:0")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("P2P[dsp-p2p-line-1]: ")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Release: ")));
         assertTrue(first.stream().anyMatch(value -> value.startsWith("Transport: ")));

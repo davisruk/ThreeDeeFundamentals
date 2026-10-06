@@ -44,6 +44,17 @@ class DspFullDayReportFactoryTest {
                         .map(value -> value.elapsedSimulationTime()).toList()));
         assertTrue(report.serviceCentres().stream()
                 .allMatch(value -> value.outcome() != DspServiceCentreCompletionOutcome.UNFINISHED_AT_HARD_CUTOFF));
+        assertTrue(report.serviceCentres().stream().allMatch(value ->
+                value.completion().p2pOutputClosureState()
+                        == online.davisfamily.warehouse.sim.dsp.analysis.DspP2pOutputClosureState.P2P_OUTPUT_CLOSED
+                        && value.completion().missingPackCount() == 0
+                        && value.completion().pdcCollectedPackCount() == 0
+                        && value.completion().affectedAllocatedBagCount() == 0
+                        && value.completion().markedOutboundToteCount() == 0
+                        && value.completion().pendingEmptyBagCount() == 0));
+        assertTrue(report.serviceCentres().stream().allMatch(value -> report.runtimeSnapshot()
+                .completions().stream()
+                .anyMatch(completion -> completion == value.completion())));
 
         assertThrows(UnsupportedOperationException.class,
                 () -> report.serviceCentres().add(report.serviceCentres().getFirst()));

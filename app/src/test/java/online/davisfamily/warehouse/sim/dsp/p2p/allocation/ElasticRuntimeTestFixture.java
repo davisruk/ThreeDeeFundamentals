@@ -112,6 +112,30 @@ public final class ElasticRuntimeTestFixture {
                         Duration.ofMinutes(1), Duration.ZERO, Duration.ZERO)));
     }
 
+    public DspP2pElasticAllocationRuntime createRuntimeWithMissingPackSnapshotSupplier(
+            Supplier<P2pMissingPackSnapshot> missingPackSnapshotSupplier) {
+        return new DspP2pElasticAllocationRuntimeFactory().createWithoutArrivalConsumers(
+                world,
+                definitions,
+                Map.copyOf(probes),
+                () -> new WarehouseSchedulerSnapshot(
+                        List.of(), Map.of(), Set.of(), Optional.empty()),
+                new InboundToteManifestCatalog(List.of()),
+                ledger::snapshot,
+                () -> new Av02InventorySnapshot(1, List.of(), List.of()),
+                clock::initialSnapshot,
+                this::supplySnapshot,
+                timetable(),
+                () -> new BagPlanningResult(List.of(), List.of(), List.of(), List.of(), List.of()),
+                outboundAllocator,
+                P2pElasticAllocationConfig.productionBaseline(
+                        new P2pWorkloadCostConfig(
+                                Duration.ofMinutes(1), Duration.ZERO, Duration.ZERO)),
+                online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog.empty(),
+                new online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentRegistry(),
+                missingPackSnapshotSupplier);
+    }
+
     public DspP2pElasticAllocationRuntime createRuntime(
             Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
             InboundToteManifestCatalog manifestCatalog,

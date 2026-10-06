@@ -4,8 +4,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+import online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
@@ -58,7 +61,12 @@ public final class DspFullDayProgressFormatter {
                         .reversed()
                         .thenComparing(DspServiceCentreMetricsSnapshot::serviceCentreId))
                 .toList();
-        serviceCentres.stream().map(this::serviceCentreLine).forEach(lines::add);
+        Map<String, DspServiceCentreCompletionSnapshot> completionsById = new LinkedHashMap<>();
+        runtime.completions().forEach(value ->
+                completionsById.put(value.serviceCentreId(), value));
+        serviceCentres.stream().map(value -> serviceCentreLine(
+                value,
+                completionsById.get(value.serviceCentreId()))).forEach(lines::add);
         metrics.p2pLines().stream().map(this::lineLine).forEach(lines::add);
 
         var release = runtime.operationalRelease();
@@ -117,7 +125,13 @@ public final class DspFullDayProgressFormatter {
         return List.copyOf(lines);
     }
 
-    private String serviceCentreLine(DspServiceCentreMetricsSnapshot metrics) {
+    private String serviceCentreLine(
+            DspServiceCentreMetricsSnapshot metrics,
+            DspServiceCentreCompletionSnapshot completionSnapshot) {
+        if (completionSnapshot == null) {
+            throw new IllegalArgumentException(
+                    "missing completion snapshot for " + metrics.serviceCentreId());
+        }
         String blocks = java.util.Arrays.stream(DspFullDayBlockCategory.values())
                 .map(category -> block(category, metrics.block(category)))
                 .collect(Collectors.joining(";"));
@@ -135,6 +149,12 @@ public final class DspFullDayProgressFormatter {
                 + ",unmet:" + metrics.unmetLineCount()
                 + " completion=" + completion
                 + " outcome=" + metrics.completionOutcome()
+                + " p2pOutputClosure=" + completionSnapshot.p2pOutputClosureState()
+                + " exceptions=missingPacks:" + completionSnapshot.missingPackCount()
+                + ",pdcCollectedPacks:" + completionSnapshot.pdcCollectedPackCount()
+                + ",affectedAllocatedBags:" + completionSnapshot.affectedAllocatedBagCount()
+                + ",markedOutboundTotes:" + completionSnapshot.markedOutboundToteCount()
+                + ",pendingEmptyBags:" + completionSnapshot.pendingEmptyBagCount()
                 + " blocks=" + blocks;
     }
 

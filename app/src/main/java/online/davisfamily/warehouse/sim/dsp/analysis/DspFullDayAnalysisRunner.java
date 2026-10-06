@@ -283,11 +283,15 @@ public final class DspFullDayAnalysisRunner {
             if (transportIndex < 0) {
                 throw new IllegalStateException("progress formatter omitted transport section");
             }
+            Map<String, Integer> missingPackCounts = new TreeMap<>();
+            runtime.completions().forEach(completion -> missingPackCounts.put(
+                    completion.serviceCentreId(), completion.missingPackCount()));
             lines.add(transportIndex + 1, inboundTotesInFlight(runtime.lifecycle(), manifestCatalog));
             lines.add(transportIndex + 2, closedOutboundTotesByServiceCentre(
                     runtime.p2pLines().stream().map(line -> line.outboundAllocation()).toList(),
                     runtime.metrics().serviceCentres().stream()
-                            .map(centre -> centre.serviceCentreId()).toList()));
+                            .map(centre -> centre.serviceCentreId()).toList(),
+                    missingPackCounts));
             if (wallInterval.isPresent()) {
                 lines.add(2, "WallClock: sincePreviousProgress=" + wallInterval.orElseThrow());
             }
@@ -356,14 +360,32 @@ public final class DspFullDayAnalysisRunner {
     static String closedOutboundTotesByServiceCentre(
             List<OutboundAllocationSnapshot> allocations,
             List<String> serviceCentreIds) {
-        if (allocations == null || serviceCentreIds == null) {
+        return closedOutboundTotesByServiceCentre(allocations, serviceCentreIds, Map.of());
+    }
+
+    static String closedOutboundTotesByServiceCentre(
+            List<OutboundAllocationSnapshot> allocations,
+            List<String> serviceCentreIds,
+            Map<String, Integer> missingPackCountsByServiceCentre) {
+        if (allocations == null || serviceCentreIds == null
+                || missingPackCountsByServiceCentre == null) {
             throw new IllegalArgumentException("closed outbound count values must not be null");
         }
         Map<String, Integer> counts = new TreeMap<>();
         Map<String, Integer> bagCounts = new TreeMap<>();
+        Map<String, Integer> missingCounts = new TreeMap<>();
         for (String serviceCentreId : serviceCentreIds) {
             counts.put(serviceCentreId, 0);
             bagCounts.put(serviceCentreId, 0);
+            missingCounts.put(serviceCentreId, 0);
+        }
+        for (Map.Entry<String, Integer> entry : missingPackCountsByServiceCentre.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank()
+                    || entry.getValue() == null || entry.getValue() < 0) {
+                throw new IllegalArgumentException(
+                        "missing-pack counts must have nonblank IDs and nonnegative values");
+            }
+            missingCounts.put(entry.getKey(), entry.getValue());
         }
         for (OutboundAllocationSnapshot allocation : allocations) {
             for (var tote : allocation.closedTotes()) {
@@ -377,6 +399,8 @@ public final class DspFullDayAnalysisRunner {
         counts.forEach((id, count) -> line.append(' ').append(id).append('=').append(count));
         line.append(" | AllocatedBagsByServiceCentre:");
         bagCounts.forEach((id, count) -> line.append(' ').append(id).append('=').append(count));
+        line.append(" | MissingPacksByServiceCentre:");
+        missingCounts.forEach((id, count) -> line.append(' ').append(id).append('=').append(count));
         return line.toString();
     }
 

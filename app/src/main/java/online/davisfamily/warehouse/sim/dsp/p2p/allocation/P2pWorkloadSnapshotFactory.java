@@ -34,6 +34,8 @@ public final class P2pWorkloadSnapshotFactory {
     private P2pWorkloadSnapshot lastSnapshot;
     private Map<String, P2pServiceCentreWorkloadSnapshot> lastServiceCentreSnapshots = Map.of();
     private ValidationCache lastValidationCache;
+    private int lastMissingClassificationEpoch = -1;
+    private P2pWorkloadCostConfig lastCostConfig;
 
     public P2pWorkloadSnapshot create(
             P2pServiceCentreWorkSnapshot workSnapshot,
@@ -48,7 +50,8 @@ public final class P2pWorkloadSnapshotFactory {
                 outboundAllocationSnapshot,
                 costConfig,
                 new Av02InventorySnapshot(1, List.of(), List.of()),
-                compatibilityLifecycleSnapshot(manifestCatalog));
+                compatibilityLifecycleSnapshot(manifestCatalog),
+                P2pMissingPackSnapshot.empty());
     }
 
     public P2pWorkloadSnapshot create(
@@ -59,14 +62,50 @@ public final class P2pWorkloadSnapshotFactory {
             P2pWorkloadCostConfig costConfig,
             Av02InventorySnapshot av02InventorySnapshot,
             PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
+        return create(
+                workSnapshot,
+                manifestCatalog,
+                bagPlanningResult,
+                outboundAllocationSnapshot,
+                costConfig,
+                av02InventorySnapshot,
+                lifecycleSnapshot,
+                P2pMissingPackSnapshot.empty());
+    }
+
+    public P2pWorkloadSnapshot create(
+            P2pServiceCentreWorkSnapshot workSnapshot,
+            InboundToteManifestCatalog manifestCatalog,
+            BagPlanningResult bagPlanningResult,
+            OutboundAllocationSnapshot outboundAllocationSnapshot,
+            P2pWorkloadCostConfig costConfig,
+            Av02InventorySnapshot av02InventorySnapshot,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot,
+            P2pMissingPackSnapshot missingPackSnapshot) {
         if (workSnapshot == null
                 || manifestCatalog == null
                 || bagPlanningResult == null
                 || outboundAllocationSnapshot == null
                 || costConfig == null
                 || av02InventorySnapshot == null
-                || lifecycleSnapshot == null) {
+                || lifecycleSnapshot == null
+                || missingPackSnapshot == null) {
             throw new IllegalArgumentException("workload inputs must not be null");
+        }
+        int missingClassificationEpoch =
+                missingPackSnapshot.firstCollectedSheetByOrderId().size();
+        if (lastSnapshot != null
+                && lastValidationCache != null
+                && lastValidationCache.matches(
+                        workSnapshot,
+                        manifestCatalog,
+                        bagPlanningResult,
+                        outboundAllocationSnapshot,
+                        av02InventorySnapshot,
+                        lifecycleSnapshot)
+                && missingClassificationEpoch == lastMissingClassificationEpoch
+                && costConfig.equals(lastCostConfig)) {
+            return lastSnapshot;
         }
 
         Map<PhysicalToteId, String> remainingToteOwners;
@@ -109,6 +148,8 @@ public final class P2pWorkloadSnapshotFactory {
         orderedServiceCentreIds.addAll(planIndex.orderedServiceCentreIds());
 
         List<P2pServiceCentreWorkloadSnapshot> serviceCentres = new ArrayList<>();
+        int classifiedMissingBagCount = 0;
+        int classifiedPendingEmptyBagCount = 0;
         for (String serviceCentreId : orderedServiceCentreIds) {
             String normalizedServiceCentreId = serviceCentreId.trim();
             List<PhysicalToteId> remainingToteIds = workSnapshot.remainingToteIds(
@@ -124,13 +165,42 @@ public final class P2pWorkloadSnapshotFactory {
             try {
                 for (PlannedBag plannedBag : planIndex.plannedBagsByServiceCentre()
                         .getOrDefault(normalizedServiceCentreId, List.of())) {
+                    Set<String> missingPackIds = missingPackSnapshot
+                            .missingPhysicalPackIdsByBagKey()
+                            .getOrDefault(plannedBag.bagKey(), Set.of());
+                    boolean pendingEmpty = missingPackSnapshot.pendingEmptyBagKeys()
+                            .contains(plannedBag.bagKey());
+                    if (!plannedBag.physicalPackIds().containsAll(missingPackIds)) {
+                        throw new IllegalStateException(
+                                "Missing exception packs are absent from the planned bag: "
+                                        + plannedBag.bagKey());
+                    }
+                    if (!missingPackIds.isEmpty()) {
+                        classifiedMissingBagCount++;
+                    }
+                    if (pendingEmpty) {
+                        classifiedPendingEmptyBagCount++;
+                        if (missingPackIds.size() != plannedBag.physicalPackIds().size()) {
+                            throw new IllegalStateException(
+                                    "Pending empty exception bag is not fully missing: "
+                                            + plannedBag.bagKey());
+                        }
+                    }
                     if (allocatedBagKeys.contains(plannedBag.bagKey())) {
+                        if (pendingEmpty) {
+                            throw new IllegalStateException(
+                                    "Pending empty exception bag must not be allocated: "
+                                            + plannedBag.bagKey());
+                        }
+                        continue;
+                    }
+                    if (pendingEmpty) {
                         continue;
                     }
                     remainingBagKeys.add(plannedBag.bagKey());
                     remainingPackCount = Math.addExact(
                             remainingPackCount,
-                            plannedBag.physicalPackIds().size());
+                            plannedBag.physicalPackIds().size() - missingPackIds.size());
                 }
             } catch (ArithmeticException exception) {
                 throw new IllegalArgumentException("remaining pack count overflow", exception);
@@ -166,10 +236,20 @@ public final class P2pWorkloadSnapshotFactory {
             }
         }
 
+        if (classifiedMissingBagCount
+                        != missingPackSnapshot.missingPhysicalPackIdsByBagKey().size()
+                || classifiedPendingEmptyBagCount
+                        != missingPackSnapshot.pendingEmptyBagKeys().size()) {
+            throw new IllegalStateException(
+                    "Missing-pack snapshot contains bag keys absent from the bag plan");
+        }
+
         if (sameServiceCentreSequence(serviceCentres)) {
             if (replacementValidationCache != null) {
                 lastValidationCache = replacementValidationCache;
             }
+            lastMissingClassificationEpoch = missingClassificationEpoch;
+            lastCostConfig = costConfig;
             return lastSnapshot;
         }
 
@@ -187,6 +267,8 @@ public final class P2pWorkloadSnapshotFactory {
         if (replacementValidationCache != null) {
             lastValidationCache = replacementValidationCache;
         }
+        lastMissingClassificationEpoch = missingClassificationEpoch;
+        lastCostConfig = costConfig;
         return replacement;
     }
 

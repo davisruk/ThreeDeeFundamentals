@@ -31,6 +31,7 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.OsrProcessingReleaseCand
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationCalibrationStatus;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
@@ -489,6 +490,10 @@ class DspOperationalReleaseSnapshotTest {
         assertEquals(List.of(), fiveArgument.routeAdmissions());
         assertEquals(List.of(), sevenArgument.routeAdmissions());
         assertEquals(Optional.empty(), eightArgument.elasticP2pAllocation());
+        assertSame(P2pMissingPackSnapshot.empty(), fourArgument.missingPacks());
+        assertSame(P2pMissingPackSnapshot.empty(), fiveArgument.missingPacks());
+        assertSame(P2pMissingPackSnapshot.empty(), sevenArgument.missingPacks());
+        assertSame(P2pMissingPackSnapshot.empty(), eightArgument.missingPacks());
         assertEquals(equivalent, eightArgument);
         assertEquals(equivalent.hashCode(), eightArgument.hashCode());
         assertEquals(
@@ -499,7 +504,8 @@ class DspOperationalReleaseSnapshotTest {
                         + ", routeAdmissions=" + eightArgument.routeAdmissions()
                         + ", p2pLineLeases=" + eightArgument.p2pLineLeases()
                         + ", p2pRouteAdmissions=" + eightArgument.p2pRouteAdmissions()
-                        + ", elasticP2pAllocation=" + eightArgument.elasticP2pAllocation() + "]",
+                        + ", elasticP2pAllocation=" + eightArgument.elasticP2pAllocation()
+                        + ", missingPacks=" + eightArgument.missingPacks() + "]",
                 eightArgument.toString());
     }
 

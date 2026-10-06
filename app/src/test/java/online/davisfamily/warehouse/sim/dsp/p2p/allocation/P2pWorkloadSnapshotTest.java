@@ -104,6 +104,90 @@ class P2pWorkloadSnapshotTest {
     }
 
     @Test
+    void shouldExcludeExceptionPacksAndPendingEmptyBagsAndReuseByCollectEpoch() {
+        InboundToteManifest input104 = manifest("input-104", "order-104", "104", 0);
+        InboundToteManifest input108 = manifest("input-108", "order-108", "108", 1);
+        PlannedBag allocated104 = plannedBag(
+                "rx-104-allocated", "104", "pharmacy-104", input104,
+                "allocated-pack-1", "allocated-pack-2");
+        PlannedBag remaining104 = plannedBag(
+                "rx-104-remaining", "104", "pharmacy-104", input104,
+                "remaining-pack-1", "remaining-pack-2");
+        PlannedBag pendingEmpty104 = plannedBag(
+                "rx-104-empty", "104", "pharmacy-104", input104, "empty-pack-104");
+        PlannedBag remaining108 = plannedBag(
+                "rx-108-remaining", "108", "pharmacy-108", input108, "remaining-pack-108");
+        BagPlanningResult bagPlan = planning(
+                List.of(allocated104, remaining104, pendingEmpty104, remaining108),
+                List.of(input104, input104, input104, input108));
+        PhysicalToteId outboundId = new PhysicalToteId("outbound-partial-104");
+        OrderSheetKey sourceSheet = input104.orderSheetKey();
+        AllocatedOutboundBag partialAllocation = new AllocatedOutboundBag(
+                allocated104,
+                outboundId,
+                List.of(new OutputSheetAllocation(sourceSheet, sourceSheet)),
+                List.of("allocated-pack-1"),
+                List.of("allocated-pack-2"));
+        OutboundToteSnapshot partialTote = new OutboundToteSnapshot(
+                outboundId,
+                new P2pLineId("line-104"),
+                Optional.of("104"),
+                Optional.of("pharmacy-104"),
+                10,
+                List.of(partialAllocation),
+                Optional.of(OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE));
+        OutboundAllocationSnapshot outbound = new OutboundAllocationSnapshot(
+                Map.of(), List.of(partialTote), List.of(partialAllocation));
+        InboundToteManifestCatalog manifestCatalog =
+                new InboundToteManifestCatalog(List.of(input104, input108));
+        P2pServiceCentreWorkSnapshot work = new P2pServiceCentreWorkSnapshot(Map.of(), Map.of());
+        Av02InventorySnapshot av02 = new Av02InventorySnapshot(1, List.of(), List.of());
+        PhysicalToteLifecycleSnapshot lifecycle = new PhysicalToteLifecycleLedger().snapshot();
+        P2pMissingPackSnapshot firstCollect = new P2pMissingPackSnapshot(
+                1,
+                Map.of(
+                        allocated104.bagKey(), java.util.Set.of("allocated-pack-2"),
+                        remaining104.bagKey(), java.util.Set.of("remaining-pack-2"),
+                        pendingEmpty104.bagKey(), java.util.Set.of("empty-pack-104")),
+                java.util.Set.of(pendingEmpty104.bagKey()),
+                Map.of("104", 3),
+                Map.of(),
+                Map.of("order-104", input104.orderSheetKey()));
+
+        P2pWorkloadSnapshot initial = factory.create(
+                work, manifestCatalog, bagPlan, outbound, COSTS, av02, lifecycle, firstCollect);
+        assertEquals(1, initial.require("104").remainingUnallocatedPackCount());
+        assertEquals(List.of(remaining104.bagKey()), initial.require("104").remainingBagKeys());
+        assertEquals(1, initial.require("104").remainingUnallocatedBagCount());
+        assertEquals(1, initial.require("108").remainingUnallocatedPackCount());
+
+        P2pMissingPackSnapshot pdcOnlyChange = firstCollect.withPdcCollectedPack("104");
+        assertSame(initial, factory.create(
+                work, manifestCatalog, bagPlan, outbound, COSTS, av02, lifecycle, pdcOnlyChange));
+
+        P2pMissingPackSnapshot secondCollect = new P2pMissingPackSnapshot(
+                3,
+                Map.of(
+                        allocated104.bagKey(), java.util.Set.of("allocated-pack-2"),
+                        remaining104.bagKey(), java.util.Set.of("remaining-pack-2"),
+                        pendingEmpty104.bagKey(), java.util.Set.of("empty-pack-104"),
+                        remaining108.bagKey(), java.util.Set.of("remaining-pack-108")),
+                java.util.Set.of(pendingEmpty104.bagKey(), remaining108.bagKey()),
+                Map.of("104", 3, "108", 1),
+                Map.of("104", 1),
+                Map.of(
+                        "order-104", input104.orderSheetKey(),
+                        "order-108", input108.orderSheetKey()));
+        P2pWorkloadSnapshot afterSecondCollect = factory.create(
+                work, manifestCatalog, bagPlan, outbound, COSTS, av02, lifecycle, secondCollect);
+        assertNotSame(initial, afterSecondCollect);
+        assertSame(initial.require("104"), afterSecondCollect.require("104"));
+        assertEquals(0, afterSecondCollect.require("108").remainingUnallocatedPackCount());
+        assertEquals(0, afterSecondCollect.require("108").remainingUnallocatedBagCount());
+        assertTrue(afterSecondCollect.require("108").remainingBagKeys().isEmpty());
+    }
+
+    @Test
     void shouldReuseFiveThousandBagPlanIndexAndRetainWorkloadValues() {
         LargePlanFixture fixture = fiveThousandBagPlan();
 

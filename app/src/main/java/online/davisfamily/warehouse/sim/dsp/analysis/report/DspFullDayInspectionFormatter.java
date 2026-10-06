@@ -160,6 +160,12 @@ public final class DspFullDayInspectionFormatter {
                 + " blocks=" + blocks
                 + " completion=" + result.completionDateTime().map(Object::toString).orElse("none")
                 + " outcome=" + result.outcome()
+                + " p2pOutputClosure=" + result.completion().p2pOutputClosureState()
+                + " exceptions=missingPacks:" + result.completion().missingPackCount()
+                + ",pdcCollectedPacks:" + result.completion().pdcCollectedPackCount()
+                + ",affectedAllocatedBags:" + result.completion().affectedAllocatedBagCount()
+                + ",markedOutboundTotes:" + result.completion().markedOutboundToteCount()
+                + ",pendingEmptyBags:" + result.completion().pendingEmptyBagCount()
                 + " lateness=target:" + targetLateness + ",latest:" + latestLateness
                 + " unfinishedIdentities=" + joinOrNone(result.unfinishedIdentities());
     }

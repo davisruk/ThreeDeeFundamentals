@@ -287,7 +287,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             outboundAllocator,
                             profile.p2pElasticAllocationConfig(),
                             requirementCatalog,
-                            correlationAssignments);
+                            correlationAssignments,
+                            exceptionLedger::snapshot);
             elasticReference.set(elasticRuntime);
             closeables.add(elasticRuntime);
 
@@ -460,12 +461,14 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     transportRuntime,
                     launchQueue,
                     outboundAllocator,
+                    exceptionLedger,
                     completionEvaluator,
                     clockController::snapshot);
             Runnable closeApplicableOutputs = () -> closeApplicableOutputs(
                     lineRuntimes,
                     completionSource.plannedBagsByServiceCentre,
                     outboundAllocator,
+                    exceptionLedger.snapshot(),
                     clockController.snapshot());
             DspFullDayCutoffController cutoffController = new DspFullDayCutoffController(
                     clockController::snapshot,
@@ -782,8 +785,10 @@ public final class DspFullDayAnalysisRuntimeFactory {
             List<DspHeadlessP2pLineRuntime> lineRuntimes,
             Map<String, List<PlannedBag>> plannedBagsByServiceCentre,
             OutboundToteAllocator outboundAllocator,
+            P2pMissingPackSnapshot missingPackSnapshot,
             DspOperationalClockSnapshot clockSnapshot) {
         Set<BagKey> allocatedBagKeys = outboundAllocator.snapshot().allocatedBagKeys();
+        Set<BagKey> pendingEmptyBagKeys = missingPackSnapshot.pendingEmptyBagKeys();
         for (DspHeadlessP2pLineRuntime lineRuntime : lineRuntimes) {
             DspHeadlessP2pLineRuntimeSnapshot snapshot = lineRuntime.snapshot();
             Optional<OutboundToteSnapshot> open = snapshot.activity().openOutboundTote();
@@ -794,7 +799,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
             boolean allBagsAllocated = true;
             for (PlannedBag plannedBag : plannedBagsByServiceCentre
                     .getOrDefault(serviceCentreId, List.of())) {
-                if (!allocatedBagKeys.contains(plannedBag.bagKey())) {
+                if (!allocatedBagKeys.contains(plannedBag.bagKey())
+                        && !pendingEmptyBagKeys.contains(plannedBag.bagKey())) {
                     allBagsAllocated = false;
                     break;
                 }
@@ -870,6 +876,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
         private final DspWarehouseTransportRuntime transportRuntime;
         private final OsrOutboundRouteLaunchQueue launchQueue;
         private final OutboundToteAllocator outboundAllocator;
+        private final DspPreparedPackExceptionLedger exceptionLedger;
         private final DspFullDayCompletionEvaluator evaluator;
         private final Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier;
         private final Map<String, Duration> firstCompletionTimes = new LinkedHashMap<>();
@@ -887,6 +894,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 DspWarehouseTransportRuntime transportRuntime,
                 OsrOutboundRouteLaunchQueue launchQueue,
                 OutboundToteAllocator outboundAllocator,
+                DspPreparedPackExceptionLedger exceptionLedger,
                 DspFullDayCompletionEvaluator evaluator,
                 Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier) {
             this.manifestsByServiceCentre = indexManifests(manifestCatalog.manifests());
@@ -910,6 +918,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
             this.transportRuntime = transportRuntime;
             this.launchQueue = launchQueue;
             this.outboundAllocator = outboundAllocator;
+            this.exceptionLedger = exceptionLedger;
             this.evaluator = evaluator;
             this.clockSnapshotSupplier = clockSnapshotSupplier;
         }
@@ -922,6 +931,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
             OsrInventorySnapshot osr = osrInventory.snapshot();
             Av02InventorySnapshot av02 = av02Inventory.snapshot();
             OutboundAllocationSnapshot outbound = outboundAllocator.snapshot();
+            P2pMissingPackSnapshot missingPackSnapshot = exceptionLedger.snapshot();
             DspFullDayCompletionProjectionCache.SupplyProjection supplyProjection =
                     projectionCache.supplyProjection(supply);
             DspFullDayCompletionProjectionCache.LifecycleProjection lifecycleProjection =
@@ -931,7 +941,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
             DspFullDayCompletionProjectionCache.Av02Projection av02Projection =
                     projectionCache.av02Projection(av02);
             DspFullDayCompletionProjectionCache.OutboundProjection outboundProjection =
-                    projectionCache.outboundProjection(outbound);
+                    projectionCache.outboundProjection(outbound, missingPackSnapshot);
             List<String> serviceCentreIds = supplyProjection.serviceCentreIds();
             StationProcessingSnapshot station = stationRuntime.coordinatorSnapshot();
             P2pLineLeaseCatalogSnapshot leases = elasticRuntime.leaseSnapshot();
@@ -1005,7 +1015,12 @@ public final class DspFullDayAnalysisRuntimeFactory {
                                 openOutbound.getOrDefault(id, 0),
                                 unallocatedCompleted.getOrDefault(id, 0),
                                 unsupported,
-                                Optional.ofNullable(firstCompletionTimes.get(id)));
+                                Optional.ofNullable(firstCompletionTimes.get(id)),
+                                outboundProjection.missingPackCounts().getOrDefault(id, 0),
+                                outboundProjection.pdcCollectedPackCounts().getOrDefault(id, 0),
+                                outboundProjection.affectedAllocatedBagCounts().getOrDefault(id, 0),
+                                outboundProjection.markedOutboundToteCounts().getOrDefault(id, 0),
+                                outboundProjection.pendingEmptyBagCounts().getOrDefault(id, 0));
                 var snapshot = evaluator.evaluate(observation);
                 if (snapshot.complete()) {
                     firstCompletionTimes.putIfAbsent(id, snapshot.completionElapsedTime().orElseThrow());

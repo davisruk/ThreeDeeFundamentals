@@ -44,6 +44,13 @@ class DspFullDayReportJsonWriterTest {
         assertTrue(root.at("/metrics/observedSimulationDuration/nanos").isIntegralNumber());
         assertTrue(root.at("/metrics/observedSimulationDuration/iso").isTextual());
         assertEquals("104", root.at("/serviceCentres/0/serviceCentreId").textValue());
+        assertEquals("P2P_OUTPUT_CLOSED",
+                root.at("/serviceCentres/0/p2pOutputClosureState").textValue());
+        assertEquals(0, root.at("/serviceCentres/0/missingPackCount").intValue());
+        assertEquals(0, root.at("/serviceCentres/0/pdcCollectedPackCount").intValue());
+        assertEquals(0, root.at("/serviceCentres/0/affectedAllocatedBagCount").intValue());
+        assertEquals(0, root.at("/serviceCentres/0/markedOutboundToteCount").intValue());
+        assertEquals(0, root.at("/serviceCentres/0/pendingEmptyBagCount").intValue());
         assertEquals("dsp-p2p-line-1", root.at("/p2pLines/0/lineId").textValue());
         assertEquals(
                 new String(bytes, StandardCharsets.UTF_8),

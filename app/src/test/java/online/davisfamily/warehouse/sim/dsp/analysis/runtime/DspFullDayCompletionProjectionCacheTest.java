@@ -38,6 +38,7 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteClosureReason;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocation;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.PhysicalToteSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.PhysicalToteSupplyState;
@@ -125,6 +126,43 @@ class DspFullDayCompletionProjectionCacheTest {
                 () -> outboundProjection.remainingPlannedPackCounts().clear());
         assertThrows(UnsupportedOperationException.class,
                 () -> outboundProjection.openOutboundCounts().clear());
+    }
+
+    @Test
+    void shouldProjectExceptionWorkOncePerOutboundAndLedgerSnapshotPair() {
+        DspFullDayCompletionProjectionCache cache = newCache();
+        OutboundAllocationSnapshot outbound = exceptionOutboundSnapshot();
+        BagKey partialBagKey = new BagKey("rx-104-2", 1);
+        BagKey emptyBagKey = new BagKey("rx-108-1", 1);
+        P2pMissingPackSnapshot missing = new P2pMissingPackSnapshot(
+                1,
+                Map.of(
+                        partialBagKey, Set.of("pack-104-3"),
+                        emptyBagKey, Set.of("pack-108-1")),
+                Set.of(emptyBagKey),
+                Map.of("104", 1, "108", 1),
+                Map.of(),
+                Map.of(
+                        "ORDER-104-2", new OrderSheetKey("ORDER-104-2", 1),
+                        "ORDER-108", new OrderSheetKey("ORDER-108", 1)));
+
+        DspFullDayCompletionProjectionCache.OutboundProjection first =
+                cache.outboundProjection(outbound, missing);
+        assertSame(first, cache.outboundProjection(outbound, missing));
+        assertEquals(Map.of("104", 1, "108", 0), first.remainingPlannedBagCounts());
+        assertEquals(Map.of("104", 1, "108", 0), first.remainingPlannedPackCounts());
+        assertEquals(Map.of("104", 1, "108", 1), first.missingPackCounts());
+        assertEquals(Map.of(), first.pdcCollectedPackCounts());
+        assertEquals(Map.of("104", 1), first.affectedAllocatedBagCounts());
+        assertEquals(Map.of("104", 1), first.markedOutboundToteCounts());
+        assertEquals(Map.of("108", 1), first.pendingEmptyBagCounts());
+
+        P2pMissingPackSnapshot pdcCollected = missing.withPdcCollectedPack("104");
+        DspFullDayCompletionProjectionCache.OutboundProjection afterPdcCollection =
+                cache.outboundProjection(outbound, pdcCollected);
+        assertNotSame(first, afterPdcCollection);
+        assertEquals(Map.of("104", 1), afterPdcCollection.pdcCollectedPackCounts());
+        assertSame(afterPdcCollection, cache.outboundProjection(outbound, pdcCollected));
     }
 
     @Test
@@ -399,6 +437,28 @@ class DspFullDayCompletionProjectionCacheTest {
                 open,
                 List.of(closed),
                 changed ? List.of(first) : List.of(first, second));
+    }
+
+    private static OutboundAllocationSnapshot exceptionOutboundSnapshot() {
+        PlannedBag planned = plannedBag(
+                "rx-104-2", "104", "ORDER-104-2", List.of("pack-104-2", "pack-104-3"));
+        PhysicalToteId outboundId = new PhysicalToteId("outbound-exception-104");
+        OrderSheetKey sourceSheet = planned.owningOrderSheetKeys().getFirst();
+        AllocatedOutboundBag partial = new AllocatedOutboundBag(
+                planned,
+                outboundId,
+                List.of(new OutputSheetAllocation(sourceSheet, sourceSheet)),
+                List.of("pack-104-2"),
+                List.of("pack-104-3"));
+        OutboundToteSnapshot closed = new OutboundToteSnapshot(
+                outboundId,
+                new P2pLineId("line-exception-104"),
+                Optional.of("104"),
+                Optional.of("pharmacy-104"),
+                3,
+                List.of(partial),
+                Optional.of(OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE));
+        return new OutboundAllocationSnapshot(Map.of(), List.of(closed), List.of(partial));
     }
 
     private static InboundToteManifest manifest(

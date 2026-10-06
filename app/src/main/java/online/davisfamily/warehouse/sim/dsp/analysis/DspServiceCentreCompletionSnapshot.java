@@ -31,7 +31,68 @@ public record DspServiceCentreCompletionSnapshot(
         Optional<LocalDateTime> completionDateTime,
         DspServiceCentreCompletionOutcome outcome,
         ServiceCentreDeadlineSnapshot deadline,
-        boolean complete) {
+        boolean complete,
+        DspP2pOutputClosureState p2pOutputClosureState,
+        int missingPackCount,
+        int pdcCollectedPackCount,
+        int affectedAllocatedBagCount,
+        int markedOutboundToteCount,
+        int pendingEmptyBagCount) {
+
+    /** Compatibility constructor for snapshots without exception work. */
+    public DspServiceCentreCompletionSnapshot(
+            String serviceCentreId,
+            boolean supplyComplete,
+            int upstreamWaitingCount,
+            int capacityBlockedManifestCount,
+            int osrWaitingCount,
+            int av02WaitingCount,
+            int nonTerminalInboundToteCount,
+            int remainingPhysicalToteCount,
+            int remainingPhysicalPackCount,
+            int remainingPlannedBagCount,
+            int activeStationClaimCount,
+            int pendingStationDispositionCount,
+            int transportEnvelopeCount,
+            int tipperInputCount,
+            int p2pAssignmentCount,
+            int openOutboundToteCount,
+            int unallocatedCompletedBagCount,
+            List<String> unsupportedWork,
+            Optional<Duration> completionElapsedTime,
+            Optional<LocalDateTime> completionDateTime,
+            DspServiceCentreCompletionOutcome outcome,
+            ServiceCentreDeadlineSnapshot deadline,
+            boolean complete) {
+        this(
+                serviceCentreId,
+                supplyComplete,
+                upstreamWaitingCount,
+                capacityBlockedManifestCount,
+                osrWaitingCount,
+                av02WaitingCount,
+                nonTerminalInboundToteCount,
+                remainingPhysicalToteCount,
+                remainingPhysicalPackCount,
+                remainingPlannedBagCount,
+                activeStationClaimCount,
+                pendingStationDispositionCount,
+                transportEnvelopeCount,
+                tipperInputCount,
+                p2pAssignmentCount,
+                openOutboundToteCount,
+                unallocatedCompletedBagCount,
+                unsupportedWork,
+                completionElapsedTime,
+                completionDateTime,
+                outcome,
+                deadline,
+                complete,
+                complete
+                        ? DspP2pOutputClosureState.P2P_OUTPUT_CLOSED
+                        : DspP2pOutputClosureState.NOT_CLOSED,
+                0, 0, 0, 0, 0);
+    }
 
     public DspServiceCentreCompletionSnapshot {
         if (serviceCentreId == null || serviceCentreId.isBlank()) {
@@ -53,6 +114,15 @@ public record DspServiceCentreCompletionSnapshot(
         requireNonNegative(p2pAssignmentCount, "p2pAssignmentCount");
         requireNonNegative(openOutboundToteCount, "openOutboundToteCount");
         requireNonNegative(unallocatedCompletedBagCount, "unallocatedCompletedBagCount");
+        requireNonNegative(missingPackCount, "missingPackCount");
+        requireNonNegative(pdcCollectedPackCount, "pdcCollectedPackCount");
+        requireNonNegative(affectedAllocatedBagCount, "affectedAllocatedBagCount");
+        requireNonNegative(markedOutboundToteCount, "markedOutboundToteCount");
+        requireNonNegative(pendingEmptyBagCount, "pendingEmptyBagCount");
+        if (pdcCollectedPackCount > missingPackCount) {
+            throw new IllegalArgumentException(
+                    "pdcCollectedPackCount must not exceed missingPackCount");
+        }
         if (unsupportedWork == null) {
             throw new IllegalArgumentException("unsupportedWork must not be null");
         }
@@ -92,8 +162,27 @@ public record DspServiceCentreCompletionSnapshot(
                 p2pAssignmentCount,
                 openOutboundToteCount,
                 unallocatedCompletedBagCount,
+                missingPackCount,
+                pdcCollectedPackCount,
                 unsupportedWork)) {
             throw new IllegalArgumentException("complete does not match completion predicates");
+        }
+        if (p2pOutputClosureState == null) {
+            throw new IllegalArgumentException("p2pOutputClosureState must not be null");
+        }
+        DspP2pOutputClosureState expectedClosure = !complete
+                ? DspP2pOutputClosureState.NOT_CLOSED
+                : hasExceptionWork(
+                                missingPackCount,
+                                pdcCollectedPackCount,
+                                affectedAllocatedBagCount,
+                                markedOutboundToteCount,
+                                pendingEmptyBagCount)
+                        ? DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION
+                        : DspP2pOutputClosureState.P2P_OUTPUT_CLOSED;
+        if (p2pOutputClosureState != expectedClosure) {
+            throw new IllegalArgumentException(
+                    "p2pOutputClosureState does not match completion and exception counts");
         }
         if (complete && completionElapsedTime.isEmpty()) {
             throw new IllegalArgumentException("a complete snapshot requires a completion time");
@@ -151,6 +240,8 @@ public record DspServiceCentreCompletionSnapshot(
             int p2pAssignmentCount,
             int openOutboundToteCount,
             int unallocatedCompletedBagCount,
+            int missingPackCount,
+            int pdcCollectedPackCount,
             List<String> unsupportedWork) {
         return supplyComplete
                 && upstreamWaitingCount == 0
@@ -168,7 +259,21 @@ public record DspServiceCentreCompletionSnapshot(
                 && p2pAssignmentCount == 0
                 && openOutboundToteCount == 0
                 && unallocatedCompletedBagCount == 0
+                && pdcCollectedPackCount == missingPackCount
                 && unsupportedWork.isEmpty();
+    }
+
+    private static boolean hasExceptionWork(
+            int missingPackCount,
+            int pdcCollectedPackCount,
+            int affectedAllocatedBagCount,
+            int markedOutboundToteCount,
+            int pendingEmptyBagCount) {
+        return missingPackCount > 0
+                || pdcCollectedPackCount > 0
+                || affectedAllocatedBagCount > 0
+                || markedOutboundToteCount > 0
+                || pendingEmptyBagCount > 0;
     }
 
     private static void requireNonNegative(int value, String fieldName) {

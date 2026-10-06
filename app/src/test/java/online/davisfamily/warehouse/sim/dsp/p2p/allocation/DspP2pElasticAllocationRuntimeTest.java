@@ -35,5 +35,18 @@ class DspP2pElasticAllocationRuntimeTest {
     void shouldRejectNullSupplierResultBeforeComposition() {
         ElasticRuntimeTestFixture fixture = new ElasticRuntimeTestFixture();
         assertThrows(IllegalStateException.class, () -> fixture.createRuntime(() -> null));
+        assertThrows(IllegalStateException.class,
+                () -> fixture.createRuntimeWithMissingPackSnapshotSupplier(() -> null));
+    }
+
+    @Test
+    void shouldAcceptImmutableMissingPackSnapshotSupplier() {
+        ElasticRuntimeTestFixture fixture = new ElasticRuntimeTestFixture();
+        DspP2pElasticAllocationRuntime runtime =
+                fixture.createRuntimeWithMissingPackSnapshotSupplier(P2pMissingPackSnapshot::empty);
+
+        assertEquals(5, runtime.lineDefinitions().size());
+        runtime.close();
+        assertTrue(runtime.isClosed());
     }
 }

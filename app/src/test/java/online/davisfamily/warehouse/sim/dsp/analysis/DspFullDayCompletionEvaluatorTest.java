@@ -51,6 +51,8 @@ class DspFullDayCompletionEvaluatorTest {
 
         DspServiceCentreCompletionSnapshot first = evaluator.evaluate(complete);
         assertTrue(first.complete());
+        assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED,
+                first.p2pOutputClosureState());
         assertEquals(Duration.ZERO, first.completionElapsedTime().orElseThrow());
 
         DspFullDayCompletionEvaluator.Observation blocked = observation(
@@ -125,6 +127,47 @@ class DspFullDayCompletionEvaluatorTest {
                 evaluator.evaluate(observation(
                         lateClock.snapshotAtSimulationSeconds(Duration.ofHours(24).toSeconds()),
                         false, 0, List.of(), Optional.empty())).outcome());
+    }
+
+    @Test
+    void shouldWaitForPdcCollectionAndClosePartialOrZeroPackWorkWithException() {
+        DspOperationalClockSnapshot now = clock.initialSnapshot();
+
+        DspServiceCentreCompletionSnapshot waitingForPdc = evaluator.evaluate(
+                exceptionObservation(now, 1, 0, 0, 0, 0));
+        assertFalse(waitingForPdc.complete());
+        assertEquals(DspP2pOutputClosureState.NOT_CLOSED,
+                waitingForPdc.p2pOutputClosureState());
+        assertTrue(waitingForPdc.completionElapsedTime().isEmpty());
+
+        DspServiceCentreCompletionSnapshot partialBag = evaluator.evaluate(
+                exceptionObservation(now, 1, 1, 1, 1, 0));
+        assertTrue(partialBag.complete());
+        assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION,
+                partialBag.p2pOutputClosureState());
+        assertEquals(1, partialBag.missingPackCount());
+        assertEquals(1, partialBag.pdcCollectedPackCount());
+        assertEquals(DspServiceCentreCompletionOutcome.ON_TARGET, partialBag.outcome());
+
+        DspServiceCentreCompletionSnapshot zeroPackBag = evaluator.evaluate(
+                exceptionObservation(now, 1, 1, 0, 0, 1));
+        assertTrue(zeroPackBag.complete());
+        assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION,
+                zeroPackBag.p2pOutputClosureState());
+        assertEquals(1, zeroPackBag.pendingEmptyBagCount());
+        assertEquals(partialBag.outcome(), zeroPackBag.outcome());
+
+        DspServiceCentreCompletionSnapshot lateException = evaluator.evaluate(
+                exceptionObservation(
+                        lateClock.snapshotAtSimulationSeconds(Duration.ofHours(23).toSeconds()),
+                        1, 1, 1, 1, 0));
+        assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION,
+                lateException.p2pOutputClosureState());
+        assertEquals(DspServiceCentreCompletionOutcome.MISSED_TRUNKER,
+                lateException.outcome());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> exceptionObservation(now, 0, 1, 0, 0, 0));
     }
 
     @Test
@@ -266,5 +309,26 @@ class DspFullDayCompletionEvaluatorTest {
                 0,
                 unsupportedWork,
                 previousCompletion);
+    }
+
+    private static DspFullDayCompletionEvaluator.Observation exceptionObservation(
+            DspOperationalClockSnapshot clock,
+            int missingPackCount,
+            int pdcCollectedPackCount,
+            int affectedAllocatedBagCount,
+            int markedOutboundToteCount,
+            int pendingEmptyBagCount) {
+        return new DspFullDayCompletionEvaluator.Observation(
+                "109",
+                clock,
+                true,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                List.of(),
+                Optional.empty(),
+                missingPackCount,
+                pdcCollectedPackCount,
+                affectedAllocatedBagCount,
+                markedOutboundToteCount,
+                pendingEmptyBagCount);
     }
 }

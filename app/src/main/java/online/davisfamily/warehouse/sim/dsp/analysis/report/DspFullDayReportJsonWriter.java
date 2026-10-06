@@ -363,6 +363,12 @@ public final class DspFullDayReportJsonWriter {
         node.put("upstreamWaitingCount", metrics.upstreamWaitingCount());
         node.put("complete", result.complete());
         node.put("outcome", result.outcome().name());
+        node.put("p2pOutputClosureState", completion.p2pOutputClosureState().name());
+        node.put("missingPackCount", completion.missingPackCount());
+        node.put("pdcCollectedPackCount", completion.pdcCollectedPackCount());
+        node.put("affectedAllocatedBagCount", completion.affectedAllocatedBagCount());
+        node.put("markedOutboundToteCount", completion.markedOutboundToteCount());
+        node.put("pendingEmptyBagCount", completion.pendingEmptyBagCount());
         optionalDuration(node, "completionElapsedTime", result.completionElapsedTime());
         optionalDateTime(node, "completionDateTime", result.completionDateTime());
         optionalDuration(node, "targetLateness", result.targetLateness());

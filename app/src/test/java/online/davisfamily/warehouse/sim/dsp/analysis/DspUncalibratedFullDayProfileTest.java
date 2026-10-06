@@ -29,8 +29,9 @@ class DspUncalibratedFullDayProfileTest {
         assertEquals("UNCALIBRATED", profile.timingCalibrationStatus());
         assertEquals("P2P_OUTPUT_CLOSED", profile.completionMilestone());
         assertEquals("PRIORITY_ORDERED_OSR_LOW_WATERMARK", profile.serviceCentreSupplyPolicyId());
-        assertEquals("DEPENDENCY_READY_OVERLAP", profile.orderEligibilityPolicyId());
-        assertEquals("PHARMACY_GROUPED_THEN_SOURCE_SEQUENCE", profile.candidateRankingPolicyId());
+        assertEquals("ORDER_WIDE_PREPARATION_READY_OVERLAP", profile.orderEligibilityPolicyId());
+        assertEquals("ADAPTED_FIRST_PHARMACY_GROUPED_THEN_SOURCE_SEQUENCE",
+                profile.candidateRankingPolicyId());
         assertEquals("PHARMACY_PURE_FIXED_BAG_CAPACITY", profile.outboundAllocationPolicyId());
         assertEquals(OPERATING_DATE, profile.operatingDate());
         assertEquals(Duration.ofMillis(50), profile.fixedStep());

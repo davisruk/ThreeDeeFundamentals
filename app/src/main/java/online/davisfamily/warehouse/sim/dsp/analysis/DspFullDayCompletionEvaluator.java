@@ -90,7 +90,13 @@ public final class DspFullDayCompletionEvaluator {
                 completionDateTime,
                 outcome,
                 deadline,
-                complete);
+                complete,
+                closureState(observation, complete),
+                observation.missingPackCount(),
+                observation.pdcCollectedPackCount(),
+                observation.affectedAllocatedBagCount(),
+                observation.markedOutboundToteCount(),
+                observation.pendingEmptyBagCount());
     }
 
     public List<DspServiceCentreCompletionSnapshot> evaluateAll(
@@ -165,7 +171,12 @@ public final class DspFullDayCompletionEvaluator {
             int openOutboundToteCount,
             int unallocatedCompletedBagCount,
             List<String> unsupportedWork,
-            Optional<Duration> previousCompletionElapsedTime) {
+            Optional<Duration> previousCompletionElapsedTime,
+            int missingPackCount,
+            int pdcCollectedPackCount,
+            int affectedAllocatedBagCount,
+            int markedOutboundToteCount,
+            int pendingEmptyBagCount) {
 
         public Observation {
             if (serviceCentreId == null || serviceCentreId.isBlank()) {
@@ -202,6 +213,61 @@ public final class DspFullDayCompletionEvaluator {
             requireNonNegative(p2pAssignmentCount, "p2pAssignmentCount");
             requireNonNegative(openOutboundToteCount, "openOutboundToteCount");
             requireNonNegative(unallocatedCompletedBagCount, "unallocatedCompletedBagCount");
+            requireNonNegative(missingPackCount, "missingPackCount");
+            requireNonNegative(pdcCollectedPackCount, "pdcCollectedPackCount");
+            requireNonNegative(affectedAllocatedBagCount, "affectedAllocatedBagCount");
+            requireNonNegative(markedOutboundToteCount, "markedOutboundToteCount");
+            requireNonNegative(pendingEmptyBagCount, "pendingEmptyBagCount");
+            if (pdcCollectedPackCount > missingPackCount) {
+                throw new IllegalArgumentException(
+                        "pdcCollectedPackCount must not exceed missingPackCount");
+            }
+        }
+
+        /** Compatibility constructor for observations without exception projections. */
+        public Observation(
+                String serviceCentreId,
+                DspOperationalClockSnapshot clockSnapshot,
+                boolean supplyComplete,
+                int upstreamWaitingCount,
+                int capacityBlockedManifestCount,
+                int osrWaitingCount,
+                int av02WaitingCount,
+                int nonTerminalInboundToteCount,
+                int remainingPhysicalToteCount,
+                int remainingPhysicalPackCount,
+                int remainingPlannedBagCount,
+                int activeStationClaimCount,
+                int pendingStationDispositionCount,
+                int transportEnvelopeCount,
+                int tipperInputCount,
+                int p2pAssignmentCount,
+                int openOutboundToteCount,
+                int unallocatedCompletedBagCount,
+                List<String> unsupportedWork,
+                Optional<Duration> previousCompletionElapsedTime) {
+            this(
+                    serviceCentreId,
+                    clockSnapshot,
+                    supplyComplete,
+                    upstreamWaitingCount,
+                    capacityBlockedManifestCount,
+                    osrWaitingCount,
+                    av02WaitingCount,
+                    nonTerminalInboundToteCount,
+                    remainingPhysicalToteCount,
+                    remainingPhysicalPackCount,
+                    remainingPlannedBagCount,
+                    activeStationClaimCount,
+                    pendingStationDispositionCount,
+                    transportEnvelopeCount,
+                    tipperInputCount,
+                    p2pAssignmentCount,
+                    openOutboundToteCount,
+                    unallocatedCompletedBagCount,
+                    unsupportedWork,
+                    previousCompletionElapsedTime,
+                    0, 0, 0, 0, 0);
         }
 
         public Observation(
@@ -234,6 +300,7 @@ public final class DspFullDayCompletionEvaluator {
                     && p2pAssignmentCount == 0
                     && openOutboundToteCount == 0
                     && unallocatedCompletedBagCount == 0
+                    && pdcCollectedPackCount == missingPackCount
                     && unsupportedWork.isEmpty();
         }
 
@@ -246,5 +313,20 @@ public final class DspFullDayCompletionEvaluator {
                 throw new IllegalArgumentException(fieldName + " must be >= 0");
             }
         }
+    }
+
+    private static DspP2pOutputClosureState closureState(
+            Observation observation,
+            boolean complete) {
+        if (!complete) {
+            return DspP2pOutputClosureState.NOT_CLOSED;
+        }
+        return observation.missingPackCount() > 0
+                        || observation.pdcCollectedPackCount() > 0
+                        || observation.affectedAllocatedBagCount() > 0
+                        || observation.markedOutboundToteCount() > 0
+                        || observation.pendingEmptyBagCount() > 0
+                ? DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION
+                : DspP2pOutputClosureState.P2P_OUTPUT_CLOSED;
     }
 }

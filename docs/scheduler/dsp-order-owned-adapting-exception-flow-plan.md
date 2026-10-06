@@ -3,8 +3,10 @@
 Branch: `feature/dsp-full-day-analysis-metrics-inspection` (or a new feature branch
 based on its committed tip). Step 1 is committed at `f2f50ad`; Step 2 is
 committed and verified at `ede909f`. Step 3 is committed at `60bd361`; the
-user reports its tests green. Step 4 has not started. The user starts each
-step separately.
+user reports its tests green. Step 4 is committed at `1fbaf14` and user
+verification is green. Step 5 has uncommitted implementation work; its focused
+verification is not yet green (see the Step 5 resumption instructions). The
+user starts each step separately.
 
 ## Purpose and authority
 
@@ -851,6 +853,37 @@ User verification: no additional check for this step.
 
 ## Step 5 — Honest provisional completion, workload and reporting
 
+### 5.1 Resumption and unchanged boundaries
+
+The existing Step 5 production and test edits must be preserved, not discarded
+or reimplemented. The prior focused run compiled successfully but failed
+`DspFullDayAnalysisRuntimeFactoryTest.shouldCompletePartialAndZeroPackExceptionsWhenAssociatedSheetsUseDifferentLines`:
+both ASSOCIATED totes were assigned to `dsp-p2p-line-1`. The fixture used
+`cross-prescription` and `patient-1` on both incoming sheets. That violates
+the trusted upstream patient/prescription containment contract in the lifecycle
+requirements and pins the same planned bag correlation to one line. The
+test requirement, not that pinning, must change as specified below. Step 5
+remains incomplete until the revised focused verification and user checks pass.
+
+On resumption, inspect the existing Step 5 diff against the production contract
+below, then repair the integration fixture/tests using 5.4. Do not restart the
+feature or overwrite unrelated work. Keep the production implementation if it
+meets this contract; only mechanical corrections within the named Step 5 files
+are authorized. An unresolved production-contract conflict still requires a
+stop/report, not an architectural choice by the implementation model.
+
+Do not change `DeadlineAwareElasticStickyP2pLineAllocationPolicy`, bag-correlation
+requirements/assignment/compatibility, lease selection, routes, machine
+controllers, or the profile's workload cost/demand merely to make a test use
+two lines. Pharmacy affinity is a selection preference, not a permanent
+pharmacy-to-line prohibition. A committed bag correlation is pinned to one
+line; increasing `desiredLines` does not force the next tote onto another
+line. Separate valid prescriptions may use different lines when the existing
+allocator permits it, but this step must neither require nor manufacture
+that placement. The controlled two-line proof in 5.5 supplies that coverage.
+
+### 5.2 Production contract (unchanged)
+
 Create `DspP2pOutputClosureState` in `dsp/analysis` with
 `NOT_CLOSED`, `P2P_OUTPUT_CLOSED`, and
 `P2P_OUTPUT_CLOSED_WITH_EXCEPTION`. Add it **per service centre** to
@@ -907,6 +940,17 @@ Retain the runner's existing two-argument
 `closedOutboundTotesByServiceCentre` helper as a compatibility delegate;
 the new three-argument overload accepts per-centre missing-pack counts.
 
+Efficiency acceptance is unchanged: reuse cached immutable ledger and outbound
+snapshots; keep workload invalidation tied to first-COLLECT classification,
+and completion/report invalidation tied to actual snapshot changes. Do not add
+per-tick order/pack/bag scans, snapshot construction, copied classification
+maps, another bag/correlation index, shared mutable worker state, or a new
+runtime inspection API to satisfy the revised test. Fixture construction and
+bounded test-only assertions are not production hot paths. Retain the existing
+identity/state-transition tests; do not replace them with timing assertions.
+
+### 5.3 Change surface and retained tests
+
 Files: modify `DspFullDayCompletionEvaluator`,
 `DspServiceCentreCompletionSnapshot`,
 `DspFullDayCompletionProjectionCache`,
@@ -933,20 +977,145 @@ Tests: extend `DspFullDayCompletionEvaluatorTest`,
 partial and zero-pack completion, pending PDC-collection preventing closure,
 deadline outcome independent of closure state, no bogus physical bag/tote,
 cache identity stable without ledger mutation and invalidated once on a real
-change, and unchanged progress prefix/console-file parity. In
-`DspFullDayAnalysisRuntimeFactoryTest`, add a bounded full-day executable
-two-sheet order fixture: one ADAPTED source feeds both sheets, the first
-ASSOCIATED COLLECT receives both prepared packs, the second receives none;
-run through P2P to prove the wrong-sheet pack reaches PDC collection,
-partial/zero-pack outcomes are attributed to the correct bag and centre,
-and P2P output closes with exception. Use two assigned P2P lines in a second
-variant to prove no cross-line PRL hold or pack migration. Neither variant
-uses wall-clock assertions or a production-day dataset.
+change, and unchanged progress prefix/console-file parity. Preserve those
+existing Step 5 tests. `ElasticRuntimeTestFixture` may retain the supporting
+fixture changes already present; do not broaden its production analogue.
+Read `DspFullDayBagPlanningRequestFactory`, `DspOrderItem`, `PlannedPackSlot`,
+`PlannedPackSlotKey`, `PlannedBag`, and the existing
+`DspFullDayPdcPackDispositionTest` when repairing the full-day fixture.
+The last class is a read/verification dependency, not a file to rewrite.
+
+### 5.4 Exact full-day integration fixture and assertions
+
+Modify only the Step 5 exception fixture, its helper, and its two added tests
+in `DspFullDayAnalysisRuntimeFactoryTest`; retain the other integration tests
+and their helpers. Use the existing `sheetOwnedProfile()` without a cost or
+line-demand override. Keep `exceptionFixtureInput(profile)`'s existing
+product dimensions, preflight, deterministic bag planner, loaded-input
+construction, three physical manifests, and source sequence 0/1/2.
+
+Use these exact orders: source `(adapted-source, 1)` of type ADAPTED;
+first target `(associated-target, 1)` and later target
+`(associated-target, 2)`, both ASSOCIATED. Physical tote IDs remain
+`tote-adapted`, `tote-associated-1`, and `tote-associated-2`. Every line has
+product `product-a`, quantity one, pharmacy `pharmacy-1`, service centre
+`104`, and the identity below:
+
+| Line | Patient | Prescription | Source sheet | Intended fulfilment sheet | Physical pack origin |
+| --- | --- | --- | --- | --- | --- |
+| A1 | patient-first | first-prescription | adapted-source/1 | associated-target/1 | ADAPTED STORE/COLLECT |
+| A2 | patient-partial | partial-prescription | adapted-source/1 | associated-target/2 | ADAPTED STORE/COLLECT |
+| B | patient-zero | zero-prescription | adapted-source/1 | associated-target/2 | ADAPTED STORE/COLLECT |
+| D | patient-partial | partial-prescription | associated-target/2 | associated-target/2 | Initially in tote-associated-2 |
+
+Build the source's prepared-line list in order `[A1, A2, B]`, using the
+four-argument `adaptedLine(line, referenceOrderId, prescriptionId, patientId)`
+helper with reference order `associated-target` for each line. Build target
+sheet 1's items as `[A1]` and target sheet 2's items as `[A2, B, D]`; their
+ADAPTED aliases use that same helper with reference order `adapted-source`.
+Source and alias patient/prescription values must match the table. Keep those
+ADAPTED helpers' reference sheet at 1: `referenceSheetNumber` is not the target
+sheet discriminator. The validated target catalog and planned slots establish
+the intended sheet from the target orders. Do not add D to the prepared-line
+list or prepared-key set. Construct D directly as:
+
+```java
+new DspOrderItem("D", "product-a", 1, "pharmacy-1",
+        "patient-partial", "partial-prescription",
+        DspOrderLineType.FULL_PACK, "associated-target", 2, 1)
+```
+
+The later order stays ASSOCIATED because A2 and B require Adapting. Its
+manifest includes all three items; the existing planner creates D's initial
+physical pack/load plan and leaves the ADAPTED aliases pending. Do not
+manually register provenance, create a substitute planned bag, inject a
+runtime bag, mark missing IDs, or confirm PDC collection in this integration
+test. The real COLLECT, machine and outbound controllers must produce them.
+
+Apply these mechanical test changes:
+
+1. Rename `shouldCompletePartialAndZeroPackExceptionsAfterPdcCollectionOnOneLine`
+   to `shouldCompletePartialAndZeroPackExceptionsWithValidIncomingSheetOwnership`.
+   It uses `sheetOwnedProfile()`, the corrected `exceptionFixtureInput`, and
+   the corrected completion helper. Remove the failing
+   `shouldCompletePartialAndZeroPackExceptionsWhenAssociatedSheetsUseDifferentLines`
+   variant and its private `twoLineExceptionProfile()` helper. Do not replace
+   it with another full-day test that forces separate lines.
+2. Remove `requireDifferentLines` from `assertExceptionFixtureCompletes`, its
+   `observedLines`/`differentLinesObserved` tracking, the desired-lines check,
+   and all same/different-line assertions. Remove only imports/helpers made
+   unused by this repair. Retain helpers/imports used by other tests.
+3. Find the three original planned bags by the table's prescription IDs. Resolve
+   exact pack IDs using `requirePlannedPackSlot(new PlannedPackSlotKey(sheet,
+   line, 1)).reservedPhysicalPackId()`: source sheet for A1/A2/B, later target
+   sheet for D. Use these IDs in the following assertions; do not infer pack
+   identities from a bag's first/second position or the global slot list.
+4. Before runtime creation, assert exactly four slots and three planned bags;
+   first bag IDs `[A1]`, partial bag IDs `[A2, D]`, zero-pack bag IDs `[B]`.
+   Assert `owningOrderSheetKeys()` is exactly `[associated-target/1]` for the
+   first bag and `[associated-target/2]` for each later bag. No patient or
+   prescription in this fixture spans the two fulfilment sheets. This proves
+   that physical misplacement is not being confused with logical ownership.
+5. Advance the real full-day runtime by `1d` while RUNNING, at most 3,000
+   iterations, as in the current helper. Do not extend that bound, use sleeps,
+   measure wall-clock time, or use a production-day dataset. Assert
+   `ALL_SUPPORTED_WORK_COMPLETE`, retaining the current completion/operational/
+   elastic failure diagnostics. Do not mandate a particular assigned line.
+6. Assert the retained first target load plan contains exactly `[A1, A2, B]`
+   in that order. Assert the later load plan contains exactly `[D]`: it receives
+   no prepared packs but retains its direct pack. It is **not** an empty tote
+   in this scenario. A2 and B remain absent from the later physical plan;
+   there is no migration of the misplaced packs back to their intended tote.
+7. From the real outbound snapshot, assert exactly two allocated physical bags.
+   The first keeps its original `PlannedBag` reference, actual `[A1]`, missing
+   `[]`; the partial bag keeps its original reference, actual `[D]`, missing
+   `[A2]`. Both retain their original owning sheets. The zero-pack logical bag
+   has no outbound allocation (`findAllocatedBag(zeroPackBag.bagKey()).isEmpty()`).
+   Assert `openTotesByLine().isEmpty()` and exactly one closed tote is
+   exception-marked; its physical ID equals the
+   partial bag's allocated outbound physical ID. Do not mandate the total
+   number of closed totes, co-location of the two bags, or their line IDs.
+8. For centre 104 assert `complete()` and
+   `P2P_OUTPUT_CLOSED_WITH_EXCEPTION`, with `missingPackCount = 2`,
+   `pdcCollectedPackCount = 2`, `affectedAllocatedBagCount = 1`,
+   `markedOutboundToteCount = 1`, and `pendingEmptyBagCount = 1`.
+   Together with the exact allocation assertions, these distinguish the
+   physical partial bag, the logical zero-pack bag, and both physically
+   collected misplaced packs. Do not count the zero-pack bag as allocated or
+   claim final Exceptions completion.
+
+### 5.5 Cross-line proof without changing the allocator
+
+Reuse, unchanged, the committed `DspFullDayPdcPackDispositionTest` tests
+`sameLineSheetsBypassWrongPacksAndBagOnlyAvailableContents()` and
+`differentLinesNeverAssignThePassingWrongBagToTheFirstLine()`; include their
+class in Step 5's focused command below. This is the required cross-line
+proof, not a claim that the full-day allocator schedules this fixture on two
+lines. The existing test deliberately supplies separate line-local work
+providers: the first line owns the normal first-sheet bag, and the later
+line owns the partial/zero-pack later-sheet bags. Each planned bag has one
+intended incoming sheet; the partial bag has one direct later-tote pack plus
+one misplaced prepared pack, just as in 5.4.
+
+Those tests exercise real tipping, sorting, PDC bypass/outfeed and PRL/bagger
+flow. They assert two misplaced packs collected, no PRL indefinitely holding
+them, no cross-line pack migration, a later partial bag containing only its
+direct pack, and no zero-pack physical bag. In the different-line variant,
+the misplaced packs' passage must not assign or release a later-sheet bag
+on the first line. In the same-line variant, the later bag may legitimately
+use that line when its direct pack arrives; passage of a misplaced pack
+still must not claim a PRL. Their boundary is `StoredBagReceiver`;
+the corrected full-day test separately proves outbound allocation and
+provisional closure. Do not force production lease assignments, add a test-only
+runtime API, or weaken either proof to combine those two boundaries. If the
+existing controlled test fails or the corrected bounded full-day fixture
+exposes a production-contract conflict, stop/report rather than changing
+scheduling, routing, or bag-correlation pinning.
 
 Implementation verification:
 
 ```powershell
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCompletionEvaluatorTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayCompletionProjectionCacheTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisRunnerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInspectionFormatterTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayCompletionEvaluatorTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayCompletionProjectionCacheTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayPdcPackDispositionTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadSnapshotTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntimeTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisRunnerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInspectionFormatterTest
 ```
 
 User verification: run `.\gradlew test` as a separate broad regression
@@ -961,7 +1130,10 @@ production flow, not just type names. Mark PASS/FAIL/UNPROVEN for: order-wide
 preparation barrier and ADAPTED preference without global blocking; bin
 identity/linked overflow/first-and-later COLLECT; exact intended-sheet
 provenance; wrong-sheet PDC outfeed rather than PRL capture on same/different
-lines; partial and zero-pack bag semantics; marked outbound tote persistence;
+lines (the valid full-day fixture proves real allocation/closure under the
+unchanged allocator, while `DspFullDayPdcPackDispositionTest` supplies controlled
+same-line/two-line machine proof; do not require forced full-day line splitting);
+partial and zero-pack bag semantics; marked outbound tote persistence;
 lease quiescence and output close; per-centre exception closure without
 final-Exceptions claim; unchanged 12N-only unmatched-tote and debug paths;
 and mutation-driven hot-path efficiency. Report unnecessary changes and
