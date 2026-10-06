@@ -18,6 +18,50 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 class AdaptingAreaAdmissionTest {
 
     @Test
+    void shouldInspectSortedLocalCapacityWithoutSelectingOrMutatingVisits() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench busy = new AdaptingBench("bench-2", store, 5d);
+        AdaptingBench idle = new AdaptingBench("bench-1", store, 5d);
+        AdaptingArea area = new AdaptingArea(List.of(busy, idle), 1, storageMap());
+        AdaptingBenchId busyId = new AdaptingBenchId("bench-2");
+        area.submitVisitTo(busyId, storeVisit("active", "active-line", "active-order"));
+        busy.startProcessing();
+        area.submitVisitTo(busyId, storeVisit("queued", "queued-line", "queued-order"));
+        var selectionProfile = storeVisit("next", "next-line", "next-order").profile();
+        var candidateBefore = area.admissionSnapshotFor(selectionProfile);
+
+        var first = area.benchAdmissionSnapshots();
+        assertEquals(List.of(new AdaptingBenchId("bench-1"), busyId),
+                first.stream().map(AdaptingBenchAdmissionSnapshot::benchId).toList());
+        assertEquals(AdaptingBenchState.IDLE, first.getFirst().benchSnapshot().state());
+        assertTrue(first.getFirst().admissionOpen());
+        assertEquals("", first.getFirst().blockedReason());
+        assertEquals(AdaptingBenchState.PROCESSING_STORE, first.get(1).benchSnapshot().state());
+        assertEquals("active", first.get(1).benchSnapshot().activeToteId());
+        assertEquals(AdaptingVisitType.STORE, first.get(1).benchSnapshot().activeVisitType());
+        assertEquals(5d, first.get(1).benchSnapshot().remainingProcessingSeconds());
+        assertEquals(1, first.get(1).queueSnapshot().capacity());
+        assertEquals(List.of("queued"), first.get(1).queueSnapshot().toteIds());
+        assertFalse(first.get(1).admissionOpen());
+        assertEquals("Bench queue and processing slot are full", first.get(1).blockedReason());
+        assertThrows(UnsupportedOperationException.class, first::clear);
+        assertThrows(UnsupportedOperationException.class,
+                () -> first.get(1).queueSnapshot().toteIds().clear());
+        assertEquals(first, area.benchAdmissionSnapshots());
+        assertEquals(candidateBefore, area.admissionSnapshotFor(selectionProfile));
+
+        busy.tick(5d);
+        busy.consumeCompletion().orElseThrow();
+        assertTrue(area.dispatchNextQueuedVisit(busyId));
+        var second = area.benchAdmissionSnapshots();
+        assertEquals("queued", second.get(1).benchSnapshot().activeToteId());
+        assertTrue(second.get(1).queueSnapshot().toteIds().isEmpty());
+        assertTrue(second.get(1).admissionOpen());
+        assertEquals("active", first.get(1).benchSnapshot().activeToteId());
+        assertEquals(List.of("queued"), first.get(1).queueSnapshot().toteIds());
+    }
+
+    @Test
     void shouldSubmitDirectAndQueuedVisitsToTheExactSelectedBench() {
         AdaptedLineStore sharedStore = new AdaptedLineStore();
         AdaptingArea area = new AdaptingArea(List.of(

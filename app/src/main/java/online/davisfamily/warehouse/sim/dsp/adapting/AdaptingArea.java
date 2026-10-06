@@ -81,7 +81,12 @@ public class AdaptingArea {
             throw new IllegalArgumentException("profile must not be null");
         }
 
-        List<AdaptingBenchAdmissionSnapshot> admissions = new ArrayList<>();
+        return new AdaptingAreaAdmissionSnapshot(benchAdmissionSnapshots(), selectBenchFor(profile));
+    }
+
+    /** Read-only local processing capacity, without candidate-specific bench selection. */
+    public List<AdaptingBenchAdmissionSnapshot> benchAdmissionSnapshots() {
+        List<AdaptingBenchAdmissionSnapshot> admissions = new ArrayList<>(sortedBenchIds.size());
         for (AdaptingBenchId benchId : sortedBenchIds) {
             BenchSlot slot = benchSlots.get(benchId);
             boolean open = slot.canAcceptVisit();
@@ -92,7 +97,7 @@ public class AdaptingArea {
                     open,
                     open ? "" : "Bench queue and processing slot are full"));
         }
-        return new AdaptingAreaAdmissionSnapshot(admissions, selectBenchFor(profile));
+        return List.copyOf(admissions);
     }
 
     public AdaptingBenchSelection submitVisit(AdaptingVisit visit) {

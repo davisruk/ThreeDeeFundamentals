@@ -5,6 +5,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
@@ -247,6 +248,11 @@ public class ToteTrackTipperFlowController implements SimulationController {
 
     public boolean hasActiveTote() {
         return activeTote != null;
+    }
+
+    /** Read-only identity of the tote currently owned by this tipper. */
+    public Optional<String> activeToteId() {
+        return activeTote == null ? Optional.empty() : Optional.of(activeTote.getId());
     }
 
     public boolean canAcceptNextTote() {

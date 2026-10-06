@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,7 @@ class ToteTrackTipperFlowControllerTest {
                 TipperToteCompletedListener.NO_OP);
 
         assertFalse(controller.hasActiveTote());
+        assertEquals(Optional.empty(), controller.activeToteId());
         assertFalse(controller.isToteCaptured());
         assertTrue(controller.canAcceptNextTote());
     }
@@ -83,6 +85,10 @@ class ToteTrackTipperFlowControllerTest {
 
         controller.acceptNextTote(tote);
 
+        assertEquals(Optional.of("live-tote"), controller.activeToteId());
+        assertEquals(Optional.of("live-tote"), controller.activeToteId());
+        assertTrue(tippingMachine.isIdle());
+        assertFalse(controller.isToteCaptured());
         assertTrue(controller.hasActiveTote());
         assertFalse(controller.canAcceptNextTote());
         assertThrows(IllegalStateException.class, () -> controller.acceptNextTote(tote));
@@ -120,6 +126,7 @@ class ToteTrackTipperFlowControllerTest {
         }
 
         assertEquals(1, completions.get());
+        assertEquals(Optional.empty(), controller.activeToteId());
     }
 
     @Test

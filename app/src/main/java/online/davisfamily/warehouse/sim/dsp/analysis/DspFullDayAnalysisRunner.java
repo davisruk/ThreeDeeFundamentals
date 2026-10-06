@@ -12,15 +12,19 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 import online.davisfamily.threedee.sim.framework.time.FixedStepExecutionConfig;
 import online.davisfamily.threedee.sim.framework.time.FixedStepExecutionDriver;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayBlockedProgressFormatter;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionFormatter;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionSnapshot;
@@ -37,6 +41,7 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnaps
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
 /** Executes one loaded full-day DSP analysis through bounded headless fixed steps. */
 public final class DspFullDayAnalysisRunner {
@@ -181,6 +186,7 @@ public final class DspFullDayAnalysisRunner {
         printProgress(
                 progressOutput,
                 "start",
+                runtime,
                 startRuntime,
                 input,
                 profile,
@@ -188,6 +194,7 @@ public final class DspFullDayAnalysisRunner {
                 Optional.empty());
         printNewCompletions(
                 progressOutput,
+                runtime,
                 startRuntime,
                 completedServiceCentres,
                 input,
@@ -217,6 +224,7 @@ public final class DspFullDayAnalysisRunner {
                         printProgress(
                                 progressOutput,
                                 "progress=" + elapsed,
+                                runtime,
                                 progressRuntime,
                                 input,
                                 profile,
@@ -237,6 +245,7 @@ public final class DspFullDayAnalysisRunner {
             var currentRuntime = runtime.snapshot();
             printNewCompletions(
                     progressOutput,
+                    runtime,
                     currentRuntime,
                     completedServiceCentres,
                     input,
@@ -249,7 +258,7 @@ public final class DspFullDayAnalysisRunner {
                 executionSnapshot.requestedTimeScale(),
                 executionSnapshot.achievedTimeScale());
         var finalRuntime = runtime.snapshot();
-        printProgress(progressOutput, "final", finalRuntime, input, profile,
+        printProgress(progressOutput, "final", runtime, finalRuntime, input, profile,
                 manifestCatalog, Optional.empty());
         DspFullDayAnalysisReport report = reportFactory.create(finalRuntime, input, profile);
         reportWriter.write(report, outputPath, overwrite);
@@ -265,6 +274,7 @@ public final class DspFullDayAnalysisRunner {
     private void printProgress(
             DspFullDayProgressOutput progressOutput,
             String milestone,
+            DspFullDayAnalysisRuntime liveRuntime,
             DspFullDayAnalysisRuntimeSnapshot runtime,
             DspFullDayLoadedInput input,
             DspUncalibratedFullDayProfile profile,
@@ -295,6 +305,16 @@ public final class DspFullDayAnalysisRunner {
             if (wallInterval.isPresent()) {
                 lines.add(2, "WallClock: sincePreviousProgress=" + wallInterval.orElseThrow());
             }
+            appendBlockedProgressLines(milestone, runtime,
+                    liveRuntime::adaptingBenchAdmissionSnapshots,
+                    () -> {
+                        Map<P2pLineId, Optional<String>> activeTipperIds = new LinkedHashMap<>();
+                        for (var line : liveRuntime.lineRuntimes()) {
+                            activeTipperIds.put(line.lineDefinition().lineId(),
+                                    line.tipperFlowController().activeToteId());
+                        }
+                        return activeTipperIds;
+                    }, lines);
             progressOutput.print(milestone, List.copyOf(lines));
         } catch (IOException exception) {
             throw new ProgressOutputFailure(exception);
@@ -303,6 +323,7 @@ public final class DspFullDayAnalysisRunner {
 
     private void printNewCompletions(
             DspFullDayProgressOutput progressOutput,
+            DspFullDayAnalysisRuntime liveRuntime,
             DspFullDayAnalysisRuntimeSnapshot runtime,
             Set<String> completedServiceCentres,
             DspFullDayLoadedInput input,
@@ -313,6 +334,7 @@ public final class DspFullDayAnalysisRunner {
                 printProgress(
                         progressOutput,
                         "completion=" + completion.serviceCentreId(),
+                        liveRuntime,
                         runtime,
                         input,
                         profile,
@@ -320,6 +342,27 @@ public final class DspFullDayAnalysisRunner {
                         Optional.empty());
             }
         }
+    }
+
+    static void appendBlockedProgressLines(
+            String milestone,
+            DspFullDayAnalysisRuntimeSnapshot snapshot,
+            Supplier<List<AdaptingBenchAdmissionSnapshot>> benches,
+            Supplier<Map<P2pLineId, Optional<String>>> activeTipperIds,
+            List<String> lines) {
+        if (!milestone.startsWith("progress=")
+                || !(snapshot.continuation().blocked() || snapshot.transportArrival().blocked()
+                        || snapshot.transportIngress().blocked())) {
+            return;
+        }
+        for (int index = 0; index < lines.size(); index++) {
+            if (lines.get(index).startsWith("Station: ")) {
+                lines.addAll(index + 1, new DspFullDayBlockedProgressFormatter().describe(
+                        snapshot, benches.get(), activeTipperIds.get()));
+                return;
+            }
+        }
+        throw new IllegalStateException("progress formatter omitted station section");
     }
 
     static String inboundTotesInFlight(

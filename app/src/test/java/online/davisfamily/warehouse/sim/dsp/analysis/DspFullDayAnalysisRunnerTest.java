@@ -14,15 +14,28 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
+import online.davisfamily.warehouse.sim.dsp.adapting.AdaptingBenchAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportTestSupport;
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.station.continuation.StationRouteContinuationControllerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingDispositionType;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportArrivalControllerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.transport.routing.WarehouseTransportIngressControllerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifest;
@@ -41,6 +54,62 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocation;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
 class DspFullDayAnalysisRunnerTest {
+
+    @Test
+    void shouldReadDiagnosticsOnlyForBlockedProgressAndInsertAfterStation(@TempDir Path directory)
+            throws Exception {
+        var profile = DspFullDayReportTestSupport.profile();
+        var input = DspFullDayReportTestSupport.input(directory, profile);
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var base = runtime.snapshot();
+            AtomicInteger benchReads = new AtomicInteger();
+            AtomicInteger tipperReads = new AtomicInteger();
+            Map<P2pLineId, Optional<String>> ids = new LinkedHashMap<>();
+            runtime.lineRuntimes().forEach(line -> ids.put(line.lineDefinition().lineId(), Optional.empty()));
+            Supplier<List<AdaptingBenchAdmissionSnapshot>> benches = () -> {
+                benchReads.incrementAndGet();
+                return List.of();
+            };
+            Supplier<Map<P2pLineId, Optional<String>>> tippers = () -> {
+                tipperReads.incrementAndGet();
+                return ids;
+            };
+            List<String> compact = List.of("Transport: original", "Station: original", "Load: original");
+            // Even full occupancies must not trigger inspection without an explicit blocker.
+            var fullButUnblocked = withBlock(base, 0);
+            List<String> unblockedLines = new ArrayList<>(compact);
+            DspFullDayAnalysisRunner.appendBlockedProgressLines("progress=PT1M", fullButUnblocked,
+                    benches, tippers, unblockedLines);
+            assertEquals(compact, unblockedLines);
+            var blocked = withBlock(base, 1);
+            for (String milestone : List.of("start", "completion=104", "final", "failure")) {
+                List<String> lines = new ArrayList<>(compact);
+                DspFullDayAnalysisRunner.appendBlockedProgressLines(milestone, blocked, benches, tippers, lines);
+                assertEquals(compact, lines);
+            }
+            assertEquals(0, benchReads.get());
+            assertEquals(0, tipperReads.get());
+            for (int source = 1; source <= 3; source++) {
+                List<String> lines = new ArrayList<>(compact);
+                DspFullDayAnalysisRunner.appendBlockedProgressLines("progress=PT1M", withBlock(base, source),
+                        benches, tippers, lines);
+                assertEquals("Transport: original", lines.get(0));
+                assertEquals("Station: original", lines.get(1));
+                assertTrue(lines.get(2).startsWith("BlockedProgress: "));
+                assertTrue(lines.get(3).startsWith("BlockedProgress.TransportArrival: "));
+                assertEquals("Load: original", lines.getLast());
+                assertEquals(1, lines.stream().filter(line -> line.startsWith("BlockedProgress: ")).count());
+                assertEquals(source, benchReads.get());
+                assertEquals(source, tipperReads.get());
+            }
+            // A repeated blocked milestone is observed again, without a signature cache.
+            DspFullDayAnalysisRunner.appendBlockedProgressLines("progress=PT2M", blocked,
+                    benches, tippers, new ArrayList<>(compact));
+            assertEquals(4, benchReads.get());
+            assertEquals(4, tipperReads.get());
+            assertEquals(base, runtime.snapshot());
+        }
+    }
 
     @Test
     void shouldCompleteEarlyInBoundedHeadlessBatchesAndPrintLockedInspections(@TempDir Path directory)
@@ -90,7 +159,7 @@ class DspFullDayAnalysisRunnerTest {
     @Test
     void shouldEmitCompactProgressAtFixedStepThresholdsInsideEachBatch(@TempDir Path directory)
             throws Exception {
-        DspUncalibratedFullDayProfile profile = slowProfile(directory, Duration.ofHours(1), 3);
+        DspUncalibratedFullDayProfile profile = slowProfile(directory, Duration.ofHours(1), 3, true);
         DspFullDayLoadedInput input = DspFullDayReportTestSupport.input(directory, profile);
         Path output = directory.resolve("threshold-report.json");
         Path progressLog = directory.resolve("progress").resolve("full-day.log");
@@ -117,6 +186,7 @@ class DspFullDayAnalysisRunnerTest {
         assertTrue(progress.lastIndexOf("[dsp-full-day:final]")
                 > progress.lastIndexOf("[dsp-full-day:progress=PT18H]"));
         assertFalse(progress.contains("unfinishedIdentities"));
+        assertTrue(progress.contains("BlockedProgress: "));
         assertTrue(progress.contains("InboundReleasedNotConsumed: "));
         assertTrue(progress.contains("ClosedOutboundTotesByServiceCentre: "));
         assertTrue(progress.lines().filter(line -> line.startsWith(
@@ -202,7 +272,7 @@ class DspFullDayAnalysisRunnerTest {
     @Test
     void shouldLogMonotonicWallIntervalAtEachConfiguredProgressMilestone(@TempDir Path directory)
             throws Exception {
-        DspUncalibratedFullDayProfile profile = slowProfile(directory, Duration.ofHours(1), 3);
+        DspUncalibratedFullDayProfile profile = slowProfile(directory, Duration.ofHours(1), 3, true);
         DspFullDayLoadedInput input = DspFullDayReportTestSupport.input(directory, profile);
         Path progressLog = directory.resolve("wall-interval-progress.log");
         AtomicLong clock = new AtomicLong();
@@ -222,6 +292,8 @@ class DspFullDayAnalysisRunnerTest {
         assertEquals("WallClock: sincePreviousProgress=PT0.003S", lines.get(second + 3));
         assertEquals(lines.stream().filter(line -> line.startsWith("[dsp-full-day:progress=")).count(),
                 lines.stream().filter(line -> line.startsWith("WallClock: ")).count());
+        assertTrue(lines.stream().anyMatch(line -> line.startsWith("BlockedProgress: ")));
+        assertEquals(22_000_000L, clock.get());
     }
 
     @Test
@@ -378,6 +450,14 @@ class DspFullDayAnalysisRunnerTest {
             Path directory,
             Duration fixedStep,
             int stepsPerBatch) {
+        return slowProfile(directory, fixedStep, stepsPerBatch, false);
+    }
+
+    private static DspUncalibratedFullDayProfile slowProfile(
+            Path directory,
+            Duration fixedStep,
+            int stepsPerBatch,
+            boolean blockTransport) {
         DspUncalibratedFullDayProfile baseline = profile(directory, fixedStep, stepsPerBatch);
         return new DspUncalibratedFullDayProfile(
                 baseline.operatingDate(),
@@ -392,7 +472,8 @@ class DspFullDayAnalysisRunnerTest {
                 baseline.maximumStepsPerAdvance(),
                 baseline.metricSampleInterval(),
                 0.000001d,
-                baseline.queueCapacities(),
+                blockTransport ? new DspUncalibratedFullDayProfile.QueueCapacities(64, 1, 4, 4, 4)
+                        : baseline.queueCapacities(),
                 baseline.thirdPartyAreaConfig(),
                 baseline.adaptingStorageConfig(),
                 List.of(new DspUncalibratedFullDayProfile.AdaptingBenchDefinition(
@@ -406,6 +487,27 @@ class DspFullDayAnalysisRunnerTest {
     private static InboundToteManifest manifest(String id, OrderType orderType) {
         return new InboundToteManifest(new PhysicalToteId(id), new OrderSheetKey("order-" + id, 1),
                 orderType, "104", List.of(new DspOrderItem("line-" + id, "product", 1)), 1);
+    }
+
+    private static DspFullDayAnalysisRuntimeSnapshot withBlock(
+            DspFullDayAnalysisRuntimeSnapshot base, int source) {
+        var tote = new PhysicalToteId("blocked-head");
+        var destination = new OperationalRouteDestination(StationType.ADAPTING, "bench-1");
+        var continuation = source == 1 ? new StationRouteContinuationControllerSnapshot(
+                Optional.of(tote), Optional.of(StationProcessingDispositionType.CONTINUE),
+                Optional.of(StationType.ADAPTING), Optional.empty(), Optional.of(tote), "continuation full",
+                0, 0, Optional.empty(), Optional.empty(), Optional.empty()) : base.continuation();
+        var arrival = source == 2 ? new WarehouseTransportArrivalControllerSnapshot(
+                List.of(new WarehouseTransportArrivalControllerSnapshot.PendingArrival(tote, destination, "sensor")),
+                Optional.empty(), Optional.empty(), Optional.of(tote), "arrival full", 0) : base.transportArrival();
+        var ingress = new WarehouseTransportIngressControllerSnapshot(64, 64, 64, 64,
+                Optional.of(tote), Optional.of(destination), Optional.empty(), Optional.empty(),
+                source == 3 ? Optional.of(tote) : Optional.empty(), source == 3 ? "transport full" : "", 0);
+        return new DspFullDayAnalysisRuntimeSnapshot(base.state(), base.clock(), base.scheduler(), base.supply(),
+                base.osr(), base.av02(), base.lifecycle(), base.av02Allocation(), base.operationalRelease(),
+                base.elastic(), base.p2pLines(), base.stationProcessing(), base.stationClaims(), base.routes(),
+                base.outboundTransport(), base.transportInFlight(), ingress, arrival, base.stationArrivals(),
+                continuation, base.completions(), base.cutoff(), base.metrics(), base.closed());
     }
 
     private static OutboundToteSnapshot outboundTote(

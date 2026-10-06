@@ -81,6 +81,27 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
 
     @Test
+    void shouldInspectConfiguredBenchCapacityWithoutChangingRuntime(@TempDir Path directory)
+            throws IOException {
+        DspUncalibratedFullDayProfile profile = profile();
+        DspFullDayLoadedInput input = loadSingleFullPack(directory, profile);
+        try (DspFullDayAnalysisRuntime runtime = new DspFullDayAnalysisRuntimeFactory()
+                .create(input, profile)) {
+            var before = runtime.snapshot();
+            var benches = runtime.adaptingBenchAdmissionSnapshots();
+            assertEquals(profile.adaptingBenchDefinitions().stream()
+                    .map(DspUncalibratedFullDayProfile.AdaptingBenchDefinition::id).sorted().toList(),
+                    benches.stream().map(bench -> bench.benchId().value()).toList());
+            assertTrue(benches.stream().allMatch(bench -> bench.admissionOpen()
+                    && bench.queueSnapshot().toteIds().isEmpty()
+                    && bench.benchSnapshot().activeToteId().isEmpty()));
+            assertThrows(UnsupportedOperationException.class, benches::clear);
+            assertEquals(benches, runtime.adaptingBenchAdmissionSnapshots());
+            assertEquals(before, runtime.snapshot());
+        }
+    }
+
+    @Test
     void shouldRetainThirdPartyOrdersAndDeterministicOrderAcrossReleaseEvaluations(
             @TempDir Path directory) throws IOException {
         DspUncalibratedFullDayProfile profile = profile();

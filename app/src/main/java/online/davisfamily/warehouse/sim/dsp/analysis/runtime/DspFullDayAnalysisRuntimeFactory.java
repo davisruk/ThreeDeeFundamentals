@@ -537,6 +537,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     stationRuntime,
                     continuationRuntime,
                     adaptedLineStore,
+                    adaptingArea,
                     lineRuntimes,
                     cutoffController,
                     completionEvaluator,
