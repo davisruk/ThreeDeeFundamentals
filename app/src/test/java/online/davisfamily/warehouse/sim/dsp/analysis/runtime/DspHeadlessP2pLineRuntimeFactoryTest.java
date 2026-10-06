@@ -5,11 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +23,12 @@ import online.davisfamily.threedee.sim.framework.SimulationWorld;
 import online.davisfamily.threedee.sim.framework.objects.SimObject;
 import online.davisfamily.threedee.matrices.Vec3;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResultTestFixtures;
+import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackTrace;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
 import online.davisfamily.warehouse.sim.dsp.outbound.DeterministicOutboundToteIdSource;
@@ -28,6 +36,8 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocator;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteConfig;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocator;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.AllowAllP2pArrivalAdmissionPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.arrival.P2pArrivalRouteBinding;
@@ -39,6 +49,7 @@ import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
 import online.davisfamily.warehouse.sim.totebag.control.PdcPackDispositionPolicy;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
+import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagWorkPlanProvider;
 
@@ -48,6 +59,7 @@ class DspHeadlessP2pLineRuntimeFactoryTest {
     void shouldWirePolicyAndKeepLineNonQuiescentUntilBypassedPackLeavesPdc() {
         DspHeadlessP2pLineConfig original = fixture("line-1").config();
         assertSame(PdcPackDispositionPolicy.noOp(), original.packDispositionPolicy());
+        assertTrue(original.missingPackIdsProvider().apply("legacy-correlation").isEmpty());
         int[] collections = {0};
         PdcPackDispositionPolicy policy = new PdcPackDispositionPolicy() {
             @Override public boolean bypassPrl(String id) { return "wrong".equals(id); }
@@ -65,6 +77,7 @@ class DspHeadlessP2pLineRuntimeFactoryTest {
             @Override public Set<String> expectedCorrelationIds() { return Set.of("missing-bag"); }
         };
         DspHeadlessP2pLineConfig config = withPolicy(original, work, policy);
+        assertTrue(config.missingPackIdsProvider().apply("legacy-correlation").isEmpty());
         assertThrows(IllegalArgumentException.class, () -> withPolicy(original, work, null));
         DspHeadlessP2pLineRuntime runtime = new DspHeadlessP2pLineRuntimeFactory().create(config);
         assertSame(policy, runtime.config().packDispositionPolicy());
@@ -89,12 +102,154 @@ class DspHeadlessP2pLineRuntimeFactoryTest {
         assertEquals(1, collections[0]);
     }
 
+    @Test
+    void shouldPassConfiguredPartialPackBagThroughTheCompleteHeadlessLine() {
+        DspHeadlessP2pLineConfig base = fixture("line-1").config();
+        OrderSheetKey owningSheet = new OrderSheetKey("order-1", 1);
+        BagKey bagKey = new BagKey("rx-partial", 1);
+        String correlationId = bagKey.correlationId();
+        PhysicalToteId inputToteId = new PhysicalToteId("input-partial");
+        PackDimensions dimensions = new PackDimensions(0.02f, 0.01f, 0.008f);
+        List<PackPlan> packPlans = List.of(
+                new PackPlan("p1", correlationId, dimensions),
+                new PackPlan("p2", correlationId, dimensions),
+                new PackPlan("p3", correlationId, dimensions));
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(inputToteId, packPlans);
+        PlannedBag plannedBag = new PlannedBag(
+                bagKey,
+                "SC-1",
+                "pharmacy-1",
+                "patient-1",
+                "rx-partial",
+                List.of("p1", "p2", "p3"),
+                List.of(owningSheet));
+        List<PlannedPackTrace> traces = packPlans.stream()
+                .map(packPlan -> new PlannedPackTrace(
+                        packPlan.packId(),
+                        new PackSourceProvenance(
+                                owningSheet,
+                                "line-" + packPlan.packId(),
+                                "product-" + packPlan.packId(),
+                                "SC-1",
+                                "pharmacy-1",
+                                "patient-1",
+                                "rx-partial"),
+                        inputToteId,
+                        owningSheet,
+                        bagKey))
+                .toList();
+        BagPlanningResult bagPlan = BagPlanningResultTestFixtures.complete(
+                List.of(plannedBag), List.of(toteLoadPlan), traces);
+        ToteToBagWorkPlanProvider workPlan = new ToteToBagWorkPlanProvider() {
+            @Override
+            public OptionalInt expectedPackCount(String id) {
+                return correlationId.equals(id) ? OptionalInt.of(3) : OptionalInt.empty();
+            }
+
+            @Override
+            public Set<String> expectedCorrelationIds() {
+                return Set.of(correlationId);
+            }
+        };
+        PdcPackDispositionPolicy dispositionPolicy = new PdcPackDispositionPolicy() {
+            @Override public boolean bypassPrl(String id) { return false; }
+            @Override public int effectivePackCount(String id, int planned) {
+                assertEquals(correlationId, id);
+                assertEquals(3, planned);
+                return 2;
+            }
+            @Override public boolean allowEmptyTote(String id) { return false; }
+            @Override public void collectedAtPdcOutfeed(String id) {
+                fail("Claimable partial-bag packs must not be collected at the PDC outfeed");
+            }
+            @Override public boolean deferInitialPrlAssignments() { return true; }
+            @Override public long classificationEpoch() { return 1; }
+        };
+        int[] missingProviderCalls = {0};
+        Function<String, Set<String>> missingPackIdsProvider = id -> {
+            assertEquals(correlationId, id);
+            missingProviderCalls[0]++;
+            return Set.of("p2");
+        };
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                new PhysicalToteLifecycleLedger(),
+                new DeterministicOutboundToteIdSource(),
+                new OutputSheetAllocator(List.of(owningSheet)),
+                new OutboundToteConfig(4));
+        DspHeadlessP2pLineConfig config = withPolicyAndProvider(
+                base, workPlan, bagPlan, allocator, dispositionPolicy, missingPackIdsProvider);
+        assertSame(missingPackIdsProvider, config.missingPackIdsProvider());
+        assertThrows(IllegalArgumentException.class, () -> withPolicyAndProvider(
+                base, workPlan, bagPlan, allocator, dispositionPolicy, null));
+
+        RecordingWorld world = new RecordingWorld();
+        DspHeadlessP2pLineRuntime runtime = new DspHeadlessP2pLineRuntimeFactory().create(world, config);
+        assertEquals(4, world.controllers.size());
+        assertEquals(List.of(
+                        runtime.tipperFlowController(),
+                        runtime.toteToBagFlowController(),
+                        runtime.tipperInputQueueController(),
+                        runtime.outboundToteAllocationController()),
+                world.controllers);
+        runtime.sortingMachine().receive(new Pack("p1", correlationId, dimensions));
+        runtime.sortingMachine().receive(new Pack("p3", correlationId, dimensions));
+
+        double simulatedSeconds = 0d;
+        for (int index = 0; index < 2_000
+                && allocator.snapshot().allocatedBags().isEmpty(); index++) {
+            runtime.simulationWorld().update(0.05d);
+            simulatedSeconds += 0.05d;
+        }
+
+        var outbound = allocator.snapshot();
+        assertEquals(1, outbound.allocatedBags().size());
+        var allocatedBag = outbound.allocatedBags().getFirst();
+        assertSame(plannedBag, allocatedBag.plannedBag());
+        assertEquals(List.of("p1", "p3"), allocatedBag.actualPhysicalPackIds());
+        assertEquals(List.of("p2"), allocatedBag.missingPhysicalPackIds());
+        assertTrue(outbound.openToteFor(config.lineDefinition().lineId())
+                .orElseThrow().requiresExceptionProcessing());
+        assertTrue(runtime.bagReceiver().getReceivedBags().isEmpty());
+        assertEquals(1, missingProviderCalls[0]);
+
+        Duration currentSimulationTime = Duration.ofNanos(
+                Math.round(simulatedSeconds * 1_000_000_000d));
+        var closed = runtime.closeOutboundToteForApplicableWorkCompletion(currentSimulationTime)
+                .orElseThrow();
+        assertTrue(closed.requiresExceptionProcessing());
+    }
+
     private static DspHeadlessP2pLineConfig withPolicy(DspHeadlessP2pLineConfig c,
             ToteToBagWorkPlanProvider work, PdcPackDispositionPolicy policy) {
         return new DspHeadlessP2pLineConfig(c.lineDefinition(), c.stationArrivalQueue(),
                 c.tipperInputQueueCapacity(), c.admissionPolicy(), c.routeBinding(), c.tipperSegment(),
                 c.payloadFactory(), c.stationProcessingCoordinator(), work, c.bagPlanningResult(),
                 c.outboundToteAllocator(), c.toteCompletedListener(), c.durations(), policy);
+    }
+
+    private static DspHeadlessP2pLineConfig withPolicyAndProvider(
+            DspHeadlessP2pLineConfig c,
+            ToteToBagWorkPlanProvider work,
+            BagPlanningResult bagPlan,
+            OutboundToteAllocator allocator,
+            PdcPackDispositionPolicy policy,
+            Function<String, Set<String>> missingPackIdsProvider) {
+        return new DspHeadlessP2pLineConfig(
+                c.lineDefinition(),
+                c.stationArrivalQueue(),
+                c.tipperInputQueueCapacity(),
+                c.admissionPolicy(),
+                c.routeBinding(),
+                c.tipperSegment(),
+                c.payloadFactory(),
+                c.stationProcessingCoordinator(),
+                work,
+                bagPlan,
+                allocator,
+                c.toteCompletedListener(),
+                c.durations(),
+                policy,
+                missingPackIdsProvider);
     }
 
     @Test

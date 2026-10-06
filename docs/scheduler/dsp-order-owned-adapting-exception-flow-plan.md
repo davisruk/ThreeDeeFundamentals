@@ -2,8 +2,9 @@
 
 Branch: `feature/dsp-full-day-analysis-metrics-inspection` (or a new feature branch
 based on its committed tip). Step 1 is committed at `f2f50ad`; Step 2 is
-committed and verified at `ede909f`. Step 3 has not started. The user starts
-each step separately.
+committed and verified at `ede909f`. Step 3 is committed at `60bd361`; the
+user reports its tests green. Step 4 has not started. The user starts each
+step separately.
 
 ## Purpose and authority
 
@@ -550,37 +551,295 @@ User verification: no additional check for this step.
 
 ## Step 4 — Actual bag contents and marked outbound totes
 
-Extend `AllocatedOutboundBag` with immutable ordered
-`actualPhysicalPackIds` and `missingPhysicalPackIds` derived from the
-original `PlannedBag`. Keep its existing three-argument constructor as a
-delegating all-present compatibility path. Reject duplicates, overlap,
-foreign IDs, empty actual IDs, and an actual/missing partition that differs
-from the planned pack IDs. Add an `OutboundToteAllocator.allocate` overload
-accepting the exact missing IDs; preserve the old overload as empty-missing.
-Derive `OutboundToteSnapshot.requiresExceptionProcessing` from its contained
-allocated bags (also after close), with its existing constructor delegating
-to an all-normal value. A zero-pack logical bag never calls this allocator.
+This is the outbound handoff only. Implement the following subsections in
+order, then their tests. Steps 1–3 remain authoritative and unchanged. Do not
+change PRL/PDC classification, first-COLLECT behavior, scheduling, completion
+criteria, workload demand, progress output, labels, or the debug rig. The
+Step 5 exception closure state and reporting are **not** part of this step.
 
-`OutboundToteAllocationController` keeps correlation and ordered pack-ID
-validation, but compares runtime bag contents with the planned IDs **minus
-the ledger's exact missing IDs**. On a match it passes missing IDs to the
-allocator, then removes the bag from `StoredBagReceiver` as now. No relaxed
-subset acceptance: an unrelated, duplicate, or missing-but-not-registered
-runtime pack fails before allocation or receiver removal. Preserve tote
-service-centre/pharmacy purity, bag capacity, output sheet derivation, and
-close-before-line-release behavior. Count affected allocated bags and marked
-outbound tote IDs from successful immutable outbound allocation snapshots;
-do not duplicate those owners in the missing-pack ledger.
+### 4.1 Exact immutable allocated-bag partition
 
-Files: modify `AllocatedOutboundBag`, `OutboundToteSnapshot`,
-`OutboundToteAllocator`, `OutboundToteAllocationController`, headless config/
-factory wiring and full-day composition. Tests: extend
-`OutboundToteAllocationControllerTest`, `OutboundToteAllocatorTest`,
-`MultiLineOutboundToteAllocationTest`, and
-`DspHeadlessP2pLineRuntimeFactoryTest`. Assert exact actual/missing pack
-partition, normal compatibility, partial bag mark on open and closed tote,
-two different outbound totes for one prescription when capacity demands,
-zero bag never allocated, and failure leaves receiver/allocator unchanged.
+Keep `AllocatedOutboundBag` a record. Append these two components, in this
+order, after its existing three components:
+
+```java
+List<String> actualPhysicalPackIds,
+List<String> missingPhysicalPackIds
+```
+
+Its five-argument canonical constructor retains all existing planned-bag,
+physical-tote, and output-sheet validation. Both new lists must be non-null;
+actual must be nonempty. Both lists must contain exact planned IDs, in their
+relative `PlannedBag.physicalPackIds()` order. They must be disjoint and
+together cover that original list exactly. Reject null/blank/foreign IDs,
+duplicates, overlap, reordered IDs, and incomplete partitions with
+`IllegalArgumentException`; do not trim or repair caller-supplied pack IDs.
+
+Validate the partition with two integer cursors in one traversal of the
+original planned IDs: for each planned ID, consume the next actual ID if it
+equals that ID, otherwise consume the next missing ID if it equals that ID,
+otherwise fail. At the end both input lists must be fully consumed. Use
+`plannedId.equals(candidate)` so null entries fail validation safely. The
+planned list already contains unique IDs; this algorithm proves order,
+coverage, uniqueness and disjointness without another set or nested
+`List.contains` scans. Freeze both lists with `List.copyOf` only after
+validation. Retain the original `PlannedBag` reference; never construct a
+smaller substitute bag or change its owning sheets, key, or pack list.
+
+Keep the existing three-argument constructor, delegating with the original
+planned pack list and `List.of()` for missing IDs. Use a private null-checking
+helper when reading that list in the delegating constructor, so a null
+planned bag still raises `IllegalArgumentException`. The all-present path
+can reuse the already immutable planned list. Add no mutable exception state
+to this record; an affected bag is identified by a nonempty missing list.
+
+### 4.2 Allocator preparation before mutation
+
+Add exactly this public overload and have the existing three-argument
+`allocate` delegate to it with `Set.of()`:
+
+```java
+AllocatedOutboundBag allocate(
+        P2pLineId lineId,
+        PlannedBag bag,
+        Duration allocationTime,
+        Set<String> missingPhysicalPackIds)
+```
+
+Keep `requireLineAndTime`, null-bag and duplicate-bag checks. Before looking
+up/closing an open tote or invoking the tote ID source, output-sheet
+allocator, or lifecycle mutation, require a non-null missing set and prepare
+the exact ordered partition. Use one private `PackPartition` record holding
+the two lists and one private preparation helper. For a nonempty missing
+set, traverse this bag's planned IDs once, append each ID to actual or
+missing according to set membership, and count matched missing IDs. That
+count must equal the supplied set size, rejecting foreign/null/noncanonical
+IDs, and actual must be nonempty. With an empty set, use the original planned
+list and `List.of()` directly. Do not retain the caller's set or build an
+index over other bags. The prepared lists are temporary, bag-local values;
+`AllocatedOutboundBag` supplies their defensive immutable boundary.
+
+Pass this partition through both existing allocation branches to
+`completeAllocation`. Construct the five-argument `AllocatedOutboundBag`
+before the lifecycle assignment loop in that method, then retain the
+existing assignment/add/history/capacity-close sequence. This ensures the
+new bag-content validation cannot fail after assigning output sheets. Do
+not redesign `OutputSheetAllocator` or add a transaction/rollback layer.
+
+Invalid missing IDs and all-missing input must leave allocator and lifecycle
+state, cached snapshot identity, tote ID sequence, and output-sheet ordinals
+unchanged, including when the incoming bag would otherwise cause a pharmacy
+or centre change. This guarantee concerns the new prevalidation failures,
+not all possible allocator failures. Existing tests deliberately preserve
+published partial creation/allocation/closure when a later injected ID or
+lifecycle operation fails; preserve those semantics and cache invalidation
+points. Such post-mutation failures remain fatal, not recoverable retries.
+
+Keep maximum capacity measured in physical bags, per-line open-tote
+ownership, pharmacy/centre purity, and original-sheet output numbering.
+Partial contents do not create another bag or change an output ordinal.
+Two bags for one prescription may still occupy different outbound totes.
+A pending zero-pack logical bag is never allocated; the all-missing check is
+an invariant guard, not a way to fabricate an empty physical bag.
+
+### 4.3 Stored tote exception flag and existing snapshot cache
+
+Keep `OutboundToteSnapshot` a record and append
+`boolean requiresExceptionProcessing` after `closureReason`. In its
+existing contained-bag validation loop, accumulate whether any bag has a
+nonempty missing list and reject a supplied flag that differs from that
+derived value with `IllegalArgumentException`. The generated accessor is
+therefore O(1), and an empty/unassigned or all-normal tote must be unmarked.
+Do not implement the accessor as a stream or repeated contents scan.
+
+Preserve the seven-argument constructor as a delegate that derives the flag
+from its supplied contents with a small private loop. Ordinary legacy
+contents produce `false`. Partial contents must produce `true`, not be
+silently cleared by that compatibility constructor; this clarifies the old
+"all-normal" wording. Reject a null list or null bag with
+`IllegalArgumentException` in the helper. The public canonical constructor
+still validates the complete snapshot. Do not convert this record to a
+mutable class or change any existing accessor/closure/purity contract.
+
+Add one boolean to allocator-owned `MutableOutboundTote`, initially false.
+After successful `add`, OR it with that bag's nonempty missing list; normal
+bags cannot clear it. Pass it to the new eight-argument snapshot constructor
+on both open publication and close. New physical totes start unmarked;
+another line is unaffected. The flag is a contents-derived cached aggregate,
+not a second exception-work ledger.
+
+Retain `OutboundToteAllocator.cachedSnapshot`: allocation and actual close
+invalidate it at the existing mutation points; idle reads, rejected
+prevalidation, and closing an already idle line do not. Old open/closed
+snapshots and bag lists remain immutable after later additions/closure.
+`OutboundAllocationSnapshot` needs no change: its existing immutable bags,
+totes and indexes already carry the new record values. Do not rebuild it
+inside `update` to count exceptions. Step 5 will derive affected allocated
+bag and distinct marked-tote counts from that snapshot; do not add those
+owners or counters to `DspPreparedPackExceptionLedger` now.
+
+### 4.4 Narrow missing-ID lookup and exact runtime validation
+
+Add a fifth, final constructor argument to a new
+`OutboundToteAllocationController` overload:
+
+```java
+Function<String, Set<String>> missingPackIdsProvider
+```
+
+Validate the provider as non-null. Keep its current four-argument constructor
+as a delegate using one static reusable function returning `Set.of()`.
+Provider keys are original bag correlation IDs; results are non-null,
+stable read-only sets for the simulation-thread allocation call. Do not
+import the analysis runtime or mutable ledger into the outbound package,
+extend `PdcPackDispositionPolicy`, or create another correlation/pack index.
+
+Capture `completedBagReceiver.getReceivedBags()` once in the controller
+constructor as a private final live read-only list view. The current receiver
+returns an unmodifiable view over its backing list, not a frozen copy; it
+tracks later receives/removals. Do not change `StoredBagReceiver` or cache
+`List.copyOf` of that view at construction. In `update`, validate the context,
+then return immediately when the view is empty: no time conversion, provider
+query, stream, collection copy, or allocator/snapshot call on that path.
+For nonempty work, take one `List.copyOf` of the received-bag view, preserve
+its encounter order, and calculate allocation time once using the existing
+simulation-time conversion. That event-local copy permits safe removal
+from the live receiver during the loop.
+
+For each received bag:
+
+1. Use existing indexed `bagPlanningResult.findBagByCorrelationId` to obtain
+   its original planned bag. Unknown correlation remains an
+   `IllegalStateException` before allocation/removal. Query the provider
+   **once** for that correlation and reject a null result as an invariant
+   `IllegalStateException`.
+2. Compare `runtimeBag.getPackContents()` directly with the planned list
+   minus that missing set. Traverse planned IDs once, count/skip registered
+   missing IDs, and otherwise require the next runtime pack's `packId()` to
+   equal that exact planned ID. Require all runtime packs consumed, matched
+   missing count equal to set size, and a positive expected actual count.
+   Fail with `IllegalStateException` on a mismatch. Do not construct a
+   runtime-ID list, filtered expected list, stream, or temporary set for
+   this comparison. This rejects reordered, duplicate, foreign,
+   unregistered-absent, and registered-missing-but-present runtime packs,
+   as well as an invalid provider set; there is no general subset acceptance.
+3. Call the new allocator overload with that same set and original bag,
+   then remove that exact runtime bag from the receiver as now. Keep the
+   existing fatal check if removal unexpectedly fails after allocation.
+
+Receiver/content failures occur before this bag's allocator mutation or
+receiver removal. Earlier valid bags in the same update stay committed; do
+not turn the entire batch into an atomic transaction. Do not swallow a
+provider/allocator failure or remove the failed bag for a later silent retry.
+
+### 4.5 Headless and full-day composition
+
+In `DspHeadlessP2pLineConfig`, add a final
+`Function<String, Set<String>> missingPackIdsProvider` field and accessor of
+the same name, and a fifteen-argument constructor appending that provider
+after `packDispositionPolicy`. Preserve both current constructors: the
+thirteen-argument one continues to use the no-op disposition policy, and
+the fourteen-argument one delegates with one static reusable empty-missing
+function. The fifteen-argument constructor retains current validation and
+rejects a null provider. Isolated/legacy callers still use strict full-pack
+outbound validation, even when they explicitly supply a disposition policy.
+
+`DspHeadlessP2pLineRuntimeFactory.build` passes
+`config.missingPackIdsProvider()` as the fifth outbound-controller argument;
+keep all machinery, registered-controller order, and caller-owned allocator
+identity unchanged. Immediately after constructing the existing full-day
+exception ledger/adapter, create one typed bound function
+`exceptionLedger::missingPackIdsFor` and pass the **same reference** to every
+headless line config. The ledger already provides indexed immutable sets;
+this call needs no snapshot construction or copied classification map.
+Only the simulation-thread outbound controller calls it, never the scheduler
+worker. Do not construct a per-line ledger, a function per tick, or query the
+ledger while polling an empty receiver. Leave full-day output completion
+logic unchanged until Step 5, even though its remaining-work criteria cannot
+yet finish an exception-bearing day correctly.
+
+### 4.6 Bounded deterministic proof and change surface
+
+Modify only `AllocatedOutboundBag`, `OutboundToteSnapshot`,
+`OutboundToteAllocator`, `OutboundToteAllocationController`,
+`DspHeadlessP2pLineConfig`, `DspHeadlessP2pLineRuntimeFactory`, and
+`DspFullDayAnalysisRuntimeFactory`, plus the following four existing tests.
+Read also `OutboundAllocationSnapshot`, `PlannedBag`, `BagPlanningResult`,
+`StoredBagReceiver`, `Bag`, and `DspPreparedPackExceptionLedger` to verify
+the reused indexes/views/ownership; do not edit them. Do not create another
+test class or broaden the specified verification command.
+
+- `OutboundToteAllocatorTest`: use planned IDs `[p1, p2, p3]` with missing
+  `{p2}` to assert the original planned-bag reference, actual `[p1, p3]`,
+  missing `[p2]`, immutable lists, and unchanged source/output identity.
+  Exercise both allocated-bag constructors, rejecting duplicate/overlapping/
+  foreign/null/reordered/incomplete partitions and empty actual contents.
+  Test both tote constructors and reject a flag inconsistent with contents.
+  Prove a partial bag marks an open tote, normal additions retain the mark,
+  and explicit and capacity closure retain it. Old snapshots remain unchanged;
+  repeated reads reuse identity. The next physical tote starts unmarked.
+  Reject foreign/null/all-missing sets before mutation, also against an
+  existing tote of another pharmacy/centre; assert unchanged allocator and
+  lifecycle snapshots, and use counting ID-source assertions plus the next
+  valid output ordinal to prove no ID/ordinal consumption. Retain existing
+  injected post-mutation failure tests without weakening their assertions.
+- `OutboundToteAllocationControllerTest`: extend the fixture with an explicit
+  provider overload, retaining its current no-provider path. Receive `[p1,
+  p3]` for planned `[p1, p2, p3]` and provider `{p2}`; assert the exact
+  partition/marked tote and removal only after allocation. For wrong order,
+  duplicate/foreign IDs, unregistered absence, registered-missing presence,
+  null/foreign provider results, and unknown correlation, assert the failed
+  bag remains and cached allocator/lifecycle snapshots are unchanged. Keep
+  duplicate-allocation and receiver-order tests. A counting provider is
+  called once per received bag and zero times on repeated empty updates;
+  a counting receiver getter proves its live view is captured once and later
+  receives are still processed. Assert no new allocation on idle updates.
+- `MultiLineOutboundToteAllocationTest`: prove a marked tote on one line
+  does not mark the other line's normal tote or alter line history. Allocate
+  two bags of one prescription and one incoming sheet with capacity one;
+  make one bag partial and one normal. They occupy distinct outbound totes
+  with sheets 101 and 102, only the partial bag's tote marked, and no
+  prescription-wide hold or incoming-sheet change.
+- `DspHeadlessP2pLineRuntimeFactoryTest`: retain the Step 3 bypass/zero-bag
+  and controller-order tests. Assert old config constructors supply an
+  empty-missing provider and the new constructor rejects null/preserves the
+  supplied provider reference. Build a bounded headless partial-bag fixture
+  with planned `[p1, p2, p3]`, a matching work-plan count of three, a disposition
+  policy returning effective count two for that correlation, and a counting
+  missing provider returning `{p2}`. Set that policy's deferral to true and
+  epoch to a constant one; bypass and empty-tote authorization return false,
+  and an outfeed-collection callback fails the test if invoked. Without
+  deferral the original eager assignment would incorrectly wait for three.
+  The work provider publishes only this correlation and count three. Use
+  `BagPlanningResultTestFixtures.complete` with all three original pack traces,
+  one original owning sheet `(order-1, 1)`, and an allocator configured with
+  that known sheet and capacity four; do not reuse the current empty fixture's
+  bag plan or empty output-sheet catalog. Supply that helper with one original
+  `ToteLoadPlan` containing all three `PackPlan` values, each with the same
+  bag correlation and dimensions `0.02f, 0.01f, 0.008f`; all three traces name
+  that plan's same physical input tote ID. The helper derives matching slot
+  dimensions from those plans. Use those dimensions for physical packs and
+  the existing default placeholder durations. Deliver claimable packs `p1` and `p3`
+  through `runtime.sortingMachine().receive`, then advance the existing world
+  by `0.05d` steps, at most 2,000 iterations, stopping at the first outbound
+  allocation and asserting it occurred. Keep the full registered controller
+  set. Assert exact allocated contents, a marked open tote, an empty receiver,
+  and one provider call; explicitly close the tote at the world's current
+  simulation time using the existing seconds-to-duration conversion and
+  assert the mark remains. This must not manually place the partial bag
+  straight into the receiver. Keep the zero-effective fixture producing no
+  physical bag/tote, not an empty `Bag` (which its constructor rejects).
+
+These are state, identity, and call-count tests, not timing benchmarks. The
+normal and partial per-bag preparation/validation work is O(that bag's pack
+count), never O(all planned bags/packs). Small defensive lists and the private
+partition value are permitted **on allocation events**, not idle ticks.
+The canonical tote validation uses its existing bounded bag traversal;
+exception-flag reads and mutation-time aggregation are O(1). Snapshot history
+rebuilds remain behind the existing mutation cache, not a new fixed-step
+operation. Review the full-day bound-function wiring statically in this step;
+the real two-sheet COLLECT-to-output and lease/completion proof stays in
+Step 5. Do not claim this step alone fixes the stall or proves new run speed.
 
 Implementation verification:
 

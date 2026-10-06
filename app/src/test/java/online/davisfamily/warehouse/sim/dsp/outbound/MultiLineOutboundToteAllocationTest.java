@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.outbound;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -77,6 +78,49 @@ class MultiLineOutboundToteAllocationTest {
     }
 
     @Test
+    void shouldKeepPartialBagExceptionMarkLocalAcrossLinesAndPrescriptionTotes() {
+        OrderSheetKey incomingSheet = sheet("order-1", 1);
+        OrderSheetKey otherSheet = sheet("order-2", 1);
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                ledger,
+                new DeterministicOutboundToteIdSource(),
+                new OutputSheetAllocator(List.of(incomingSheet, otherSheet)),
+                new OutboundToteConfig(1));
+        PlannedBag partial = bagWithPackIds(
+                "rx-split", 1, List.of("p1", "p2"), incomingSheet);
+        PlannedBag normalSamePrescription = bagWithPackIds(
+                "rx-split", 2, List.of("p3"), incomingSheet);
+        PlannedBag normalOtherLine = bagWithPackIds(
+                "rx-other-line", 1, List.of("p4"), otherSheet);
+
+        allocator.allocate(LINE_1, partial, seconds(1), java.util.Set.of("p2"));
+        allocator.allocate(LINE_1, normalSamePrescription, seconds(2));
+        allocator.allocate(LINE_2, normalOtherLine, seconds(1));
+
+        OutboundAllocationSnapshot snapshot = allocator.snapshot();
+        assertEquals(3, snapshot.closedTotes().size());
+        assertEquals(List.of(LINE_1, LINE_1, LINE_2), snapshot.closedTotes().stream()
+                .map(OutboundToteSnapshot::p2pLineId)
+                .toList());
+        assertTrue(snapshot.closedTotes().get(0).requiresExceptionProcessing());
+        assertFalse(snapshot.closedTotes().get(1).requiresExceptionProcessing());
+        assertFalse(snapshot.closedTotes().get(2).requiresExceptionProcessing());
+        assertEquals(sheet("order-1", 101), outputSheet(snapshot.closedTotes().get(0).allocatedBags().getFirst()));
+        assertEquals(sheet("order-1", 102), outputSheet(snapshot.closedTotes().get(1).allocatedBags().getFirst()));
+        assertEquals(incomingSheet,
+                snapshot.closedTotes().get(0).allocatedBags().getFirst()
+                        .outputSheetAllocations().getFirst().sourceOwningSheetKey());
+        assertEquals(incomingSheet,
+                snapshot.closedTotes().get(1).allocatedBags().getFirst()
+                        .outputSheetAllocations().getFirst().sourceOwningSheetKey());
+        assertEquals(normalOtherLine.bagKey(),
+                snapshot.closedTotes().get(2).allocatedBags().getFirst().bagKey());
+        assertEquals(List.of(partial.bagKey(), normalSamePrescription.bagKey(), normalOtherLine.bagKey()),
+                snapshot.allocatedBags().stream().map(AllocatedOutboundBag::bagKey).toList());
+    }
+
+    @Test
     void shouldPreserveDeterministicLineAndToteHistoryOrder() {
         OrderSheetKey sheet1 = sheet("order-1", 1);
         OrderSheetKey sheet2 = sheet("order-2", 1);
@@ -140,6 +184,21 @@ class MultiLineOutboundToteAllocationTest {
                 prescriptionId,
                 List.of("pack-" + prescriptionId + "-" + ordinal),
                 Arrays.asList(owningSheets));
+    }
+
+    private static PlannedBag bagWithPackIds(
+            String prescriptionId,
+            int ordinal,
+            List<String> packIds,
+            OrderSheetKey owningSheet) {
+        return new PlannedBag(
+                new BagKey(prescriptionId, ordinal),
+                "SC-1",
+                "pharmacy-1",
+                "patient-1",
+                prescriptionId,
+                packIds,
+                List.of(owningSheet));
     }
 
     private static OrderSheetKey outputSheet(AllocatedOutboundBag allocation) {

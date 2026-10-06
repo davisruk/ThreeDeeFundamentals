@@ -15,7 +15,20 @@ public record OutboundToteSnapshot(
         Optional<String> pharmacyId,
         int maximumBagCount,
         List<AllocatedOutboundBag> allocatedBags,
-        Optional<OutboundToteClosureReason> closureReason) {
+        Optional<OutboundToteClosureReason> closureReason,
+        boolean requiresExceptionProcessing) {
+
+    public OutboundToteSnapshot(
+            PhysicalToteId physicalToteId,
+            P2pLineId p2pLineId,
+            Optional<String> serviceCentreId,
+            Optional<String> pharmacyId,
+            int maximumBagCount,
+            List<AllocatedOutboundBag> allocatedBags,
+            Optional<OutboundToteClosureReason> closureReason) {
+        this(physicalToteId, p2pLineId, serviceCentreId, pharmacyId, maximumBagCount,
+                allocatedBags, closureReason, deriveExceptionFlag(allocatedBags));
+    }
 
     public OutboundToteSnapshot {
         if (physicalToteId == null) {
@@ -50,7 +63,9 @@ public record OutboundToteSnapshot(
         }
 
         Set<BagKey> bagKeys = new LinkedHashSet<>();
+        boolean containsMissingPacks = false;
         for (AllocatedOutboundBag allocatedBag : allocatedBags) {
+            containsMissingPacks |= !allocatedBag.missingPhysicalPackIds().isEmpty();
             if (!allocatedBag.outboundPhysicalToteId().equals(physicalToteId)) {
                 throw new IllegalArgumentException("allocated bag physical tote ID must match snapshot");
             }
@@ -62,6 +77,10 @@ public record OutboundToteSnapshot(
             if (!bagKeys.add(allocatedBag.bagKey())) {
                 throw new IllegalArgumentException("Duplicate allocated bag key: " + allocatedBag.bagKey());
             }
+        }
+        if (requiresExceptionProcessing != containsMissingPacks) {
+            throw new IllegalArgumentException(
+                    "requiresExceptionProcessing must match allocated bag contents");
         }
     }
 
@@ -79,6 +98,20 @@ public record OutboundToteSnapshot(
 
     public int remainingBagCapacity() {
         return maximumBagCount - bagCount();
+    }
+
+    private static boolean deriveExceptionFlag(List<AllocatedOutboundBag> allocatedBags) {
+        if (allocatedBags == null) {
+            throw new IllegalArgumentException("allocatedBags must not be null");
+        }
+        boolean requiresExceptionProcessing = false;
+        for (AllocatedOutboundBag allocatedBag : allocatedBags) {
+            if (allocatedBag == null) {
+                throw new IllegalArgumentException("allocatedBags must not contain null");
+            }
+            requiresExceptionProcessing |= !allocatedBag.missingPhysicalPackIds().isEmpty();
+        }
+        return requiresExceptionProcessing;
     }
 
     public boolean containsPatient(String patientId) {

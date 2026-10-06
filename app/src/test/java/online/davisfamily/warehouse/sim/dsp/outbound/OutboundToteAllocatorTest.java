@@ -10,7 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +29,175 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
 class OutboundToteAllocatorTest {
     private static final P2pLineId LINE = new P2pLineId("p2p-1");
+
+    @Test
+    void shouldPublishExactImmutableActualAndMissingPackPartition() {
+        OrderSheetKey sourceSheet = sheet("order-1", 1);
+        Fixture fixture = fixture(4, sourceSheet);
+        PlannedBag plannedBag = bagWithPackIds(
+                "rx-partial", 1, "SC-1", "pharmacy-1", "patient-1",
+                List.of("p1", "p2", "p3"), sourceSheet);
+
+        AllocatedOutboundBag partial = fixture.allocator().allocate(
+                LINE, plannedBag, seconds(1), Set.of("p2"));
+        AllocatedOutboundBag legacy = new AllocatedOutboundBag(
+                plannedBag, partial.outboundPhysicalToteId(), partial.outputSheetAllocations());
+
+        assertSame(plannedBag, partial.plannedBag());
+        assertEquals(List.of("p1", "p3"), partial.actualPhysicalPackIds());
+        assertEquals(List.of("p2"), partial.missingPhysicalPackIds());
+        assertEquals(List.of("p1", "p2", "p3"), plannedBag.physicalPackIds());
+        assertEquals(sourceSheet, partial.outputSheetAllocations().getFirst().sourceOwningSheetKey());
+        assertEquals(sheet("order-1", 101), partial.outputSheetAllocations().getFirst().outputSheetKey());
+        assertSame(plannedBag.physicalPackIds(), legacy.actualPhysicalPackIds());
+        assertTrue(legacy.missingPhysicalPackIds().isEmpty());
+        assertThrows(UnsupportedOperationException.class,
+                () -> partial.actualPhysicalPackIds().add("p4"));
+        assertThrows(UnsupportedOperationException.class,
+                () -> partial.missingPhysicalPackIds().add("p4"));
+
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of("p1", "p2"), List.of("p2"));
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of("p1", "p1", "p3"), List.of("p2"));
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of("p1", "p3"), List.of("p2", "p2"));
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of("p1", "foreign"), List.of("p2", "p3"));
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                Arrays.asList("p1", null), List.of("p2", "p3"));
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of("p1", " "), List.of("p2", "p3"));
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of("p3", "p1"), List.of("p2"));
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of("p1", "p3"), List.of());
+        assertInvalidPartition(plannedBag, partial.outputSheetAllocations(),
+                List.of(), List.of("p1", "p2", "p3"));
+        assertThrows(IllegalArgumentException.class, () -> new AllocatedOutboundBag(
+                plannedBag, partial.outboundPhysicalToteId(), partial.outputSheetAllocations(),
+                null, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new AllocatedOutboundBag(
+                plannedBag, partial.outboundPhysicalToteId(), partial.outputSheetAllocations(),
+                List.of("p1", "p3"), null));
+    }
+
+    @Test
+    void shouldDeriveAndValidateOutboundToteExceptionFlagFromBagContents() {
+        OrderSheetKey sourceSheet = sheet("order-1", 1);
+        Fixture fixture = fixture(3, sourceSheet);
+        PlannedBag partialPlan = bagWithPackIds(
+                "rx-partial", 1, "SC-1", "pharmacy-1", "patient-1",
+                List.of("p1", "p2", "p3"), sourceSheet);
+        AllocatedOutboundBag partial = fixture.allocator().allocate(
+                LINE, partialPlan, seconds(1), Set.of("p2"));
+        OutboundToteSnapshot open = fixture.allocator().snapshot().openToteFor(LINE).orElseThrow();
+
+        OutboundToteSnapshot legacyPartial = new OutboundToteSnapshot(
+                open.physicalToteId(), open.p2pLineId(), open.serviceCentreId(), open.pharmacyId(),
+                open.maximumBagCount(), List.of(partial), open.closureReason());
+        OutboundToteSnapshot canonicalPartial = new OutboundToteSnapshot(
+                open.physicalToteId(), open.p2pLineId(), open.serviceCentreId(), open.pharmacyId(),
+                open.maximumBagCount(), List.of(partial), open.closureReason(), true);
+
+        assertTrue(open.requiresExceptionProcessing());
+        assertTrue(legacyPartial.requiresExceptionProcessing());
+        assertTrue(canonicalPartial.requiresExceptionProcessing());
+        assertThrows(IllegalArgumentException.class, () -> new OutboundToteSnapshot(
+                open.physicalToteId(), open.p2pLineId(), open.serviceCentreId(), open.pharmacyId(),
+                open.maximumBagCount(), List.of(partial), open.closureReason(), false));
+        assertThrows(IllegalArgumentException.class, () -> new OutboundToteSnapshot(
+                open.physicalToteId(), open.p2pLineId(), open.serviceCentreId(), open.pharmacyId(),
+                open.maximumBagCount(), List.of(), open.closureReason(), true));
+        assertThrows(IllegalArgumentException.class, () -> new OutboundToteSnapshot(
+                open.physicalToteId(), open.p2pLineId(), open.serviceCentreId(), open.pharmacyId(),
+                open.maximumBagCount(), null, open.closureReason()));
+    }
+
+    @Test
+    void shouldRetainExceptionFlagAcrossAdditionsAndExplicitAndCapacityClosure() {
+        OrderSheetKey partialSheet = sheet("order-partial", 1);
+        OrderSheetKey normalSheet = sheet("order-normal", 1);
+        OrderSheetKey laterSheet = sheet("order-later", 1);
+        Fixture explicitFixture = fixture(3, partialSheet, normalSheet, laterSheet);
+        PlannedBag partialPlan = bagWithPackIds(
+                "rx-partial", 1, "SC-1", "pharmacy-1", "patient-1",
+                List.of("p1", "p2", "p3"), partialSheet);
+
+        explicitFixture.allocator().allocate(LINE, partialPlan, seconds(1), Set.of("p2"));
+        OutboundAllocationSnapshot afterPartial = explicitFixture.allocator().snapshot();
+        OutboundToteSnapshot partialOpen = afterPartial.openToteFor(LINE).orElseThrow();
+        explicitFixture.allocator().allocate(LINE, bag("rx-normal", normalSheet), seconds(2));
+        OutboundToteSnapshot stillMarked = explicitFixture.allocator().snapshot()
+                .openToteFor(LINE).orElseThrow();
+
+        assertTrue(partialOpen.requiresExceptionProcessing());
+        assertEquals(1, partialOpen.bagCount());
+        assertTrue(stillMarked.requiresExceptionProcessing());
+        assertEquals(2, stillMarked.bagCount());
+        OutboundAllocationSnapshot afterNormal = explicitFixture.allocator().snapshot();
+        assertNotSame(afterPartial, afterNormal);
+        assertSame(afterNormal, explicitFixture.allocator().snapshot());
+        OutboundToteSnapshot explicitlyClosed = explicitFixture.allocator()
+                .closeForApplicableWorkCompletion(LINE, seconds(3)).orElseThrow();
+        assertTrue(explicitlyClosed.requiresExceptionProcessing());
+        assertEquals(OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE,
+                explicitlyClosed.closureReason().orElseThrow());
+        assertTrue(partialOpen.open());
+        assertEquals(1, partialOpen.bagCount());
+
+        explicitFixture.allocator().allocate(LINE, bag("rx-later", laterSheet), seconds(4));
+        assertFalse(explicitFixture.allocator().snapshot()
+                .openToteFor(LINE).orElseThrow().requiresExceptionProcessing());
+
+        Fixture capacityFixture = fixture(1, partialSheet, normalSheet);
+        capacityFixture.allocator().allocate(LINE, partialPlan, seconds(1), Set.of("p2"));
+        capacityFixture.allocator().allocate(LINE, bag("rx-normal-capacity", normalSheet), seconds(2));
+        OutboundAllocationSnapshot capacitySnapshot = capacityFixture.allocator().snapshot();
+        assertEquals(2, capacitySnapshot.closedTotes().size());
+        assertTrue(capacitySnapshot.closedTotes().getFirst().requiresExceptionProcessing());
+        assertFalse(capacitySnapshot.closedTotes().get(1).requiresExceptionProcessing());
+    }
+
+    @Test
+    void shouldRejectInvalidMissingIdsBeforeAnyToteOrLifecycleMutation() {
+        OrderSheetKey firstSheet = sheet("order-first", 1);
+        OrderSheetKey nextSheet = sheet("order-next", 1);
+        PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
+        int[] idCalls = {0};
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                ledger,
+                ignored -> new PhysicalToteId("outbound-p2p-1-" + ++idCalls[0]),
+                new OutputSheetAllocator(List.of(firstSheet, nextSheet)),
+                new OutboundToteConfig(4));
+        allocator.allocate(LINE, bag("rx-first", 1, "SC-1", "pharmacy-1", "patient-1", firstSheet),
+                seconds(1));
+        OutboundAllocationSnapshot outboundBefore = allocator.snapshot();
+        var lifecycleBefore = ledger.snapshot();
+        PlannedBag nextBag = bagWithPackIds(
+                "rx-next", 1, "SC-2", "pharmacy-2", "patient-2",
+                List.of("p1", "p2"), nextSheet);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> allocator.allocate(LINE, nextBag, seconds(2), Set.of("foreign")));
+        assertUnchangedBeforeInvalidPartitionIsResolved(allocator, ledger, outboundBefore, lifecycleBefore, idCalls);
+        assertThrows(IllegalArgumentException.class,
+                () -> allocator.allocate(LINE, nextBag, seconds(2), Set.of("p1", "p2")));
+        assertUnchangedBeforeInvalidPartitionIsResolved(allocator, ledger, outboundBefore, lifecycleBefore, idCalls);
+        assertThrows(IllegalArgumentException.class,
+                () -> allocator.allocate(LINE, nextBag, seconds(2), null));
+        assertUnchangedBeforeInvalidPartitionIsResolved(allocator, ledger, outboundBefore, lifecycleBefore, idCalls);
+        Set<String> nullMember = new HashSet<>(Arrays.asList("p1", null));
+        assertThrows(IllegalArgumentException.class,
+                () -> allocator.allocate(LINE, nextBag, seconds(2), nullMember));
+        assertUnchangedBeforeInvalidPartitionIsResolved(allocator, ledger, outboundBefore, lifecycleBefore, idCalls);
+
+        AllocatedOutboundBag validNext = allocator.allocate(LINE, nextBag, seconds(2));
+        assertEquals(2, idCalls[0]);
+        assertEquals("outbound-p2p-1-2", validNext.outboundPhysicalToteId().value());
+        assertEquals(sheet("order-next", 101), validNext.outputSheetAllocations().getFirst().outputSheetKey());
+        assertEquals(1, allocator.snapshot().closedTotes().size());
+    }
 
     @Test
     void shouldOpenOutboundToteAndAssignFirstBagIdentity() {
@@ -397,6 +568,31 @@ class OutboundToteAllocatorTest {
         assertTrue(afterPartialCreation.allocatedBags().isEmpty());
     }
 
+    private static void assertInvalidPartition(
+            PlannedBag plannedBag,
+            List<OutputSheetAllocation> outputSheets,
+            List<String> actualPackIds,
+            List<String> missingPackIds) {
+        assertThrows(IllegalArgumentException.class, () -> new AllocatedOutboundBag(
+                plannedBag,
+                new PhysicalToteId("outbound-invalid"),
+                outputSheets,
+                actualPackIds,
+                missingPackIds));
+    }
+
+    private static void assertUnchangedBeforeInvalidPartitionIsResolved(
+            OutboundToteAllocator allocator,
+            PhysicalToteLifecycleLedger ledger,
+            OutboundAllocationSnapshot outboundBefore,
+            Object lifecycleBefore,
+            int[] idCalls) {
+        assertSame(outboundBefore, allocator.snapshot());
+        assertSame(lifecycleBefore, ledger.snapshot());
+        assertEquals(1, idCalls[0]);
+        assertTrue(outboundBefore.closedTotes().isEmpty());
+    }
+
     private static Fixture fixture(int capacity, OrderSheetKey... knownSheets) {
         PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
         return new Fixture(
@@ -426,6 +622,24 @@ class OutboundToteAllocatorTest {
                 patientId,
                 prescriptionId,
                 List.of("pack-" + prescriptionId + "-" + bagOrdinal),
+                Arrays.asList(owningSheets));
+    }
+
+    private static PlannedBag bagWithPackIds(
+            String prescriptionId,
+            int bagOrdinal,
+            String serviceCentreId,
+            String pharmacyId,
+            String patientId,
+            List<String> packIds,
+            OrderSheetKey... owningSheets) {
+        return new PlannedBag(
+                new BagKey(prescriptionId, bagOrdinal),
+                serviceCentreId,
+                pharmacyId,
+                patientId,
+                prescriptionId,
+                packIds,
                 Arrays.asList(owningSheets));
     }
 

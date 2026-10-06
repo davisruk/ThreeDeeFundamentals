@@ -53,6 +53,14 @@ public final class OutboundToteAllocator {
             P2pLineId lineId,
             PlannedBag bag,
             Duration allocationTime) {
+        return allocate(lineId, bag, allocationTime, Set.of());
+    }
+
+    public AllocatedOutboundBag allocate(
+            P2pLineId lineId,
+            PlannedBag bag,
+            Duration allocationTime,
+            Set<String> missingPhysicalPackIds) {
         requireLineAndTime(lineId, allocationTime);
         if (bag == null) {
             throw new IllegalArgumentException("bag must not be null");
@@ -60,6 +68,7 @@ public final class OutboundToteAllocator {
         if (allocatedBagKeys.contains(bag.bagKey())) {
             throw new IllegalStateException("Planned bag is already allocated: " + bag.bagKey());
         }
+        PackPartition packPartition = preparePackPartition(bag, missingPhysicalPackIds);
 
         MutableOutboundTote currentTote = openTotesByLine.get(lineId);
         OutboundToteClosureReason mismatchReason = mismatchReason(currentTote, bag);
@@ -80,12 +89,12 @@ public final class OutboundToteAllocator {
             openTotesByLine.put(lineId, currentTote);
             lineOrder.add(lineId);
             cachedSnapshot = null;
-            return completeAllocation(currentTote, bag, outputSheets, allocationTime);
+            return completeAllocation(currentTote, bag, packPartition, outputSheets, allocationTime);
         }
 
         List<OutputSheetAllocation> outputSheets = outputSheetAllocator.resolve(
                 bag.owningOrderSheetKeys(), currentTote.physicalToteId, lifecycleLedger.snapshot());
-        return completeAllocation(currentTote, bag, outputSheets, allocationTime);
+        return completeAllocation(currentTote, bag, packPartition, outputSheets, allocationTime);
     }
 
     public Optional<OutboundToteSnapshot> closeForApplicableWorkCompletion(
@@ -122,9 +131,16 @@ public final class OutboundToteAllocator {
     private AllocatedOutboundBag completeAllocation(
             MutableOutboundTote currentTote,
             PlannedBag bag,
+            PackPartition packPartition,
             List<OutputSheetAllocation> outputSheets,
             Duration allocationTime) {
         validateOutputAssignments(currentTote.physicalToteId, outputSheets);
+        AllocatedOutboundBag allocatedBag = new AllocatedOutboundBag(
+                bag,
+                currentTote.physicalToteId,
+                outputSheets,
+                packPartition.actualPhysicalPackIds(),
+                packPartition.missingPhysicalPackIds());
         for (OutputSheetAllocation outputSheet : outputSheets) {
             if (lifecycleLedger.activeAssignmentFor(outputSheet.outputSheetKey()).isEmpty()) {
                 lifecycleLedger.assign(
@@ -135,10 +151,6 @@ public final class OutboundToteAllocator {
             }
         }
 
-        AllocatedOutboundBag allocatedBag = new AllocatedOutboundBag(
-                bag,
-                currentTote.physicalToteId,
-                outputSheets);
         currentTote.add(allocatedBag);
         cachedSnapshot = null;
         allocatedBags.add(allocatedBag);
@@ -206,6 +218,39 @@ public final class OutboundToteAllocator {
         return closedSnapshot;
     }
 
+    private static PackPartition preparePackPartition(
+            PlannedBag bag,
+            Set<String> missingPhysicalPackIds) {
+        if (missingPhysicalPackIds == null) {
+            throw new IllegalArgumentException("missingPhysicalPackIds must not be null");
+        }
+        List<String> plannedPackIds = bag.physicalPackIds();
+        if (missingPhysicalPackIds.isEmpty()) {
+            return new PackPartition(plannedPackIds, List.of());
+        }
+
+        List<String> actualPackIds = new ArrayList<>(plannedPackIds.size());
+        List<String> missingPackIds = new ArrayList<>(missingPhysicalPackIds.size());
+        int matchedMissingPackCount = 0;
+        for (String plannedPackId : plannedPackIds) {
+            if (missingPhysicalPackIds.contains(plannedPackId)) {
+                missingPackIds.add(plannedPackId);
+                matchedMissingPackCount++;
+            } else {
+                actualPackIds.add(plannedPackId);
+            }
+        }
+        if (matchedMissingPackCount != missingPhysicalPackIds.size()) {
+            throw new IllegalArgumentException(
+                    "missingPhysicalPackIds must be a subset of the planned bag pack IDs");
+        }
+        if (actualPackIds.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "missingPhysicalPackIds must leave at least one actual physical pack");
+        }
+        return new PackPartition(actualPackIds, missingPackIds);
+    }
+
     private void validateOutputAssignments(
             PhysicalToteId targetToteId,
             List<OutputSheetAllocation> outputSheets) {
@@ -257,6 +302,7 @@ public final class OutboundToteAllocator {
         private final P2pLineId p2pLineId;
         private final int maximumBagCount;
         private final List<AllocatedOutboundBag> allocatedBags = new ArrayList<>();
+        private boolean requiresExceptionProcessing;
         private String serviceCentreId;
         private String pharmacyId;
 
@@ -281,6 +327,7 @@ public final class OutboundToteAllocator {
                 throw new IllegalStateException("Outbound tote purity violation");
             }
             allocatedBags.add(bag);
+            requiresExceptionProcessing |= !bag.missingPhysicalPackIds().isEmpty();
         }
 
         private boolean assigned() {
@@ -299,7 +346,13 @@ public final class OutboundToteAllocator {
                     Optional.ofNullable(pharmacyId),
                     maximumBagCount,
                     allocatedBags,
-                    closureReason);
+                    closureReason,
+                    requiresExceptionProcessing);
         }
+    }
+
+    private record PackPartition(
+            List<String> actualPhysicalPackIds,
+            List<String> missingPhysicalPackIds) {
     }
 }

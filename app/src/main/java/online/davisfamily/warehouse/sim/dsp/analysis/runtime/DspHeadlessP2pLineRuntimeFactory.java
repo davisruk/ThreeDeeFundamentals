@@ -208,7 +208,8 @@ public final class DspHeadlessP2pLineRuntimeFactory {
                         config.lineDefinition().lineId(),
                         bagReceiver,
                         config.bagPlanningResult(),
-                        config.outboundToteAllocator());
+                        config.outboundToteAllocator(),
+                        config.missingPackIdsProvider());
         ToteToBagP2pLineActivityProbe activityProbe = new ToteToBagP2pLineActivityProbe(
                 config.lineDefinition(),
                 config.stationArrivalQueue(),

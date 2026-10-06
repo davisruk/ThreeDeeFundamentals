@@ -1,5 +1,8 @@
 package online.davisfamily.warehouse.sim.dsp.analysis.runtime;
 
+import java.util.Set;
+import java.util.function.Function;
+
 import online.davisfamily.threedee.behaviour.routing.RouteSegment;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
 import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
@@ -23,6 +26,8 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagWorkPlanProvider;
  * rendering or inspection state.</p>
  */
 public final class DspHeadlessP2pLineConfig {
+    private static final Function<String, Set<String>> EMPTY_MISSING_PACK_IDS_PROVIDER = ignored -> Set.of();
+
     private final P2pLineDefinition lineDefinition;
     private final StationRoutedToteArrivalQueue stationArrivalQueue;
     private final int tipperInputQueueCapacity;
@@ -37,6 +42,7 @@ public final class DspHeadlessP2pLineConfig {
     private final TipperToteCompletedListener toteCompletedListener;
     private final P2pPlaceholderDurations durations;
     private final PdcPackDispositionPolicy packDispositionPolicy;
+    private final Function<String, Set<String>> missingPackIdsProvider;
 
     public DspHeadlessP2pLineConfig(
             P2pLineDefinition lineDefinition,
@@ -73,6 +79,28 @@ public final class DspHeadlessP2pLineConfig {
             TipperToteCompletedListener toteCompletedListener,
             P2pPlaceholderDurations durations,
             PdcPackDispositionPolicy packDispositionPolicy) {
+        this(lineDefinition, stationArrivalQueue, tipperInputQueueCapacity, admissionPolicy,
+                routeBinding, tipperSegment, payloadFactory, stationProcessingCoordinator,
+                workPlanProvider, bagPlanningResult, outboundToteAllocator, toteCompletedListener,
+                durations, packDispositionPolicy, EMPTY_MISSING_PACK_IDS_PROVIDER);
+    }
+
+    public DspHeadlessP2pLineConfig(
+            P2pLineDefinition lineDefinition,
+            StationRoutedToteArrivalQueue stationArrivalQueue,
+            int tipperInputQueueCapacity,
+            P2pArrivalAdmissionPolicy admissionPolicy,
+            P2pArrivalRouteBinding routeBinding,
+            RouteSegment tipperSegment,
+            P2pTipperPayloadFactory payloadFactory,
+            StationProcessingCoordinator stationProcessingCoordinator,
+            ToteToBagWorkPlanProvider workPlanProvider,
+            BagPlanningResult bagPlanningResult,
+            OutboundToteAllocator outboundToteAllocator,
+            TipperToteCompletedListener toteCompletedListener,
+            P2pPlaceholderDurations durations,
+            PdcPackDispositionPolicy packDispositionPolicy,
+            Function<String, Set<String>> missingPackIdsProvider) {
         requireNonNull(lineDefinition, "lineDefinition");
         requireNonNull(stationArrivalQueue, "stationArrivalQueue");
         if (tipperInputQueueCapacity <= 0) {
@@ -89,6 +117,7 @@ public final class DspHeadlessP2pLineConfig {
         requireNonNull(toteCompletedListener, "toteCompletedListener");
         requireNonNull(durations, "durations");
         requireNonNull(packDispositionPolicy, "packDispositionPolicy");
+        requireNonNull(missingPackIdsProvider, "missingPackIdsProvider");
 
         if (!lineDefinition.destination().equals(stationArrivalQueue.destination())) {
             throw new IllegalArgumentException(
@@ -117,6 +146,7 @@ public final class DspHeadlessP2pLineConfig {
         this.toteCompletedListener = toteCompletedListener;
         this.durations = durations;
         this.packDispositionPolicy = packDispositionPolicy;
+        this.missingPackIdsProvider = missingPackIdsProvider;
     }
 
     public P2pLineDefinition lineDefinition() {
@@ -173,6 +203,10 @@ public final class DspHeadlessP2pLineConfig {
 
     public PdcPackDispositionPolicy packDispositionPolicy() {
         return packDispositionPolicy;
+    }
+
+    public Function<String, Set<String>> missingPackIdsProvider() {
+        return missingPackIdsProvider;
     }
 
     private static void requireNonNull(Object value, String fieldName) {
