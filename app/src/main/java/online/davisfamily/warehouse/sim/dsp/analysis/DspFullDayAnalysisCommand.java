@@ -24,14 +24,40 @@ record DspFullDayAnalysisCommand(
         boolean overwrite,
         Optional<Path> progressLogPath,
         Duration progressInterval,
-        Optional<Path> serviceCentreSchedulePath) {
+        Optional<Path> serviceCentreSchedulePath,
+        DspFullDayStationProcessingOverrides stationProcessingOverrides) {
+
+    DspFullDayAnalysisCommand(
+            Path productMasterPath,
+            List<Path> orderPaths,
+            Path outputPath,
+            Optional<Path> inspectionOutputPath,
+            LocalDate operatingDate,
+            int osrLowWaterMark,
+            Duration inboundInterval,
+            int av02Capacity,
+            int outboundBagCapacity,
+            int maximumPacksPerBag,
+            Duration fixedStep,
+            int stepsPerBatch,
+            Duration metricSampleInterval,
+            boolean overwrite,
+            Optional<Path> progressLogPath,
+            Duration progressInterval,
+            Optional<Path> serviceCentreSchedulePath) {
+        this(productMasterPath, orderPaths, outputPath, inspectionOutputPath, operatingDate,
+                osrLowWaterMark, inboundInterval, av02Capacity, outboundBagCapacity,
+                maximumPacksPerBag, fixedStep, stepsPerBatch, metricSampleInterval, overwrite,
+                progressLogPath, progressInterval, serviceCentreSchedulePath,
+                DspFullDayStationProcessingOverrides.empty());
+    }
 
     DspFullDayAnalysisCommand {
         if (productMasterPath == null || orderPaths == null || orderPaths.isEmpty()
                 || outputPath == null || inspectionOutputPath == null || operatingDate == null
                 || inboundInterval == null || fixedStep == null || metricSampleInterval == null
                 || progressLogPath == null || progressInterval == null
-                || serviceCentreSchedulePath == null) {
+                || serviceCentreSchedulePath == null || stationProcessingOverrides == null) {
             throw new IllegalArgumentException("command values must not be null or empty");
         }
         if (osrLowWaterMark < 0 || av02Capacity < 1 || outboundBagCapacity < 1

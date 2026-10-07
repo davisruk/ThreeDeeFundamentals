@@ -15,6 +15,8 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -49,6 +51,7 @@ final class DspFullDayAnalysisCommandParser {
         DspFullDayAnalysisConfigJson config = configPath == null
                 ? null
                 : new DspFullDayAnalysisConfigLoader().load(configPath);
+        DspFullDayStationProcessingOverrides stationProcessingOverrides = stationOverrides(config);
         Path configBaseDirectory = configPath == null
                 ? null
                 : configPath.toAbsolutePath().normalize().getParent();
@@ -283,7 +286,32 @@ final class DspFullDayAnalysisCommandParser {
                 overwrite,
                 Optional.ofNullable(progressLogPath),
                 progressInterval,
-                Optional.ofNullable(serviceCentreSchedulePath));
+                Optional.ofNullable(serviceCentreSchedulePath),
+                stationProcessingOverrides);
+    }
+
+    private static DspFullDayStationProcessingOverrides stationOverrides(
+            DspFullDayAnalysisConfigJson config) {
+        if (config == null || (config.thirdParty() == null && config.adapting() == null)) {
+            return DspFullDayStationProcessingOverrides.empty();
+        }
+        DspFullDayAnalysisConfigJson.ThirdPartyJson thirdParty = config.thirdParty();
+        DspFullDayAnalysisConfigJson.AdaptingJson adapting = config.adapting();
+        return new DspFullDayStationProcessingOverrides(
+                optionalSeconds(thirdParty == null ? null : thirdParty.processingDurationSeconds()),
+                optionalSeconds(adapting == null ? null : adapting.storeDurationSeconds()),
+                optionalSeconds(adapting == null ? null : adapting.collectDurationSeconds()),
+                optionalInt(adapting == null ? null : adapting.processingPositionsPerBench()),
+                optionalInt(adapting == null ? null : adapting.waitingCapacityPerBench()),
+                Optional.ofNullable(adapting == null ? null : adapting.benchIds()));
+    }
+
+    private static OptionalDouble optionalSeconds(BigDecimal seconds) {
+        return seconds == null ? OptionalDouble.empty() : OptionalDouble.of(seconds.doubleValue());
+    }
+
+    private static OptionalInt optionalInt(Integer value) {
+        return value == null ? OptionalInt.empty() : OptionalInt.of(value);
     }
 
     private static Path findConfigPath(String[] arguments) {

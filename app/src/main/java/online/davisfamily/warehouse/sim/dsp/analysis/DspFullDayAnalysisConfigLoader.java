@@ -33,7 +33,14 @@ final class DspFullDayAnalysisConfigLoader {
             "overwrite",
             "progressLog",
             "progressIntervalSeconds",
-            "serviceCentreSchedule");
+            "serviceCentreSchedule",
+            "thirdParty",
+            "adapting");
+
+    private static final Set<String> THIRD_PARTY_PROPERTIES = Set.of("processingDurationSeconds");
+    private static final Set<String> ADAPTING_PROPERTIES = Set.of(
+            "storeDurationSeconds", "collectDurationSeconds", "processingPositionsPerBench",
+            "waitingCapacityPerBench", "benchIds");
 
     private final ObjectMapper objectMapper;
 
@@ -88,6 +95,8 @@ final class DspFullDayAnalysisConfigLoader {
 
     private static void validateProperty(String name, JsonNode value) {
         switch (name) {
+            case "thirdParty" -> validateStationObject(name, value, THIRD_PARTY_PROPERTIES);
+            case "adapting" -> validateStationObject(name, value, ADAPTING_PROPERTIES);
             case "productMaster", "ordersDirectory", "output", "inspectionOutput", "operatingDate",
                     "progressLog", "serviceCentreSchedule" -> {
                 requireText(name, value);
@@ -122,6 +131,45 @@ final class DspFullDayAnalysisConfigLoader {
                 }
             }
             default -> throw new IllegalArgumentException("unknown --config property: " + name);
+        }
+    }
+
+    private static void validateStationObject(String name, JsonNode value, Set<String> allowed) {
+        if (!value.isObject()) {
+            throw new IllegalArgumentException("--config property " + name + " must be an object");
+        }
+        Iterator<String> names = value.fieldNames();
+        while (names.hasNext()) {
+            String property = names.next();
+            String qualified = name + "." + property;
+            if (!allowed.contains(property)) {
+                throw new IllegalArgumentException("unknown --config property: " + qualified);
+            }
+            JsonNode entry = value.get(property);
+            if (entry.isNull()) {
+                throw new IllegalArgumentException("--config property must not be null: " + qualified);
+            }
+            switch (property) {
+                case "processingDurationSeconds", "storeDurationSeconds", "collectDurationSeconds" -> {
+                    if (!entry.isNumber()) {
+                        throw new IllegalArgumentException(qualified + " must be a JSON number");
+                    }
+                }
+                case "processingPositionsPerBench", "waitingCapacityPerBench" -> {
+                    if (!entry.isIntegralNumber() || !entry.canConvertToInt()) {
+                        throw new IllegalArgumentException(qualified + " must be a JSON integer in int range");
+                    }
+                }
+                case "benchIds" -> {
+                    if (!entry.isArray() || entry.isEmpty()) {
+                        throw new IllegalArgumentException(qualified + " must be a nonempty array of strings");
+                    }
+                    for (JsonNode id : entry) {
+                        requireText(qualified + " entry", id);
+                    }
+                }
+                default -> throw new IllegalArgumentException("unknown --config property: " + qualified);
+            }
         }
     }
 

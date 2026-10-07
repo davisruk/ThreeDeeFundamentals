@@ -23,6 +23,216 @@ import org.junit.jupiter.api.io.TempDir;
 class DspFullDayAnalysisCommandTest {
 
     @Test
+    void shouldResolveTheAgreedStationSettingsWithoutChangingOtherProfileValues(
+            @TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        Path config = directory.resolve("stations.json");
+        Files.writeString(config, stationConfig(fixture, """
+                "thirdParty": {"processingDurationSeconds": 20},
+                "adapting": {
+                  "storeDurationSeconds": 60,
+                  "collectDurationSeconds": 10,
+                  "processingPositionsPerBench": 3,
+                  "waitingCapacityPerBench": 3,
+                  "benchIds": [" bench-1 ", "bench-2", "bench-3", "bench-4", "bench-5", "bench-6"]
+                }
+                """));
+        DspFullDayAnalysisCommand command = new DspFullDayAnalysisCommandParser().parse(
+                new String[] {"--config=" + config, "--fixed-step-millis=125"});
+        DspUncalibratedFullDayProfile profile = DspFullDayAnalysisMain.profile(command);
+        DspUncalibratedFullDayProfile baseline = DspFullDayAnalysisMain.profile(
+                new DspFullDayAnalysisCommandParser().parse(arguments(fixture, "--fixed-step-millis=125")));
+
+        assertEquals(List.of("bench-1", "bench-2", "bench-3", "bench-4", "bench-5", "bench-6"),
+                command.stationProcessingOverrides().benchIds().orElseThrow());
+        assertEquals(6, profile.adaptingBenchDefinitions().size());
+        for (int index = 0; index < 6; index++) {
+            var bench = profile.adaptingBenchDefinitions().get(index);
+            assertEquals("bench-" + (index + 1), bench.id());
+            assertEquals(60d, bench.storeDurationSeconds());
+            assertEquals(60d, bench.processingDurationSeconds());
+            assertEquals(10d, bench.collectDurationSeconds());
+            assertEquals(3, bench.processingPositions());
+        }
+        assertEquals(3, profile.queueCapacities().adaptingQueueCapacityPerBench());
+        assertEquals(20d, profile.thirdPartyAreaConfig().processingDurationSeconds());
+        assertEquals(1, profile.thirdPartyAreaConfig().maxConcurrentVisits());
+        assertEquals(16, profile.thirdPartyAreaConfig().waitingCapacity());
+        assertEquals(baseline.queueCapacities().warehouseTransportCapacity(),
+                profile.queueCapacities().warehouseTransportCapacity());
+        assertEquals(baseline.queueCapacities().warehouseInFlightCapacity(),
+                profile.queueCapacities().warehouseInFlightCapacity());
+        assertEquals(baseline.queueCapacities().stationArrivalQueueCapacity(),
+                profile.queueCapacities().stationArrivalQueueCapacity());
+        assertEquals(baseline.queueCapacities().tipperInputQueueCapacity(),
+                profile.queueCapacities().tipperInputQueueCapacity());
+        assertEquals(baseline.p2pLineDefinitions(), profile.p2pLineDefinitions());
+        assertEquals(baseline.p2pPlaceholderDurations(), profile.p2pPlaceholderDurations());
+        assertEquals(baseline.p2pElasticAllocationConfig(), profile.p2pElasticAllocationConfig());
+        assertEquals(baseline.adaptingStorageConfig(), profile.adaptingStorageConfig());
+        assertEquals(baseline.routeSpeedUnitsPerSecond(), profile.routeSpeedUnitsPerSecond());
+        assertEquals(baseline.fixedStep(), profile.fixedStep());
+        assertEquals(baseline.metricSampleInterval(), profile.metricSampleInterval());
+        assertEquals("UNCALIBRATED", profile.timingCalibrationStatus());
+        assertThrows(UnsupportedOperationException.class,
+                () -> profile.adaptingBenchDefinitions().clear());
+        assertThrows(UnsupportedOperationException.class,
+                () -> command.stationProcessingOverrides().benchIds().orElseThrow().clear());
+    }
+
+    @Test
+    void shouldPreserveAbsentAndEmptyStationDefaultsAndTheOldCommandConstructor(
+            @TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        DspFullDayAnalysisCommandParser parser = new DspFullDayAnalysisCommandParser();
+        DspFullDayAnalysisCommand baseline = parser.parse(arguments(fixture));
+        DspFullDayAnalysisCommand oldConstructor = new DspFullDayAnalysisCommand(
+                baseline.productMasterPath(), baseline.orderPaths(), baseline.outputPath(),
+                baseline.inspectionOutputPath(), baseline.operatingDate(), baseline.osrLowWaterMark(),
+                baseline.inboundInterval(), baseline.av02Capacity(), baseline.outboundBagCapacity(),
+                baseline.maximumPacksPerBag(), baseline.fixedStep(), baseline.stepsPerBatch(),
+                baseline.metricSampleInterval(), baseline.overwrite(), baseline.progressLogPath(),
+                baseline.progressInterval(), baseline.serviceCentreSchedulePath());
+        assertEquals(baseline, oldConstructor);
+        assertEquals(DspFullDayStationProcessingOverrides.empty(), baseline.stationProcessingOverrides());
+        Path config = directory.resolve("stations.json");
+        for (String settings : List.of("", "\"thirdParty\": {}", "\"adapting\": {}",
+                "\"thirdParty\": {}, \"adapting\": {}")) {
+            Files.writeString(config, stationConfig(fixture, settings));
+            DspFullDayAnalysisCommand configured = parser.parse(new String[] {"--config=" + config});
+            assertEquals(baseline, configured);
+            var expected = DspFullDayAnalysisMain.profile(baseline);
+            var actual = DspFullDayAnalysisMain.profile(configured);
+            assertEquals(expected.adaptingBenchDefinitions(), actual.adaptingBenchDefinitions());
+            assertEquals(expected.queueCapacities(), actual.queueCapacities());
+            assertEquals(expected.thirdPartyAreaConfig(), actual.thirdPartyAreaConfig());
+        }
+    }
+
+    @Test
+    void shouldApplyOnlyEachSpecifiedStationProperty(@TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        Path config = directory.resolve("stations.json");
+        List<String> settings = List.of(
+                "\"thirdParty\": {\"processingDurationSeconds\": 20.5}",
+                "\"adapting\": {\"storeDurationSeconds\": 45.5}",
+                "\"adapting\": {\"collectDurationSeconds\": 10.25}",
+                "\"adapting\": {\"processingPositionsPerBench\": 3}",
+                "\"adapting\": {\"waitingCapacityPerBench\": 0}",
+                "\"adapting\": {\"benchIds\": [\" b1 \", \"b2\"]}");
+        for (int index = 0; index < settings.size(); index++) {
+            Files.writeString(config, stationConfig(fixture, settings.get(index)));
+            var profile = DspFullDayAnalysisMain.profile(new DspFullDayAnalysisCommandParser().parse(
+                    new String[] {"--config=" + config}));
+            assertEquals(index == 0 ? 20.5d : 60d, profile.thirdPartyAreaConfig().processingDurationSeconds());
+            assertEquals(16, profile.thirdPartyAreaConfig().waitingCapacity());
+            assertEquals(1, profile.thirdPartyAreaConfig().maxConcurrentVisits());
+            assertEquals(index == 4 ? 0 : 4, profile.queueCapacities().adaptingQueueCapacityPerBench());
+            assertEquals(index == 5 ? 2 : 1, profile.adaptingBenchDefinitions().size());
+            for (int benchIndex = 0; benchIndex < profile.adaptingBenchDefinitions().size(); benchIndex++) {
+                var bench = profile.adaptingBenchDefinitions().get(benchIndex);
+                assertEquals(index == 5 ? "b" + (benchIndex + 1) : "adapting-bench-1", bench.id());
+                assertEquals(index == 1 ? 45.5d : 60d, bench.storeDurationSeconds());
+                assertEquals(index == 2 ? 10.25d : 60d, bench.collectDurationSeconds());
+                assertEquals(index == 3 ? 3 : 1, bench.processingPositions());
+            }
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> new DspFullDayAnalysisCommandParser().parse(
+                        arguments(fixture, "--adapting-store-duration-seconds=60")));
+    }
+
+    @Test
+    void shouldRejectInvalidStationSettingsBeforeInputLoadingOrOutputCreation(
+            @TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        // Loading this input would fail for a different reason: station validation must win.
+        Files.writeString(fixture.productMaster(), "invalid-product-master");
+        Path config = directory.resolve("stations.json");
+        List<String> invalidSettings = List.of(
+                "\"thirdParty\": null",
+                "\"adapting\": null",
+                "\"thirdParty\": []",
+                "\"adapting\": true",
+                "\"thirdParty\": {\"unknown\": 20}",
+                "\"adapting\": {\"unknown\": 20}",
+                "\"thirdParty\": {\"processingDurationSeconds\": null}",
+                "\"adapting\": {\"storeDurationSeconds\": null}",
+                "\"adapting\": {\"collectDurationSeconds\": null}",
+                "\"adapting\": {\"processingPositionsPerBench\": null}",
+                "\"adapting\": {\"waitingCapacityPerBench\": null}",
+                "\"adapting\": {\"benchIds\": null}",
+                "\"thirdParty\": {\"processingDurationSeconds\": \"20\"}",
+                "\"adapting\": {\"storeDurationSeconds\": \"60\"}",
+                "\"adapting\": {\"collectDurationSeconds\": false}",
+                "\"adapting\": {\"processingPositionsPerBench\": 1.5}",
+                "\"adapting\": {\"waitingCapacityPerBench\": 1.5}",
+                "\"adapting\": {\"processingPositionsPerBench\": \"3\"}",
+                "\"adapting\": {\"waitingCapacityPerBench\": \"3\"}",
+                "\"adapting\": {\"benchIds\": \"b1\"}",
+                "\"adapting\": {\"benchIds\": [1]}",
+                "\"adapting\": {\"benchIds\": [null]}",
+                "\"thirdParty\": {}, \"thirdParty\": {}",
+                "\"thirdParty\": {\"processingDurationSeconds\": 20, \"processingDurationSeconds\": 30}",
+                "\"adapting\": {\"benchIds\": [\"b1\"], \"benchIds\": [\"b2\"]}",
+                "\"thirdParty\": {\"processingDurationSeconds\": 0}",
+                "\"thirdParty\": {\"processingDurationSeconds\": -1}",
+                "\"adapting\": {\"storeDurationSeconds\": 0}",
+                "\"adapting\": {\"storeDurationSeconds\": -1}",
+                "\"adapting\": {\"collectDurationSeconds\": 0}",
+                "\"adapting\": {\"collectDurationSeconds\": -1}",
+                "\"thirdParty\": {\"processingDurationSeconds\": 1e309}",
+                "\"adapting\": {\"collectDurationSeconds\": 1e-400}",
+                "\"adapting\": {\"processingPositionsPerBench\": 0}",
+                "\"adapting\": {\"processingPositionsPerBench\": -1}",
+                "\"adapting\": {\"waitingCapacityPerBench\": -1}",
+                "\"adapting\": {\"processingPositionsPerBench\": 2147483648}",
+                "\"adapting\": {\"waitingCapacityPerBench\": 2147483648}",
+                "\"adapting\": {\"benchIds\": []}",
+                "\"adapting\": {\"benchIds\": [\"b1\", \" b1 \"]}",
+                "\"adapting\": {\"benchIds\": [\" \"]}",
+                "\"adapting\": {\"benchIds\": [\" third-party-1 \"]}",
+                "\"adapting\": {\"benchIds\": [\"b1\", \"b2\"], \"processingPositionsPerBench\": 2147483647}",
+                "\"adapting\": {\"benchIds\": [\"b1\", \"b2\"], \"waitingCapacityPerBench\": 2147483647}",
+                "\"adapting\": {\"processingPositionsPerBench\": 2147483647}");
+        for (String settings : invalidSettings) {
+            assertStationSettingsRejectedBeforeLoading(fixture, config, settings);
+        }
+        var baseline = DspFullDayAnalysisMain.profile(new DspFullDayAnalysisCommandParser().parse(arguments(fixture)));
+        for (var line : baseline.p2pLineDefinitions()) {
+            assertStationSettingsRejectedBeforeLoading(fixture, config,
+                    "\"adapting\": {\"benchIds\": [\"" + line.destination().targetId() + "\"]}");
+        }
+    }
+
+    private static void assertStationSettingsRejectedBeforeLoading(
+            Fixture fixture, Path config, String settings) throws Exception {
+        Files.writeString(config, stationConfig(fixture, settings).replace("\"operatingDate\":",
+                "\"inspectionOutput\": \"" + jsonPath(fixture.inspection()) + "\",\n"
+                        + "\"progressLog\": \"progress.log\",\n\"operatingDate\":"));
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        int result = DspFullDayAnalysisMain.run(new String[] {"--config=" + config},
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
+                new PrintStream(errors, true, StandardCharsets.UTF_8));
+        String message = errors.toString(StandardCharsets.UTF_8);
+        assertEquals(2, result, settings);
+        assertTrue(message.contains("--config") || message.contains("adapting.")
+                || message.contains("adapting total capacity") || message.contains("thirdParty."),
+                () -> settings + " produced: " + message);
+        assertFalse(Files.exists(fixture.output()));
+        assertFalse(Files.exists(fixture.inspection()));
+        assertFalse(Files.exists(config.getParent().resolve("progress.log")));
+    }
+
+    private static String stationConfig(Fixture fixture, String settings) {
+        String base = configJsonWithOrders(jsonPath(fixture.productMaster()),
+                List.of(jsonPath(fixture.secondOrder()), jsonPath(fixture.firstOrder())),
+                jsonPath(fixture.output()));
+        return base.replace("\"operatingDate\":",
+                (settings.isEmpty() ? "" : settings + ",\n") + "\"operatingDate\":");
+    }
+
+    @Test
     void shouldParseRequiredRepeatedAndOptionalArguments(@TempDir Path directory) throws Exception {
         Fixture fixture = fixture(directory);
         DspFullDayAnalysisCommand command = new DspFullDayAnalysisCommandParser().parse(

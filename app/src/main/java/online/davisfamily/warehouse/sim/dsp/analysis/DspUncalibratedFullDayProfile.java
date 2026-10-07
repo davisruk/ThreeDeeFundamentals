@@ -391,16 +391,33 @@ public record DspUncalibratedFullDayProfile(
         }
     }
 
-    public record AdaptingBenchDefinition(String id, double processingDurationSeconds) {
+    public record AdaptingBenchDefinition(
+            String id,
+            double storeDurationSeconds,
+            double collectDurationSeconds,
+            int processingPositions) {
+
+        public AdaptingBenchDefinition(String id, double processingDurationSeconds) {
+            this(id, processingDurationSeconds, processingDurationSeconds, 1);
+        }
+
         public AdaptingBenchDefinition {
             if (id == null || id.isBlank()) {
                 throw new IllegalArgumentException("id must not be blank");
             }
             id = id.trim();
-            if (!Double.isFinite(processingDurationSeconds) || processingDurationSeconds < 0d) {
+            if (!Double.isFinite(storeDurationSeconds) || storeDurationSeconds < 0d
+                    || !Double.isFinite(collectDurationSeconds) || collectDurationSeconds < 0d) {
                 throw new IllegalArgumentException(
-                        "processingDurationSeconds must be finite and >= 0");
+                        "STORE and COLLECT durations must be finite and >= 0");
             }
+            if (processingPositions < 1) {
+                throw new IllegalArgumentException("processingPositions must be positive");
+            }
+        }
+
+        public double processingDurationSeconds() {
+            return storeDurationSeconds;
         }
 
         public AdaptingBenchId benchId() {

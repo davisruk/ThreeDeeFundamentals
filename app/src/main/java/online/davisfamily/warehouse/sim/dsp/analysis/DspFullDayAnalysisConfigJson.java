@@ -22,11 +22,24 @@ record DspFullDayAnalysisConfigJson(
         Boolean overwrite,
         String progressLog,
         Integer progressIntervalSeconds,
-        String serviceCentreSchedule) {
+        String serviceCentreSchedule,
+        ThirdPartyJson thirdParty,
+        AdaptingJson adapting) {
 
     DspFullDayAnalysisConfigJson {
         if (orders != null) {
             orders = List.copyOf(orders);
         }
+    }
+
+    record ThirdPartyJson(BigDecimal processingDurationSeconds) {
+    }
+
+    record AdaptingJson(
+            BigDecimal storeDurationSeconds,
+            BigDecimal collectDurationSeconds,
+            Integer processingPositionsPerBench,
+            Integer waitingCapacityPerBench,
+            List<String> benchIds) {
     }
 }

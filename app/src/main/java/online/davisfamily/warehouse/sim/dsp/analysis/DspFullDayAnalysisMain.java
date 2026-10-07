@@ -1,8 +1,15 @@
 package online.davisfamily.warehouse.sim.dsp.analysis;
 
 import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
+import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.AdaptingBenchDefinition;
+import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.QueueCapacities;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
+import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaConfig;
 
 /** Command-line entry point for one explicitly uncalibrated headless DSP operating-day run. */
 public final class DspFullDayAnalysisMain {
@@ -55,6 +62,20 @@ public final class DspFullDayAnalysisMain {
                 command.av02Capacity(),
                 command.outboundBagCapacity(),
                 command.maximumPacksPerBag());
+        DspFullDayStationProcessingOverrides overrides = command.stationProcessingOverrides();
+        ThirdPartyAreaConfig thirdParty = baseline.thirdPartyAreaConfig();
+        if (overrides.thirdPartyDurationSeconds().isPresent()) {
+            thirdParty = new ThirdPartyAreaConfig(thirdParty.waitingCapacity(),
+                    thirdParty.maxConcurrentVisits(), overrides.thirdPartyDurationSeconds().getAsDouble());
+        }
+        QueueCapacities queues = baseline.queueCapacities();
+        if (overrides.waitingCapacityPerBench().isPresent()) {
+            queues = new QueueCapacities(queues.warehouseTransportCapacity(),
+                    queues.warehouseInFlightCapacity(), queues.stationArrivalQueueCapacity(),
+                    queues.tipperInputQueueCapacity(), overrides.waitingCapacityPerBench().getAsInt());
+        }
+        List<AdaptingBenchDefinition> benches = adaptingDefinitions(baseline, overrides);
+        validateStationCapacityAndTargets(baseline, benches, queues);
         DspServiceCentreTimetable timetable = command.serviceCentreSchedulePath()
                 .map(path -> new DspFullDayServiceCentreScheduleLoader().load(path))
                 .orElseGet(baseline::timetable);
@@ -71,14 +92,61 @@ public final class DspFullDayAnalysisMain {
                 command.stepsPerBatch(),
                 command.metricSampleInterval(),
                 baseline.routeSpeedUnitsPerSecond(),
-                baseline.queueCapacities(),
-                baseline.thirdPartyAreaConfig(),
+                queues,
+                thirdParty,
                 baseline.adaptingStorageConfig(),
-                baseline.adaptingBenchDefinitions(),
+                benches,
                 baseline.p2pPlaceholderDurations(),
                 baseline.p2pLineDefinitions(),
                 baseline.prlCountPerLine(),
                 timetable);
+    }
+
+    private static List<AdaptingBenchDefinition> adaptingDefinitions(
+            DspUncalibratedFullDayProfile baseline,
+            DspFullDayStationProcessingOverrides overrides) {
+        List<AdaptingBenchDefinition> original = baseline.adaptingBenchDefinitions();
+        if (overrides.benchIds().isEmpty() && overrides.adaptingStoreDurationSeconds().isEmpty()
+                && overrides.adaptingCollectDurationSeconds().isEmpty()
+                && overrides.processingPositionsPerBench().isEmpty()) {
+            return original;
+        }
+        List<String> ids = overrides.benchIds().orElse(null);
+        int count = ids == null ? original.size() : ids.size();
+        List<AdaptingBenchDefinition> definitions = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            AdaptingBenchDefinition defaults = original.get(ids == null ? index : 0);
+            definitions.add(new AdaptingBenchDefinition(
+                    ids == null ? defaults.id() : ids.get(index),
+                    overrides.adaptingStoreDurationSeconds().orElse(defaults.storeDurationSeconds()),
+                    overrides.adaptingCollectDurationSeconds().orElse(defaults.collectDurationSeconds()),
+                    overrides.processingPositionsPerBench().orElse(defaults.processingPositions())));
+        }
+        return List.copyOf(definitions);
+    }
+
+    private static void validateStationCapacityAndTargets(
+            DspUncalibratedFullDayProfile baseline,
+            List<AdaptingBenchDefinition> benches,
+            QueueCapacities queues) {
+        Set<String> reservedTargets = new HashSet<>();
+        reservedTargets.add("third-party-1");
+        for (var line : baseline.p2pLineDefinitions()) {
+            reservedTargets.add(line.destination().targetId());
+        }
+        try {
+            int totalPositions = 0;
+            for (AdaptingBenchDefinition bench : benches) {
+                if (reservedTargets.contains(bench.id())) {
+                    throw new IllegalArgumentException("adapting.benchIds collides with route target: " + bench.id());
+                }
+                totalPositions = Math.addExact(totalPositions, bench.processingPositions());
+            }
+            int totalWaiting = Math.multiplyExact(queues.adaptingQueueCapacityPerBench(), benches.size());
+            Math.addExact(totalPositions, totalWaiting);
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException("adapting total capacity exceeds int range", exception);
+        }
     }
 
     private static String message(Exception exception) {
