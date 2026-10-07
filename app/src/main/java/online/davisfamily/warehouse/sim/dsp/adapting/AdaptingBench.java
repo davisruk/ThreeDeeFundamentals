@@ -1,32 +1,41 @@
 package online.davisfamily.warehouse.sim.dsp.adapting;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 public class AdaptingBench {
     private final String id;
     private final AdaptedLineStore store;
-    private final double processingDurationSeconds;
-
-    private AdaptingBenchState state = AdaptingBenchState.IDLE;
-    private AdaptingVisit activeVisit;
-    private double remainingProcessingSeconds;
-    private String blockedReason = "";
-    private AdaptingBenchCompletion lastCompletion;
+    private final List<AdaptingProcessingPosition> positions;
+    private int occupiedProcessingPositions;
 
     public AdaptingBench(String id, AdaptedLineStore store, double processingDurationSeconds) {
+        this(id, store, processingDurationSeconds, processingDurationSeconds, 1);
+    }
+
+    public AdaptingBench(String id, AdaptedLineStore store, double storeDurationSeconds,
+            double collectDurationSeconds, int processingPositions) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("id must not be blank");
         }
         if (store == null) {
             throw new IllegalArgumentException("store must not be null");
         }
-        if (processingDurationSeconds < 0d) {
-            throw new IllegalArgumentException("processingDurationSeconds must be >= 0");
+        if (storeDurationSeconds < 0d || collectDurationSeconds < 0d) {
+            throw new IllegalArgumentException("STORE and COLLECT durations must be >= 0");
+        }
+        if (processingPositions < 1) {
+            throw new IllegalArgumentException("processingPositions must be positive");
         }
         this.id = id;
         this.store = store;
-        this.processingDurationSeconds = processingDurationSeconds;
+        List<AdaptingProcessingPosition> owners = new ArrayList<>(processingPositions);
+        for (int index = 0; index < processingPositions; index++) {
+            owners.add(new AdaptingProcessingPosition(this, index + 1, store,
+                    storeDurationSeconds, collectDurationSeconds));
+        }
+        positions = List.copyOf(owners);
     }
 
     public String id() {
@@ -38,142 +47,115 @@ public class AdaptingBench {
     }
 
     public AdaptingBenchState state() {
-        return state;
+        return representativePosition().state();
     }
 
     public boolean canAcceptVisit() {
-        return state == AdaptingBenchState.IDLE;
+        return occupiedProcessingPositions < processingCapacity();
+    }
+
+    public int processingCapacity() {
+        return positions.size();
+    }
+
+    public int occupiedProcessingPositions() {
+        return occupiedProcessingPositions;
+    }
+
+    AdaptingProcessingPosition position(int ordinal) {
+        if (ordinal < 1 || ordinal > positions.size()) {
+            throw new IllegalArgumentException("position ordinal is outside bench capacity: " + ordinal);
+        }
+        return positions.get(ordinal - 1);
+    }
+
+    List<AdaptingProcessingPosition> positions() {
+        return positions;
+    }
+
+    Optional<AdaptingProcessingPosition> firstIdlePosition() {
+        if (!canAcceptVisit()) {
+            return Optional.empty();
+        }
+        for (int index = 0; index < positions.size(); index++) {
+            AdaptingProcessingPosition position = positions.get(index);
+            if (position.state() == AdaptingBenchState.IDLE) {
+                return Optional.of(position);
+            }
+        }
+        return Optional.empty();
+    }
+
+    void positionAccepted() {
+        if (occupiedProcessingPositions >= processingCapacity()) {
+            throw new IllegalStateException("Bench processing capacity is full: " + id);
+        }
+        occupiedProcessingPositions++;
+    }
+
+    void positionReleased() {
+        if (occupiedProcessingPositions < 1) {
+            throw new IllegalStateException("Bench has no occupied processing positions: " + id);
+        }
+        occupiedProcessingPositions--;
     }
 
     public void acceptVisit(AdaptingVisit visit) {
-        if (visit == null) {
-            throw new IllegalArgumentException("visit must not be null");
-        }
-        if (!canAcceptVisit()) {
-            throw new IllegalStateException("Bench is not idle: " + id);
-        }
-        activeVisit = visit;
-        remainingProcessingSeconds = 0d;
-        blockedReason = "";
-        lastCompletion = null;
-        state = AdaptingBenchState.QUEUED;
+        singlePosition().acceptVisit(visit);
     }
 
     public void startProcessing() {
-        if (activeVisit == null) {
-            throw new IllegalStateException("No active visit for bench " + id);
-        }
-        if (state != AdaptingBenchState.QUEUED) {
-            throw new IllegalStateException("Bench is not queued: " + id);
-        }
-        remainingProcessingSeconds = processingDurationSeconds;
-        state = activeVisit.visitType() == AdaptingVisitType.STORE
-                ? AdaptingBenchState.PROCESSING_STORE
-                : AdaptingBenchState.PROCESSING_COLLECT;
-
-        if (remainingProcessingSeconds == 0d) {
-            completeActiveVisit();
-        }
+        singlePosition().startProcessing();
     }
 
     public void tick(double dtSeconds) {
         if (dtSeconds < 0d) {
             throw new IllegalArgumentException("dtSeconds must be >= 0");
         }
-        if (state != AdaptingBenchState.PROCESSING_STORE && state != AdaptingBenchState.PROCESSING_COLLECT) {
-            return;
-        }
-
-        remainingProcessingSeconds = Math.max(0d, remainingProcessingSeconds - dtSeconds);
-        if (remainingProcessingSeconds == 0d) {
-            completeActiveVisit();
+        for (int index = 0; index < positions.size(); index++) {
+            positions.get(index).tick(dtSeconds);
         }
     }
 
     public Optional<AdaptingBenchCompletion> consumeCompletion() {
-        if (state != AdaptingBenchState.COMPLETED || lastCompletion == null) {
-            return Optional.empty();
-        }
-
-        AdaptingBenchCompletion completion = lastCompletion;
-        lastCompletion = null;
-        activeVisit = null;
-        blockedReason = "";
-        state = AdaptingBenchState.IDLE;
-        return Optional.of(completion);
+        return singlePosition().consumeCompletion();
     }
 
     /**
      * Returns the staged completion without consuming it or changing bench state.
      */
     public Optional<AdaptingBenchCompletion> peekCompletion() {
-        return state == AdaptingBenchState.COMPLETED
-                ? Optional.ofNullable(lastCompletion)
-                : Optional.empty();
+        return singlePosition().peekCompletion();
     }
 
     void commitOrderGroup(AdaptingPreparedOrderGroup decision) {
-        if (state != AdaptingBenchState.COMPLETED || lastCompletion == null
-                || lastCompletion.preparedOrderGroup().orElse(null) != decision) {
-            throw new IllegalStateException("Bench has no matching strict COLLECT decision");
-        }
-        store.commitOrderGroup(decision);
+        singlePosition().commitOrderGroup(decision);
     }
 
     public void clearBlocked() {
-        if (state != AdaptingBenchState.BLOCKED) {
-            throw new IllegalStateException("Bench is not blocked: " + id);
-        }
-        activeVisit = null;
-        remainingProcessingSeconds = 0d;
-        blockedReason = "";
-        state = AdaptingBenchState.IDLE;
+        singlePosition().clearBlocked();
     }
 
     public AdaptingBenchSnapshot snapshot() {
-        return new AdaptingBenchSnapshot(
-                id,
-                state,
-                activeVisit != null ? activeVisit.physicalToteId().value() : "",
-                activeVisit != null ? activeVisit.visitType() : null,
-                remainingProcessingSeconds,
-                blockedReason);
+        return representativePosition().snapshot();
     }
 
-    private void completeActiveVisit() {
-        if (activeVisit == null) {
-            throw new IllegalStateException("No active visit for bench " + id);
+    private AdaptingProcessingPosition singlePosition() {
+        if (positions.size() != 1) {
+            throw new IllegalStateException("Singular bench operation requires one processing position: " + id);
         }
+        return positions.getFirst();
+    }
 
-        try {
-            if (activeVisit.visitType() == AdaptingVisitType.STORE) {
-                store.stageAll(
-                        activeVisit.preparedLines(),
-                        activeVisit.profile().orderSheetKey(),
-                        activeVisit.profile().serviceCentreId());
-                lastCompletion = new AdaptingBenchCompletion(activeVisit, List.of());
-            } else if (store.strictStorage()) {
-                List<String> pharmacies = activeVisit.profile().pharmacyIds();
-                String storeId = pharmacies.getFirst();
-                if (pharmacies.stream().anyMatch(pharmacy -> !pharmacy.equals(storeId))) {
-                    throw new IllegalStateException("COLLECT visit mixes stores");
+    private AdaptingProcessingPosition representativePosition() {
+        if (occupiedProcessingPositions > 0) {
+            for (int index = 0; index < positions.size(); index++) {
+                AdaptingProcessingPosition position = positions.get(index);
+                if (position.state() != AdaptingBenchState.IDLE) {
+                    return position;
                 }
-                AdaptingPreparedOrderGroup prepared = store.prepareOrderGroup(
-                        storeId, activeVisit.profile().orderSheetKey().orderId());
-                lastCompletion = new AdaptingBenchCompletion(
-                        activeVisit, prepared.records(), Optional.of(prepared));
-            } else {
-                lastCompletion = new AdaptingBenchCompletion(
-                        activeVisit,
-                        store.takeAll(activeVisit.requestedLineKeys()));
             }
-            state = AdaptingBenchState.COMPLETED;
-        } catch (IllegalStateException ex) {
-            blockedReason = ex.getMessage();
-            lastCompletion = null;
-            state = AdaptingBenchState.BLOCKED;
-        } finally {
-            remainingProcessingSeconds = 0d;
         }
+        return positions.getFirst();
     }
 }

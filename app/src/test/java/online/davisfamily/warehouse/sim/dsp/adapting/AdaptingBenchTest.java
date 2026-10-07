@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.adapting;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -23,6 +24,164 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 class AdaptingBenchTest {
     private static final OrderSheetKey SOURCE_ORDER_SHEET = new OrderSheetKey("adapted-source", 7);
     private static final String SERVICE_CENTRE_ID = "104";
+
+    @Test
+    void shouldRetainStablePositionsAndChooseTheLowestIdleOrdinal() {
+        AdaptingBench bench = new AdaptingBench("bench-1", new AdaptedLineStore(), 60d, 10d, 3);
+        List<AdaptingProcessingPosition> positions = bench.positions();
+        assertSame(positions, bench.positions());
+        assertEquals(3, bench.processingCapacity());
+        assertEquals(0, bench.occupiedProcessingPositions());
+        assertEquals(AdaptingBenchState.IDLE, bench.state());
+        assertSame(positions.getFirst(), bench.firstIdlePosition().orElseThrow());
+        for (int ordinal = 1; ordinal <= 3; ordinal++) {
+            assertSame(positions.get(ordinal - 1), bench.position(ordinal));
+            assertEquals(ordinal, bench.position(ordinal).ordinal());
+        }
+        assertThrows(UnsupportedOperationException.class, positions::clear);
+        for (int ordinal : new int[] {-1, 0, 4, Integer.MAX_VALUE}) {
+            assertThrows(IllegalArgumentException.class, () -> bench.position(ordinal));
+        }
+        assertEquals(0, bench.occupiedProcessingPositions());
+        bench.position(2).acceptVisit(AdaptingVisit.store(new PhysicalToteId("second"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID,
+                List.of(adaptedLine("second", "target", "0000310"))));
+        assertSame(positions.getFirst(), bench.firstIdlePosition().orElseThrow());
+        bench.position(1).acceptVisit(AdaptingVisit.store(new PhysicalToteId("first"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID,
+                List.of(adaptedLine("first", "target", "0000310"))));
+        assertSame(positions.get(2), bench.firstIdlePosition().orElseThrow());
+        assertEquals(2, bench.occupiedProcessingPositions());
+        assertSame(positions, bench.positions());
+    }
+
+    @Test
+    void shouldUseTheLowestOccupiedPositionAsTheRepresentativeView() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 0d, 0d, 3);
+        bench.bindStorageMap(storageMap("0000310", "bench-1"));
+        AdaptingVisit third = AdaptingVisit.store(new PhysicalToteId("third"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID,
+                List.of(adaptedLine("third", "target", "0000310")));
+        bench.position(3).acceptVisit(third);
+        bench.position(3).startProcessing();
+        assertEquals(AdaptingBenchState.COMPLETED, bench.state());
+        assertEquals("third", bench.snapshot().activeToteId());
+
+        bench.position(2).acceptVisit(AdaptingVisit.collect(new PhysicalToteId("second"),
+                new OrderSheetKey("target", 1), SERVICE_CENTRE_ID,
+                List.of(new PreparedLineKey("target", "missing")), List.of("0000310")));
+        bench.position(2).startProcessing();
+        assertEquals(AdaptingBenchState.BLOCKED, bench.state());
+        assertEquals("second", bench.snapshot().activeToteId());
+        assertEquals("bench-1", bench.snapshot().benchId());
+        assertEquals(AdaptingVisitType.COLLECT, bench.snapshot().activeVisitType());
+        assertTrue(bench.canAcceptVisit());
+        assertEquals(2, bench.occupiedProcessingPositions());
+
+        bench.position(1).acceptVisit(AdaptingVisit.store(new PhysicalToteId("first"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID,
+                List.of(adaptedLine("first", "target", "0000310"))));
+        assertEquals(AdaptingBenchState.QUEUED, bench.state());
+        assertEquals("first", bench.snapshot().activeToteId());
+        assertFalse(bench.canAcceptVisit());
+        assertEquals(3, bench.occupiedProcessingPositions());
+        assertSame(third, bench.position(3).consumeCompletion().orElseThrow().visit());
+        assertEquals("first", bench.snapshot().activeToteId());
+        assertEquals(2, bench.occupiedProcessingPositions());
+        bench.position(1).startProcessing();
+        bench.position(1).consumeCompletion().orElseThrow();
+        assertEquals("second", bench.snapshot().activeToteId());
+        assertEquals(AdaptingBenchState.BLOCKED, bench.state());
+        bench.position(2).clearBlocked();
+        assertEquals(0, bench.occupiedProcessingPositions());
+        assertEquals(AdaptingBenchState.IDLE, bench.state());
+        assertEquals("", bench.snapshot().activeToteId());
+        assertEquals(bench.position(1).snapshot(), bench.snapshot());
+    }
+
+    @Test
+    void shouldRejectSingularOperationsOnMultiPositionBenchesWithoutMutation() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 0d, 0d, 3);
+        bench.bindStorageMap(storageMap("0000310", "bench-1"));
+        AdaptingVisit visit = AdaptingVisit.store(new PhysicalToteId("pending"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID,
+                List.of(adaptedLine("pending", "target", "0000310")));
+        assertSingularOperationsRejected(bench, visit);
+        assertEquals(0, bench.occupiedProcessingPositions());
+
+        bench.position(2).acceptVisit(AdaptingVisit.collect(new PhysicalToteId("blocked"),
+                new OrderSheetKey("target", 1), SERVICE_CENTRE_ID,
+                List.of(new PreparedLineKey("target", "missing")), List.of("0000310")));
+        bench.position(2).startProcessing();
+        bench.position(3).acceptVisit(visit);
+        bench.position(3).startProcessing();
+        AdaptingBenchCompletion completion = bench.position(3).peekCompletion().orElseThrow();
+        AdaptingBenchSnapshot before = bench.snapshot();
+        assertSingularOperationsRejected(bench, visit);
+        assertEquals(before, bench.snapshot());
+        assertEquals(2, bench.occupiedProcessingPositions());
+        assertSame(completion, bench.position(3).peekCompletion().orElseThrow());
+        assertEquals(AdaptingBenchState.BLOCKED, bench.position(2).state());
+        assertTrue(store.contains(PreparedLineKey.forPreparedLine(visit.preparedLines().getFirst())));
+    }
+
+    private static void assertSingularOperationsRejected(AdaptingBench bench, AdaptingVisit visit) {
+        assertThrows(IllegalStateException.class, () -> bench.acceptVisit(visit));
+        assertThrows(IllegalStateException.class, bench::startProcessing);
+        assertThrows(IllegalStateException.class, bench::peekCompletion);
+        assertThrows(IllegalStateException.class, bench::consumeCompletion);
+        assertThrows(IllegalStateException.class, bench::clearBlocked);
+        assertThrows(IllegalStateException.class, () -> bench.commitOrderGroup(null));
+    }
+
+    @Test
+    void shouldKeepTheLegacyOnePositionEqualDurationStoreAndCollectCycle() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 5d);
+        bench.bindStorageMap(storageMap("0000310", "bench-1"));
+        DspOrderItem line = adaptedLine("line", "target", "0000310");
+        bench.acceptVisit(AdaptingVisit.store(new PhysicalToteId("source"),
+                SOURCE_ORDER_SHEET, SERVICE_CENTRE_ID, List.of(line)));
+        assertEquals(1, bench.processingCapacity());
+        assertEquals(1, bench.occupiedProcessingPositions());
+        bench.startProcessing();
+        bench.tick(4d);
+        assertTrue(bench.peekCompletion().isEmpty());
+        assertFalse(store.contains(PreparedLineKey.forPreparedLine(line)));
+        bench.tick(1d);
+        assertEquals(1, bench.occupiedProcessingPositions());
+        assertFalse(bench.canAcceptVisit());
+        bench.consumeCompletion().orElseThrow();
+        assertEquals(0, bench.occupiedProcessingPositions());
+        assertTrue(bench.consumeCompletion().isEmpty());
+
+        bench.acceptVisit(AdaptingVisit.collect(new PhysicalToteId("collect"),
+                new OrderSheetKey("target", 1), SERVICE_CENTRE_ID,
+                List.of(PreparedLineKey.forPreparedLine(line)), List.of("0000310")));
+        bench.startProcessing();
+        bench.tick(4d);
+        assertTrue(bench.peekCompletion().isEmpty());
+        assertTrue(store.contains(PreparedLineKey.forPreparedLine(line)));
+        bench.tick(1d);
+        assertEquals(1, bench.occupiedProcessingPositions());
+        assertEquals(line, bench.peekCompletion().orElseThrow().collectedLines().getFirst().line());
+        bench.consumeCompletion().orElseThrow();
+        assertEquals(0, bench.occupiedProcessingPositions());
+        assertEquals(AdaptingBenchState.IDLE, bench.state());
+    }
+
+    @Test
+    void shouldRejectInvalidBenchConfiguration() {
+        AdaptedLineStore store = new AdaptedLineStore();
+        assertThrows(IllegalArgumentException.class, () -> new AdaptingBench(" ", store, 60d, 10d, 3));
+        assertThrows(IllegalArgumentException.class, () -> new AdaptingBench("bench-1", null, 60d, 10d, 3));
+        assertThrows(IllegalArgumentException.class, () -> new AdaptingBench("bench-1", store, -1d, 10d, 3));
+        assertThrows(IllegalArgumentException.class, () -> new AdaptingBench("bench-1", store, 60d, -1d, 3));
+        assertThrows(IllegalArgumentException.class, () -> new AdaptingBench("bench-1", store, 60d, 10d, 0));
+        assertThrows(IllegalArgumentException.class, () -> new AdaptingBench("bench-1", store, 60d, 10d, -1));
+    }
 
     @Test
     void shouldStageAdaptedLinesAfterStoreVisitCompletes() {
