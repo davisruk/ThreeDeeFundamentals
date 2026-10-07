@@ -5,8 +5,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedPackSlot;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 
@@ -16,6 +18,16 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
     private final PackDimensions packDimensions;
     private final DspPackPlanFactory packPlanFactory;
     private final CollectedPackCorrelationResolver correlationResolver;
+    private final PlannedSlotCollectedPackCorrelationResolver plannedSlotResolver;
+
+    /** Full-day collection reuses each immutable slot's correlation and dimensions. */
+    public static DefaultCollectedPackPlanFactory forPlannedSlots(
+            DspPackPlanFactory packPlanFactory,
+            BagPlanningResult bagPlan) {
+        var resolver = new PlannedSlotCollectedPackCorrelationResolver(bagPlan);
+        return new DefaultCollectedPackPlanFactory(
+                DEFAULT_DIMENSIONS, packPlanFactory, resolver, resolver);
+    }
 
     public DefaultCollectedPackPlanFactory(DspPackPlanFactory packPlanFactory) {
         this(
@@ -43,6 +55,14 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
             PackDimensions packDimensions,
             DspPackPlanFactory packPlanFactory,
             CollectedPackCorrelationResolver correlationResolver) {
+        this(packDimensions, packPlanFactory, correlationResolver, null);
+    }
+
+    private DefaultCollectedPackPlanFactory(
+            PackDimensions packDimensions,
+            DspPackPlanFactory packPlanFactory,
+            CollectedPackCorrelationResolver correlationResolver,
+            PlannedSlotCollectedPackCorrelationResolver plannedSlotResolver) {
         if (packDimensions == null) {
             throw new IllegalArgumentException("packDimensions must not be null");
         }
@@ -55,6 +75,7 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
         this.packDimensions = packDimensions;
         this.packPlanFactory = packPlanFactory;
         this.correlationResolver = correlationResolver;
+        this.plannedSlotResolver = plannedSlotResolver;
     }
 
     @Override
@@ -70,14 +91,18 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
             }
             int packOrdinal = 1;
             String lineReference = collectedLine.line().lineReference();
-            String correlationId = correlationResolver.resolve(collectedLine, packOrdinal);
+            PlannedPackSlot slot = plannedSlotResolver == null ? null
+                    : plannedSlotResolver.requirePlannedSlot(collectedLine, packOrdinal);
+            String correlationId = slot == null
+                    ? correlationResolver.resolve(collectedLine, packOrdinal)
+                    : slot.bagKey().correlationId();
             if (correlationId == null || correlationId.isBlank()) {
                 throw new IllegalStateException("Resolved correlationId must not be blank");
             }
             packPlans.add(packPlanFactory.createPackPlan(
                     "pack-" + lineReference + "-" + packOrdinal,
                     correlationId.trim(),
-                    packDimensions,
+                    slot == null ? packDimensions : slot.dimensions(),
                     new PackSourceProvenance(
                             collectedLine.sourceOrderSheetKey(),
                             lineReference,
@@ -103,12 +128,17 @@ public class DefaultCollectedPackPlanFactory implements CollectedPackPlanFactory
             }
             int ordinal = 1;
             String lineReference = line.line().lineReference();
-            String correlationId = correlationResolver.resolve(line, ordinal);
+            PlannedPackSlot slot = plannedSlotResolver == null ? null
+                    : plannedSlotResolver.requirePlannedSlot(line, ordinal);
+            String correlationId = slot == null
+                    ? correlationResolver.resolve(line, ordinal)
+                    : slot.bagKey().correlationId();
             if (correlationId == null || correlationId.isBlank()) {
                 throw new IllegalStateException("Resolved correlationId must not be blank");
             }
             String packId = "pack-" + lineReference + "-" + ordinal;
-            plans.add(new PackPlan(packId, correlationId.trim(), packDimensions));
+            plans.add(new PackPlan(packId, correlationId.trim(),
+                    slot == null ? packDimensions : slot.dimensions()));
             PackSourceProvenance prior = provenance.putIfAbsent(packId,
                     new PackSourceProvenance(
                             line.sourceOrderSheetKey(),

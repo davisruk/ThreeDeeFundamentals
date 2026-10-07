@@ -442,7 +442,7 @@ On each `update(context, dtSeconds)`:
 1. Copy the receiver's current received-bag list in receipt order.
 2. For each runtime `Bag`, resolve its correlation through `bagPlanningResult.findBagByCorrelationId(...)`.
 3. Fail clearly and leave the runtime bag in the receiver if no planned bag exists.
-4. Verify runtime physical pack IDs and order equal `PlannedBag.physicalPackIds()`; fail clearly and leave it in the receiver on mismatch.
+4. Verify exact runtime physical pack membership against `PlannedBag.physicalPackIds()`, independent of arrival order; reject duplicate, foreign or unexplained absent IDs and leave the bag in the receiver on mismatch. The later exception-flow extension permits only explicitly registered missing IDs. Published allocation lists use planned order as a reporting convention, not a physical ordering constraint.
 5. Convert `context.getSimulationTimeSeconds()` to nonnegative `Duration` using `Duration.ofNanos(Math.round(seconds * 1_000_000_000d))`.
 6. Allocate the planned bag to the configured line.
 7. Remove the runtime bag from `StoredBagReceiver` only after successful allocation.

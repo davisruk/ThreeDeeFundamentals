@@ -46,6 +46,8 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.StationRoutedToteArrivalQueue;
 import online.davisfamily.warehouse.sim.totebag.assembly.TipperTotePayload;
+import online.davisfamily.warehouse.sim.totebag.conveyor.LinearLaneEntrySnapshot;
+import online.davisfamily.warehouse.sim.totebag.conveyor.PrlConveyor;
 import online.davisfamily.warehouse.sim.totebag.control.PdcPackDispositionPolicy;
 import online.davisfamily.warehouse.sim.totebag.pack.Pack;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
@@ -217,6 +219,165 @@ class DspHeadlessP2pLineRuntimeFactoryTest {
         var closed = runtime.closeOutboundToteForApplicableWorkCompletion(currentSimulationTime)
                 .orElseThrow();
         assertTrue(closed.requiresExceptionProcessing());
+    }
+
+    @Test
+    void shouldAllocateMixedLengthBagThroughProductionHeadlessGeometry() {
+        DspHeadlessP2pLineConfig base = fixture("line-1").config();
+        OrderSheetKey owningSheet = new OrderSheetKey("mixed-order", 1);
+        BagKey bagKey = new BagKey("mixed-rx", 1);
+        String correlationId = bagKey.correlationId();
+        PhysicalToteId inputToteId = new PhysicalToteId("mixed-input");
+        PackDimensions shortDimensions = new PackDimensions(0.030f, 0.042f, 0.086f);
+        PackDimensions longDimensions = new PackDimensions(0.174f, 0.075f, 0.030f);
+        List<PackPlan> packPlans = List.of(
+                new PackPlan("short-pack", correlationId, shortDimensions),
+                new PackPlan("long-pack", correlationId, longDimensions));
+        ToteLoadPlan toteLoadPlan = new ToteLoadPlan(inputToteId, packPlans);
+        PlannedBag plannedBag = new PlannedBag(
+                bagKey,
+                "SC-1",
+                "pharmacy-1",
+                "patient-1",
+                "mixed-rx",
+                List.of("short-pack", "long-pack"),
+                List.of(owningSheet));
+        List<PlannedPackTrace> traces = packPlans.stream()
+                .map(packPlan -> new PlannedPackTrace(
+                        packPlan.packId(),
+                        new PackSourceProvenance(
+                                owningSheet,
+                                "line-" + packPlan.packId(),
+                                "product-" + packPlan.packId(),
+                                "SC-1",
+                                "pharmacy-1",
+                                "patient-1",
+                                "mixed-rx"),
+                        inputToteId,
+                        owningSheet,
+                        bagKey))
+                .toList();
+        BagPlanningResult bagPlan = BagPlanningResultTestFixtures.complete(
+                List.of(plannedBag), List.of(toteLoadPlan), traces);
+        ToteToBagWorkPlanProvider workPlan = new ToteToBagWorkPlanProvider() {
+            @Override
+            public OptionalInt expectedPackCount(String id) {
+                return correlationId.equals(id) ? OptionalInt.of(2) : OptionalInt.empty();
+            }
+
+            @Override
+            public Set<String> expectedCorrelationIds() {
+                return Set.of(correlationId);
+            }
+        };
+        PdcPackDispositionPolicy dispositionPolicy = new PdcPackDispositionPolicy() {
+            @Override public boolean bypassPrl(String id) { return false; }
+            @Override public int effectivePackCount(String id, int planned) {
+                assertEquals(correlationId, id);
+                assertEquals(2, planned);
+                return planned;
+            }
+            @Override public boolean allowEmptyTote(String id) { return false; }
+            @Override public void collectedAtPdcOutfeed(String id) {
+                fail("Complete mixed-length bag packs must not be collected at the PDC outfeed");
+            }
+            @Override public boolean deferInitialPrlAssignments() { return true; }
+            @Override public long classificationEpoch() { return 1; }
+        };
+        Function<String, Set<String>> missingPackIdsProvider = id -> {
+            assertEquals(correlationId, id);
+            return Set.of();
+        };
+        OutboundToteAllocator allocator = new OutboundToteAllocator(
+                new PhysicalToteLifecycleLedger(),
+                new DeterministicOutboundToteIdSource(),
+                new OutputSheetAllocator(List.of(owningSheet)),
+                new OutboundToteConfig(4));
+        DspHeadlessP2pLineConfig config = withPolicyAndProvider(
+                base, workPlan, bagPlan, allocator, dispositionPolicy, missingPackIdsProvider);
+
+        RecordingWorld world = new RecordingWorld();
+        DspHeadlessP2pLineRuntime runtime = new DspHeadlessP2pLineRuntimeFactory().create(world, config);
+        assertEquals(4, world.controllers.size());
+        assertEquals(List.of(
+                        runtime.tipperFlowController(),
+                        runtime.toteToBagFlowController(),
+                        runtime.tipperInputQueueController(),
+                        runtime.outboundToteAllocationController()),
+                world.controllers);
+
+        Pack shortPack = new Pack("short-pack", correlationId, shortDimensions);
+        Pack longPack = new Pack("long-pack", correlationId, longDimensions);
+        runtime.sortingMachine().receive(shortPack);
+        runtime.sortingMachine().receive(longPack);
+
+        double simulatedSeconds = 0d;
+        for (int index = 0; index < 2_000
+                && allocator.snapshot().allocatedBags().isEmpty(); index++) {
+            runtime.simulationWorld().update(0.05d);
+            simulatedSeconds += 0.05d;
+            assertProductionLaneGeometry(runtime);
+        }
+
+        var outbound = allocator.snapshot();
+        assertEquals(1, outbound.allocatedBags().size());
+        var allocatedBag = outbound.allocatedBags().getFirst();
+        assertSame(plannedBag, allocatedBag.plannedBag());
+        assertEquals(List.of("short-pack", "long-pack"), allocatedBag.actualPhysicalPackIds());
+        assertTrue(allocatedBag.missingPhysicalPackIds().isEmpty());
+        assertFalse(outbound.openToteFor(config.lineDefinition().lineId())
+                .orElseThrow().requiresExceptionProcessing());
+
+        for (int index = 0; index < 20; index++) {
+            runtime.simulationWorld().update(0.05d);
+            simulatedSeconds += 0.05d;
+            assertProductionLaneGeometry(runtime);
+        }
+        assertEquals(1, allocator.snapshot().allocatedBags().size());
+        assertTrue(runtime.toteToBagFlowController().getPdcLaneEntries().isEmpty());
+        assertTrue(runtime.toteToBagFlowController().getActivePdcTransfers().isEmpty());
+        assertTrue(runtime.toteToBagFlowController().getActivePrlToPcrTransfers().isEmpty());
+        for (PrlConveyor prl : runtime.prlConveyors()) {
+            assertTrue(prl.getLaneEntries().isEmpty());
+        }
+        assertTrue(runtime.pcrConveyor().getLaneEntries().isEmpty());
+        assertTrue(runtime.pcrConveyor().isEmpty());
+        assertEquals(0, runtime.toteToBagFlowController().getOutstandingExpectedBagGroupCount());
+
+        Duration currentSimulationTime = Duration.ofNanos(
+                Math.round(simulatedSeconds * 1_000_000_000d));
+        var closed = runtime.closeOutboundToteForApplicableWorkCompletion(currentSimulationTime)
+                .orElseThrow();
+        assertFalse(closed.requiresExceptionProcessing());
+    }
+
+    private static void assertProductionLaneGeometry(DspHeadlessP2pLineRuntime runtime) {
+        assertLaneGeometry(runtime.toteToBagFlowController().getPdcLaneEntries(), 6.2f, 0.015f);
+        for (PrlConveyor prl : runtime.prlConveyors()) {
+            assertLaneGeometry(prl.getLaneEntries(), 1.8f, 0.015f);
+        }
+        assertLaneGeometry(runtime.pcrConveyor().getLaneEntries(),
+                runtime.pcrConveyor().getUsableLength(), runtime.pcrConveyor().getMinimumGap());
+    }
+
+    private static void assertLaneGeometry(
+            List<LinearLaneEntrySnapshot> entries,
+            float usableLength,
+            float minimumGap) {
+        final float tolerance = 0.000001f;
+        for (int index = 0; index < entries.size(); index++) {
+            LinearLaneEntrySnapshot entry = entries.get(index);
+            float packLength = entry.pack().getDimensions().length();
+            assertTrue(entry.frontDistance() >= packLength - tolerance);
+            assertTrue(entry.frontDistance() <= usableLength + tolerance);
+            assertTrue(entry.rearDistance() >= -tolerance);
+            assertTrue(entry.rearDistance() <= usableLength - packLength + tolerance);
+            if (index > 0) {
+                LinearLaneEntrySnapshot ahead = entries.get(index - 1);
+                assertTrue(ahead.frontDistance() >= entry.frontDistance() - tolerance);
+                assertTrue(ahead.rearDistance() - entry.frontDistance() >= minimumGap - tolerance);
+            }
+        }
     }
 
     private static DspHeadlessP2pLineConfig withPolicy(DspHeadlessP2pLineConfig c,

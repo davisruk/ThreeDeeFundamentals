@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.outbound;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -11,6 +12,7 @@ import online.davisfamily.warehouse.sim.dsp.bagging.BagPlanningResult;
 import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
 import online.davisfamily.warehouse.sim.totebag.bag.Bag;
 import online.davisfamily.warehouse.sim.totebag.handoff.StoredBagReceiver;
+import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 
 public final class OutboundToteAllocationController implements SimulationController {
     private static final double NANOSECONDS_PER_SECOND = 1_000_000_000d;
@@ -94,31 +96,39 @@ public final class OutboundToteAllocationController implements SimulationControl
             Bag runtimeBag,
             PlannedBag plannedBag,
             Set<String> missingPackIds) {
-        var runtimePackIterator = runtimeBag.getPackContents().iterator();
-        int actualPackCount = 0;
-        int matchedMissingPackCount = 0;
-        for (String plannedPackId : plannedBag.physicalPackIds()) {
-            if (missingPackIds.contains(plannedPackId)) {
-                matchedMissingPackCount++;
-                continue;
-            }
-            if (!runtimePackIterator.hasNext()
-                    || !plannedPackId.equals(runtimePackIterator.next().packId())) {
-                throw packPartitionMismatch(runtimeBag);
-            }
-            actualPackCount++;
+        // Physical arrival order is not planned line order. Each planned ID must occur
+        // exactly once in either the physical bag or the registered missing set.
+        Set<String> unmatchedPackIds = new HashSet<>(plannedBag.physicalPackIds());
+        List<PackPlan> runtimePacks = runtimeBag.getPackContents();
+        if (runtimePacks.isEmpty()) {
+            throw packPartitionMismatch(runtimeBag, plannedBag, missingPackIds);
         }
-        if (runtimePackIterator.hasNext()
-                || matchedMissingPackCount != missingPackIds.size()
-                || actualPackCount == 0) {
-            throw packPartitionMismatch(runtimeBag);
+        for (PackPlan runtimePack : runtimePacks) {
+            if (!unmatchedPackIds.remove(runtimePack.packId())) {
+                throw packPartitionMismatch(runtimeBag, plannedBag, missingPackIds);
+            }
+        }
+        for (String missingPackId : missingPackIds) {
+            if (!unmatchedPackIds.remove(missingPackId)) {
+                throw packPartitionMismatch(runtimeBag, plannedBag, missingPackIds);
+            }
+        }
+        if (!unmatchedPackIds.isEmpty()) {
+            throw packPartitionMismatch(runtimeBag, plannedBag, missingPackIds);
         }
     }
 
-    private static IllegalStateException packPartitionMismatch(Bag runtimeBag) {
+    private static IllegalStateException packPartitionMismatch(
+            Bag runtimeBag,
+            PlannedBag plannedBag,
+            Set<String> missingPackIds) {
         return new IllegalStateException(
                 "Runtime pack IDs do not match planned bag for correlation: "
-                        + runtimeBag.getCorrelationId());
+                        + runtimeBag.getCorrelationId()
+                        + "; planned=" + plannedBag.physicalPackIds()
+                        + "; actual=" + runtimeBag.getPackContents().stream()
+                                .map(PackPlan::packId).toList()
+                        + "; registeredMissing=" + missingPackIds);
     }
 
     private static Duration simulationTime(double seconds) {

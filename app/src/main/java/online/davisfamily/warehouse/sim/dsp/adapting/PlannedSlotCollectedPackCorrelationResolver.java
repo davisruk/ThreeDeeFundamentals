@@ -19,6 +19,11 @@ public final class PlannedSlotCollectedPackCorrelationResolver
 
     @Override
     public String resolve(AdaptedLineRecord collectedLine, int packOrdinal) {
+        return requirePlannedSlot(collectedLine, packOrdinal).bagKey().correlationId();
+    }
+
+    /** Resolves and validates once so collection can also reuse the slot's dimensions. */
+    PlannedPackSlot requirePlannedSlot(AdaptedLineRecord collectedLine, int packOrdinal) {
         if (collectedLine == null) {
             throw new IllegalArgumentException("collectedLine must not be null");
         }
@@ -41,7 +46,7 @@ public final class PlannedSlotCollectedPackCorrelationResolver
                     "Collected slot is already initially physical: " + slot.slotKey());
         }
         validateSourceFacts(slot.sourceProvenance(), collectedLine);
-        return slot.bagKey().correlationId();
+        return slot;
     }
 
     private static void validateSourceFacts(

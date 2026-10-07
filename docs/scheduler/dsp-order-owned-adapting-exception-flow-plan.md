@@ -577,6 +577,12 @@ together cover that original list exactly. Reject null/blank/foreign IDs,
 duplicates, overlap, reordered IDs, and incomplete partitions with
 `IllegalArgumentException`; do not trim or repair caller-supplied pack IDs.
 
+This relative ordering is the canonical immutable reporting representation,
+not a physical pack-arrival or bag-content ordering requirement. The allocator
+constructs these lists in planned order after the controller has validated
+membership independently of runtime order. Do not reorder physical packs or
+change bag correlations to satisfy the reporting representation.
+
 Validate the partition with two integer cursors in one traversal of the
 original planned IDs: for each planned ID, consume the next actual ID if it
 equals that ID, otherwise consume the next missing ID if it equals that ID,
@@ -715,16 +721,20 @@ For each received bag:
    `IllegalStateException` before allocation/removal. Query the provider
    **once** for that correlation and reject a null result as an invariant
    `IllegalStateException`.
-2. Compare `runtimeBag.getPackContents()` directly with the planned list
-   minus that missing set. Traverse planned IDs once, count/skip registered
-   missing IDs, and otherwise require the next runtime pack's `packId()` to
-   equal that exact planned ID. Require all runtime packs consumed, matched
-   missing count equal to set size, and a positive expected actual count.
-   Fail with `IllegalStateException` on a mismatch. Do not construct a
-   runtime-ID list, filtered expected list, stream, or temporary set for
-   this comparison. This rejects reordered, duplicate, foreign,
-   unregistered-absent, and registered-missing-but-present runtime packs,
-   as well as an invalid provider set; there is no general subset acceptance.
+2. Validate exact membership, independent of runtime pack order. Initialize
+   one event-local `HashSet<String>` from this bag's unique planned IDs.
+   Require nonempty runtime contents. Remove each runtime pack ID from that
+   set, rejecting any unsuccessful removal; then remove each registered
+   missing ID, again rejecting any unsuccessful removal. Require the set to
+   be empty. This proves exact coverage, uniqueness and disjointness while
+   accepting every permutation of complete or partial physical contents.
+   Duplicate/foreign IDs, unregistered absence, registered-missing presence,
+   and invalid provider sets remain `IllegalStateException` failures before
+   allocation/removal; there is no general subset acceptance. Traverse only
+   this bag's planned, actual and missing IDs: no global index or nested
+   collection scans. Do not construct success-path streams, filtered lists,
+   or additional sets. On failure only, include planned IDs, actual IDs and
+   registered missing IDs in the diagnostic message.
 3. Call the new allocator overload with that same set and original bag,
    then remove that exact runtime bag from the receiver as now. Keep the
    existing fatal check if removal unexpectedly fails after allocation.
@@ -788,7 +798,9 @@ test class or broaden the specified verification command.
 - `OutboundToteAllocationControllerTest`: extend the fixture with an explicit
   provider overload, retaining its current no-provider path. Receive `[p1,
   p3]` for planned `[p1, p2, p3]` and provider `{p2}`; assert the exact
-  partition/marked tote and removal only after allocation. For wrong order,
+  partition/marked tote and removal only after allocation. Also accept complete
+  `[p3, p1, p2]` and partial `[p3, p1]` with missing `{p2}`, publishing the
+  canonical planned-order partition without modifying runtime contents. For
   duplicate/foreign IDs, unregistered absence, registered-missing presence,
   null/foreign provider results, and unknown correlation, assert the failed
   bag remains and cached allocator/lifecycle snapshots are unchanged. Keep
@@ -835,7 +847,8 @@ test class or broaden the specified verification command.
 These are state, identity, and call-count tests, not timing benchmarks. The
 normal and partial per-bag preparation/validation work is O(that bag's pack
 count), never O(all planned bags/packs). Small defensive lists and the private
-partition value are permitted **on allocation events**, not idle ticks.
+partition value and one bag-local membership set are permitted **on allocation
+events**, not idle ticks.
 The canonical tote validation uses its existing bounded bag traversal;
 exception-flag reads and mutation-time aggregation are O(1). Snapshot history
 rebuilds remain behind the existing mutation cache, not a new fixed-step
@@ -850,6 +863,37 @@ Implementation verification:
 ```
 
 User verification: no additional check for this step.
+
+### Post-implementation correction — Physical pack order is not membership
+
+The user-confirmed 2026-10-07 correction supersedes the former Step 4.4
+requirement to reject reordered runtime packs. Keep Step 4.1's canonical
+reporting representation and all other allocation, purity, missing-pack,
+receiver-order and mutation-boundary contracts unchanged. Do not change
+PDC/PRL routing, conveyor movement, bag planning or physical pack order.
+
+In `DspFullDayAnalysisRuntimeFactoryTest`, add a bounded production-boundary
+regression with one ADAPTED source storing two lines in reverse fulfilment
+order and one ASSOCIATED tote already containing an ordinary pack for the
+same prescription. Assert different physical/planned order, actual PRL
+release order, correct bag correlation and exact canonical allocated
+membership, ordinary output closure, no missing/collected packs, and no
+exception-marked tote. Exercise normal STORE/COLLECT and P2P machinery,
+not a manually populated completed-bag receiver.
+
+Unexpected membership discrepancies remain fatal before allocation/removal
+for now. Operational recovery through accounted Exceptions work is deferred;
+do not add exception swallowing, pack loss, rollback or retries in this fix.
+
+Implementation verification for this bounded correction:
+
+```powershell
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocationControllerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest
+```
+
+User verification: run `.\gradlew test`, rebuild with `.\gradlew installDist`,
+then repeat the daily simulation using the existing configuration. The
+focused regression does not prove the entire production dataset completes.
 
 ## Step 5 — Honest provisional completion, workload and reporting
 

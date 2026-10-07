@@ -198,9 +198,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     adaptingArea,
                     schedulerState,
                     loadPlans,
-                    new DefaultCollectedPackPlanFactory(
-                            packPlanFactory,
-                            new PlannedSlotCollectedPackCorrelationResolver(bagPlan)),
+                    DefaultCollectedPackPlanFactory.forPlannedSlots(packPlanFactory, bagPlan),
                     provenanceRegistry,
                     (sheet, tote, packs) -> {
                         var decision = exceptionLedger.prepareCollect(sheet, tote, packs);

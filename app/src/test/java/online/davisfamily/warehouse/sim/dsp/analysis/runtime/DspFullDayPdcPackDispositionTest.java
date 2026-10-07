@@ -187,7 +187,8 @@ class DspFullDayPdcPackDispositionTest {
             @Override public Set<String> expectedCorrelationIds() { return counts.keySet(); }
         };
         TippingMachine tipper = new TippingMachine(id + "-tipper", 0.05d, 0.05d, 0.05d);
-        SortingMachine sorter = new SortingMachine(id + "-sorter", 0.05d);
+        // At 1 m/s, a 0.20 m pack plus the 0.05 m PDC gap needs 0.25 s between releases.
+        SortingMachine sorter = new SortingMachine(id + "-sorter", 0.25d);
         PdcConveyor pdc = new PdcConveyor(id + "-pdc", new ConveyorOccupancyModel(2f, 0.05f, 0f), 1f);
         PrlConveyor prl = new PrlConveyor(id + "-prl", 0.1f, new ConveyorOccupancyModel(2f, 0.05f, 0f));
         PcrConveyor pcr = new PcrConveyor(id + "-pcr", new ConveyorOccupancyModel(2f, 0.05f, 0f), 0.1d);

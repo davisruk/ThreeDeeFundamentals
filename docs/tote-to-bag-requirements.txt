@@ -83,6 +83,9 @@ PRL assignment and lifecycle
 Each PRL handles one bag at a time.
 - packs for a correlation id are accumulated onto the assigned PRL
 - the sorting machine does not guarantee pack order beyond single-file delivery onto the PDC
+- physical pack order in totes, on conveyors and inside bags is not a bag-membership constraint
+- each physical pack's unique ID and planned bag correlation determine its membership; PDC-to-PRL claiming uses the correlation, not arrival position
+- outbound validation must accept any pack ordering while rejecting duplicates, foreign packs and unexplained omissions; a partial bag may omit only explicitly registered missing packs
 - PRL behaviour should therefore be explicit and stateful
 
 Suggested PRL lifecycle:

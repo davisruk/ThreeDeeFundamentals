@@ -227,7 +227,7 @@ Completed outbound-allocation behavior:
 - Inbound physical totes terminate at P2P and are never reused as outbound totes.
 - Output sheets are allocated separately from immutable planned bag and pack provenance; deterministic generated sheets handle physical tote overflow.
 - Closed tote assignments advance from `OUTBOUND_BAG` to `OUTBOUND` and remain active for later dispatch/32R work.
-- `OutboundToteAllocationController` validates planned correlation and ordered pack identity before removing a completed runtime bag from `StoredBagReceiver`.
+- `OutboundToteAllocationController` validates planned correlation and exact pack membership, independent of physical arrival order, before removing a completed runtime bag from `StoredBagReceiver`. Allocated contents remain canonically published in planned order.
 - All-missing prescriptions still produce no bag. Future Exception work must create an empty NS bag for a dedicated pharmacy-pure outbound tote rather than fabricating one in normal bag planning/allocation.
 
 Completed OSR physical-inventory behavior:

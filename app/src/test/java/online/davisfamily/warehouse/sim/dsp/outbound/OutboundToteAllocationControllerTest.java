@@ -1,6 +1,7 @@
 package online.davisfamily.warehouse.sim.dsp.outbound;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -52,6 +53,26 @@ class OutboundToteAllocationControllerTest {
     }
 
     @Test
+    void shouldAllocateCompleteRuntimeBagRegardlessOfPackArrivalOrder() {
+        PlannedBag plannedBag = plannedBag("rx-reordered", 1, sheet("order-1", 1), "p1", "p2", "p3");
+        Fixture fixture = fixture(plannedBag);
+        Bag runtimeBag = runtimeBag(plannedBag.bagKey().correlationId(), "p3", "p1", "p2");
+        receive(fixture.receiver(), runtimeBag);
+
+        fixture.controller().update(contextAt(1d), 0.1d);
+
+        AllocatedOutboundBag allocation = fixture.allocator().snapshot().allocatedBags().getFirst();
+        assertSame(plannedBag, allocation.plannedBag());
+        assertEquals(List.of("p1", "p2", "p3"), allocation.actualPhysicalPackIds());
+        assertTrue(allocation.missingPhysicalPackIds().isEmpty());
+        assertEquals(List.of("p3", "p1", "p2"), runtimeBag.getPackContents().stream()
+                .map(PackPlan::packId).toList());
+        assertFalse(fixture.allocator().snapshot().openToteFor(LINE).orElseThrow()
+                .requiresExceptionProcessing());
+        assertTrue(receivedBags(fixture).isEmpty());
+    }
+
+    @Test
     void shouldAllocatePartialRuntimeBagUsingRegisteredMissingPackIds() {
         PlannedBag plannedBag = plannedBag("rx-partial", 1, sheet("order-1", 1), "p1", "p2", "p3");
         int[] providerCalls = {0};
@@ -62,7 +83,8 @@ class OutboundToteAllocationControllerTest {
         }, plannedBag);
         OutboundAllocationSnapshot beforeAllocation = fixture.allocator().snapshot();
         var lifecycleBefore = fixture.ledger().snapshot();
-        receive(fixture.receiver(), runtimeBag(plannedBag.bagKey().correlationId(), "p1", "p3"));
+        Bag runtimeBag = runtimeBag(plannedBag.bagKey().correlationId(), "p3", "p1");
+        receive(fixture.receiver(), runtimeBag);
 
         fixture.controller().update(contextAt(1.25d), 0.1d);
 
@@ -73,6 +95,8 @@ class OutboundToteAllocationControllerTest {
         assertSame(plannedBag, allocation.plannedBag());
         assertEquals(List.of("p1", "p3"), allocation.actualPhysicalPackIds());
         assertEquals(List.of("p2"), allocation.missingPhysicalPackIds());
+        assertEquals(List.of("p3", "p1"), runtimeBag.getPackContents().stream()
+                .map(PackPlan::packId).toList());
         assertTrue(afterAllocation.openToteFor(LINE).orElseThrow().requiresExceptionProcessing());
         assertEquals(1, providerCalls[0]);
         assertTrue(receivedBags(fixture).isEmpty());
@@ -148,13 +172,37 @@ class OutboundToteAllocationControllerTest {
         PlannedBag planned = plannedBag("rx-invalid", 1, sheet("order-1", 1), "p1", "p2", "p3");
         String correlationId = planned.bagKey().correlationId();
 
-        assertRejected(planned, runtimeBag(correlationId, "p3", "p1"), ignored -> Set.of("p2"));
         assertRejected(planned, runtimeBag(correlationId, "p1", "p1", "p3"), ignored -> Set.of());
+        assertRejected(planned, runtimeBag(correlationId, "p3", "p3"), ignored -> Set.of("p2"));
         assertRejected(planned, runtimeBag(correlationId, "p1", "foreign", "p3"), ignored -> Set.of());
         assertRejected(planned, runtimeBag(correlationId, "p1", "p3"), ignored -> Set.of());
         assertRejected(planned, runtimeBag(correlationId, "p1", "p2", "p3"), ignored -> Set.of("p2"));
         assertRejected(planned, runtimeBag(correlationId, "p1", "p2", "p3"), ignored -> Set.of("foreign"));
+        assertRejected(planned, runtimeBag(correlationId, "p1", "p3"), ignored -> Set.of("foreign"));
+        assertRejected(planned, runtimeBag(correlationId, "p3", "p1", "p2", "p3"), ignored -> Set.of());
         assertRejected(planned, runtimeBag(correlationId, "p1", "p2", "p3"), ignored -> null);
+    }
+
+    @Test
+    void shouldRejectPackFromAnotherPlannedBagBeforeAnyMutation() {
+        PlannedBag first = plannedBag("rx-1", 1, sheet("order-1", 1), "p1", "p2");
+        PlannedBag second = plannedBag("rx-2", 1, sheet("order-1", 1), "p3", "p4");
+        Fixture fixture = fixture(first, second);
+        Bag runtimeBag = runtimeBag(first.bagKey().correlationId(), "p3", "p1");
+        receive(fixture.receiver(), runtimeBag);
+        OutboundAllocationSnapshot outboundBefore = fixture.allocator().snapshot();
+        var lifecycleBefore = fixture.ledger().snapshot();
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class,
+                () -> fixture.controller().update(contextAt(1d), 0.1d));
+
+        assertTrue(failure.getMessage().contains("rx-1/bag-1"));
+        assertTrue(failure.getMessage().contains("planned=[p1, p2]"));
+        assertTrue(failure.getMessage().contains("actual=[p3, p1]"));
+        assertTrue(failure.getMessage().contains("registeredMissing=[]"));
+        assertEquals(List.of(runtimeBag), receivedBags(fixture));
+        assertSame(outboundBefore, fixture.allocator().snapshot());
+        assertSame(lifecycleBefore, fixture.ledger().snapshot());
     }
 
     @Test

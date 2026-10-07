@@ -560,9 +560,107 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     }
 
     @Test
+    void shouldBagMixedOrdinaryAndAdaptedPacksRegardlessOfTheirPhysicalOrder() {
+        DspUncalibratedFullDayProfile profile = sheetOwnedProfile();
+        String prescriptionId = "mixed-prescription";
+        String patientId = "mixed-patient";
+        // STORE order differs from fulfilment line order, and COLLECT appends to a
+        // tote that already holds its ordinary pack. Neither order determines membership.
+        NotionalToteOrder source = adaptedOrder("adapted-source", 1, OrderType.ADAPTED,
+                List.of(adaptedLine("A2", "associated-target", prescriptionId, patientId),
+                        adaptedLine("A1", "associated-target", prescriptionId, patientId)), 0);
+        NotionalToteOrder target = adaptedOrder("associated-target", 1, OrderType.ASSOCIATED,
+                List.of(adaptedLine("A1", "adapted-source", prescriptionId, patientId),
+                        adaptedLine("A2", "adapted-source", prescriptionId, patientId),
+                        new DspOrderItem("D", "product-a", 1, "pharmacy-1", patientId,
+                                prescriptionId, DspOrderLineType.FULL_PACK,
+                                "associated-target", 1, 1)), 1);
+        PhysicalToteId targetToteId = new PhysicalToteId("tote-associated-1");
+        DspDatasetLoadReport report = DspDatasetLoadReport.empty();
+        LoadedDspData assembled = new LoadedDspData(
+                List.of(new ProductMasterRecord("product-a", "Product A", Optional.empty(),
+                        Optional.of(new PackDimensions(0.07f, 0.034f, 0.027f)))),
+                List.of(source, target), source.items(),
+                source.items().stream().map(PreparedLineKey::forPreparedLine)
+                        .collect(java.util.stream.Collectors.toSet()),
+                Set.of(), List.of(
+                        new InboundToteManifest(new PhysicalToteId("tote-adapted"),
+                                source.orderSheetKey(), source.orderType(), "104", source.items(), 0),
+                        new InboundToteManifest(targetToteId, target.orderSheetKey(),
+                                target.orderType(), "104", target.items(), 1)), report);
+        var projection = new DspFullDayInputPreflight().project(
+                assembled, DspInputRejectionCatalog.empty());
+        assertTrue(projection.rejectionCatalog().rejectedLines().isEmpty());
+        BagPlanningResult plan = new DeterministicBagPlanner(
+                new MaximumPackCountBagCapacityPolicy(profile.maximumPacksPerBag()))
+                        .plan(new DspFullDayBagPlanningRequestFactory()
+                                .create(projection.executableData()));
+        DspFullDayLoadedInput input = new DspFullDayLoadedInput(
+                projection.executableData(), projection.reportableOrders(),
+                projection.rejectionCatalog(), plan, report, profile.timetable());
+        String a1 = plan.requirePlannedPackSlot(new PlannedPackSlotKey(
+                source.orderSheetKey(), "A1", 1)).reservedPhysicalPackId();
+        String a2 = plan.requirePlannedPackSlot(new PlannedPackSlotKey(
+                source.orderSheetKey(), "A2", 1)).reservedPhysicalPackId();
+        String direct = plan.requirePlannedPackSlot(new PlannedPackSlotKey(
+                target.orderSheetKey(), "D", 1)).reservedPhysicalPackId();
+        PlannedBag plannedBag = plan.plannedBags().getFirst();
+        assertEquals(1, plan.plannedBags().size());
+        assertEquals(List.of(a1, a2, direct), plannedBag.physicalPackIds());
+
+        try (DspFullDayAnalysisRuntime runtime =
+                new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            for (int step = 0; step < 3_000
+                    && runtime.state() == DspFullDayRuntimeState.RUNNING; step++) {
+                runtime.update(1d);
+            }
+
+            assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, runtime.state());
+            assertEquals(List.of(direct, a2, a1), runtime.loadPlanRegistry()
+                    .getLoadPlanFor(targetToteId.value()).getPackPlans().stream()
+                    .map(PackPlan::packId).toList());
+            var releasedGroups = runtime.lineRuntimes().stream()
+                    .flatMap(line -> line.toteToBagFlowController().getReleasedGroups().stream()).toList();
+            assertEquals(1, releasedGroups.size());
+            assertEquals(plannedBag.bagKey().correlationId(), releasedGroups.getFirst().correlationId());
+            assertEquals(List.of(direct, a2, a1), releasedGroups.getFirst().packs().stream()
+                    .map(pack -> pack.getId()).toList());
+            OutboundAllocationSnapshot outbound = runtime.outboundToteAllocator().snapshot();
+            assertEquals(1, outbound.allocatedBags().size());
+            AllocatedOutboundBag allocation = outbound.findAllocatedBag(plannedBag.bagKey()).orElseThrow();
+            assertSame(plannedBag, allocation.plannedBag());
+            assertEquals(List.of(a1, a2, direct), allocation.actualPhysicalPackIds());
+            assertTrue(allocation.missingPhysicalPackIds().isEmpty());
+            assertEquals(1, outbound.closedTotes().size());
+            assertFalse(outbound.closedTotes().getFirst().requiresExceptionProcessing());
+            assertTrue(outbound.openTotesByLine().isEmpty());
+            var completion = runtime.completionSnapshots().stream()
+                    .filter(value -> value.serviceCentreId().equals("104")).findFirst().orElseThrow();
+            assertTrue(completion.complete());
+            assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED, completion.p2pOutputClosureState());
+            assertEquals(0, completion.missingPackCount());
+            assertEquals(0, completion.pdcCollectedPackCount());
+        }
+    }
+
+    @Test
     void shouldCompletePartialAndZeroPackExceptionsWithValidIncomingSheetOwnership() {
         DspUncalibratedFullDayProfile profile = sheetOwnedProfile();
         DspFullDayLoadedInput input = exceptionFixtureInput(profile);
+        assertExceptionFixtureCompletes(input, profile);
+    }
+
+    @Test
+    void shouldCollectDifferentNonDefaultProductDimensionsAndCompleteExceptionFlow() {
+        DspUncalibratedFullDayProfile profile = sheetOwnedProfile();
+        DspFullDayLoadedInput input = exceptionFixtureInput(profile, true);
+        OrderSheetKey source = new OrderSheetKey("adapted-source", 1);
+        var first = input.bagPlan().requirePlannedPackSlot(new PlannedPackSlotKey(source, "A1", 1));
+        var second = input.bagPlan().requirePlannedPackSlot(new PlannedPackSlotKey(source, "A2", 1));
+        assertEquals("product-a", first.sourceProvenance().productId());
+        assertEquals("product-b", second.sourceProvenance().productId());
+        assertEquals(new PackDimensions(0.07f, 0.034f, 0.027f), first.dimensions());
+        assertEquals(new PackDimensions(0.174f, 0.075f, 0.03f), second.dimensions());
         assertExceptionFixtureCompletes(input, profile);
     }
 
@@ -635,6 +733,15 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                     .map(PackPlan::packId).toList();
             assertEquals(List.of(firstPackId, partialAdaptedPackId, zeroPackId),
                     firstCollectedPackIds);
+            var collectedPlans = runtime.loadPlanRegistry()
+                    .getLoadPlanFor(firstSheetTote.value()).getPackPlans();
+            List<String> sourceLineReferences = List.of("A1", "A2", "B");
+            for (int index = 0; index < sourceLineReferences.size(); index++) {
+                var slot = input.bagPlan().requirePlannedPackSlot(new PlannedPackSlotKey(
+                        sourceSheet, sourceLineReferences.get(index), 1));
+                assertSame(slot.dimensions(), collectedPlans.get(index).dimensions());
+                assertEquals(slot.bagKey().correlationId(), collectedPlans.get(index).correlationId());
+            }
             assertEquals(List.of(directPackId), runtime.loadPlanRegistry()
                     .getLoadPlanFor(secondSheetTote.value()).getPackPlans().stream()
                     .map(PackPlan::packId).toList());
@@ -666,10 +773,17 @@ class DspFullDayAnalysisRuntimeFactoryTest {
 
     private static DspFullDayLoadedInput exceptionFixtureInput(
             DspUncalibratedFullDayProfile profile) {
+        return exceptionFixtureInput(profile, false);
+    }
+
+    private static DspFullDayLoadedInput exceptionFixtureInput(
+            DspUncalibratedFullDayProfile profile,
+            boolean mixedDimensions) {
+        String laterProduct = mixedDimensions ? "product-b" : "product-a";
         List<DspOrderItem> preparedLines = List.of(
                 adaptedLine("A1", "associated-target", "first-prescription", "patient-first"),
-                adaptedLine("A2", "associated-target", "partial-prescription", "patient-partial"),
-                adaptedLine("B", "associated-target", "zero-prescription", "patient-zero"));
+                adaptedLine("A2", "associated-target", "partial-prescription", "patient-partial", 1, laterProduct),
+                adaptedLine("B", "associated-target", "zero-prescription", "patient-zero", 1, laterProduct));
         NotionalToteOrder source = adaptedOrder(
                 "adapted-source", 1, OrderType.ADAPTED, preparedLines, 0);
         NotionalToteOrder first = adaptedOrder(
@@ -678,8 +792,8 @@ class DspFullDayAnalysisRuntimeFactoryTest {
         NotionalToteOrder second = adaptedOrder(
                 "associated-target", 2, OrderType.ASSOCIATED,
                 List.of(
-                        adaptedLine("A2", "adapted-source", "partial-prescription", "patient-partial"),
-                        adaptedLine("B", "adapted-source", "zero-prescription", "patient-zero"),
+                        adaptedLine("A2", "adapted-source", "partial-prescription", "patient-partial", 1, laterProduct),
+                        adaptedLine("B", "adapted-source", "zero-prescription", "patient-zero", 1, laterProduct),
                         new DspOrderItem("D", "product-a", 1, "pharmacy-1",
                                 "patient-partial", "partial-prescription",
                                 DspOrderLineType.FULL_PACK, "associated-target", 2, 1)), 2);
@@ -693,7 +807,11 @@ class DspFullDayAnalysisRuntimeFactoryTest {
         DspDatasetLoadReport report = DspDatasetLoadReport.empty();
         LoadedDspData assembled = new LoadedDspData(
                 List.of(new ProductMasterRecord("product-a", "Product A", Optional.empty(),
-                        Optional.of(new PackDimensions(0.20f, 0.10f, 0.08f)))),
+                        Optional.of(mixedDimensions
+                                ? new PackDimensions(0.07f, 0.034f, 0.027f)
+                                : new PackDimensions(0.20f, 0.10f, 0.08f))),
+                        new ProductMasterRecord("product-b", "Product B", Optional.empty(),
+                                Optional.of(new PackDimensions(0.174f, 0.075f, 0.03f)))),
                 List.of(source, first, second),
                 preparedLines,
                 preparedLines.stream().map(PreparedLineKey::forPreparedLine)
@@ -731,8 +849,19 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             String prescriptionId,
             String patientId,
             int referenceSheetNumber) {
+        return adaptedLine(lineReference, referenceOrderId, prescriptionId, patientId,
+                referenceSheetNumber, "product-a");
+    }
+
+    private static DspOrderItem adaptedLine(
+            String lineReference,
+            String referenceOrderId,
+            String prescriptionId,
+            String patientId,
+            int referenceSheetNumber,
+            String productId) {
         return new DspOrderItem(
-                lineReference, "product-a", 1, "pharmacy-1", patientId, prescriptionId,
+                lineReference, productId, 1, "pharmacy-1", patientId, prescriptionId,
                 DspOrderLineType.ADAPTED, referenceOrderId, referenceSheetNumber, 0);
     }
 

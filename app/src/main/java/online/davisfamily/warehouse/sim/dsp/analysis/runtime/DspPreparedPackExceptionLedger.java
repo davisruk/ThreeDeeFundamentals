@@ -115,11 +115,15 @@ public final class DspPreparedPackExceptionLedger {
                 PlannedBag bag = bagsByCorrelationId.get(pack.correlationId());
                 if (bag == null || !bag.bagKey().equals(slot.bagKey())
                         || !bag.physicalPackIds().contains(pack.packId())
-                        || !slot.dimensions().equals(pack.dimensions())
                         || !slot.sourceProvenance().serviceCentreId().equals(bag.serviceCentreId())
                         || !slot.sourceProvenance().pharmacyId().equals(bag.pharmacyId())
                         || !slot.fulfilmentOrderSheetKey().orderId().equals(orderId)) {
                     throw new IllegalStateException("Inconsistent planned bag identity: " + pack.packId());
+                }
+                if (!slot.dimensions().equals(pack.dimensions())) {
+                    throw new IllegalStateException(
+                            "Collected pack dimensions do not match planned slot: " + pack.packId()
+                                    + " expected=" + slot.dimensions() + " actual=" + pack.dimensions());
                 }
                 if (!slot.fulfilmentOrderSheetKey().equals(collectingSheet)) {
                     if (nextMisplaced.containsKey(pack.packId())) {

@@ -131,6 +131,27 @@ class DspPreparedPackExceptionLedgerTest {
     }
 
     @Test
+    void rejectsDimensionMismatchWithExactDetailsWithoutPublishingCollect() {
+        DspPreparedPackExceptionLedger ledger = fixture();
+        var initial = ledger.snapshot();
+        PackDimensions actual = new PackDimensions(0.07f, 0.034f, 0.027f);
+        var failure = assertThrows(IllegalStateException.class,
+                () -> ledger.prepareCollect(FIRST, FIRST_TOTE, List.of(
+                        pack("pack-a", FIRST_BAG),
+                        new PackPlan("pack-b", PARTIAL.correlationId(), actual),
+                        pack("pack-c", EMPTY))));
+
+        assertEquals("Collected pack dimensions do not match planned slot: pack-b"
+                + " expected=" + DIMENSIONS + " actual=" + actual, failure.getMessage());
+        assertSame(initial, ledger.snapshot());
+        assertFalse(ledger.isMisplaced("pack-b"));
+        assertEquals(Map.of(), ledger.snapshot().firstCollectedSheetByOrderId());
+        assertEquals(Map.of(), ledger.snapshot().missingPhysicalPackIdsByBagKey());
+        ledger.commitCollect(ledger.prepareCollect(FIRST, FIRST_TOTE, allPacks()));
+        assertTrue(ledger.isMisplaced("pack-b"));
+    }
+
+    @Test
     void rejectsStaleDecisionAndNonemptyLaterCollect() {
         DspPreparedPackExceptionLedger ledger = fixture();
         var decision = ledger.prepareCollect(FIRST, FIRST_TOTE, allPacks());

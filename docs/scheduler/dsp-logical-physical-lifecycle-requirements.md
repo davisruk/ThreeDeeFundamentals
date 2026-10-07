@@ -392,6 +392,15 @@ A completed bag must identify:
 
 Physical pack plans and logical fulfilment outcomes must remain separate. A missing product must not be represented by a fake physical pack.
 
+Physical arrival/containment order is not a bag-membership constraint. Unique
+physical pack IDs and their planned bag correlations determine the correct
+bag. Validate each actual pack exactly once against that bag's planned IDs;
+any absent IDs must be explicitly registered as missing. Reject foreign IDs,
+duplicates, unexplained omissions and registered-missing IDs that are actually
+present, but accept any permutation of the valid contents. Deterministic
+planned-order lists in allocated-bag snapshots are a canonical reporting
+representation, not an instruction to reorder physical packs.
+
 ## 11. Bag Planning
 
 Lines sharing a `prescriptionId` should share one bag where possible.
@@ -400,7 +409,7 @@ Phase 1 shall use a configurable maximum physical pack count per bag. The policy
 
 Rules:
 
-- preserve source line order deterministically;
+- preserve source line order deterministically for planning bag membership and ordinals, not as a required physical arrival or bag-content order;
 - never split one physical pack;
 - allocate bag ordinals starting from one;
 - create another bag when the configured pack count would be exceeded;
@@ -498,6 +507,14 @@ The lifecycle foundation must allow:
 - the tote to continue outbound after Exceptions regardless of resolution outcome.
 
 Detailed Exception behavior remains defined by `docs/machines/exceptions-station-requirements.md` and is implemented only after this lifecycle foundation exists.
+
+For now, an unexpected runtime pack-membership discrepancy may terminate the
+run with `IllegalStateException`, before allocation or removal of the failed
+bag. Ultimately operational discrepancies must become explicitly retained
+and accounted Exceptions work rather than terminating DSP execution. That
+recovery behavior remains deferred to the Exception process/station design;
+this is not permission to catch arbitrary invariant failures, discard packs
+or silently retry partially mutated operations.
 
 An order-wide blue-bin tip can put packs intended for incoming sheet 002 into
 the earlier collecting sheet 001 tote. At P2P, a pack not belonging to the
