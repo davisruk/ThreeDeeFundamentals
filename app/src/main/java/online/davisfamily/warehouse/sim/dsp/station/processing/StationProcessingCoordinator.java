@@ -84,6 +84,13 @@ public final class StationProcessingCoordinator {
         return claim;
     }
 
+    public Optional<StationProcessingClaim> findActiveClaim(PhysicalToteId physicalToteId) {
+        if (physicalToteId == null) {
+            throw new IllegalArgumentException("physicalToteId must not be null");
+        }
+        return Optional.ofNullable(activeClaims.get(physicalToteId));
+    }
+
     public StationProcessingClaim requireActiveClaim(PhysicalToteId physicalToteId) {
         if (physicalToteId == null) {
             throw new IllegalArgumentException("physicalToteId must not be null");

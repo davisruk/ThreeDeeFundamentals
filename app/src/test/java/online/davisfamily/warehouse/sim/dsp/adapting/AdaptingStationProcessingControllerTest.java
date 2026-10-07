@@ -267,18 +267,10 @@ class AdaptingStationProcessingControllerTest {
     }
 
     @Test
-    void shouldRejectCompletionPhysicalSheetServiceAndVisitTypeMismatchesBeforeMutation() {
+    void shouldRejectCompletionSheetServiceAndVisitTypeMismatchesBeforeMutation() {
         NotionalToteOrder order = order("mismatch-controller", OrderType.ASSOCIATED);
         PhysicalToteId physicalToteId = new PhysicalToteId("mismatch-controller-physical");
 
-        assertCompletionMismatch(
-                order,
-                AdaptingVisit.collect(
-                        new PhysicalToteId("different-physical"),
-                        order.orderSheetKey(),
-                        order.serviceCentreId(),
-                        List.of(PreparedLineKey.forDispatchLine(order, order.items().getFirst())),
-                        List.of("pharmacy-1")));
         assertCompletionMismatch(
                 order,
                 AdaptingVisit.collect(
@@ -357,6 +349,232 @@ class AdaptingStationProcessingControllerTest {
         assertTrue(fixture.coordinator().snapshot().activeClaims().isEmpty());
     }
 
+    @Test
+    void shouldCompleteConcurrentStoreAndCollectIndependentlyAndStartQueueWithoutReticking() {
+        List<NotionalToteOrder> orders = List.of(order("store", OrderType.ADAPTED),
+                order("collect-2", OrderType.ASSOCIATED), order("collect-3", OrderType.ASSOCIATED),
+                order("queued", OrderType.ASSOCIATED));
+        ConcurrentFixture fixture = concurrentFixture(orders, 60d, 10d, false, false,
+                AdaptingCollectObserver.noOp());
+        fixture.acceptAll();
+        assertEquals(3, fixture.bench().occupiedProcessingPositions());
+        assertEquals(4, fixture.coordinator().snapshot().activeClaims().size());
+        fixture.controller().update(context(10d), 10d);
+        assertEquals(List.of("collect-2-physical"), fixture.completedIds());
+        assertSame(fixture.totes().get(3).physicalToteId(), fixture.bench().position(2).activeToteId());
+        assertEquals(10d, fixture.bench().position(2).snapshot().remainingProcessingSeconds());
+        assertEquals(50d, fixture.bench().position(1).snapshot().remainingProcessingSeconds());
+        assertEquals(AdaptingBenchState.COMPLETED, fixture.bench().position(3).state());
+        assertTrue(fixture.coordinator().findActiveClaim(fixture.totes().get(2).physicalToteId()).isPresent());
+        assertTrue(fixture.coordinator().findActiveClaim(fixture.totes().get(1).physicalToteId()).isEmpty());
+        assertSame(fixture.registry().getLoadPlanFor(fixture.totes().get(1).physicalToteId()),
+                fixture.coordinator().peekDisposition().orElseThrow().currentLoadPlan());
+        assertSame(fixture.totes().getFirst().loadPlan(),
+                fixture.registry().getLoadPlanFor(fixture.totes().getFirst().physicalToteId()));
+        fixture.controller().update(context(10d), 0d);
+        assertEquals(List.of("collect-2-physical", "collect-3-physical"), fixture.completedIds());
+        assertEquals(2, fixture.bench().occupiedProcessingPositions());
+        fixture.controller().update(context(20d), 10d);
+        assertEquals(1, fixture.bench().occupiedProcessingPositions());
+        fixture.controller().update(context(60d), 40d);
+        assertEquals(List.of("collect-2-physical", "collect-3-physical", "queued-physical", "store-physical"),
+                fixture.completedIds());
+        var storeDisposition = fixture.coordinator().pendingDispositions().getLast();
+        assertEquals(StationProcessingDispositionType.CONSUME, storeDisposition.type());
+        assertSame(fixture.totes().getFirst().loadPlan(), storeDisposition.currentLoadPlan());
+        assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_ADAPTING,
+                fixture.lifecycle().snapshot().totes().get(fixture.totes().getFirst().physicalToteId()).state());
+        assertTrue(fixture.runtimeState().snapshot().preparedLineKeys().contains(
+                PreparedLineKey.forPreparedLine(orders.getFirst().items().getFirst())));
+        assertEquals(0, fixture.bench().occupiedProcessingPositions());
+        assertTrue(fixture.coordinator().snapshot().activeClaims().isEmpty());
+        assertTrue(fixture.area().peekQueuedVisit(fixture.id()).isEmpty());
+    }
+
+    @Test
+    void shouldCommitSimultaneousStrictPreviewsByOrdinalWithReadOnlyVersionRefresh() {
+        ConcurrentFixture fixture = concurrentFixture(List.of(
+                order("first", OrderType.ASSOCIATED), order("second", OrderType.ASSOCIATED),
+                order("third", OrderType.ASSOCIATED)), 60d, 10d, true, false,
+                AdaptingCollectObserver.noOp());
+        fixture.acceptAll();
+        fixture.bench().tick(10d);
+        var previews = fixture.bench().positions().stream()
+                .map(position -> position.peekCompletion().orElseThrow()).toList();
+        assertEquals(previews.getFirst().preparedOrderGroup().orElseThrow().mutationVersion(),
+                previews.get(1).preparedOrderGroup().orElseThrow().mutationVersion());
+        for (int index = 0; index < 3; index++) {
+            var before = fixture.bench().position(index + 1).peekCompletion().orElseThrow();
+            fixture.controller().update(context(10d), 0d);
+            assertEquals(index + 1, fixture.coordinator().pendingDispositions().size());
+            assertEquals(2 - index, fixture.bench().occupiedProcessingPositions());
+            var disposition = fixture.coordinator().pendingDispositions().get(index);
+            assertSame(fixture.totes().get(index), disposition.claim().routedTote());
+            assertSame(fixture.registry().getLoadPlanFor(disposition.physicalToteId()),
+                    disposition.currentLoadPlan());
+            assertEquals(List.of("pack-line-" + fixture.orders().get(index).orderId() + "-1"),
+                    disposition.currentLoadPlan().getPackPlans().stream().map(PackPlan::packId).toList());
+            assertSame(previews.get(index), before);
+        }
+        assertEquals(List.of("first-physical", "second-physical", "third-physical"), fixture.completedIds());
+        assertTrue(fixture.store().binSnapshots().isEmpty());
+    }
+
+    @Test
+    void shouldSkipUnclaimedDomainCompletionWithoutConsumingItsPosition() {
+        ConcurrentFixture fixture = concurrentFixture(List.of(
+                order("unclaimed", OrderType.ASSOCIATED), order("claimed", OrderType.ASSOCIATED)),
+                0d, 0d, false, false, AdaptingCollectObserver.noOp());
+        fixture.area().submitVisitTo(fixture.id(), new AdaptingVisitFactory().create(
+                fixture.totes().getFirst().physicalToteId(), fixture.orders().getFirst()));
+        fixture.area().startQueuedPositions(fixture.id());
+        var retained = fixture.bench().position(1).peekCompletion().orElseThrow();
+        fixture.target().accept(fixture.totes().get(1), Duration.ZERO);
+        fixture.controller().update(context(1d), 0d);
+        assertEquals(List.of("claimed-physical"), fixture.completedIds());
+        assertSame(retained, fixture.bench().position(1).peekCompletion().orElseThrow());
+        assertEquals(1, fixture.bench().occupiedProcessingPositions());
+        assertSame(fixture.totes().getFirst().loadPlan(), fixture.registry()
+                .getLoadPlanFor(fixture.totes().getFirst().physicalToteId()));
+    }
+
+    @Test
+    void shouldPreserveStrictPositionPlansStorageAndClaimsForAllExpectedPreparationFailures() {
+        for (String failure : List.of("provenance", "observer", "prospective", "stale-plan")) {
+            AtomicBoolean observerCommitted = new AtomicBoolean();
+            AdaptingCollectObserver observer = (sheet, tote, packs) -> {
+                if (failure.equals("observer")) {
+                    throw new IllegalStateException("observer refused preparation");
+                }
+                return () -> observerCommitted.set(true);
+            };
+            ConcurrentFixture fixture = concurrentFixture(List.of(order("failure", OrderType.ASSOCIATED),
+                    order("other", OrderType.ASSOCIATED)), 0d, 0d, true,
+                    failure.equals("prospective"), observer);
+            fixture.acceptAll();
+            if (failure.equals("provenance")) {
+                fixture.provenance().register("pack-line-failure-1",
+                        new online.davisfamily.warehouse.sim.dsp.bagging.PackSourceProvenance(
+                                new OrderSheetKey("wrong-source", 1), "line-failure", "product-1", "SC-1",
+                                "pharmacy-1", "patient-failure", "prescription-failure"));
+            } else if (failure.equals("stale-plan")) {
+                fixture.registry().putLoadPlan(new ToteLoadPlan("failure-physical", List.of()));
+            }
+            var bins = fixture.store().binSnapshots();
+            var provenanceBefore = fixture.provenance().snapshot();
+            var coordinatorBefore = fixture.coordinator().snapshot();
+            var completion = fixture.bench().position(1).peekCompletion().orElseThrow();
+            var current = fixture.registry().getLoadPlanFor("failure-physical");
+            var group = fixture.store().prepareOrderGroup("pharmacy-1", "failure");
+            assertThrows(RuntimeException.class, () -> fixture.controller().update(context(1d), 0d), failure);
+            assertSame(bins, fixture.store().binSnapshots(), failure);
+            assertEquals(group, fixture.store().prepareOrderGroup("pharmacy-1", "failure"), failure);
+            assertSame(current, fixture.registry().getLoadPlanFor("failure-physical"), failure);
+            assertSame(completion, fixture.bench().position(1).peekCompletion().orElseThrow(), failure);
+            assertEquals(2, fixture.bench().occupiedProcessingPositions(), failure);
+            assertEquals(provenanceBefore, fixture.provenance().snapshot(), failure);
+            assertEquals(coordinatorBefore, fixture.coordinator().snapshot(), failure);
+            assertFalse(observerCommitted.get(), failure);
+        }
+    }
+
+    private static ConcurrentFixture concurrentFixture(List<NotionalToteOrder> orders,
+            double storeDuration, double collectDuration, boolean strict, boolean wrongProspectivePlan,
+            AdaptingCollectObserver observer) {
+        AdaptingBenchId id = new AdaptingBenchId("bench-1");
+        AdaptingStorageMap map = new AdaptingStorageMap();
+        map.configureAvailableBenches(List.of(id));
+        map.assignPharmacyToBench("pharmacy-1", id);
+        List<NotionalToteOrder> sources = new java.util.ArrayList<>();
+        Map<PreparedLineKey, OrderSheetKey> targets = new java.util.LinkedHashMap<>();
+        for (NotionalToteOrder order : orders) {
+            sources.add(new NotionalToteOrder("source-" + order.orderId(), "source-" + order.orderId(),
+                    order.serviceCentreId(), 1, OrderType.ADAPTED, order.items(), 1, 0));
+            targets.put(PreparedLineKey.forPreparedLine(order.items().getFirst()), order.orderSheetKey());
+        }
+        AdaptedLineStore store;
+        if (strict) {
+            AdaptingTargetSheetCatalog catalog = new AdaptingTargetSheetCatalog(targets);
+            List<NotionalToteOrder> allOrders = new java.util.ArrayList<>(sources);
+            allOrders.addAll(orders);
+            store = new AdaptedLineStore(new AdaptingStorageLayout(AdaptingStorageConfig.defaults(), map,
+                    catalog, new AdaptingOrderPreparationCatalog(
+                            new LoadedDspData(List.of(), allOrders, List.of(), Set.of()), catalog)));
+        } else {
+            store = new AdaptedLineStore();
+        }
+        for (int index = 0; index < orders.size(); index++) {
+            if (orders.get(index).orderType() != OrderType.ADAPTED) {
+                store.stageAll(orders.get(index).items(), sources.get(index).orderSheetKey(), "SC-1");
+            }
+        }
+        AdaptingBench bench = new SnapshotThrowingBench("bench-1", store, storeDuration, collectDuration);
+        AdaptingArea area = new AdaptingArea(List.of(bench), 3, map);
+        MapBackedToteLoadPlanRegistry registry = new MapBackedToteLoadPlanRegistry();
+        StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
+        PackProvenanceRegistry provenance = new PackProvenanceRegistry();
+        DspSchedulerRuntimeState runtimeState = new DspSchedulerRuntimeState(new WarehouseSchedulerSnapshot(
+                List.of(), Map.of(), Set.of(), Optional.empty()));
+        DefaultCollectedPackPlanFactory packs = new DefaultCollectedPackPlanFactory(
+                dimensions(), new DspPackPlanFactory(provenance));
+        AdaptingAreaController areaController = strict
+                ? new AdaptingAreaController(area, runtimeState, registry, packs, provenance, observer)
+                : new AdaptingAreaController(area, runtimeState, registry, packs);
+        List<RoutedPhysicalTote> totes = new java.util.ArrayList<>();
+        List<InboundToteManifest> manifests = new java.util.ArrayList<>();
+        for (NotionalToteOrder order : orders) {
+            PhysicalToteId physical = new PhysicalToteId(order.orderId() + "-physical");
+            ToteLoadPlan plan = wrongProspectivePlan && totes.isEmpty()
+                    ? new WrongProspectiveTotePlan(physical) : new ToteLoadPlan(physical, List.of());
+            registry.putLoadPlan(plan);
+            totes.add(routedTote(order, physical, destination("bench-1"), plan, OperationalPhysicalToteSource.OSR));
+            if (order.orderType() == OrderType.ADAPTED) {
+                manifests.add(new InboundToteManifest(physical, order.orderSheetKey(), order.orderType(),
+                        order.serviceCentreId(), order.items(), 0));
+            }
+        }
+        InboundToteLifecycleController lifecycle = new InboundToteLifecycleController(
+                new PhysicalToteLifecycleLedger(), new InboundToteManifestCatalog(manifests));
+        for (InboundToteManifest manifest : manifests) {
+            lifecycle.activate(manifest.physicalToteId(), Duration.ZERO);
+        }
+        AdaptingStationProcessingTarget target = new AdaptingStationProcessingTarget(destination("bench-1"),
+                new StationProcessingOrderCatalog(orders), registry, new AdaptingVisitFactory(), area, coordinator);
+        AdaptingStationProcessingController controller = new AdaptingStationProcessingController("concurrent",
+                Set.of(destination("bench-1")), registry, area, areaController, lifecycle, coordinator);
+        return new ConcurrentFixture(id, orders, totes, store, bench, area, registry, provenance, coordinator,
+                target, controller, lifecycle, runtimeState);
+    }
+
+    private record ConcurrentFixture(AdaptingBenchId id, List<NotionalToteOrder> orders,
+            List<RoutedPhysicalTote> totes, AdaptedLineStore store, AdaptingBench bench, AdaptingArea area,
+            MapBackedToteLoadPlanRegistry registry, PackProvenanceRegistry provenance,
+            StationProcessingCoordinator coordinator, AdaptingStationProcessingTarget target,
+            AdaptingStationProcessingController controller, InboundToteLifecycleController lifecycle,
+            DspSchedulerRuntimeState runtimeState) {
+        void acceptAll() {
+            for (RoutedPhysicalTote tote : totes) {
+                target.accept(tote, Duration.ZERO);
+            }
+        }
+
+        List<String> completedIds() {
+            return coordinator.pendingDispositions().stream()
+                    .map(disposition -> disposition.physicalToteId().value()).toList();
+        }
+    }
+
+    private static final class WrongProspectiveTotePlan extends ToteLoadPlan {
+        private WrongProspectiveTotePlan(PhysicalToteId physical) {
+            super(physical, List.of());
+        }
+
+        @Override
+        public ToteLoadPlan withAdditionalPackPlans(List<PackPlan> packs) {
+            return new ToteLoadPlan("wrong-physical", packs);
+        }
+    }
+
     private static Fixture collectFixture(
             NotionalToteOrder order,
             OperationalPhysicalToteSource source,
@@ -413,8 +631,10 @@ class AdaptingStationProcessingControllerTest {
             NotionalToteOrder order,
             AdaptingVisit mismatchedVisit) {
         AdaptedLineStore store = new AdaptedLineStore();
-        store.stage(order.items().getFirst(), new OrderSheetKey("source-" + order.orderId(), 1), "SC-1");
-        MismatchingPeekBench bench = new MismatchingPeekBench(
+        if (mismatchedVisit.visitType() == AdaptingVisitType.COLLECT) {
+            store.stage(order.items().getFirst(), new OrderSheetKey("source-" + order.orderId(), 1), "SC-1");
+        }
+        AdaptingBench bench = new AdaptingBench(
                 "bench-1", store, 0d);
         AdaptingStorageMap storageMap = new AdaptingStorageMap();
         storageMap.configureAvailableBenches(List.of(new AdaptingBenchId("bench-1")));
@@ -433,15 +653,13 @@ class AdaptingStationProcessingControllerTest {
                 new DefaultCollectedPackPlanFactory(
                         dimensions(), new DspPackPlanFactory(new PackProvenanceRegistry())));
         StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
-        AdaptingStationProcessingTarget target = new AdaptingStationProcessingTarget(
-                destination("bench-1"), new StationProcessingOrderCatalog(List.of(order)),
-                registry, new AdaptingVisitFactory(), area, coordinator);
         AdaptingStationProcessingController controller = new AdaptingStationProcessingController(
                 "mismatch-controller", Set.of(destination("bench-1")), registry, area,
                 areaController, lifecycleController(), coordinator);
 
-        target.accept(routed, Duration.ZERO);
-        bench.overrideCompletion(new AdaptingBenchCompletion(mismatchedVisit, List.of()));
+        area.submitVisitTo(new AdaptingBenchId("bench-1"), mismatchedVisit);
+        coordinator.claim(routed, Duration.ZERO);
+        area.startQueuedPositions(new AdaptingBenchId("bench-1"));
         var coordinatorBefore = coordinator.snapshot();
         var benchBefore = bench.snapshot();
         var runtimeBefore = runtimeState.snapshot();
@@ -671,22 +889,14 @@ class AdaptingStationProcessingControllerTest {
         }
     }
 
-    private static final class MismatchingPeekBench extends AdaptingBench {
-        private AdaptingBenchCompletion overrideCompletion;
-
-        private MismatchingPeekBench(String id, AdaptedLineStore store, double duration) {
-            super(id, store, duration);
+    private static final class SnapshotThrowingBench extends AdaptingBench {
+        private SnapshotThrowingBench(String id, AdaptedLineStore store, double storeDuration,
+                double collectDuration) {
+            super(id, store, storeDuration, collectDuration, 3);
         }
-
-        private void overrideCompletion(AdaptingBenchCompletion completion) {
-            this.overrideCompletion = completion;
-        }
-
         @Override
-        public java.util.Optional<AdaptingBenchCompletion> peekCompletion() {
-            return overrideCompletion == null
-                    ? super.peekCompletion()
-                    : java.util.Optional.of(overrideCompletion);
+        public AdaptingBenchSnapshot snapshot() {
+            throw new AssertionError("Processing must not construct bench snapshots");
         }
     }
 }

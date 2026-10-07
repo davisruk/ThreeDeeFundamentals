@@ -321,6 +321,48 @@ class AdaptingStationProcessingTargetTest {
                 fixture.registry().getLoadPlanFor(routedTote.physicalToteId()));
     }
 
+    @Test
+    void shouldClaimThreePositionsAndThreeWaitingAndRetainSeventhArrivalHead() {
+        List<NotionalToteOrder> orders = java.util.stream.IntStream.rangeClosed(1, 7)
+                .mapToObj(i -> order("capacity-" + i, OrderType.ADAPTED)).toList();
+        Fixture fixture = fixture(orders, OperationalPhysicalToteSource.OSR,
+                "bench-1", 60d, 3, true, 3);
+        List<RoutedPhysicalTote> totes = new java.util.ArrayList<>();
+        for (NotionalToteOrder order : orders) {
+            var id = new PhysicalToteId(order.orderId() + "-physical");
+            var plan = new ToteLoadPlan(id, List.of());
+            fixture.registry().putLoadPlan(plan);
+            totes.add(routedTote(order, id, fixture.destination(), plan, OperationalPhysicalToteSource.OSR));
+        }
+        StationRoutedToteArrivalQueue queue = new StationRoutedToteArrivalQueue(fixture.destination(), 7);
+        totes.forEach(queue::enqueue);
+        StationArrivalClaimController claimant = new StationArrivalClaimController(
+                new StationProcessingBinding(queue, fixture.target()));
+        for (int i = 0; i < 6; i++) {
+            claimant.update(context(0d), 0d);
+            assertSame(totes.get(i), fixture.coordinator().findActiveClaim(totes.get(i).physicalToteId())
+                    .orElseThrow().routedTote());
+        }
+        AdaptingBench bench = fixture.area().bench(new AdaptingBenchId("bench-1"));
+        assertEquals(3, bench.occupiedProcessingPositions());
+        assertEquals(List.of("capacity-4-physical", "capacity-5-physical", "capacity-6-physical"),
+                fixture.area().benchAdmissionSnapshots().getFirst().queueSnapshot().toteIds());
+        var before = fixture.area().benchAdmissionSnapshots();
+        var claims = fixture.coordinator().snapshot();
+        var blocked = totes.get(6);
+        var follower = blocked.tote().getRouteFollower();
+        var segment = follower.getCurrentSegment();
+        claimant.update(context(1d), 0d);
+        assertSame(blocked, queue.peek().orElseThrow());
+        assertTrue(claimant.snapshot().blocked());
+        assertEquals(before, fixture.area().benchAdmissionSnapshots());
+        assertEquals(claims, fixture.coordinator().snapshot());
+        assertSame(follower, blocked.tote().getRouteFollower());
+        assertSame(segment, follower.getCurrentSegment());
+        assertSame(blocked.loadPlan(), fixture.registry().getLoadPlanFor(blocked.physicalToteId()));
+        assertSame(blocked.renderable(), queue.peek().orElseThrow().renderable());
+    }
+
     private static Fixture fixture(
             NotionalToteOrder order,
             OperationalPhysicalToteSource source,
@@ -337,13 +379,21 @@ class AdaptingStationProcessingTargetTest {
             double processingDurationSeconds,
             int queueCapacity,
             boolean installPlan) {
+        return fixture(orders, source, destinationId, processingDurationSeconds, queueCapacity,
+                installPlan, 1);
+    }
+
+    private static Fixture fixture(List<NotionalToteOrder> orders, OperationalPhysicalToteSource source,
+            String destinationId, double processingDurationSeconds, int queueCapacity,
+            boolean installPlan, int positions) {
         OperationalRouteDestination destination = destination(destinationId);
         AdaptedLineStore store = new AdaptedLineStore();
         AdaptingStorageMap storageMap = new AdaptingStorageMap();
         storageMap.configureAvailableBenches(List.of(new AdaptingBenchId(destinationId)));
         storageMap.assignPharmacyToBench("pharmacy-1", new AdaptingBenchId(destinationId));
         AdaptingArea area = new AdaptingArea(
-                List.of(new AdaptingBench(destinationId, store, processingDurationSeconds)),
+                List.of(new AdaptingBench(destinationId, store,
+                        processingDurationSeconds, processingDurationSeconds, positions)),
                 queueCapacity,
                 storageMap);
         MapBackedToteLoadPlanRegistry registry = new MapBackedToteLoadPlanRegistry();

@@ -116,9 +116,7 @@ public final class AdaptingStationProcessingTarget implements StationProcessingT
         }
 
         StationProcessingClaim claim = coordinator.claim(routedTote, claimedAt);
-        if (area.bench(benchId).state() == AdaptingBenchState.QUEUED) {
-            area.bench(benchId).startProcessing();
-        }
+        area.startQueuedPositions(benchId);
         return claim;
     }
 

@@ -95,7 +95,9 @@ public class AdaptingArea {
                     slot.bench.snapshot(),
                     slot.queue.snapshot(),
                     open,
-                    open ? "" : "Bench queue and processing slot are full"));
+                    open ? "" : "Bench queue and processing slot are full",
+                    slot.bench.processingCapacity(),
+                    slot.bench.occupiedProcessingPositions()));
         }
         return List.copyOf(admissions);
     }
@@ -138,7 +140,7 @@ public class AdaptingArea {
         }
 
         if (slot.bench.canAcceptVisit() && slot.pendingVisits.isEmpty()) {
-            slot.bench.acceptVisit(visit);
+            slot.bench.firstIdlePosition().orElseThrow().acceptVisit(visit);
         } else {
             slot.queue.enqueue(visit.physicalToteId().value());
             slot.pendingVisits.addLast(visit);
@@ -148,12 +150,34 @@ public class AdaptingArea {
 
     public boolean dispatchNextQueuedVisit(AdaptingBenchId benchId) {
         BenchSlot slot = slot(benchId);
+        if (slot.bench.processingCapacity() != 1) {
+            throw new IllegalStateException("Singular dispatch requires a one-position bench");
+        }
         if (!slot.bench.canAcceptVisit() || slot.pendingVisits.isEmpty()) {
             return false;
         }
         slot.queue.dequeue();
         slot.bench.acceptVisit(slot.pendingVisits.removeFirst());
         return true;
+    }
+
+    public void startQueuedPositions(AdaptingBenchId benchId) {
+        List<AdaptingProcessingPosition> positions = slot(benchId).bench.positions();
+        for (int index = 0; index < positions.size(); index++) {
+            AdaptingProcessingPosition position = positions.get(index);
+            if (position.state() == AdaptingBenchState.QUEUED) {
+                position.startProcessing();
+            }
+        }
+    }
+
+    public void dispatchQueuedVisits(AdaptingBenchId benchId) {
+        BenchSlot slot = slot(benchId);
+        while (!slot.pendingVisits.isEmpty() && slot.bench.canAcceptVisit()) {
+            AdaptingProcessingPosition position = slot.bench.firstIdlePosition().orElseThrow();
+            slot.queue.dequeue();
+            position.acceptVisit(slot.pendingVisits.removeFirst());
+        }
     }
 
     public Optional<AdaptingVisit> peekQueuedVisit(AdaptingBenchId benchId) {
@@ -168,9 +192,7 @@ public class AdaptingArea {
         int inProgress = 0;
         int queued = 0;
         for (BenchSlot slot : benchSlots.values()) {
-            if (slot.bench.state() != AdaptingBenchState.IDLE) {
-                inProgress++;
-            }
+            inProgress += slot.bench.occupiedProcessingPositions();
             queued += slot.pendingVisits.size();
         }
         return new StationSnapshot(StationType.ADAPTING, inProgress, queued);
@@ -215,7 +237,9 @@ public class AdaptingArea {
         }
 
         boolean canAcceptVisit() {
-            return bench.canAcceptVisit() || queue.canAccept();
+            return pendingVisits.isEmpty()
+                    ? bench.canAcceptVisit() || queue.canAccept()
+                    : queue.canAccept();
         }
     }
 }

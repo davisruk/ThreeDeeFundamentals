@@ -281,6 +281,80 @@ class AdaptingAreaAdmissionTest {
         assertEquals(new AdaptingBenchId("bench-2"), selection.benchId());
     }
 
+    @Test
+    void shouldCountThreePositionsAndThreeWaitingAndNeverBypassFullFifo() {
+        AdaptingBenchId id = new AdaptingBenchId("bench-1");
+        AdaptingBench bench = new AdaptingBench("bench-1", new AdaptedLineStore(), 0d, 0d, 3);
+        AdaptingArea area = new AdaptingArea(List.of(bench), 3);
+        List<AdaptingVisit> visits = java.util.stream.IntStream.rangeClosed(1, 7)
+                .mapToObj(i -> storeVisit("tote-" + i, "line-" + i, "target-" + i)).toList();
+        for (int i = 0; i < 6; i++) {
+            assertTrue(area.submitVisitTo(id, visits.get(i)).accepted());
+        }
+        area.startQueuedPositions(id);
+        var before = area.benchAdmissionSnapshots();
+        assertEquals(3, before.getFirst().processingCapacity());
+        assertEquals(3, before.getFirst().occupiedProcessingPositions());
+        assertEquals(new online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot(
+                online.davisfamily.warehouse.sim.dsp.model.StationType.ADAPTING, 3, 3),
+                area.stationSnapshot());
+        assertFalse(area.submitVisitTo(id, visits.get(6)).accepted());
+        assertEquals(before, area.benchAdmissionSnapshots());
+        assertThrows(IllegalStateException.class, () -> area.dispatchNextQueuedVisit(id));
+
+        bench.position(2).consumeCompletion().orElseThrow();
+        // An idle owner is not permission to overtake the older full queue.
+        assertFalse(area.canAcceptVisitAt(id));
+        assertFalse(area.submitVisitTo(id, visits.get(6)).accepted());
+        assertEquals(AdaptingBenchState.IDLE, bench.position(2).state());
+        assertTrue(area.benchAdmissionSnapshots().getFirst().canStartQueuedVisit());
+        area.dispatchQueuedVisits(id);
+        assertEquals(visits.get(3), bench.position(2).activeVisit());
+        assertEquals(AdaptingBenchState.QUEUED, bench.position(2).state());
+        assertTrue(area.submitVisitTo(id, visits.get(6)).accepted());
+        area.startQueuedPositions(id);
+        bench.position(1).consumeCompletion().orElseThrow();
+        bench.position(3).consumeCompletion().orElseThrow();
+        area.dispatchQueuedVisits(id);
+        assertEquals(visits.get(4), bench.position(1).activeVisit());
+        assertEquals(visits.get(5), bench.position(3).activeVisit());
+        assertEquals(visits.get(6), area.peekQueuedVisit(id).orElseThrow());
+    }
+
+    @Test
+    void shouldAppendBehindWaitingVisitEvenWhenIdleCapacityExists() {
+        AdaptingBenchId id = new AdaptingBenchId("bench-1");
+        AdaptingBench bench = new AdaptingBench("bench-1", new AdaptedLineStore(), 0d, 0d, 3);
+        AdaptingArea area = new AdaptingArea(List.of(bench), 3);
+        for (int i = 1; i <= 4; i++) {
+            area.submitVisitTo(id, storeVisit("tote-" + i, "line-" + i, "target-" + i));
+        }
+        area.startQueuedPositions(id);
+        bench.position(1).consumeCompletion().orElseThrow();
+        AdaptingVisit newest = storeVisit("newest", "newest-line", "newest-target");
+        assertTrue(area.submitVisitTo(id, newest).accepted());
+        assertEquals(AdaptingBenchState.IDLE, bench.position(1).state());
+        assertEquals(List.of("tote-4", "newest"), area.benchAdmissionSnapshots().getFirst()
+                .queueSnapshot().toteIds());
+        area.dispatchQueuedVisits(id);
+        assertEquals("tote-4", bench.position(1).activeToteId().value());
+        assertEquals(newest, area.peekQueuedVisit(id).orElseThrow());
+    }
+
+    @Test
+    void shouldPreserveLegacyAdmissionConstructorAndValidatePositionCounts() {
+        AdaptingArea area = new AdaptingArea(List.of(
+                new AdaptingBench("bench-1", new AdaptedLineStore(), 1d)), 1);
+        var view = area.benchAdmissionSnapshots().getFirst();
+        assertEquals(view, new AdaptingBenchAdmissionSnapshot(view.benchId(), view.benchSnapshot(),
+                view.queueSnapshot(), view.admissionOpen(), view.blockedReason()));
+        for (int[] counts : List.of(new int[] {0, 0}, new int[] {3, -1}, new int[] {3, 4})) {
+            assertThrows(IllegalArgumentException.class, () -> new AdaptingBenchAdmissionSnapshot(
+                    view.benchId(), view.benchSnapshot(), view.queueSnapshot(), true, "",
+                    counts[0], counts[1]));
+        }
+    }
+
     private static AdaptingVisit storeVisit(String toteId, String lineId, String targetOrderId) {
         return AdaptingVisit.store(
                 new PhysicalToteId(toteId),

@@ -214,6 +214,57 @@ class AdaptedLineStoreTest {
                 () -> AdaptedLineRecord.fromPreparedLine(manual, SOURCE, CENTRE));
     }
 
+    @Test
+    void refreshShouldPreserveOrderedFactsAcrossUnrelatedStoreAndCollectMutations() {
+        DspOrderItem a = line("a", "first", STORE);
+        DspOrderItem b = line("b", "second", STORE);
+        DspOrderItem c = line("c", "first", STORE);
+        AdaptedLineStore store = strictStore(1, Map.of(
+                key(a), new OrderSheetKey("first", 1), key(c), new OrderSheetKey("first", 2),
+                key(b), new OrderSheetKey("second", 1)), Map.of());
+        store.stageAll(List.of(c, a), SOURCE, CENTRE);
+        var first = store.prepareOrderGroup(STORE, "first");
+        assertSame(first, store.refreshOrderGroupDecision(first));
+        store.stage(b, SOURCE, CENTRE);
+        var bins = store.binSnapshots();
+        var afterStore = store.refreshOrderGroupDecision(first);
+        assertNotSame(first, afterStore);
+        assertEquals(first.records(), afterStore.records());
+        assertSame(bins, store.binSnapshots());
+        var second = store.prepareOrderGroup(STORE, "second");
+        store.commitOrderGroup(second);
+        bins = store.binSnapshots();
+        var afterCollect = store.refreshOrderGroupDecision(first);
+        assertEquals(List.of(key(c), key(a)), afterCollect.records().stream()
+                .map(AdaptedLineRecord::key).toList());
+        assertSame(bins, store.binSnapshots());
+        assertThrows(IllegalStateException.class, () -> store.commitOrderGroup(afterStore));
+        assertEquals(first.records(), store.commitOrderGroup(afterCollect));
+        assertThrows(IllegalStateException.class, () -> store.refreshOrderGroupDecision(first));
+        var later = store.prepareOrderGroup(STORE, "first");
+        assertFalse(later.firstCollection());
+        assertSame(later, store.refreshOrderGroupDecision(later));
+    }
+
+    @Test
+    void refreshMustNotReplaceChangedOrderedRecords() {
+        DspOrderItem a = line("a", "first", STORE);
+        DspOrderItem b = line("b", "first", STORE);
+        DspOrderItem other = line("other", "other", STORE);
+        AdaptedLineStore store = strictStore(2, Map.of(
+                key(a), new OrderSheetKey("first", 1), key(b), new OrderSheetKey("first", 1),
+                key(other), new OrderSheetKey("other", 1)), Map.of());
+        store.stageAll(List.of(a, b), SOURCE, CENTRE);
+        var actual = store.prepareOrderGroup(STORE, "first");
+        var reversed = new AdaptingPreparedOrderGroup(STORE, "first", actual.mutationVersion(),
+                List.of(actual.records().get(1), actual.records().getFirst()), true);
+        store.stage(other, SOURCE, CENTRE);
+        var bins = store.binSnapshots();
+        assertThrows(IllegalStateException.class, () -> store.refreshOrderGroupDecision(reversed));
+        assertSame(bins, store.binSnapshots());
+        assertThrows(IllegalArgumentException.class, () -> store.refreshOrderGroupDecision(null));
+    }
+
     private static AdaptedLineStore strictStore(int linesPerBin,
             Map<PreparedLineKey, OrderSheetKey> targets, Map<String, String> stores) {
         Map<OrderSheetKey, List<DspOrderItem>> aliases = new LinkedHashMap<>();

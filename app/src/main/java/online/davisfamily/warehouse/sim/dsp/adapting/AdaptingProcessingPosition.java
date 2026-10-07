@@ -123,12 +123,30 @@ final class AdaptingProcessingPosition {
                 : Optional.empty();
     }
 
+    AdaptingPreparedOrderGroup refreshOrderGroupDecision(AdaptingPreparedOrderGroup decision) {
+        return store.refreshOrderGroupDecision(decision);
+    }
+
     void commitOrderGroup(AdaptingPreparedOrderGroup decision) {
+        commitOrderGroup(lastCompletion, decision);
+    }
+
+    void commitOrderGroup(AdaptingBenchCompletion expectedCompletion,
+            AdaptingPreparedOrderGroup currentOrderGroup) {
         if (state != AdaptingBenchState.COMPLETED || lastCompletion == null
-                || lastCompletion.preparedOrderGroup().orElse(null) != decision) {
+                || lastCompletion != expectedCompletion || currentOrderGroup == null) {
             throw new IllegalStateException("Bench has no matching strict COLLECT decision");
         }
-        store.commitOrderGroup(decision);
+        AdaptingPreparedOrderGroup retained = lastCompletion.preparedOrderGroup().orElseThrow(
+                () -> new IllegalStateException("Completion has no strict COLLECT group"));
+        if (!retained.storeId().equals(currentOrderGroup.storeId())
+                || !retained.referenceOrderId().equals(currentOrderGroup.referenceOrderId())
+                || retained.firstCollection() != currentOrderGroup.firstCollection()
+                || !retained.records().equals(currentOrderGroup.records())
+                || !lastCompletion.collectedLines().equals(currentOrderGroup.records())) {
+            throw new IllegalStateException("Strict COLLECT group identity changed before commit");
+        }
+        store.commitOrderGroup(currentOrderGroup);
     }
 
     void clearBlocked() {

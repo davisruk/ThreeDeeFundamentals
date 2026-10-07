@@ -19,6 +19,26 @@ import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 class StationProcessingCoordinatorTest {
 
     @Test
+    void shouldFindExactActiveClaimByIdWithoutChangingOwnership() {
+        StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
+        var routed = StationProcessingTestFixtures.routedTote("indexed-tote",
+                StationProcessingTestFixtures.destination("third-party-1"));
+        assertTrue(coordinator.findActiveClaim(routed.physicalToteId()).isEmpty());
+        StationProcessingClaim claim = coordinator.claim(routed, Duration.ZERO);
+        var before = coordinator.snapshot();
+        assertSame(claim, coordinator.findActiveClaim(routed.physicalToteId()).orElseThrow());
+        assertSame(claim, coordinator.requireActiveClaim(routed.physicalToteId()));
+        assertTrue(coordinator.findActiveClaim(new PhysicalToteId("absent")).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> coordinator.findActiveClaim(null));
+        assertEquals(before, coordinator.snapshot());
+        coordinator.complete(routed.physicalToteId(), StationProcessingDispositionType.CONSUME,
+                routed.loadPlan(), Duration.ofSeconds(1));
+        before = coordinator.snapshot();
+        assertTrue(coordinator.findActiveClaim(routed.physicalToteId()).isEmpty());
+        assertEquals(before, coordinator.snapshot());
+    }
+
+    @Test
     void shouldKeepActiveClaimsAndDispositionsInDeterministicOrder() {
         StationProcessingCoordinator coordinator = new StationProcessingCoordinator();
         var first = StationProcessingTestFixtures.routedTote(

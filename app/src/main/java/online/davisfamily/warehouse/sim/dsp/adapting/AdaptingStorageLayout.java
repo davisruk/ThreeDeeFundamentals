@@ -274,6 +274,25 @@ public class AdaptingStorageLayout {
                 mutationVersion, records, true);
     }
 
+    public AdaptingPreparedOrderGroup refreshOrderGroupDecision(AdaptingPreparedOrderGroup decision) {
+        requireStrictStorage();
+        if (decision == null) {
+            throw new IllegalArgumentException("decision must not be null");
+        }
+        if (decision.mutationVersion() == mutationVersion) {
+            return decision;
+        }
+        AdaptingPreparedOrderGroup current = prepareOrderGroup(
+                decision.storeId(), decision.referenceOrderId());
+        if (!current.storeId().equals(decision.storeId())
+                || !current.referenceOrderId().equals(decision.referenceOrderId())
+                || current.firstCollection() != decision.firstCollection()
+                || !current.records().equals(decision.records())) {
+            throw new IllegalStateException("Strict COLLECT group facts changed before refresh");
+        }
+        return current;
+    }
+
     public List<AdaptedLineRecord> commitOrderGroup(AdaptingPreparedOrderGroup decision) {
         requireStrictStorage();
         if (decision == null) {

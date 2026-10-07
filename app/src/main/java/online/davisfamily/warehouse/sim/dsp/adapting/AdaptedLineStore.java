@@ -63,6 +63,10 @@ public class AdaptedLineStore {
         return layout.commitOrderGroup(decision);
     }
 
+    public AdaptingPreparedOrderGroup refreshOrderGroupDecision(AdaptingPreparedOrderGroup decision) {
+        return layout.refreshOrderGroupDecision(decision);
+    }
+
     public List<AdaptedLineRecord> takeOrderGroup(String storeId, String referenceOrderId) {
         return commitOrderGroup(prepareOrderGroup(storeId, referenceOrderId));
     }

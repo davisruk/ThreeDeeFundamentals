@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.adapting;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -213,6 +214,176 @@ class AdaptingCollectFlowTest {
         assertEquals(AdaptingBenchState.COMPLETED, fixture.bench().state());
         assertTrue(fixture.bench().peekCompletion().isPresent());
     }
+
+    @Test
+    void shouldRefreshOnlyAtPreparationAndCommitExactConcurrentPosition() {
+        ConcurrentStrictFixture fixture = concurrentStrictFixture();
+        var firstCompletion = fixture.bench().position(1).peekCompletion().orElseThrow();
+        var secondCompletion = fixture.bench().position(2).peekCompletion().orElseThrow();
+        PreparedAdaptingCollect first = fixture.controller().prepareBenchCollect(
+                fixture.id(), 1, fixture.registry().getLoadPlanFor("collect-first"));
+        assertEquals(first, new PreparedAdaptingCollect(first.benchId(), first.completion(),
+                first.currentLoadPlan(), first.replacementLoadPlan(), first.preparedPacks(),
+                first.observerCommit()));
+        PreparedAdaptingCollect staleSecond = fixture.controller().prepareBenchCollect(
+                fixture.id(), 2, fixture.registry().getLoadPlanFor("collect-second"));
+        fixture.controller().commitBenchCollect(first).run();
+        assertEquals(1, fixture.bench().occupiedProcessingPositions());
+        var bins = fixture.store().binSnapshots();
+        var provenance = fixture.provenance().snapshot();
+        assertThrows(IllegalStateException.class, () -> fixture.controller().commitBenchCollect(staleSecond));
+        assertSame(bins, fixture.store().binSnapshots());
+        assertEquals(provenance, fixture.provenance().snapshot());
+        assertSame(staleSecond.currentLoadPlan(), fixture.registry().getLoadPlanFor("collect-second"));
+        assertSame(secondCompletion, fixture.bench().position(2).peekCompletion().orElseThrow());
+        assertEquals(List.of("first"), fixture.publishedOrders());
+
+        PreparedAdaptingCollect fresh = fixture.controller().prepareBenchCollect(
+                fixture.id(), 2, staleSecond.currentLoadPlan());
+        assertSame(secondCompletion, fresh.completion());
+        assertEquals(secondCompletion.collectedLines(), fresh.currentOrderGroup().records());
+        assertEquals(staleSecond.preparedPacks().packPlans(), fresh.preparedPacks().packPlans());
+        fixture.controller().commitBenchCollect(fresh).run();
+        assertSame(fresh.replacementLoadPlan(), fixture.registry().getLoadPlanFor("collect-second"));
+        assertEquals(List.of("first", "second"), fixture.publishedOrders());
+        assertEquals(0, fixture.bench().occupiedProcessingPositions());
+        assertTrue(fixture.bench().position(1).peekCompletion().isEmpty());
+        assertTrue(fixture.bench().position(2).peekCompletion().isEmpty());
+        assertSame(firstCompletion, first.completion());
+    }
+
+    @Test
+    void shouldRefreshPendingPreviewAfterUnrelatedStoreButRejectAlreadyPreparedToken() {
+        ConcurrentStrictFixture fixture = concurrentStrictFixture();
+        ToteLoadPlan current = fixture.registry().getLoadPlanFor("collect-first");
+        var token = fixture.controller().prepareBenchCollect(fixture.id(), 1, current);
+        fixture.store().stage(fixture.otherLine(), new OrderSheetKey("source-other", 1), "SC-1");
+        var bins = fixture.store().binSnapshots();
+        assertThrows(IllegalStateException.class, () -> fixture.controller().commitBenchCollect(token));
+        assertSame(bins, fixture.store().binSnapshots());
+        assertTrue(fixture.provenance().snapshot().provenanceByPackId().isEmpty());
+        assertTrue(fixture.publishedOrders().isEmpty());
+        var fresh = fixture.controller().prepareBenchCollect(fixture.id(), 1, current);
+        assertSame(token.completion(), fresh.completion());
+        assertEquals(token.currentOrderGroup().records(), fresh.currentOrderGroup().records());
+        fixture.controller().commitBenchCollect(fresh).run();
+        assertTrue(fixture.store().contains(PreparedLineKey.forPreparedLine(fixture.otherLine())));
+        assertEquals(List.of("first"), fixture.publishedOrders());
+    }
+
+    @Test
+    void shouldRejectStaleCompletionAndPlanReferencesBeforeDrainAndRejectSingularMultiPositionApis() {
+        ConcurrentStrictFixture fixture = concurrentStrictFixture();
+        ToteLoadPlan current = fixture.registry().getLoadPlanFor("collect-first");
+        var token = fixture.controller().prepareBenchCollect(fixture.id(), 1, current);
+        var copiedCompletion = new AdaptingBenchCompletion(token.completion().visit(),
+                token.completion().collectedLines(), token.completion().preparedOrderGroup());
+        var copiedToken = new PreparedAdaptingCollect(token.benchId(), copiedCompletion,
+                current, token.replacementLoadPlan(), token.preparedPacks(), token.observerCommit(),
+                1, token.currentOrderGroup());
+        var bins = fixture.store().binSnapshots();
+        assertThrows(IllegalStateException.class, () -> fixture.controller().commitBenchCollect(copiedToken));
+        var wrongPosition = new PreparedAdaptingCollect(token.benchId(), token.completion(),
+                current, token.replacementLoadPlan(), token.preparedPacks(), token.observerCommit(),
+                2, token.currentOrderGroup());
+        assertThrows(IllegalStateException.class, () -> fixture.controller().commitBenchCollect(wrongPosition));
+        assertThrows(IllegalStateException.class, () -> fixture.controller().applyBenchCompletion(fixture.id()));
+        assertThrows(IllegalStateException.class, () -> fixture.controller().prepareBenchCollect(fixture.id(), current));
+        ToteLoadPlan replacementCurrent = new ToteLoadPlan(current.physicalToteId(), current.getPackPlans());
+        fixture.registry().putLoadPlan(replacementCurrent);
+        assertThrows(IllegalStateException.class, () -> fixture.controller().commitBenchCollect(token));
+        assertSame(bins, fixture.store().binSnapshots());
+        assertSame(replacementCurrent, fixture.registry().getLoadPlanFor(current.physicalToteId()));
+        assertSame(token.completion(), fixture.bench().position(1).peekCompletion().orElseThrow());
+        assertEquals(2, fixture.bench().occupiedProcessingPositions());
+        assertTrue(fixture.provenance().snapshot().provenanceByPackId().isEmpty());
+        assertTrue(fixture.publishedOrders().isEmpty());
+    }
+
+    @Test
+    void shouldApplyLaterSheetEmptyStrictCollectOnlyAfterDesignatedFirstDrain() {
+        ConcurrentStrictFixture fixture = concurrentStrictFixture();
+        fixture.controller().commitBenchCollect(fixture.controller().prepareBenchCollect(
+                fixture.id(), 1, fixture.registry().getLoadPlanFor("collect-first"))).run();
+        DspOrderItem laterLine = adaptedPreparedLine("line-first-later", "first", 1, 1);
+        NotionalToteOrder later = new NotionalToteOrder("first", "first-2", "SC-1", 2,
+                OrderType.ASSOCIATED, List.of(laterLine), 1, 2);
+        ToteLoadPlan current = new ToteLoadPlan("collect-later", List.of(
+                new PackPlan("direct-pack", "direct-bag", testDimensions())));
+        fixture.registry().putLoadPlan(current);
+        fixture.controller().applyBenchCompletion(fixture.id(), 3); // Idle position stays idle.
+        AdaptingVisit visit = new AdaptingVisitFactory().create(current.physicalToteId(), later);
+        fixture.bench().position(1).acceptVisit(visit);
+        fixture.bench().position(1).startProcessing();
+        var bins = fixture.store().binSnapshots();
+        var provenance = fixture.provenance().snapshot();
+        var secondCompletion = fixture.bench().position(2).peekCompletion().orElseThrow();
+        var token = fixture.controller().prepareBenchCollect(fixture.id(), 1, current);
+        assertFalse(token.currentOrderGroup().firstCollection());
+        assertTrue(token.preparedPacks().packPlans().isEmpty());
+        fixture.controller().commitBenchCollect(token).run();
+        assertSame(bins, fixture.store().binSnapshots());
+        assertEquals(provenance, fixture.provenance().snapshot());
+        assertSame(token.replacementLoadPlan(), fixture.registry().getLoadPlanFor(current.physicalToteId()));
+        assertEquals(current.getPackPlans(), token.replacementLoadPlan().getPackPlans());
+        assertSame(secondCompletion, fixture.bench().position(2).peekCompletion().orElseThrow());
+        assertEquals(1, fixture.bench().occupiedProcessingPositions());
+        assertEquals(List.of("first", "first"), fixture.publishedOrders());
+    }
+
+    private static ConcurrentStrictFixture concurrentStrictFixture() {
+        List<NotionalToteOrder> orders = new ArrayList<>();
+        Map<PreparedLineKey, OrderSheetKey> targets = new java.util.LinkedHashMap<>();
+        List<DspOrderItem> lines = new ArrayList<>();
+        for (String id : List.of("first", "second", "other")) {
+            DspOrderItem line = adaptedPreparedLine("line-" + id, id, 1, 1);
+            lines.add(line);
+            orders.add(new NotionalToteOrder("source-" + id, "source-" + id, "SC-1", 1,
+                    OrderType.ADAPTED, List.of(line), 1, 0));
+            orders.add(dispatchOrder(id, OrderType.ASSOCIATED, line));
+            targets.put(PreparedLineKey.forPreparedLine(line), new OrderSheetKey(id, 1));
+        }
+        DspOrderItem laterLine = adaptedPreparedLine("line-first-later", "first", 1, 1);
+        NotionalToteOrder extraSource = new NotionalToteOrder("source-first-later", "source-first-later",
+                "SC-1", 1, OrderType.ADAPTED, List.of(laterLine), 1, 0);
+        orders.add(extraSource);
+        orders.add(new NotionalToteOrder("first", "first-2", "SC-1", 2,
+                OrderType.ASSOCIATED, List.of(laterLine), 1, 2));
+        targets.put(PreparedLineKey.forPreparedLine(laterLine), new OrderSheetKey("first", 2));
+        AdaptingTargetSheetCatalog targetCatalog = new AdaptingTargetSheetCatalog(targets);
+        AdaptingOrderPreparationCatalog orderCatalog = new AdaptingOrderPreparationCatalog(
+                new LoadedDspData(List.of(), orders, List.of(), Set.of()), targetCatalog);
+        AdaptingStorageMap map = new AdaptingStorageMap();
+        AdaptingBenchId id = new AdaptingBenchId("bench-1");
+        map.configureAvailableBenches(List.of(id));
+        AdaptedLineStore store = new AdaptedLineStore(new AdaptingStorageLayout(
+                AdaptingStorageConfig.defaults(), map, targetCatalog, orderCatalog));
+        for (int i = 0; i < 2; i++) {
+            store.stage(lines.get(i), orders.get(i * 2).orderSheetKey(), "SC-1");
+        }
+        store.stage(laterLine, extraSource.orderSheetKey(), "SC-1");
+        AdaptingBench bench = new AdaptingBench("bench-1", store, 0d, 0d, 3);
+        AdaptingArea area = new AdaptingArea(List.of(bench), 3, map);
+        MapBackedToteLoadPlanRegistry registry = new MapBackedToteLoadPlanRegistry();
+        PackProvenanceRegistry provenance = new PackProvenanceRegistry();
+        List<String> published = new ArrayList<>();
+        AdaptingAreaController controller = new AdaptingAreaController(area, emptyRuntimeState(), registry,
+                new DefaultCollectedPackPlanFactory(testDimensions(), new DspPackPlanFactory(provenance)),
+                provenance, (sheet, tote, packs) -> () -> published.add(sheet.orderId()));
+        for (int i = 0; i < 2; i++) {
+            String toteId = "collect-" + orders.get(i * 2 + 1).orderId();
+            registry.putLoadPlan(new ToteLoadPlan(toteId, List.of()));
+            area.submitVisitTo(id, new AdaptingVisitFactory().create(
+                    new PhysicalToteId(toteId), orders.get(i * 2 + 1)));
+        }
+        area.startQueuedPositions(id);
+        return new ConcurrentStrictFixture(id, store, bench, registry, provenance, controller,
+                published, lines.get(2));
+    }
+
+    private record ConcurrentStrictFixture(AdaptingBenchId id, AdaptedLineStore store,
+            AdaptingBench bench, MapBackedToteLoadPlanRegistry registry, PackProvenanceRegistry provenance,
+            AdaptingAreaController controller, List<String> publishedOrders, DspOrderItem otherLine) { }
 
     private static StrictFixture strictFixture(AdaptingCollectObserver observer,
             List<PackPlan> initialPacks) {

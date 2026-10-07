@@ -36,8 +36,7 @@ public final class AdaptingStationProcessingController
 
     private final String processingControllerId;
     private final Set<OperationalRouteDestination> destinations;
-    private final List<AdaptingBenchId> sortedBenchIds;
-    private final Map<AdaptingBenchId, OperationalRouteDestination> destinationByBenchId;
+    private final List<BoundPosition> orderedPositions;
     private final MutableToteLoadPlanRegistry loadPlanRegistry;
     private final AdaptingArea area;
     private final AdaptingAreaController areaController;
@@ -95,10 +94,15 @@ public final class AdaptingStationProcessingController
 
         List<AdaptingBenchId> sortedIds = new ArrayList<>(destinationByBench.keySet());
         sortedIds.sort(Comparator.naturalOrder());
+        List<BoundPosition> positions = new ArrayList<>();
+        for (AdaptingBenchId benchId : sortedIds) {
+            for (AdaptingProcessingPosition position : area.bench(benchId).positions()) {
+                positions.add(new BoundPosition(benchId, destinationByBench.get(benchId), position));
+            }
+        }
         this.processingControllerId = processingControllerId.trim();
         this.destinations = Collections.unmodifiableSet(destinationCopy);
-        this.sortedBenchIds = List.copyOf(sortedIds);
-        this.destinationByBenchId = Map.copyOf(destinationByBench);
+        this.orderedPositions = List.copyOf(positions);
         this.loadPlanRegistry = loadPlanRegistry;
         this.area = area;
         this.areaController = areaController;
@@ -132,38 +136,38 @@ public final class AdaptingStationProcessingController
 
         Duration completedAt = simulationTime(context.getSimulationTimeSeconds());
 
-        // The shared area is advanced exactly once per controller update: each owned bench is
-        // ticked once in deterministic bench-id order.
-        for (AdaptingBenchId benchId : sortedBenchIds) {
-            area.bench(benchId).tick(dtSeconds);
+        // Advance all timers before applying any completion or starting queued work.
+        for (int index = 0; index < orderedPositions.size(); index++) {
+            orderedPositions.get(index).position().tick(dtSeconds);
         }
 
         // Only one completed claim may cross the generic boundary in one update.
-        for (AdaptingBenchId benchId : sortedBenchIds) {
-            AdaptingBench bench = area.bench(benchId);
-            if (bench.state() != AdaptingBenchState.COMPLETED) {
+        for (int index = 0; index < orderedPositions.size(); index++) {
+            BoundPosition bound = orderedPositions.get(index);
+            AdaptingBenchId benchId = bound.benchId();
+            AdaptingProcessingPosition position = bound.position();
+            if (position.state() != AdaptingBenchState.COMPLETED) {
                 continue;
             }
 
-            Optional<AdaptingBenchCompletion> completionOptional = bench.peekCompletion();
+            Optional<AdaptingBenchCompletion> completionOptional = position.peekCompletion();
             if (completionOptional.isEmpty()) {
                 throw new IllegalStateException(
                         "Completed Adapting bench has no staged completion: " + benchId);
             }
             AdaptingBenchCompletion completion = completionOptional.orElseThrow();
-            String activeToteId = bench.snapshot().activeToteId();
-            if (activeToteId == null || activeToteId.isBlank()) {
+            PhysicalToteId physicalToteId = position.activeToteId();
+            if (physicalToteId == null || completion.visit() != position.activeVisit()) {
                 throw new IllegalStateException(
                         "Completed Adapting bench has no retained active tote: " + benchId);
             }
-            PhysicalToteId physicalToteId = new PhysicalToteId(activeToteId);
-            Optional<StationProcessingClaim> activeClaim = activeClaimFor(physicalToteId);
+            Optional<StationProcessingClaim> activeClaim = coordinator.findActiveClaim(physicalToteId);
             if (activeClaim.isEmpty()) {
                 continue;
             }
 
             StationProcessingClaim claim = activeClaim.orElseThrow();
-            OperationalRouteDestination expectedDestination = destinationByBenchId.get(benchId);
+            OperationalRouteDestination expectedDestination = bound.destination();
             if (!expectedDestination.equals(claim.destination())) {
                 throw new IllegalStateException(
                         "Adapting completion claim destination does not match bench " + benchId);
@@ -182,21 +186,20 @@ public final class AdaptingStationProcessingController
             }
 
             if (completion.visit().visitType() == AdaptingVisitType.STORE) {
-                completeStore(benchId, claim, currentLoadPlan, completedAt);
+                completeStore(benchId, position.ordinal(), claim, currentLoadPlan, completedAt);
             } else {
-                completeCollect(benchId, claim, currentLoadPlan, completedAt);
+                completeCollect(benchId, position, claim, currentLoadPlan, completedAt);
             }
 
-            if (area.dispatchNextQueuedVisit(benchId)
-                    && area.bench(benchId).state() == AdaptingBenchState.QUEUED) {
-                area.bench(benchId).startProcessing();
-            }
-            break;
+            area.dispatchQueuedVisits(benchId);
+            area.startQueuedPositions(benchId);
+            return;
         }
     }
 
     private void completeStore(
             AdaptingBenchId benchId,
+            int positionOrdinal,
             StationProcessingClaim claim,
             ToteLoadPlan currentLoadPlan,
             Duration completedAt) {
@@ -210,7 +213,7 @@ public final class AdaptingStationProcessingController
                 completedAt);
         inboundLifecycleController.validateConsumeAtAdapting(physicalToteId, completedAt);
 
-        AdaptingBenchCompletion applied = areaController.applyBenchCompletion(benchId)
+        AdaptingBenchCompletion applied = areaController.applyBenchCompletion(benchId, positionOrdinal)
                 .orElseThrow(() -> new IllegalStateException(
                         "Adapting STORE completion disappeared before application"));
         requireMatchingVisitIdentity(claim, applied.visit());
@@ -230,6 +233,7 @@ public final class AdaptingStationProcessingController
 
     private void completeCollect(
             AdaptingBenchId benchId,
+            AdaptingProcessingPosition position,
             StationProcessingClaim claim,
             ToteLoadPlan currentLoadPlan,
             Duration completedAt) {
@@ -243,11 +247,11 @@ public final class AdaptingStationProcessingController
                 currentLoadPlan,
                 completedAt);
 
-        AdaptingBenchCompletion preview = area.bench(benchId).peekCompletion()
+        AdaptingBenchCompletion preview = position.peekCompletion()
                 .orElseThrow(() -> new IllegalStateException("COLLECT completion disappeared"));
         if (preview.preparedOrderGroup().isPresent()) {
             PreparedAdaptingCollect prepared = areaController.prepareBenchCollect(
-                    benchId, currentLoadPlan);
+                    benchId, position.ordinal(), currentLoadPlan);
             requireMatchingVisitIdentity(claim, prepared.completion().visit());
             ToteLoadPlan prospective = prepared.replacementLoadPlan();
             coordinator.validateCanComplete(
@@ -266,7 +270,7 @@ public final class AdaptingStationProcessingController
             return;
         }
 
-        AdaptingBenchCompletion applied = areaController.applyBenchCompletion(benchId)
+        AdaptingBenchCompletion applied = areaController.applyBenchCompletion(benchId, position.ordinal())
                 .orElseThrow(() -> new IllegalStateException(
                         "Adapting COLLECT completion disappeared before application"));
         requireMatchingVisitIdentity(claim, applied.visit());
@@ -297,12 +301,8 @@ public final class AdaptingStationProcessingController
                 completedAt);
     }
 
-    private Optional<StationProcessingClaim> activeClaimFor(PhysicalToteId physicalToteId) {
-        return coordinator.snapshot().activeClaims().stream()
-                .filter(active -> active.physicalToteId().equals(physicalToteId))
-                .findFirst()
-                .map(active -> coordinator.requireActiveClaim(physicalToteId));
-    }
+    private record BoundPosition(AdaptingBenchId benchId,
+            OperationalRouteDestination destination, AdaptingProcessingPosition position) { }
 
     private static void requireMatchingVisitIdentity(
             StationProcessingClaim claim,
