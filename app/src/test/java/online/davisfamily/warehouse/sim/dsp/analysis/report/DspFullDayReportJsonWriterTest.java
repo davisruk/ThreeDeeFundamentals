@@ -20,6 +20,29 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 class DspFullDayReportJsonWriterTest {
 
     @Test
+    void shouldRoundTripConfiguredBenchDurationsAndPositionCounts(@TempDir Path directory) throws Exception {
+        var profile = DspFullDayReportTestSupport.configuredStations(DspFullDayReportTestSupport.profile());
+        var report = DspFullDayReportTestSupport.earlyCompletionReport(directory, profile);
+        JsonNode root = new ObjectMapper().readTree(new DspFullDayReportJsonWriter().serialize(report));
+        JsonNode benches = root.at("/configuration/adapting/benches");
+        assertEquals(6, benches.size());
+        int positions = 0;
+        for (int index = 0; index < benches.size(); index++) {
+            JsonNode bench = benches.get(index);
+            assertEquals("bench-" + (index + 1), bench.get("id").textValue());
+            assertEquals(60d, bench.get("processingDurationSeconds").doubleValue());
+            assertEquals(60d, bench.get("storeDurationSeconds").doubleValue());
+            assertEquals(10d, bench.get("collectDurationSeconds").doubleValue());
+            assertEquals(3, bench.get("processingPositions").intValue());
+            positions += bench.get("processingPositions").intValue();
+        }
+        assertEquals(18, positions);
+        assertEquals(20d, root.at("/configuration/thirdParty/processingDurationSeconds").doubleValue());
+        assertEquals(3, root.at("/configuration/queues/adaptingQueueCapacityPerBench").intValue());
+        assertEquals("UNCALIBRATED", root.at("/profile/calibrationStatus").textValue());
+    }
+
+    @Test
     void shouldEmitCompleteExplicitUtf8Schema(@TempDir Path directory) throws Exception {
         DspFullDayAnalysisReport report =
                 DspFullDayReportTestSupport.earlyCompletionReport(directory);
@@ -32,6 +55,12 @@ class DspFullDayReportJsonWriterTest {
         assertEquals("UNCALIBRATED", root.at("/profile/calibrationStatus").textValue());
         assertEquals("P2P_OUTPUT_CLOSED", root.at("/profile/completionMilestone").textValue());
         assertNotNull(root.get("configuration"));
+        assertEquals(1, root.at("/configuration/adapting/benches").size());
+        assertEquals("adapting-bench-1", root.at("/configuration/adapting/benches/0/id").textValue());
+        assertEquals(60d, root.at("/configuration/adapting/benches/0/processingDurationSeconds").doubleValue());
+        assertEquals(60d, root.at("/configuration/adapting/benches/0/collectDurationSeconds").doubleValue());
+        assertEquals(1, root.at("/configuration/adapting/benches/0/processingPositions").intValue());
+        assertEquals(60d, root.at("/configuration/thirdParty/processingDurationSeconds").doubleValue());
         assertNotNull(root.get("load"));
         assertTrue(root.at("/load/inboundToteIdSubstitutions").isArray());
         assertEquals(0, root.at("/load/inboundToteIdSubstitutions").size());

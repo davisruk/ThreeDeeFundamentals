@@ -18,6 +18,28 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 class ThirdPartyAreaTest {
 
     @Test
+    void shouldRetainOneConcurrentVisitAndGiveEachVisitTwentySecondsFromItsOwnStart() {
+        ThirdPartyArea area = new ThirdPartyArea(new ThirdPartyAreaConfig(16, 1, 20d));
+        var first = visit("first");
+        var second = visit("second");
+        assertTrue(area.submitVisit(first));
+        assertTrue(area.submitVisit(second));
+        area.update(19d);
+        assertTrue(area.drainCompletions().isEmpty());
+        assertEquals(1, area.snapshot().activeCount());
+        assertEquals(1, area.snapshot().waitingCount());
+        area.update(1d);
+        assertEquals(List.of(new ThirdPartyCompletion(first)), area.drainCompletions());
+        assertEquals(1, area.snapshot().activeCount());
+        assertEquals(0, area.snapshot().waitingCount());
+        area.update(19d);
+        assertTrue(area.drainCompletions().isEmpty());
+        area.update(1d);
+        assertEquals(List.of(new ThirdPartyCompletion(second)), area.drainCompletions());
+        assertEquals(0, area.snapshot().activeCount());
+    }
+
+    @Test
     void shouldBlockAdmissionWhenProcessingAndWaitingCapacityAreFull() {
         ThirdPartyArea area = new ThirdPartyArea(new ThirdPartyAreaConfig(1, 1, 5d));
 

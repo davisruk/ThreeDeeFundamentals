@@ -21,7 +21,11 @@ public final class DspFullDayReportTestSupport {
     }
 
     public static DspFullDayAnalysisReport earlyCompletionReport(Path directory) throws IOException {
-        DspUncalibratedFullDayProfile profile = profile();
+        return earlyCompletionReport(directory, profile());
+    }
+
+    public static DspFullDayAnalysisReport earlyCompletionReport(
+            Path directory, DspUncalibratedFullDayProfile profile) throws IOException {
         DspFullDayLoadedInput input = loadInput(directory, profile);
         try (DspFullDayAnalysisRuntime runtime = new DspFullDayAnalysisRuntimeFactory()
                 .create(input, profile)) {
@@ -80,6 +84,26 @@ public final class DspFullDayReportTestSupport {
                 message("order-108", "tote-108", "108", "998"));
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(productMaster, List.of(firstOrder, secondOrder)), profile);
+    }
+
+    /** The agreed station overrides only; all unrelated baseline settings are retained. */
+    public static DspUncalibratedFullDayProfile configuredStations(DspUncalibratedFullDayProfile base) {
+        var queues = base.queueCapacities();
+        return new DspUncalibratedFullDayProfile(
+                base.operatingDate(), base.osrInventoryConfig(), base.serviceCentreSupplyConfig(),
+                base.inboundToteArrivalPolicy(), base.av02AllocationConfig(), base.p2pElasticAllocationConfig(),
+                base.outboundToteConfig(), base.maximumPacksPerBag(), base.fixedStep(),
+                base.maximumStepsPerAdvance(), base.metricSampleInterval(), base.routeSpeedUnitsPerSecond(),
+                new DspUncalibratedFullDayProfile.QueueCapacities(queues.warehouseTransportCapacity(),
+                        queues.warehouseInFlightCapacity(), queues.stationArrivalQueueCapacity(),
+                        queues.tipperInputQueueCapacity(), 3),
+                new online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaConfig(
+                        base.thirdPartyAreaConfig().waitingCapacity(),
+                        base.thirdPartyAreaConfig().maxConcurrentVisits(), 20d),
+                base.adaptingStorageConfig(), java.util.stream.IntStream.rangeClosed(1, 6)
+                        .mapToObj(index -> new DspUncalibratedFullDayProfile.AdaptingBenchDefinition(
+                                "bench-" + index, 60d, 10d, 3)).toList(),
+                base.p2pPlaceholderDurations(), base.p2pLineDefinitions(), base.prlCountPerLine(), base.timetable());
     }
 
     private static DspFullDayLoadedInput loadInputWithReusedCarrier(

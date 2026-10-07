@@ -318,6 +318,22 @@ public final class DspFullDayAnalysisRunner {
                         }
                         return activeTipperIds;
                     }, lines);
+            if ("start".equals(milestone)) {
+                int positions = 0;
+                for (var bench : profile.adaptingBenchDefinitions()) {
+                    positions = Math.addExact(positions, bench.processingPositions());
+                }
+                int waitingPerBench = profile.queueCapacities().adaptingQueueCapacityPerBench();
+                lines.add("StationProcessing: thirdPartySeconds="
+                        + profile.thirdPartyAreaConfig().processingDurationSeconds()
+                        + " adaptingPositions=" + positions + " adaptingWaiting="
+                        + Math.multiplyExact(waitingPerBench, profile.adaptingBenchDefinitions().size()));
+                for (var bench : profile.adaptingBenchDefinitions()) {
+                    lines.add("AdaptingConfig[" + bench.id() + "]: storeSeconds=" + bench.storeDurationSeconds()
+                            + " collectSeconds=" + bench.collectDurationSeconds()
+                            + " positions=" + bench.processingPositions() + " waitingCapacity=" + waitingPerBench);
+                }
+            }
             progressOutput.print(milestone, List.copyOf(lines));
         } catch (IOException exception) {
             throw new ProgressOutputFailure(exception);

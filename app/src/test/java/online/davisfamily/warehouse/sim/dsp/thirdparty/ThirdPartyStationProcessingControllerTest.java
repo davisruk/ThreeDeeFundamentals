@@ -52,6 +52,23 @@ import online.davisfamily.warehouse.sim.dsp.transport.RoutedPhysicalTote;
 class ThirdPartyStationProcessingControllerTest {
 
     @Test
+    void shouldContinueOnlyAfterTwentySecondsOfClaimedProcessing() {
+        var fixture = fixture(OrderType.FULL_PACK, OperationalPhysicalToteSource.OSR,
+                DspOrderLineType.FULL_PACK, "twenty-seconds", 20d);
+        fixture.target().accept(fixture.routedTote(), Duration.ofSeconds(50));
+        fixture.controller().update(context(69d), 19d);
+        assertTrue(fixture.coordinator().pendingDispositions().isEmpty());
+        assertEquals(1, fixture.area().snapshot().activeCount());
+        assertSame(fixture.routedTote().loadPlan(), fixture.registry().getLoadPlanFor(
+                fixture.routedTote().physicalToteId()));
+        fixture.controller().update(context(70d), 1d);
+        var disposition = fixture.coordinator().peekDisposition().orElseThrow();
+        assertEquals(Duration.ofSeconds(70), disposition.completedAt());
+        assertEquals(Duration.ofSeconds(50), disposition.claim().claimedAt());
+        assertEquals(0, fixture.area().snapshot().activeCount());
+    }
+
+    @Test
     void shouldPublishOneContinueDispositionWithTheExactReplacementPlan() {
         Fixture fixture = fixture(OrderType.FULL_PACK, OperationalPhysicalToteSource.OSR,
                 DspOrderLineType.FULL_PACK, "controller-direct", 0d);

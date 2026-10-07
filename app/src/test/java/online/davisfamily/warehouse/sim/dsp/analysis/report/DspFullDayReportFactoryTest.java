@@ -17,6 +17,36 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionO
 class DspFullDayReportFactoryTest {
 
     @Test
+    void shouldReportEffectiveStationSettingsAndRetainTheLegacyStoreAlias(@TempDir Path directory)
+            throws Exception {
+        var profile = DspFullDayReportTestSupport.configuredStations(DspFullDayReportTestSupport.profile());
+        var report = DspFullDayReportTestSupport.earlyCompletionReport(directory, profile);
+        var adapting = (java.util.Map<?, ?>) report.configuration().get("adapting");
+        var benches = (List<?>) adapting.get("benches");
+        assertEquals(6, benches.size());
+        int positions = 0;
+        for (int index = 0; index < benches.size(); index++) {
+            var bench = (java.util.Map<?, ?>) benches.get(index);
+            assertEquals("bench-" + (index + 1), bench.get("id"));
+            assertEquals(60d, bench.get("processingDurationSeconds"));
+            assertEquals(60d, bench.get("storeDurationSeconds"));
+            assertEquals(10d, bench.get("collectDurationSeconds"));
+            assertEquals(3, bench.get("processingPositions"));
+            positions += (Integer) bench.get("processingPositions");
+            assertThrows(UnsupportedOperationException.class, bench::clear);
+        }
+        assertEquals(18, positions);
+        var thirdParty = (java.util.Map<?, ?>) report.configuration().get("thirdParty");
+        assertEquals(20d, thirdParty.get("processingDurationSeconds"));
+        assertEquals(1, thirdParty.get("maxConcurrentVisits"));
+        assertEquals(16, thirdParty.get("waitingCapacity"));
+        var queues = (java.util.Map<?, ?>) report.configuration().get("queues");
+        assertEquals(3, queues.get("adaptingQueueCapacityPerBench"));
+        assertEquals("UNCALIBRATED", report.calibrationStatus());
+        assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, report.state());
+    }
+
+    @Test
     void shouldProduceStableTerminalReportValues(@TempDir Path directory) throws Exception {
         DspFullDayAnalysisReport report =
                 DspFullDayReportTestSupport.earlyCompletionReport(directory);

@@ -536,7 +536,10 @@ public final class DspFullDayReportFactory {
     }
 
     private static Map<String, Object> bench(AdaptingBenchDefinition value) {
-        return linkedMap("id", value.id(), "processingDurationSeconds", value.processingDurationSeconds());
+        return linkedMap("id", value.id(), "processingDurationSeconds", value.processingDurationSeconds(),
+                "storeDurationSeconds", value.storeDurationSeconds(),
+                "collectDurationSeconds", value.collectDurationSeconds(),
+                "processingPositions", value.processingPositions());
     }
 
     private static Map<String, Object> placeholders(P2pPlaceholderDurations value) {

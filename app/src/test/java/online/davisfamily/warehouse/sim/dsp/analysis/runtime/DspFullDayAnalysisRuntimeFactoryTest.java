@@ -59,6 +59,7 @@ import online.davisfamily.warehouse.sim.dsp.model.DspOrderLineType;
 import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.model.ProductMasterRecord;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
@@ -78,6 +79,27 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class DspFullDayAnalysisRuntimeFactoryTest {
+
+    @Test
+    void shouldComposeSixPhysicalBenchesWithEighteenPositionsAndSharedWaiting() {
+        var configured = online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportTestSupport
+                .configuredStations(sheetOwnedProfile());
+        var input = exceptionFixtureInput(configured, true);
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, configured)) {
+            var capacity = runtime.schedulerRuntimeState().snapshot().stationAdmissions()
+                    .get(StationType.ADAPTING).capacity();
+            assertEquals(18, capacity.maxInProgress());
+            assertEquals(18, capacity.queueLimit());
+            assertEquals(6, runtime.stationProcessingRuntime().destinations().stream()
+                    .filter(destination -> destination.stationType() == StationType.ADAPTING).count());
+            assertEquals(6, runtime.stationProcessingRuntime().claimantSnapshots().stream()
+                    .filter(claim -> claim.destination().stationType() == StationType.ADAPTING).count());
+            var benches = runtime.adaptingBenchAdmissionSnapshots();
+            assertEquals(6, benches.size());
+            assertTrue(benches.stream().allMatch(bench -> bench.processingCapacity() == 3
+                    && bench.occupiedProcessingPositions() == 0 && bench.queueSnapshot().capacity() == 3));
+        }
+    }
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
 
     @Test

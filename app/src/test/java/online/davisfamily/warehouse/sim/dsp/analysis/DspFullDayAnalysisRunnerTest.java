@@ -56,6 +56,32 @@ import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 class DspFullDayAnalysisRunnerTest {
 
     @Test
+    void shouldPrintEffectiveStationSettingsOnlyInStartAndMirrorThem(@TempDir Path directory) throws Exception {
+        var profile = DspFullDayReportTestSupport.configuredStations(profile(directory, Duration.ofSeconds(1), 20));
+        var input = DspFullDayReportTestSupport.input(directory, profile);
+        var bytes = new ByteArrayOutputStream();
+        Path log = directory.resolve("configured-progress.log");
+        new DspFullDayAnalysisRunner(() -> 1_000_000L, new PrintStream(bytes, true, StandardCharsets.UTF_8))
+                .run(input, profile, directory.resolve("configured-report.json"), Optional.empty(),
+                        Optional.of(log), Duration.ofSeconds(5), false);
+        String progress = Files.readString(log);
+        assertEquals(progress, bytes.toString(StandardCharsets.UTF_8));
+        String summary = "StationProcessing: thirdPartySeconds=20.0 adaptingPositions=18 adaptingWaiting=18";
+        assertEquals(1, occurrences(progress, summary));
+        int nextMilestone = progress.indexOf("[dsp-full-day:", "[dsp-full-day:start]".length());
+        assertTrue(nextMilestone > progress.indexOf(summary));
+        for (int index = 1; index <= 6; index++) {
+            String config = "AdaptingConfig[bench-" + index + "]: storeSeconds=60.0 collectSeconds=10.0"
+                    + " positions=3 waitingCapacity=3";
+            assertEquals(1, occurrences(progress, config));
+            assertTrue(progress.indexOf(config) < nextMilestone);
+        }
+        assertTrue(progress.contains("[dsp-full-day:progress="));
+        assertTrue(progress.contains("[dsp-full-day:completion="));
+        assertTrue(progress.contains("[dsp-full-day:final]"));
+    }
+
+    @Test
     void shouldReadDiagnosticsOnlyForBlockedProgressAndInsertAfterStation(@TempDir Path directory)
             throws Exception {
         var profile = DspFullDayReportTestSupport.profile();
@@ -130,6 +156,10 @@ class DspFullDayAnalysisRunnerTest {
         assertTrue(Files.isRegularFile(output));
         String inspection = inspectionBytes.toString(StandardCharsets.UTF_8);
         assertTrue(inspection.contains("[dsp-full-day:start]"));
+        assertEquals(1, occurrences(inspection,
+                "StationProcessing: thirdPartySeconds=60.0 adaptingPositions=1 adaptingWaiting=4"));
+        assertEquals(1, occurrences(inspection, "AdaptingConfig[adapting-bench-1]: storeSeconds=60.0"
+                + " collectSeconds=60.0 positions=1 waitingCapacity=4"));
         assertTrue(inspection.contains("[dsp-full-day:final]"));
         assertTrue(inspection.contains("[dsp-full-day:completion="));
         assertTrue(clock.get() >= 4);

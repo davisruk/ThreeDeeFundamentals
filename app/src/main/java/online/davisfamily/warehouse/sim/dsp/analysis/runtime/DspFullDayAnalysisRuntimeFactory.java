@@ -101,12 +101,19 @@ public final class DspFullDayAnalysisRuntimeFactory {
             Function<String, Set<String>> missingPackIdsProvider =
                     exceptionLedger::missingPackIdsFor;
             QueueCapacities queues = profile.queueCapacities();
+            int adaptingPositions = 0;
+            for (AdaptingBenchDefinition definition : profile.adaptingBenchDefinitions()) {
+                adaptingPositions = Math.addExact(adaptingPositions, definition.processingPositions());
+            }
+            StationCapacity adaptingCapacity = new StationCapacity(adaptingPositions,
+                    Math.multiplyExact(queues.adaptingQueueCapacityPerBench(),
+                            profile.adaptingBenchDefinitions().size()));
 
             DspRouteDeriver routeDeriver = new DspRouteDeriver(
                     new InMemoryProductMasterRepository(data.products()));
             List<OperationalRouteDestination> destinations = destinations(profile);
             Map<StationType, StationAdmissionSnapshot> initialAdmissions =
-                    initialStationAdmissions(profile, destinations);
+                    initialStationAdmissions(profile, destinations, adaptingCapacity);
             DspSchedulerRuntimeState schedulerState = new LoadedDspSchedulerRuntimeFactory(
                     routeDeriver).createRuntimeState(
                             data, initialAdmissions, Optional.empty());
@@ -188,7 +195,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
             List<AdaptingBench> adaptingBenches = new ArrayList<>();
             for (AdaptingBenchDefinition definition : profile.adaptingBenchDefinitions()) {
                 adaptingBenches.add(new AdaptingBench(
-                        definition.id(), adaptedLineStore, definition.processingDurationSeconds()));
+                        definition.id(), adaptedLineStore, definition.storeDurationSeconds(),
+                        definition.collectDurationSeconds(), definition.processingPositions()));
             }
             AdaptingArea adaptingArea = new AdaptingArea(
                     adaptingBenches,
@@ -310,6 +318,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
             StationAdmissionResolver stationAdmissionResolver = stationAdmissionResolver(
                     profile,
                     adaptingArea,
+                    adaptingCapacity,
                     thirdPartyVisitPlans,
                     thirdPartyAreaController,
                     topology,
@@ -610,10 +619,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
     private static Map<StationType, StationAdmissionSnapshot> initialStationAdmissions(
             DspUncalibratedFullDayProfile profile,
-            List<OperationalRouteDestination> destinations) {
+            List<OperationalRouteDestination> destinations,
+            StationCapacity adaptingCapacity) {
         QueueCapacities queues = profile.queueCapacities();
-        int adaptingQueueLimit = Math.multiplyExact(
-                queues.adaptingQueueCapacityPerBench(), profile.adaptingBenchDefinitions().size());
         int p2pQueueLimit = Math.multiplyExact(
                 queues.stationQueueCapacity(), profile.p2pLineDefinitions().size());
         Map<StationType, StationAdmissionSnapshot> admissions = new EnumMap<>(StationType.class);
@@ -636,8 +644,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 StationType.ADAPTING,
                 new StationAdmissionSnapshot(
                         StationType.ADAPTING,
-                        new StationCapacity(
-                                profile.adaptingBenchDefinitions().size(), adaptingQueueLimit),
+                        adaptingCapacity,
                         new StationSnapshot(StationType.ADAPTING, 0, 0),
                         true,
                         "",
@@ -721,6 +728,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
     private static StationAdmissionResolver stationAdmissionResolver(
             DspUncalibratedFullDayProfile profile,
             AdaptingArea adaptingArea,
+            StationCapacity adaptingCapacity,
             ThirdPartyVisitPlanSource thirdPartyVisitPlans,
             ThirdPartyAreaController thirdPartyAreaController,
             RouteTopology topology,
@@ -731,11 +739,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
         StationAdmissionResolver adapting = new AdaptingStationAdmissionResolver(
                 base,
                 adaptingArea,
-                new StationCapacity(
-                        profile.adaptingBenchDefinitions().size(),
-                        Math.multiplyExact(
-                                profile.queueCapacities().adaptingQueueCapacityPerBench(),
-                                profile.adaptingBenchDefinitions().size())));
+                adaptingCapacity);
         StationAdmissionResolver thirdParty = new ThirdPartyStationAdmissionResolver(
                 adapting,
                 thirdPartyVisitPlans,

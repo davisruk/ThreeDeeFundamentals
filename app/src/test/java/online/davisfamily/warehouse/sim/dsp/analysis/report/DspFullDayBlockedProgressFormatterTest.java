@@ -64,10 +64,10 @@ class DspFullDayBlockedProgressFormatterTest {
                     + " destination=ADAPTING/bench-1 terminalSensor=head-sensor"
                     + " blockedTote=arrival-head blocked=arrival full", lines.get(1));
             assertEquals("BlockedProgress.Adapting[bench-1]: state=IDLE activeTote=none"
-                    + " visit=none remainingSeconds=0.0 queue=0/1 head=none"
+                    + " visit=none remainingSeconds=0.0 occupiedPositions=0/1 queue=0/1 head=none"
                     + " admissionOpen=true blocked=none", lines.get(2));
             assertEquals("BlockedProgress.Adapting[bench-2]: state=PROCESSING_STORE"
-                    + " activeTote=bench-active visit=STORE remainingSeconds=2.5 queue=1/1"
+                    + " activeTote=bench-active visit=STORE remainingSeconds=2.5 occupiedPositions=1/1 queue=1/1"
                     + " head=bench-head admissionOpen=false blocked=local full", lines.get(3));
             assertEquals("BlockedProgress.P2P[dsp-p2p-line-1]: owner=104"
                     + " activeTipperTote=tipper-active activeTipper=true stationArrival=3"
@@ -142,6 +142,27 @@ class DspFullDayBlockedProgressFormatterTest {
                 new AdaptingBenchAdmissionSnapshot(new AdaptingBenchId("bench-1"),
                         new AdaptingBenchSnapshot("bench-1", AdaptingBenchState.IDLE, null, null, 0d, ""),
                         new MachineWaitQueueSnapshot("bench-1-queue", 1, List.of()), true, ""));
+    }
+
+    @Test
+    void shouldLabelMultiPositionScalarsAsRepresentativeWithoutDetailedPositions(@TempDir Path directory)
+            throws Exception {
+        var profile = DspFullDayReportTestSupport.profile();
+        var input = DspFullDayReportTestSupport.input(directory, profile);
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var snapshot = runtime.snapshot();
+            var bench = new AdaptingBenchAdmissionSnapshot(new AdaptingBenchId("bench-1"),
+                    new AdaptingBenchSnapshot("bench-1", AdaptingBenchState.PROCESSING_COLLECT,
+                            "lowest-occupied", AdaptingVisitType.COLLECT, 7d, ""),
+                    new MachineWaitQueueSnapshot("bench-1-queue", 3, List.of()), true, "", 3, 2);
+            var lines = new DspFullDayBlockedProgressFormatter().describe(
+                    snapshot, List.of(bench), activeIds(snapshot));
+            assertEquals("BlockedProgress.Adapting[bench-1]: representativeState=PROCESSING_COLLECT"
+                    + " representativeTote=lowest-occupied representativeVisit=COLLECT"
+                    + " representativeRemainingSeconds=7.0 occupiedPositions=2/3 queue=0/3"
+                    + " head=none admissionOpen=true blocked=none", lines.get(2));
+            assertEquals(snapshot, runtime.snapshot());
+        }
     }
 
     private static Map<P2pLineId, Optional<String>> activeIds(DspFullDayAnalysisRuntimeSnapshot snapshot) {

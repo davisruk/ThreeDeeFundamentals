@@ -78,10 +78,15 @@ public final class DspFullDayBlockedProgressFormatter {
     private static String benchLine(AdaptingBenchAdmissionSnapshot bench) {
         var state = bench.benchSnapshot();
         var queue = bench.queueSnapshot();
-        return "BlockedProgress.Adapting[" + bench.benchId().value() + "]: state=" + state.state()
-                + " activeTote=" + value(state.activeToteId())
-                + " visit=" + (state.activeVisitType() == null ? "none" : state.activeVisitType())
-                + " remainingSeconds=" + state.remainingProcessingSeconds()
+        boolean representative = bench.processingCapacity() > 1;
+        return "BlockedProgress.Adapting[" + bench.benchId().value() + "]: "
+                + (representative ? "representativeState=" : "state=") + state.state()
+                + (representative ? " representativeTote=" : " activeTote=") + value(state.activeToteId())
+                + (representative ? " representativeVisit=" : " visit=")
+                + (state.activeVisitType() == null ? "none" : state.activeVisitType())
+                + (representative ? " representativeRemainingSeconds=" : " remainingSeconds=")
+                + state.remainingProcessingSeconds()
+                + " occupiedPositions=" + bench.occupiedProcessingPositions() + "/" + bench.processingCapacity()
                 + " queue=" + queue.toteIds().size() + "/" + queue.capacity()
                 + " head=" + (queue.toteIds().isEmpty() ? "none" : queue.toteIds().getFirst())
                 + " admissionOpen=" + bench.admissionOpen()

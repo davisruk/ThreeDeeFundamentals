@@ -23,6 +23,25 @@ import org.junit.jupiter.api.io.TempDir;
 class DspFullDayProgressOutputTest {
 
     @Test
+    void shouldFlushStationSettingsWithStartBeforeLaterProgress(@TempDir Path directory) throws Exception {
+        var bytes = new ByteArrayOutputStream();
+        Path log = directory.resolve("station-settings.log");
+        List<String> settings = List.of(
+                "StationProcessing: thirdPartySeconds=20.0 adaptingPositions=18 adaptingWaiting=18",
+                "AdaptingConfig[bench-1]: storeSeconds=60.0 collectSeconds=10.0 positions=3 waitingCapacity=3");
+        try (var output = DspFullDayProgressOutput.open(
+                new PrintStream(bytes, true, StandardCharsets.UTF_8), Optional.of(log), false)) {
+            output.print("start", settings);
+            assertArrayEquals(bytes.toByteArray(), Files.readAllBytes(log));
+            output.print("progress=PT1M", List.of("Remaining: totes=1"));
+            assertArrayEquals(bytes.toByteArray(), Files.readAllBytes(log));
+            assertEquals(settings, Files.readAllLines(log).subList(1, 3));
+            assertEquals(1, Files.readAllLines(log).stream()
+                    .filter(line -> line.startsWith("StationProcessing:")).count());
+        }
+    }
+
+    @Test
     void shouldMirrorUtf8BlocksAndFlushBeforeClose(@TempDir Path directory) throws Exception {
         ByteArrayOutputStream consoleBytes = new ByteArrayOutputStream();
         PrintStream console = new PrintStream(consoleBytes, true, StandardCharsets.UTF_8);
