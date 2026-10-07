@@ -289,9 +289,15 @@ class DspFullDayAnalysisRunnerTest {
         assertTrue(first >= 0);
         assertTrue(second > first);
         assertEquals("WallClock: sincePreviousProgress=PT0.002S", lines.get(first + 3));
+        assertEquals("WallClock: sinceStart=PT0.002S", lines.get(first + 4));
         assertEquals("WallClock: sincePreviousProgress=PT0.003S", lines.get(second + 3));
-        assertEquals(lines.stream().filter(line -> line.startsWith("[dsp-full-day:progress=")).count(),
-                lines.stream().filter(line -> line.startsWith("WallClock: ")).count());
+        assertEquals("WallClock: sinceStart=PT0.005S", lines.get(second + 4));
+        long progressCount = lines.stream()
+                .filter(line -> line.startsWith("[dsp-full-day:progress=")).count();
+        assertEquals(progressCount, lines.stream()
+                .filter(line -> line.startsWith("WallClock: sincePreviousProgress=")).count());
+        assertEquals(progressCount, lines.stream()
+                .filter(line -> line.startsWith("WallClock: sinceStart=")).count());
         assertTrue(lines.stream().anyMatch(line -> line.startsWith("BlockedProgress: ")));
         assertEquals(22_000_000L, clock.get());
     }

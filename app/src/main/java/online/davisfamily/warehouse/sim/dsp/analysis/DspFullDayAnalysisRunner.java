@@ -220,7 +220,7 @@ public final class DspFullDayAnalysisRunner {
                     if (progressSchedule.reached(elapsed)) {
                         progressSchedule.advancePast(elapsed);
                         var progressRuntime = runtime.snapshot();
-                        Duration wallInterval = progressWallClock.sincePreviousProgress();
+                        List<Duration> intervals = progressWallClock.sincePreviousProgress();
                         printProgress(
                                 progressOutput,
                                 "progress=" + elapsed,
@@ -229,7 +229,7 @@ public final class DspFullDayAnalysisRunner {
                                 input,
                                 profile,
                                 manifestCatalog,
-                                Optional.of(wallInterval));
+                                Optional.of(intervals));
                     }
                 });
             } catch (TerminalReached reached) {
@@ -279,7 +279,7 @@ public final class DspFullDayAnalysisRunner {
             DspFullDayLoadedInput input,
             DspUncalibratedFullDayProfile profile,
             InboundToteManifestCatalog manifestCatalog,
-            Optional<Duration> wallInterval) {
+            Optional<List<Duration>> intervals) {
         try {
             List<String> lines = new ArrayList<>(progressFormatter.describe(
                     DspFullDayProgressSnapshot.from(runtime, input, profile)));
@@ -302,9 +302,12 @@ public final class DspFullDayAnalysisRunner {
                     runtime.metrics().serviceCentres().stream()
                             .map(centre -> centre.serviceCentreId()).toList(),
                     missingPackCounts));
-            if (wallInterval.isPresent()) {
-                lines.add(2, "WallClock: sincePreviousProgress=" + wallInterval.orElseThrow());
+            if (intervals.isPresent()) {
+                List<Duration> durations = intervals.get();
+                lines.add(2, "WallClock: sincePreviousProgress=" + durations.get(ProgressWallClock.Position.PREVIOUS.index));
+                lines.add(3, "WallClock: sinceStart=" + durations.get(ProgressWallClock.Position.TOTAL.index));
             }
+
             appendBlockedProgressLines(milestone, runtime,
                     liveRuntime::adaptingBenchAdmissionSnapshots,
                     () -> {
@@ -574,21 +577,31 @@ public final class DspFullDayAnalysisRunner {
 
     private static final class ProgressWallClock {
         private final LongSupplier monotonicNanos;
+        private final long startNanos;
         private long previousProgressNanos;
+
+        private enum Position {PREVIOUS(0), TOTAL(1);
+            public final int index;
+            private Position(int i){
+                this.index = i;
+            }
+        };
 
         private ProgressWallClock(LongSupplier monotonicNanos) {
             this.monotonicNanos = monotonicNanos;
             this.previousProgressNanos = monotonicNanos.getAsLong();
+            this.startNanos = this.previousProgressNanos;
         }
 
-        private Duration sincePreviousProgress() {
+        private List<Duration> sincePreviousProgress() {
             long now = monotonicNanos.getAsLong();
             if (now < previousProgressNanos) {
                 throw new IllegalStateException("monotonic clock moved backwards");
             }
             Duration interval = Duration.ofNanos(now - previousProgressNanos);
+            Duration sinceStart = Duration.ofNanos(now - startNanos);
             previousProgressNanos = now;
-            return interval;
+            return List.of(interval, sinceStart);
         }
     }
 }
