@@ -129,6 +129,15 @@ public record DspFullDayAnalysisReport(
         return unsupportedWork;
     }
 
+    public Map<String, Integer> nsCandidateInputLineCountByServiceCentreId() {
+        return DspFullDayProgressSnapshot.nsCandidateCounts(loadReport);
+    }
+
+    public boolean completedWithNsCandidates() {
+        return state == DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE
+                && !loadReport.unresolvedProductLines().isEmpty();
+    }
+
     /** Whether this completed report contains recoverable input exclusions. */
     public boolean completedWithInputExclusions() {
         return rejectionCatalog.rejectedLineCount() > 0

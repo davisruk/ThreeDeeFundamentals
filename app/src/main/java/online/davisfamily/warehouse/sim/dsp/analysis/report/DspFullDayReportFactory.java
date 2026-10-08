@@ -433,6 +433,10 @@ public final class DspFullDayReportFactory {
         if (!loadReport.inboundToteIdSubstitutions().isEmpty()) {
             values.add("Reused inbound carrier barcodes were assigned distinct DSP journey IDs");
         }
+        if (!loadReport.unresolvedProductLines().isEmpty()) {
+            values.add("Deferred NS candidates count input-line occurrences; "
+                    + "NS labels/Exceptions completion have not happened");
+        }
         for (UnresolvedProductLine issue : loadReport.unresolvedProductLines()) {
             values.add("Unresolved product " + issue.productId()
                     + " for " + issue.orderId() + "/" + issue.lineReference());

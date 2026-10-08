@@ -171,6 +171,145 @@ class DspFullDayCompletionEvaluatorTest {
     }
 
     @Test
+    void shouldCompletePhysicalWorkWithNsPendingButKeepOtherPredicatesBlocking() {
+        var complete = evaluator.evaluate(nsObservation(2, 0, List.of()));
+        assertTrue(complete.complete());
+        assertEquals(2, complete.nsCandidateInputLineCount());
+        assertEquals(Duration.ZERO, complete.completionElapsedTime().orElseThrow());
+        assertEquals(DspServiceCentreCompletionOutcome.ON_TARGET, complete.outcome());
+        assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION,
+                complete.p2pOutputClosureState());
+        assertEquals(0, complete.missingPackCount());
+        assertEquals(0, complete.markedOutboundToteCount());
+        assertFalse(evaluator.evaluate(nsObservation(2, 1, List.of())).complete());
+        var unsupported = evaluator.evaluate(nsObservation(2, 0, List.of("MANUAL work")));
+        assertFalse(unsupported.complete());
+        assertEquals(DspP2pOutputClosureState.NOT_CLOSED, unsupported.p2pOutputClosureState());
+        assertThrows(IllegalArgumentException.class, () -> nsObservation(-1, 0, List.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> nsSnapshot(complete, DspP2pOutputClosureState.P2P_OUTPUT_CLOSED, 2));
+        assertThrows(IllegalArgumentException.class,
+                () -> nsSnapshot(complete, DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION, -1));
+    }
+
+    @Test
+    void shouldDefaultBothLegacyConstructorShapesToZeroNs() {
+        var preException = observation(clock.initialSnapshot(), true, 0, List.of(), Optional.empty());
+        var exceptionAware = exceptionObservation(clock.initialSnapshot(), 0, 0, 0, 0, 0);
+        assertEquals(0, preException.nsCandidateInputLineCount());
+        assertEquals(0, exceptionAware.nsCandidateInputLineCount());
+        var original = evaluator.evaluate(preException);
+        for (var snapshot : List.of(legacySnapshot(original, false), legacySnapshot(original, true))) {
+            assertEquals(0, snapshot.nsCandidateInputLineCount());
+            assertEquals(original, snapshot);
+            assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED, snapshot.p2pOutputClosureState());
+        }
+    }
+
+    private DspFullDayCompletionEvaluator.Observation nsObservation(
+            int count, int upstreamWaiting, List<String> unsupported) {
+        return new DspFullDayCompletionEvaluator.Observation(
+                "109", clock.initialSnapshot(), true,
+                upstreamWaiting, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                unsupported, Optional.empty(), 0, 0, 0, 0, 0, count);
+    }
+
+    private static DspServiceCentreCompletionSnapshot nsSnapshot(
+            DspServiceCentreCompletionSnapshot snapshot, DspP2pOutputClosureState closure, int nsCount) {
+        return new DspServiceCentreCompletionSnapshot(
+                snapshot.serviceCentreId(),
+                snapshot.supplyComplete(),
+                snapshot.upstreamWaitingCount(),
+                snapshot.capacityBlockedManifestCount(),
+                snapshot.osrWaitingCount(),
+                snapshot.av02WaitingCount(),
+                snapshot.nonTerminalInboundToteCount(),
+                snapshot.remainingPhysicalToteCount(),
+                snapshot.remainingPhysicalPackCount(),
+                snapshot.remainingPlannedBagCount(),
+                snapshot.activeStationClaimCount(),
+                snapshot.pendingStationDispositionCount(),
+                snapshot.transportEnvelopeCount(),
+                snapshot.tipperInputCount(),
+                snapshot.p2pAssignmentCount(),
+                snapshot.openOutboundToteCount(),
+                snapshot.unallocatedCompletedBagCount(),
+                snapshot.unsupportedWork(),
+                snapshot.completionElapsedTime(),
+                snapshot.completionDateTime(),
+                snapshot.outcome(),
+                snapshot.deadline(),
+                snapshot.complete(),
+                closure,
+                snapshot.missingPackCount(),
+                snapshot.pdcCollectedPackCount(),
+                snapshot.affectedAllocatedBagCount(),
+                snapshot.markedOutboundToteCount(),
+                snapshot.pendingEmptyBagCount(),
+                nsCount);
+    }
+
+    private static DspServiceCentreCompletionSnapshot legacySnapshot(
+            DspServiceCentreCompletionSnapshot snapshot, boolean exceptionAware) {
+        if (exceptionAware) {
+            return new DspServiceCentreCompletionSnapshot(
+                    snapshot.serviceCentreId(),
+                    snapshot.supplyComplete(),
+                    snapshot.upstreamWaitingCount(),
+                    snapshot.capacityBlockedManifestCount(),
+                    snapshot.osrWaitingCount(),
+                    snapshot.av02WaitingCount(),
+                    snapshot.nonTerminalInboundToteCount(),
+                    snapshot.remainingPhysicalToteCount(),
+                    snapshot.remainingPhysicalPackCount(),
+                    snapshot.remainingPlannedBagCount(),
+                    snapshot.activeStationClaimCount(),
+                    snapshot.pendingStationDispositionCount(),
+                    snapshot.transportEnvelopeCount(),
+                    snapshot.tipperInputCount(),
+                    snapshot.p2pAssignmentCount(),
+                    snapshot.openOutboundToteCount(),
+                    snapshot.unallocatedCompletedBagCount(),
+                    snapshot.unsupportedWork(),
+                    snapshot.completionElapsedTime(),
+                    snapshot.completionDateTime(),
+                    snapshot.outcome(),
+                    snapshot.deadline(),
+                    snapshot.complete(),
+                    snapshot.p2pOutputClosureState(),
+                    snapshot.missingPackCount(),
+                    snapshot.pdcCollectedPackCount(),
+                    snapshot.affectedAllocatedBagCount(),
+                    snapshot.markedOutboundToteCount(),
+                    snapshot.pendingEmptyBagCount());
+        }
+        return new DspServiceCentreCompletionSnapshot(
+                snapshot.serviceCentreId(),
+                snapshot.supplyComplete(),
+                snapshot.upstreamWaitingCount(),
+                snapshot.capacityBlockedManifestCount(),
+                snapshot.osrWaitingCount(),
+                snapshot.av02WaitingCount(),
+                snapshot.nonTerminalInboundToteCount(),
+                snapshot.remainingPhysicalToteCount(),
+                snapshot.remainingPhysicalPackCount(),
+                snapshot.remainingPlannedBagCount(),
+                snapshot.activeStationClaimCount(),
+                snapshot.pendingStationDispositionCount(),
+                snapshot.transportEnvelopeCount(),
+                snapshot.tipperInputCount(),
+                snapshot.p2pAssignmentCount(),
+                snapshot.openOutboundToteCount(),
+                snapshot.unallocatedCompletedBagCount(),
+                snapshot.unsupportedWork(),
+                snapshot.completionElapsedTime(),
+                snapshot.completionDateTime(),
+                snapshot.outcome(),
+                snapshot.deadline(),
+                snapshot.complete());
+    }
+
+    @Test
     void shouldPublishOneNormalEvaluationAndReplaceItOnTheNextUpdate() {
         DspServiceCentreCompletionSnapshot incomplete = evaluator.evaluate(observation(
                 clock.initialSnapshot(), false, 0, List.of(), Optional.empty()));

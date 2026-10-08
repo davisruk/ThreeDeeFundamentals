@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspRejectedLine;
@@ -40,7 +41,10 @@ public final class DspFullDayInspectionFormatter {
                 + " calibration=" + snapshot.calibrationStatus()
                 + " milestone=" + snapshot.completionMilestone()
                 + " completedWithInputExclusions="
-                + snapshot.completedWithInputExclusions());
+                + snapshot.completedWithInputExclusions()
+                + " completedWithNsCandidates="
+                + (runtime.state() == DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE
+                        && !snapshot.loadReport().unresolvedProductLines().isEmpty()));
         lines.add("Clock: business=" + metrics.clock().businessDateTime()
                 + " elapsed=" + metrics.clock().elapsedSimulationTime()
                 + " phase=" + metrics.clock().phase());
@@ -116,6 +120,9 @@ public final class DspFullDayInspectionFormatter {
                 + " countsByReason=" + rejectionReasonSummary(snapshot.rejectionCatalog())
                 + " reusedInboundToteIds="
                 + snapshot.loadReport().inboundToteIdSubstitutions().size());
+        lines.add("NsCandidatesPendingByServiceCentre: "
+                + DspFullDayProgressSnapshot.nsCandidateCounts(snapshot.loadReport())
+                + " (input-line occurrences; NS labels/Exceptions completion have not happened)");
         lines.add("Input exclusions: rejectedLines="
                 + snapshot.rejectionCatalog().rejectedLineCount()
                 + " rejectedMessages=" + snapshot.rejectionCatalog().rejectedMessageCount()
@@ -166,6 +173,7 @@ public final class DspFullDayInspectionFormatter {
                 + ",affectedAllocatedBags:" + result.completion().affectedAllocatedBagCount()
                 + ",markedOutboundTotes:" + result.completion().markedOutboundToteCount()
                 + ",pendingEmptyBags:" + result.completion().pendingEmptyBagCount()
+                + ",nsCandidateInputLines:" + result.completion().nsCandidateInputLineCount()
                 + " lateness=target:" + targetLateness + ",latest:" + latestLateness
                 + " unfinishedIdentities=" + joinOrNone(result.unfinishedIdentities());
     }

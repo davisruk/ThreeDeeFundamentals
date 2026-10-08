@@ -96,7 +96,8 @@ public final class DspFullDayCompletionEvaluator {
                 observation.pdcCollectedPackCount(),
                 observation.affectedAllocatedBagCount(),
                 observation.markedOutboundToteCount(),
-                observation.pendingEmptyBagCount());
+                observation.pendingEmptyBagCount(),
+                observation.nsCandidateInputLineCount());
     }
 
     public List<DspServiceCentreCompletionSnapshot> evaluateAll(
@@ -176,7 +177,8 @@ public final class DspFullDayCompletionEvaluator {
             int pdcCollectedPackCount,
             int affectedAllocatedBagCount,
             int markedOutboundToteCount,
-            int pendingEmptyBagCount) {
+            int pendingEmptyBagCount,
+            int nsCandidateInputLineCount) {
 
         public Observation {
             if (serviceCentreId == null || serviceCentreId.isBlank()) {
@@ -218,10 +220,67 @@ public final class DspFullDayCompletionEvaluator {
             requireNonNegative(affectedAllocatedBagCount, "affectedAllocatedBagCount");
             requireNonNegative(markedOutboundToteCount, "markedOutboundToteCount");
             requireNonNegative(pendingEmptyBagCount, "pendingEmptyBagCount");
+            requireNonNegative(nsCandidateInputLineCount, "nsCandidateInputLineCount");
             if (pdcCollectedPackCount > missingPackCount) {
                 throw new IllegalArgumentException(
                         "pdcCollectedPackCount must not exceed missingPackCount");
             }
+        }
+
+        /** Compatibility constructor for physical exceptions without deferred NS candidates. */
+        public Observation(
+                String serviceCentreId,
+                DspOperationalClockSnapshot clockSnapshot,
+                boolean supplyComplete,
+                int upstreamWaitingCount,
+                int capacityBlockedManifestCount,
+                int osrWaitingCount,
+                int av02WaitingCount,
+                int nonTerminalInboundToteCount,
+                int remainingPhysicalToteCount,
+                int remainingPhysicalPackCount,
+                int remainingPlannedBagCount,
+                int activeStationClaimCount,
+                int pendingStationDispositionCount,
+                int transportEnvelopeCount,
+                int tipperInputCount,
+                int p2pAssignmentCount,
+                int openOutboundToteCount,
+                int unallocatedCompletedBagCount,
+                List<String> unsupportedWork,
+                Optional<Duration> previousCompletionElapsedTime,
+                int missingPackCount,
+                int pdcCollectedPackCount,
+                int affectedAllocatedBagCount,
+                int markedOutboundToteCount,
+                int pendingEmptyBagCount) {
+            this(
+                    serviceCentreId,
+                    clockSnapshot,
+                    supplyComplete,
+                    upstreamWaitingCount,
+                    capacityBlockedManifestCount,
+                    osrWaitingCount,
+                    av02WaitingCount,
+                    nonTerminalInboundToteCount,
+                    remainingPhysicalToteCount,
+                    remainingPhysicalPackCount,
+                    remainingPlannedBagCount,
+                    activeStationClaimCount,
+                    pendingStationDispositionCount,
+                    transportEnvelopeCount,
+                    tipperInputCount,
+                    p2pAssignmentCount,
+                    openOutboundToteCount,
+                    unallocatedCompletedBagCount,
+                    unsupportedWork,
+                    previousCompletionElapsedTime,
+                    missingPackCount,
+                    pdcCollectedPackCount,
+                    affectedAllocatedBagCount,
+                    markedOutboundToteCount,
+                    pendingEmptyBagCount,
+                    0);
         }
 
         /** Compatibility constructor for observations without exception projections. */
@@ -326,6 +385,7 @@ public final class DspFullDayCompletionEvaluator {
                         || observation.affectedAllocatedBagCount() > 0
                         || observation.markedOutboundToteCount() > 0
                         || observation.pendingEmptyBagCount() > 0
+                        || observation.nsCandidateInputLineCount() > 0
                 ? DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION
                 : DspP2pOutputClosureState.P2P_OUTPUT_CLOSED;
     }

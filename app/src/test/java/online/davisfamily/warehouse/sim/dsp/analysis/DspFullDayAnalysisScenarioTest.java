@@ -34,6 +34,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCata
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionReason;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayAnalysisReport;
 import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriter;
+import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayInspectionFormatter;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspFullDayBlockCategory;
@@ -517,11 +518,11 @@ class DspFullDayAnalysisScenarioTest {
     }
 
     @Test
-    void shouldDeferUnresolvedProductByServiceCentreAtHardCutoff(@TempDir Path directory) throws Exception {
+    void shouldCompleteSupportedWorkWithDeferredNsCandidates(@TempDir Path directory) throws Exception {
         ScenarioRun run = runUnresolvedProductScenario(directory.resolve("unresolved-product"));
 
-        assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, run.report().state());
-        assertEquals(DspFullDayTerminationReason.HARD_CUTOFF_REACHED,
+        assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, run.report().state());
+        assertEquals(DspFullDayTerminationReason.ALL_SUPPORTED_WORK_COMPLETE,
                 run.report().terminationReason());
         assertEquals(1, run.report().loadReport().unresolvedProductLines().size());
         assertEquals("109", run.report().loadReport().unresolvedProductLines().getFirst().serviceCentreId());
@@ -529,13 +530,104 @@ class DspFullDayAnalysisScenarioTest {
                 .noneMatch(order -> order.orderId().equals("unresolved-order")));
         assertTrue(run.input().bagPlan().packTraces().stream()
                 .noneMatch(trace -> trace.sourceProvenance().productId().equals("missing-product")));
-        assertTrue(run.report().unsupportedWork().stream()
+        assertTrue(run.report().warnings().stream()
                 .anyMatch(value -> value.contains("missing-product") && value.contains("unresolved-order")));
+        assertTrue(run.report().unsupportedWork().isEmpty());
+        assertTrue(run.report().completedWithNsCandidates());
+        assertFalse(run.report().completedWithInputExclusions());
+        assertEquals(Map.of("109", 1), run.report().nsCandidateInputLineCountByServiceCentreId());
+        var completion109 = run.report().runtimeSnapshot().completions().stream()
+                .filter(value -> value.serviceCentreId().equals("109")).findFirst().orElseThrow();
+        assertEquals(1, completion109.nsCandidateInputLineCount());
+        assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION,
+                completion109.p2pOutputClosureState());
+        assertEquals(0, completion109.missingPackCount());
+        assertEquals(0, completion109.pdcCollectedPackCount());
+        assertEquals(0, completion109.affectedAllocatedBagCount());
+        assertEquals(0, completion109.markedOutboundToteCount());
+        assertEquals(0, completion109.pendingEmptyBagCount());
 
         Map<String, DspServiceCentreCompletionOutcome> outcomes = run.report().serviceCentres().stream()
                 .collect(Collectors.toMap(result -> result.serviceCentreId(), result -> result.outcome()));
         assertNotEquals(DspServiceCentreCompletionOutcome.UNFINISHED_AT_HARD_CUTOFF, outcomes.get("104"));
-        assertEquals(DspServiceCentreCompletionOutcome.UNFINISHED_AT_HARD_CUTOFF, outcomes.get("109"));
+        assertNotEquals(DspServiceCentreCompletionOutcome.UNFINISHED_AT_HARD_CUTOFF, outcomes.get("109"));
+    }
+
+    @Test
+    void shouldCompleteMixedKnownAndUnknownLinesWithoutFabricatedPhysicalWork(@TempDir Path directory)
+            throws Exception {
+        ScenarioRun run = runDeferredNsScenario(directory, "mixed");
+        assertDeferredNsCompletion(run, Map.of("104", 1));
+        assertEquals(List.of("known-line"), run.input().data().orders().getFirst().items().stream()
+                .map(item -> item.lineReference()).toList());
+        assertEquals(2, run.input().reportableOrders().getFirst().items().size());
+        assertEquals(1, run.input().bagPlan().plannedPackSlots().size());
+        assertEquals(1, run.report().metrics().allocatedBagCount());
+        assertTrue(run.input().bagPlan().packTraces().stream()
+                .noneMatch(trace -> trace.sourceProvenance().productId().equals("missing-product")));
+    }
+
+    @Test
+    void shouldCountBothUnknownSourceAndFulfilmentOccurrences(@TempDir Path directory) throws Exception {
+        ScenarioRun run = runDeferredNsScenario(directory, "pair");
+        assertDeferredNsCompletion(run, Map.of("104", 2));
+        assertEquals(List.of("ns-source", "ns-target"), run.input().report().unresolvedProductLines()
+                .stream().map(issue -> issue.orderId()).toList());
+        assertEquals(List.of("supported-order"), run.input().data().orders().stream()
+                .map(order -> order.orderId()).toList());
+        assertTrue(run.input().data().preparedLines().isEmpty());
+        assertTrue(run.input().rejectionCatalog().rejectedLines().isEmpty());
+        assertEquals(3, run.input().reportableOrders().size());
+        assertEquals(1, run.input().bagPlan().plannedPackSlots().size());
+    }
+
+    @Test
+    void shouldReportNsOnlyCentreWithoutCreatingRuntimeRows(@TempDir Path directory) throws Exception {
+        ScenarioRun run = runDeferredNsScenario(directory, "ns-only");
+        assertDeferredNsCompletion(run, Map.of("109", 1));
+        assertEquals(List.of("104"), run.report().serviceCentres().stream()
+                .map(result -> result.serviceCentreId()).toList());
+        assertEquals(List.of("104"), run.report().runtimeSnapshot().supply().serviceCentres().stream()
+                .map(centre -> centre.serviceCentreId()).toList());
+        assertEquals(List.of("104"), run.report().runtimeSnapshot().completions().stream()
+                .map(centre -> centre.serviceCentreId()).toList());
+        assertEquals(DspP2pOutputClosureState.P2P_OUTPUT_CLOSED,
+                run.report().serviceCentres().getFirst().completion().p2pOutputClosureState());
+        assertTrue(run.report().runtimeSnapshot().lifecycle().totes().keySet().stream()
+                .noneMatch(id -> id.value().equals("ns-tote")));
+        assertTrue(java.util.stream.Stream.concat(
+                run.report().runtimeSnapshot().osr().storedTotes().stream(),
+                run.report().runtimeSnapshot().osr().departedTotes().stream())
+                .noneMatch(tote -> tote.serviceCentreId().equals("109")));
+    }
+
+    @Test
+    void shouldKeepManualWorkBlockingAlongsideDeferredNs(@TempDir Path directory) throws Exception {
+        ScenarioRun run = runDeferredNsScenario(directory, "manual");
+        assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, run.report().state());
+        assertFalse(run.report().completedWithNsCandidates());
+        assertFalse(run.report().completedWithInputExclusions());
+        assertEquals(Map.of("104", 1), run.report().nsCandidateInputLineCountByServiceCentreId());
+        assertTrue(run.report().serviceCentres().stream().noneMatch(result -> result.complete()));
+        assertTrue(run.report().unsupportedWork().stream().anyMatch(value -> value.contains("MANUAL")));
+        assertTrue(run.report().unsupportedWork().stream().noneMatch(value -> value.contains("missing-product")));
+        assertEquals(1, run.report().metrics().allocatedBagCount());
+    }
+
+    private static void assertDeferredNsCompletion(ScenarioRun run, Map<String, Integer> counts) {
+        assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, run.report().state());
+        assertTrue(run.report().completedWithNsCandidates());
+        assertFalse(run.report().completedWithInputExclusions());
+        assertEquals(counts, run.report().nsCandidateInputLineCountByServiceCentreId());
+        assertTrue(run.report().unsupportedWork().isEmpty());
+        assertTrue(run.report().warnings().stream()
+                .anyMatch(value -> value.contains("NS labels/Exceptions completion have not happened")));
+        assertTrue(run.progressOutput().contains("NsCandidatesPendingByServiceCentre: " + counts));
+        assertTrue(run.progressOutput().contains("completedWithNsCandidates=true"));
+        var inspection = new DspFullDayInspectionFormatter().describe(run.report());
+        assertTrue(inspection.stream()
+                .anyMatch(line -> line.startsWith("NsCandidatesPendingByServiceCentre: " + counts)));
+        assertTrue(inspection.getFirst().contains("completedWithNsCandidates=true"));
     }
 
     @Test
@@ -756,6 +848,51 @@ class DspFullDayAnalysisScenarioTest {
                 report,
                 new DspFullDayReportJsonWriter().serializeToString(report),
                 inspectionBytes.toString(StandardCharsets.UTF_8));
+    }
+
+    private static ScenarioRun runDeferredNsScenario(Path directory, String kind) throws IOException {
+        Files.createDirectories(directory);
+        DspUncalibratedFullDayProfile profile = unsupportedCutoffProfile();
+        Path products = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        List<LineSpec> supportedLines = new ArrayList<>(List.of(line(
+                "known-line", "05", "product-a", "pharmacy", "patient", "rx-supported", 1, 1)));
+        if (kind.equals("mixed")) {
+            supportedLines.add(line("unknown-line", "03", "missing-product",
+                    "pharmacy", "patient", "rx-supported", 17, 0));
+        }
+        List<Path> messages = new ArrayList<>();
+        messages.add(writeMessage(directory, "01-supported.json", message(
+                "supported-order", "001", "05", "supported-tote", "104", "999", supportedLines)));
+        if (kind.equals("pair")) {
+            messages.add(writeMessage(directory, "02-source.json", message(
+                    "ns-source", "002", "02", "ns-source-tote", "104", "999",
+                    List.of(line("shared-line", "02", "missing-product",
+                            "pharmacy", "patient", "rx-ns", 17, 3)))
+                    .replace("\"referenceOrderId\":\"ns-source\"", "\"referenceOrderId\":\"ns-target\"")));
+            messages.add(writeMessage(directory, "03-target.json", message(
+                    "ns-target", "001", "04", "ns-target-tote", "104", "999",
+                    List.of(line("shared-line", "02", "missing-product",
+                            "pharmacy", "patient", "rx-ns", 17, 3)))));
+        } else if (!kind.equals("mixed")) {
+            String centre = kind.equals("ns-only") ? "109" : "104";
+            messages.add(writeMessage(directory, "02-ns.json", message(
+                    "ns-order", "001", "05", "ns-tote", centre,
+                    centre.equals("104") ? "999" : "990",
+                    List.of(line("ns-line", "03", "missing-product",
+                            "pharmacy", "patient", "rx-ns", 17, 0)))));
+        }
+        if (kind.equals("manual")) {
+            messages.add(writeMessage(directory, "03-manual.json", message(
+                    "manual-order", "001", "01", null, "104", "999",
+                    List.of(line("manual-line", "01", "product-a",
+                            "pharmacy", "patient", "rx-manual", 1, 0)))));
+        }
+        DspFullDayLoadedInput input = new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(products, messages), profile);
+        return runLoadedInput(input, profile, directory);
     }
 
     private static DspUncalibratedFullDayProfile profile() {

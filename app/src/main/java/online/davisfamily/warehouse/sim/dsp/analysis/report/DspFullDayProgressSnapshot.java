@@ -1,7 +1,12 @@
 package online.davisfamily.warehouse.sim.dsp.analysis.report;
 
+import java.util.Collections;
+import java.util.Map;
+import java.util.TreeMap;
+
 import online.davisfamily.warehouse.sim.dsp.analysis.DspCompletionMilestone;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayLoadedInput;
+import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspInputRejectionCatalog;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
@@ -62,6 +67,23 @@ public record DspFullDayProgressSnapshot(
                 DspCompletionMilestone.valueOf(runtime.metrics().completionMilestone()),
                 input.report(),
                 input.rejectionCatalog());
+    }
+
+    public Map<String, Integer> nsCandidateInputLineCountByServiceCentreId() {
+        return nsCandidateCounts(loadReport);
+    }
+
+    public boolean completedWithNsCandidates() {
+        return runtime.state() == DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE
+                && !loadReport.unresolvedProductLines().isEmpty();
+    }
+
+    /** Reporting-boundary projection only; runtime completion uses its precomputed catalog. */
+    static Map<String, Integer> nsCandidateCounts(DspDatasetLoadReport loadReport) {
+        Map<String, Integer> counts = new TreeMap<>();
+        loadReport.unresolvedProductLines().forEach(line ->
+                counts.merge(line.serviceCentreId(), 1, Integer::sum));
+        return Collections.unmodifiableMap(counts);
     }
 
     /** Whether a terminal run completed while retaining recoverable input exclusions. */

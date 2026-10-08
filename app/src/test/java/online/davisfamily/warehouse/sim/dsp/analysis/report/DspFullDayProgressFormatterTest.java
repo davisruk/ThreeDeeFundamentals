@@ -11,9 +11,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayLoadedInput;
+import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntime;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
+import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
+import online.davisfamily.warehouse.sim.dsp.io.UnresolvedProductLine;
 
 class DspFullDayProgressFormatterTest {
 
@@ -88,6 +92,65 @@ class DspFullDayProgressFormatterTest {
             assertFalse(text.contains("tote-104"));
             assertFalse(text.contains("unfinishedIdentities"));
         }
+    }
+
+    @Test
+    void shouldReportNsPendingAtProjectionBoundariesWithoutInventingCentreRows(@TempDir Path directory)
+            throws Exception {
+        var profile = DspFullDayReportTestSupport.profile();
+        var input = withNsCandidates(DspFullDayReportTestSupport.input(directory, profile));
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var initial = DspFullDayProgressSnapshot.from(runtime.snapshot(), input, profile);
+            assertFalse(initial.completedWithNsCandidates());
+            assertFalse(initial.completedWithInputExclusions());
+            assertEquals(java.util.Map.of("104", 1, "109", 2),
+                    initial.nsCandidateInputLineCountByServiceCentreId());
+            assertThrowsUnsupportedMap(initial);
+            for (int step = 0; step < 300 && runtime.state() == DspFullDayRuntimeState.RUNNING; step++) {
+                runtime.update(1d);
+            }
+            var completed = DspFullDayProgressSnapshot.from(runtime.snapshot(), input, profile);
+            assertTrue(completed.completedWithNsCandidates());
+            assertFalse(completed.completedWithInputExclusions());
+            var lines = new DspFullDayProgressFormatter().describe(completed);
+            assertTrue(lines.getFirst().contains("completedWithNsCandidates=true"));
+            assertEquals(1, lines.stream()
+                    .filter(line -> line.startsWith("NsCandidatesPendingByServiceCentre:")).count());
+            assertTrue(lines.get(indexOfPrefix(lines, "NsCandidatesPendingByServiceCentre:"))
+                    .contains("{104=1, 109=2}"));
+            assertTrue(lines.get(indexOfPrefix(lines, "ServiceCentre[104]:"))
+                    .contains("nsCandidateInputLines:1"));
+            assertFalse(lines.stream().anyMatch(line -> line.startsWith("ServiceCentre[109]:")));
+            var inspection = new DspFullDayInspectionFormatter().describe(
+                    new DspFullDayInspectionSnapshot(runtime.snapshot(), input,
+                            List.of(), List.of()));
+            assertTrue(inspection.getFirst().contains("completedWithNsCandidates=true"));
+            assertTrue(inspection.stream().anyMatch(line ->
+                    line.startsWith("NsCandidatesPendingByServiceCentre: {104=1, 109=2}")));
+        }
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            runtime.update(24 * 60 * 60d);
+            var cutoff = DspFullDayProgressSnapshot.from(runtime.snapshot(), input, profile);
+            assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, runtime.state());
+            assertFalse(cutoff.completedWithNsCandidates());
+        }
+    }
+
+    private static void assertThrowsUnsupportedMap(DspFullDayProgressSnapshot snapshot) {
+        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+                () -> snapshot.nsCandidateInputLineCountByServiceCentreId().clear());
+    }
+
+    private static DspFullDayLoadedInput withNsCandidates(DspFullDayLoadedInput input) {
+        var report = new DspDatasetLoadReport(0, 0, 0, List.of(
+                new UnresolvedProductLine("ns-104", "line", "unknown", "104"),
+                new UnresolvedProductLine("source", "line", "unknown", "109"),
+                new UnresolvedProductLine("target", "line", "unknown", "109")), List.of());
+        var data = input.data();
+        return new DspFullDayLoadedInput(new LoadedDspData(
+                data.products(), data.orders(), data.preparedLines(), data.loadedPreparedLineKeys(),
+                data.startupReadyPreparedLineKeys(), data.inboundToteManifests(), report, data.retainedInputLines()),
+                input.reportableOrders(), input.rejectionCatalog(), input.bagPlan(), report, input.timetable());
     }
 
     private static int indexOfPrefix(List<String> lines, String prefix) {

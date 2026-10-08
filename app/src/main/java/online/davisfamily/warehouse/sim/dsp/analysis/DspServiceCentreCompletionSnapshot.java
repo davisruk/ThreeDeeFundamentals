@@ -37,7 +37,72 @@ public record DspServiceCentreCompletionSnapshot(
         int pdcCollectedPackCount,
         int affectedAllocatedBagCount,
         int markedOutboundToteCount,
-        int pendingEmptyBagCount) {
+        int pendingEmptyBagCount,
+        int nsCandidateInputLineCount) {
+
+    /** Compatibility constructor for physical exceptions without deferred NS candidates. */
+    public DspServiceCentreCompletionSnapshot(
+            String serviceCentreId,
+            boolean supplyComplete,
+            int upstreamWaitingCount,
+            int capacityBlockedManifestCount,
+            int osrWaitingCount,
+            int av02WaitingCount,
+            int nonTerminalInboundToteCount,
+            int remainingPhysicalToteCount,
+            int remainingPhysicalPackCount,
+            int remainingPlannedBagCount,
+            int activeStationClaimCount,
+            int pendingStationDispositionCount,
+            int transportEnvelopeCount,
+            int tipperInputCount,
+            int p2pAssignmentCount,
+            int openOutboundToteCount,
+            int unallocatedCompletedBagCount,
+            List<String> unsupportedWork,
+            Optional<Duration> completionElapsedTime,
+            Optional<LocalDateTime> completionDateTime,
+            DspServiceCentreCompletionOutcome outcome,
+            ServiceCentreDeadlineSnapshot deadline,
+            boolean complete,
+            DspP2pOutputClosureState p2pOutputClosureState,
+            int missingPackCount,
+            int pdcCollectedPackCount,
+            int affectedAllocatedBagCount,
+            int markedOutboundToteCount,
+            int pendingEmptyBagCount) {
+        this(
+                serviceCentreId,
+                supplyComplete,
+                upstreamWaitingCount,
+                capacityBlockedManifestCount,
+                osrWaitingCount,
+                av02WaitingCount,
+                nonTerminalInboundToteCount,
+                remainingPhysicalToteCount,
+                remainingPhysicalPackCount,
+                remainingPlannedBagCount,
+                activeStationClaimCount,
+                pendingStationDispositionCount,
+                transportEnvelopeCount,
+                tipperInputCount,
+                p2pAssignmentCount,
+                openOutboundToteCount,
+                unallocatedCompletedBagCount,
+                unsupportedWork,
+                completionElapsedTime,
+                completionDateTime,
+                outcome,
+                deadline,
+                complete,
+                p2pOutputClosureState,
+                missingPackCount,
+                pdcCollectedPackCount,
+                affectedAllocatedBagCount,
+                markedOutboundToteCount,
+                pendingEmptyBagCount,
+                0);
+    }
 
     /** Compatibility constructor for snapshots without exception work. */
     public DspServiceCentreCompletionSnapshot(
@@ -119,6 +184,7 @@ public record DspServiceCentreCompletionSnapshot(
         requireNonNegative(affectedAllocatedBagCount, "affectedAllocatedBagCount");
         requireNonNegative(markedOutboundToteCount, "markedOutboundToteCount");
         requireNonNegative(pendingEmptyBagCount, "pendingEmptyBagCount");
+        requireNonNegative(nsCandidateInputLineCount, "nsCandidateInputLineCount");
         if (pdcCollectedPackCount > missingPackCount) {
             throw new IllegalArgumentException(
                     "pdcCollectedPackCount must not exceed missingPackCount");
@@ -177,7 +243,8 @@ public record DspServiceCentreCompletionSnapshot(
                                 pdcCollectedPackCount,
                                 affectedAllocatedBagCount,
                                 markedOutboundToteCount,
-                                pendingEmptyBagCount)
+                                pendingEmptyBagCount,
+                                nsCandidateInputLineCount)
                         ? DspP2pOutputClosureState.P2P_OUTPUT_CLOSED_WITH_EXCEPTION
                         : DspP2pOutputClosureState.P2P_OUTPUT_CLOSED;
         if (p2pOutputClosureState != expectedClosure) {
@@ -268,12 +335,14 @@ public record DspServiceCentreCompletionSnapshot(
             int pdcCollectedPackCount,
             int affectedAllocatedBagCount,
             int markedOutboundToteCount,
-            int pendingEmptyBagCount) {
+            int pendingEmptyBagCount,
+            int nsCandidateInputLineCount) {
         return missingPackCount > 0
                 || pdcCollectedPackCount > 0
                 || affectedAllocatedBagCount > 0
                 || markedOutboundToteCount > 0
-                || pendingEmptyBagCount > 0;
+                || pendingEmptyBagCount > 0
+                || nsCandidateInputLineCount > 0;
     }
 
     private static void requireNonNegative(int value, String fieldName) {

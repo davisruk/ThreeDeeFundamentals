@@ -10,12 +10,20 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayLoadedInput;
+import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
+import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
+import online.davisfamily.warehouse.sim.dsp.io.UnresolvedProductLine;
 
 class DspFullDayReportJsonWriterTest {
 
@@ -80,10 +88,55 @@ class DspFullDayReportJsonWriterTest {
         assertEquals(0, root.at("/serviceCentres/0/affectedAllocatedBagCount").intValue());
         assertEquals(0, root.at("/serviceCentres/0/markedOutboundToteCount").intValue());
         assertEquals(0, root.at("/serviceCentres/0/pendingEmptyBagCount").intValue());
+        assertEquals(0, root.at("/serviceCentres/0/nsCandidateInputLineCount").intValue());
+        assertEquals(false, root.get("completedWithNsCandidates").booleanValue());
+        assertEquals(0, root.get("nsCandidateInputLineCountByServiceCentreId").size());
         assertEquals("dsp-p2p-line-1", root.at("/p2pLines/0/lineId").textValue());
         assertEquals(
                 new String(bytes, StandardCharsets.UTF_8),
                 writer.serializeToString(report));
+    }
+
+    @Test
+    void shouldSerializeNsOccurrencesSeparatelyFromPhysicalExceptionsAndExclusions(@TempDir Path directory)
+            throws Exception {
+        var profile = DspFullDayReportTestSupport.profile();
+        var base = DspFullDayReportTestSupport.input(directory, profile);
+        var load = new DspDatasetLoadReport(0, 0, 0, List.of(
+                new UnresolvedProductLine("ns-104", "line", "unknown", "104"),
+                new UnresolvedProductLine("ns-only", "line", "unknown", "109")), List.of());
+        var data = base.data();
+        var input = new DspFullDayLoadedInput(new LoadedDspData(
+                data.products(), data.orders(), data.preparedLines(), data.loadedPreparedLineKeys(),
+                data.startupReadyPreparedLineKeys(), data.inboundToteManifests(), load, data.retainedInputLines()),
+                base.reportableOrders(), base.rejectionCatalog(), base.bagPlan(), load, base.timetable());
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            for (int step = 0; step < 300 && runtime.state() == DspFullDayRuntimeState.RUNNING; step++) {
+                runtime.update(1d);
+            }
+            var report = new DspFullDayReportFactory().create(runtime.snapshot(), input, profile);
+            JsonNode root = new ObjectMapper().readTree(new DspFullDayReportJsonWriter().serialize(report));
+            assertTrue(root.get("completedWithNsCandidates").booleanValue());
+            assertEquals(false, root.get("completedWithInputExclusions").booleanValue());
+            assertEquals(1, root.at("/nsCandidateInputLineCountByServiceCentreId/104").intValue());
+            assertEquals(1, root.at("/nsCandidateInputLineCountByServiceCentreId/109").intValue());
+            assertEquals(2, root.get("serviceCentres").size());
+            assertEquals("P2P_OUTPUT_CLOSED_WITH_EXCEPTION",
+                    root.at("/serviceCentres/0/p2pOutputClosureState").textValue());
+            assertEquals(1, root.at("/serviceCentres/0/nsCandidateInputLineCount").intValue());
+            assertEquals(0, root.at("/serviceCentres/0/missingPackCount").intValue());
+            assertEquals(0, root.at("/serviceCentres/0/markedOutboundToteCount").intValue());
+            assertEquals(2, root.at("/load/unresolvedProductLines").size());
+            assertTrue(report.warnings().contains("Unresolved product unknown for ns-only/line"));
+            org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+                    () -> report.nsCandidateInputLineCountByServiceCentreId().clear());
+        }
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            runtime.update(24 * 60 * 60d);
+            var report = new DspFullDayReportFactory().create(runtime.snapshot(), input, profile);
+            assertEquals(DspFullDayRuntimeState.HARD_CUTOFF_REACHED, report.state());
+            assertEquals(false, report.completedWithNsCandidates());
+        }
     }
 
     @Test

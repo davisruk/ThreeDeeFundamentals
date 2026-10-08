@@ -29,6 +29,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayLoadedInput;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.AdaptingBenchDefinition;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.QueueCapacities;
+import online.davisfamily.warehouse.sim.dsp.analysis.input.DspDeferredNsCandidateCatalog;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.*;
 import online.davisfamily.warehouse.sim.dsp.av02.*;
@@ -867,6 +868,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
         private final Map<String, PlannedBag> plannedBagsByCorrelationId;
         private final DspFullDayCompletionProjectionCache projectionCache;
         private final InboundToteManifestCatalog manifestCatalog;
+        private final DspDeferredNsCandidateCatalog deferredNsCandidates;
         private final Map<String, List<String>> unsupportedByServiceCentre;
         private final List<String> globalUnsupportedWork;
         private final Av02PhysicalToteInventory av02Inventory;
@@ -908,6 +910,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     this.manifestsByServiceCentre,
                     this.plannedBagsByServiceCentre);
             this.manifestCatalog = manifestCatalog;
+            this.deferredNsCandidates = new DspDeferredNsCandidateCatalog(input);
             UnsupportedWorkIndex unsupportedWork = indexUnsupportedWork(input);
             this.unsupportedByServiceCentre = unsupportedWork.byServiceCentre();
             this.globalUnsupportedWork = unsupportedWork.global();
@@ -1023,7 +1026,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                                 outboundProjection.pdcCollectedPackCounts().getOrDefault(id, 0),
                                 outboundProjection.affectedAllocatedBagCounts().getOrDefault(id, 0),
                                 outboundProjection.markedOutboundToteCounts().getOrDefault(id, 0),
-                                outboundProjection.pendingEmptyBagCounts().getOrDefault(id, 0));
+                                outboundProjection.pendingEmptyBagCounts().getOrDefault(id, 0),
+                                deferredNsCandidates.inputLineCountFor(id));
                 var snapshot = evaluator.evaluate(observation);
                 if (snapshot.complete()) {
                     firstCompletionTimes.putIfAbsent(id, snapshot.completionElapsedTime().orElseThrow());
@@ -1293,13 +1297,6 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
         private static UnsupportedWorkIndex indexUnsupportedWork(DspFullDayLoadedInput input) {
             Map<String, List<String>> byServiceCentre = new LinkedHashMap<>();
-            for (var issue : input.report().unresolvedProductLines()) {
-                byServiceCentre.computeIfAbsent(issue.serviceCentreId(),
-                        ignored -> new ArrayList<>()).add(
-                                "Unresolved product " + issue.productId() + " for "
-                                        + issue.orderId() + "/" + issue.lineReference());
-            }
-
             List<String> global = new ArrayList<>();
             if (input.report().ignoredManualMessageCount() > 0
                     || input.report().ignoredManualLineCount() > 0) {

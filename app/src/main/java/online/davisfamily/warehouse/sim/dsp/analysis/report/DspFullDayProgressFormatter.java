@@ -33,7 +33,8 @@ public final class DspFullDayProgressFormatter {
                 + " calibration=" + snapshot.calibrationStatus()
                 + " milestone=" + snapshot.completionMilestone()
                 + " completedWithInputExclusions="
-                + snapshot.completedWithInputExclusions());
+                + snapshot.completedWithInputExclusions()
+                + " completedWithNsCandidates=" + snapshot.completedWithNsCandidates());
         lines.add("Clock: business=" + metrics.clock().businessDateTime()
                 + " elapsed=" + metrics.clock().elapsedSimulationTime()
                 + " phase=" + metrics.clock().phase());
@@ -108,6 +109,9 @@ public final class DspFullDayProgressFormatter {
                 + " countsByReason=" + rejectionReasonSummary(snapshot.rejectionCatalog())
                 + " reusedInboundToteIds="
                 + snapshot.loadReport().inboundToteIdSubstitutions().size());
+        lines.add("NsCandidatesPendingByServiceCentre: "
+                + snapshot.nsCandidateInputLineCountByServiceCentreId()
+                + " (input-line occurrences; NS labels/Exceptions completion have not happened)");
         lines.add("Unsupported: count=" + metrics.unsupportedWork().size());
 
         int remainingSheets = serviceCentres.stream()
@@ -155,6 +159,7 @@ public final class DspFullDayProgressFormatter {
                 + ",affectedAllocatedBags:" + completionSnapshot.affectedAllocatedBagCount()
                 + ",markedOutboundTotes:" + completionSnapshot.markedOutboundToteCount()
                 + ",pendingEmptyBags:" + completionSnapshot.pendingEmptyBagCount()
+                + ",nsCandidateInputLines:" + completionSnapshot.nsCandidateInputLineCount()
                 + " blocks=" + blocks;
     }
 

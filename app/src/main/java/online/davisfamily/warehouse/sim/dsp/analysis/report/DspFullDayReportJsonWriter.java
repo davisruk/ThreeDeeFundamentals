@@ -152,6 +152,9 @@ public final class DspFullDayReportJsonWriter {
         root.set("profile", profileNode(report));
         root.set("termination", terminationNode(report));
         root.put("completedWithInputExclusions", report.completedWithInputExclusions());
+        root.put("completedWithNsCandidates", report.completedWithNsCandidates());
+        root.set("nsCandidateInputLineCountByServiceCentreId",
+                objectMapper.valueToTree(report.nsCandidateInputLineCountByServiceCentreId()));
         root.set("clock", clockNode(report.metrics().clock()));
         root.set("configuration", objectMapper.valueToTree(report.configuration()));
         root.set("load", loadNode(report.loadReport(), report.rejectionCatalog()));
@@ -369,6 +372,7 @@ public final class DspFullDayReportJsonWriter {
         node.put("affectedAllocatedBagCount", completion.affectedAllocatedBagCount());
         node.put("markedOutboundToteCount", completion.markedOutboundToteCount());
         node.put("pendingEmptyBagCount", completion.pendingEmptyBagCount());
+        node.put("nsCandidateInputLineCount", completion.nsCandidateInputLineCount());
         optionalDuration(node, "completionElapsedTime", result.completionElapsedTime());
         optionalDateTime(node, "completionDateTime", result.completionDateTime());
         optionalDuration(node, "targetLateness", result.targetLateness());
