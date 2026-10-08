@@ -9,13 +9,33 @@ End-of-feature architecture review is a clean context boundary. When the impleme
 
 Documentation closure is also a clean context boundary. When architecture review has consumed substantial working context, the user may deliberately compact the session before documentation closure. Documentation closure must remain reconstructable from the repository, completed feature plan, architecture-review result, and other persistent documentation rather than depend on detailed pre-compaction conversational context.
 
-The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work. Full-day Adapting sheet-owned bin groups are implemented and verified; clickable bin visuals remain deferred.
+The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work. Clickable bin visuals remain deferred.
+
+### Current planning handoff (2026-10-08)
+
+The next feature is defined by
+`docs/scheduler/dsp-whole-service-centre-drained-handover-plan.md`. It is planned,
+not implemented. It adds a selectable deadline-independent whole-centre release
+policy set, independent fully drained P2P-line handover, deferred NS-candidate
+reporting, and a bounded shared-outbound-summary correction. The user authorizes
+each step separately; do not begin implementation from planning authorization.
+
+Order-owned Adapting bins, order-wide readiness/first-COLLECT, physical pack membership
+independent of arrival order, and configurable station capacity exist in the inspected
+source baseline. Older status paragraphs and completed sheet-owned-bin plans are
+historical context, not instructions to recreate those features. This handoff does
+not close unverified review/documentation steps of earlier plans. The active plan
+names additional current requirements and boundary prerequisites; read them before
+implementing its selected step. Exceptions Station implementation remains later work,
+after a successful headless daily run. Execute directly unless the user explicitly
+requests agents for the current task.
 
 Always read these documents before starting:
 
 1. `docs/codex-context.md`
 2. The completed station-processing boundary plan, `docs/scheduler/dsp-station-processing-boundary-plan.md`
-3. The completed route-continuation plan for `feature/dsp-station-route-continuation`
+3. The completed route-continuation plan,
+   `docs/scheduler/dsp-station-route-continuation-plan.md`
 4. The completed operational EMPTY proof plan,
    `docs/scheduler/dsp-operational-empty-end-to-end-proof-plan.md`
 5. The active full-day analysis plan,
@@ -28,6 +48,8 @@ Always read these documents before starting:
    `docs/scheduler/dsp-full-day-fixed-step-performance-remediation-plan.md`
 9. The completed full-day Adapting sheet-owned bin-groups plan,
    `docs/scheduler/dsp-adapting-sheet-owned-bin-groups-plan.md`
+10. The active selectable whole-service-centre/drained-handover plan,
+    `docs/scheduler/dsp-whole-service-centre-drained-handover-plan.md`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 

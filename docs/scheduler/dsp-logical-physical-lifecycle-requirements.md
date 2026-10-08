@@ -595,3 +595,37 @@ status codes. MANUAL input remains deliberately discarded and is not part of thi
 - Outbound totes enforce P2P-line ownership, pharmacy purity, service-centre purity, and configurable bag capacity.
 - Output overflow creates deterministic additional sheets with preserved provenance.
 - Assignment history and inspection explain the lifecycle without requiring 32R.
+
+## 19. Release Completion and Deferred NS Candidates (Agreed, Planned 2026-10-08)
+
+The implementation contract is
+`dsp-whole-service-centre-drained-handover-plan.md`. These additions are planned,
+not a declaration that the new policy or NS completion correction exists already.
+
+Release-complete means that every executable inbound obligation has committed its
+OSR/AV02 departure. It does not mean all packs have reached P2P, all bags are closed,
+all outbound totes have left, or all patient products have been supplied. A later
+centre can start only on an independently drained line whose old output tote is closed.
+Historical physical assignments remain inspectable after handover; they are not
+automatically future arrivals for the line's new owner.
+
+Unresolved product-master input lines are candidates for future Not Supplied (NS)
+handling. Preserve their original reportable order/line, pharmacy, patient,
+prescription, sheet and quantity data. The current input partition already excludes
+them from executable work, including corresponding ADAPTED/fulfilment pairing;
+known sibling lines remain executable. No synthetic physical pack, bag, tote, label
+or Exceptions visit may be created for these candidates by the interim feature.
+
+The planned completion correction distinguishes these typed NS candidates from
+other blocking unsupported work. Supported processing may complete with NS candidates
+pending; report their input-line occurrences by centre, including centres with no
+executable row. Do not call that full patient supply or completed Exceptions handling.
+Do not deduplicate source/fulfilment occurrences into an invented physical missing-pack
+count. Existing physical missing-pack/PDC/affected-bag/marked-tote/zero-pack-bag counts
+remain separate and unchanged. Existing runtime centres with NS candidates use the
+exception-aware output-closed milestone on supported completion; that does not mark
+an arbitrary physical tote for an excluded line.
+
+Malformed-input rejection remains a separate reporting classification. MANUAL/other
+unsupported work retains its blocking behavior. This interim NS rule applies to both
+policy selections without changing their physical execution algorithms.

@@ -252,6 +252,31 @@ affected line shall be recorded as unresolved/not supplied, the affected
 bag shall receive the appropriate `NS` indication, the bag shall be
 returned to the tote, and the tote shall continue.
 
+### 7.5 Deferred unresolved-product NS candidates (2026-10-08)
+
+The user confirmed that unresolved product-master input lines are candidates for
+future `NS` handling. NS means **Not Supplied**: special labels associated with the
+bag communicate missing lines to store staff, who fulfil those lines locally. The
+future Exceptions implementation owns creation/application of these special labels.
+This records future intent, not a new station-routing rule for the existing short-pick
+cases in sections 7.2 and 7.3.
+
+A missing product-master entry is not evidence of a physical Cencora short pick.
+Retain original order/line and patient/prescription/pharmacy provenance for future
+handling. Until Exceptions exists, these excluded input lines remain metadata-only
+NS candidates: no fabricated pack, empty physical bag, label, tote or station visit.
+Count input-line occurrences separately from actual physical missing packs and
+exception-marked bags/totes; source and fulfilment occurrences are not automatically
+one clinical NS outcome.
+
+`docs/scheduler/dsp-whole-service-centre-drained-handover-plan.md` specifies the
+planned interim supported-work completion and pending NS reporting correction.
+Supported work may finish while these candidates remain unresolved; neither full
+patient supply nor completed Exceptions handling is claimed. Other unsupported
+conditions still block completion. Recoverable malformed-input rejection remains
+distinct and does not acquire NS labels or Exceptions visits from this rule.
+Exceptions implementation is deferred until a headless daily run completes.
+
 ## 8. Exception Resolution
 
 ### 8.1 Processing delay

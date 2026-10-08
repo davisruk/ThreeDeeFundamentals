@@ -724,3 +724,51 @@ These deferrals must remain configurable or behind stable policy boundaries wher
 - Alternative profiles can reuse the same snapshots, invariants, commands, and metrics.
 - Fixed-step accelerated and headless execution preserve deterministic machine/sensor behavior.
 - Uncalibrated route and station timings are explicit, replaceable, and never presented as production-accurate predictions.
+
+## 22. Selectable Whole-Service-Centre Baseline (Agreed, Planned 2026-10-08)
+
+Implementation is defined by `dsp-whole-service-centre-drained-handover-plan.md`;
+this section records agreed requirements, not completed implementation.
+
+- Select a compatible policy set, not arbitrary independent strategies.
+  `DEADLINE_AWARE_ELASTIC_STICKY_LEASES` remains the default and preserves its
+  existing allocation algorithm. `WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER` is the
+  new deadline-independent baseline.
+- Select through JSON `schedulerPolicy` or `--scheduler-policy`; CLI overrides
+  JSON, then the legacy default applies. Reject invalid supplied values, including
+  an invalid JSON selection overridden by CLI. Code constructs the corresponding
+  profile, but normal operation must not require source edits. Report actual IDs.
+- New-set decisions ignore deadlines, workload weights and urgency. Deadlines remain
+  diagnostic/reporting facts; the existing hard cutoff remains run control. No
+  calibrated throughput or wall-clock improvement is implied.
+- Process centres by configured priority descending, ID ascending for ties. Every
+  executable OSR manifest, including ADAPTED and upstream-held work, and every
+  executable EMPTY sheet's AV02 departure is a release obligation. Count successful
+  committed departures only, preserving exact physical manifest multiplicity.
+- No next-centre processing release occurs until every current-centre obligation
+  commits. This is release-complete, not bag-complete or fully supplied. Do not skip
+  a blocked centre or infer completion from a locally empty OSR/AV02 queue.
+- OSR low-water backfill, rate limits, capacity and supply authorization are unchanged.
+  Later-centre storage admission or AV02 allocation is not processing-release permission.
+- The release centre needs supply authorization and at least one owned line or
+  unleased quiescent line. Spread independent new work over all available configured
+  P2P lines; a fixed one-line minimum is not this policy's demand calculation.
+- Preserve hard committed bag/tote pinning, service-centre/pharmacy purity and all
+  physical identities. Pharmacy affinity remains a preference; do not introduce a
+  new global pharmacy-to-line invariant to achieve spreading.
+- A line changes owner only after no old-centre inbound work remains due to it, all
+  input/pack/bag processing drains, and its final output tote closes. Closure and
+  lease release use existing machine boundaries. Another old-centre line may still
+  be draining while the freed line starts the next centre.
+- Do not yet queue new-centre totes behind old-centre totes on the same owned line.
+  Sequential cross-centre queuing and predictive crossover are future policies.
+- Preserve contested-capacity ADAPTED priority, concurrent FULL_PACK eligibility,
+  order-wide ASSOCIATED/EMPTY preparation and first-COLLECT inside the selected centre.
+- Only typed unresolved-product NS candidates become nonblocking interim reporting
+  work. Other unsupported executable conditions still prevent completion. Retain
+  NS input-line counts separately from physical missing packs, bags and totes.
+
+The implementation must use initialization-time obligation indexes, simulation-thread
+commit accounting, mutation-versioned immutable publication, bounded line checks and
+change-keyed retention caches. No new per-tick whole-day scans, duplicate bag planning,
+machine snapshots solely for this policy, polling count controllers or visual changes.

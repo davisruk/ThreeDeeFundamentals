@@ -1,5 +1,30 @@
 # Codex Context
 
+## Current Feature Handoff (2026-10-08)
+
+The next user-selected work is planned in
+`docs/scheduler/dsp-whole-service-centre-drained-handover-plan.md`; no implementation
+of that plan is authorized by its creation. Read `docs/codex-instructions.md` completely,
+follow its mandatory order, then read the entire active plan and its prerequisites.
+It contains exact steps, ownership/publication contracts, cache invalidation rules,
+focused commands and a fresh-session request. Do not infer decisions from chat history.
+
+The inspected source already contains order-owned Adapting bins, order-wide preparation
+and first-COLLECT, overpick/underpick accounting, arrival-order-independent physical
+pack membership checks, and configurable station processing capacity. Historical
+status paragraphs below must not trigger reimplementation or imply that outstanding
+prior review/closure has passed. Use source plus the active plan's baseline evidence.
+
+The planned new policy ignores deadlines for allocation/release/handover, while keeping
+deadlines in reports and retaining the hard cutoff. The old deadline-aware policy
+remains selectable and the default. A centre advances when all executable inbound
+release obligations commit; each old line must independently drain and close its output
+before changing centre. Deferred unresolved-product NS candidates remain visible but
+will no longer block supported-work completion. They are not fabricated physical work
+or completed Exceptions processing. Exceptions implementation follows a successful
+headless daily run. Direct execution is the default; agents require explicit current-task
+authorization under `docs/codex-instructions.md`.
+
 ## System Overview
 
 - Plain Java simulation and software-rendered 3D engine built as a Gradle project.
