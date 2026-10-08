@@ -15,12 +15,54 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.model.OrderSheetKey;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.outbound.AllocatedOutboundBag;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteClosureReason;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutputSheetAllocation;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+
 class DspFullDayProgressOutputTest {
+
+    @Test
+    void shouldMirrorCorrectedSharedOutboundSummaryAndPreserveWallClockLines(@TempDir Path directory)
+            throws Exception {
+        var sheet = new OrderSheetKey("order", 1);
+        var toteId = new PhysicalToteId("outbound-line-1-1");
+        var plannedBag = new PlannedBag(new BagKey("prescription", 1), "104", "pharmacy",
+                "patient", "prescription", List.of("pack"), List.of(sheet));
+        var bag = new AllocatedOutboundBag(plannedBag, toteId,
+                List.of(new OutputSheetAllocation(sheet, sheet)));
+        var tote = new OutboundToteSnapshot(toteId, new P2pLineId("line-1"),
+                Optional.of("104"), Optional.of("pharmacy"), 2, List.of(bag),
+                Optional.of(OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE));
+        var shared = new OutboundAllocationSnapshot(Map.of(), List.of(tote), List.of(bag));
+        String summary = DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                List.of(shared, shared, shared, shared, shared), List.of("108", "104"));
+        var bytes = new ByteArrayOutputStream();
+        Path log = directory.resolve("outbound-summary.log");
+        try (var output = DspFullDayProgressOutput.open(
+                new PrintStream(bytes, true, StandardCharsets.UTF_8), Optional.of(log), false)) {
+            output.print("progress=PT1M", List.of(
+                    "WallClock: sincePreviousProgress=PT2S", "WallClock: sinceStart=PT4S", summary));
+            assertArrayEquals(bytes.toByteArray(), Files.readAllBytes(log));
+            assertEquals(List.of("[dsp-full-day:progress=PT1M]",
+                    "WallClock: sincePreviousProgress=PT2S", "WallClock: sinceStart=PT4S",
+                    "ClosedOutboundTotesByServiceCentre: 108=0 104=1"
+                            + " | AllocatedBagsByServiceCentre: 108=0 104=1"
+                            + " | MissingPacksByServiceCentre: 108=0 104=0"), Files.readAllLines(log));
+        }
+    }
 
     @Test
     void shouldFlushStationSettingsWithStartBeforeLaterProgress(@TempDir Path directory) throws Exception {

@@ -3,6 +3,9 @@ package online.davisfamily.warehouse.sim.dsp.analysis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -162,6 +165,16 @@ class DspFullDayAnalysisRunnerTest {
                 + " collectSeconds=60.0 positions=1 waitingCapacity=4"));
         assertTrue(inspection.contains("[dsp-full-day:final]"));
         assertTrue(inspection.contains("[dsp-full-day:completion="));
+        var lines = report.runtimeSnapshot().p2pLines();
+        assertEquals(5, lines.size());
+        var sharedOutbound = lines.getFirst().outboundAllocation();
+        lines.forEach(line -> assertSame(sharedOutbound, line.outboundAllocation()));
+        assertEquals(2, sharedOutbound.closedTotes().size());
+        assertEquals(2, sharedOutbound.allocatedBags().size());
+        String finalProgress = inspection.substring(inspection.indexOf("[dsp-full-day:final]"));
+        assertTrue(finalProgress.contains("ClosedOutboundTotesByServiceCentre: 104=1 108=1"
+                + " | AllocatedBagsByServiceCentre: 104=1 108=1"
+                + " | MissingPacksByServiceCentre: 104=0 108=0"));
         assertTrue(clock.get() >= 4);
         assertFalse(inspection.contains("state=RUNNING termination=ALL_SUPPORTED_WORK_COMPLETE"));
     }
@@ -284,19 +297,130 @@ class DspFullDayAnalysisRunnerTest {
         String result = DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
                 List.of(firstLine, secondLine), List.of("109", "108", "104"),
                 Map.of("104", 2, "108", 1));
-        String originalToteSegment = "ClosedOutboundTotesByServiceCentre: 104=2 108=1 109=0";
+        String originalToteSegment = "ClosedOutboundTotesByServiceCentre: 109=0 108=1 104=2";
         assertTrue(result.startsWith(originalToteSegment + " | "));
         assertEquals(originalToteSegment
-                + " | AllocatedBagsByServiceCentre: 104=3 108=1 109=0"
-                + " | MissingPacksByServiceCentre: 104=2 108=1 109=0", result);
+                + " | AllocatedBagsByServiceCentre: 109=0 108=1 104=3"
+                + " | MissingPacksByServiceCentre: 109=0 108=1 104=2", result);
 
         OutboundAllocationSnapshot empty = new OutboundAllocationSnapshot(
                 Map.of(), List.of(), List.of());
-        assertEquals("ClosedOutboundTotesByServiceCentre: 104=0 108=0"
-                        + " | AllocatedBagsByServiceCentre: 104=0 108=0"
-                        + " | MissingPacksByServiceCentre: 104=0 108=0",
+        assertEquals("ClosedOutboundTotesByServiceCentre: 108=0 104=0"
+                        + " | AllocatedBagsByServiceCentre: 108=0 104=0"
+                        + " | MissingPacksByServiceCentre: 108=0 104=0",
                 DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
                         List.of(empty), List.of("108", "104")));
+    }
+
+    @Test
+    void shouldCountOneSharedAllocationOnceAcrossFiveLinesIncludingOpenBags() {
+        var closedBag = allocatedBag("closed", "104", "closed-prescription");
+        var openBag = allocatedBag("open", "104", "open-prescription");
+        var shared = new OutboundAllocationSnapshot(
+                Map.of(new P2pLineId("line-2"), outboundTote(
+                        "open", "line-2", "104", false, List.of(openBag))),
+                List.of(outboundTote("closed", "line-1", "104", true, List.of(closedBag))),
+                List.of(closedBag, openBag));
+
+        assertEquals("ClosedOutboundTotesByServiceCentre: 108=0 104=1"
+                        + " | AllocatedBagsByServiceCentre: 108=0 104=2"
+                        + " | MissingPacksByServiceCentre: 108=0 104=0",
+                DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                        List.of(shared, shared, shared, shared, shared), List.of("108", "104")));
+    }
+
+    @Test
+    void shouldValidateEquivalentDistinctPublicationsByIdentityRegardlessOfSnapshotOrder() {
+        var firstBag = allocatedBag("first", "104", "first-prescription");
+        var secondBag = allocatedBag("second", "108", "second-prescription");
+        var firstTote = outboundTote("first", "line-1", "104", true, List.of(firstBag));
+        var secondTote = outboundTote("second", "line-2", "108", true, List.of(secondBag));
+        var first = new OutboundAllocationSnapshot(Map.of(),
+                List.of(firstTote, secondTote), List.of(firstBag, secondBag));
+        var firstBagCopy = allocatedBag("first", "104", "first-prescription");
+        var secondBagCopy = allocatedBag("second", "108", "second-prescription");
+        var firstToteCopy = outboundTote("first", "line-1", "104", true, List.of(firstBagCopy));
+        var secondToteCopy = outboundTote("second", "line-2", "108", true, List.of(secondBagCopy));
+        var equivalent = new OutboundAllocationSnapshot(Map.of(),
+                List.of(firstToteCopy, secondToteCopy), List.of(firstBagCopy, secondBagCopy));
+        var reordered = new OutboundAllocationSnapshot(Map.of(),
+                List.of(secondToteCopy, firstToteCopy), List.of(secondBagCopy, firstBagCopy));
+        assertNotSame(first, equivalent);
+        assertEquals(first, equivalent);
+        assertNotSame(firstTote, firstToteCopy);
+        assertNotSame(firstBag, firstBagCopy);
+        assertNotEquals(first, reordered);
+
+        assertEquals("ClosedOutboundTotesByServiceCentre: 108=1 104=1"
+                        + " | AllocatedBagsByServiceCentre: 108=1 104=1"
+                        + " | MissingPacksByServiceCentre: 108=0 104=0",
+                DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                        List.of(first, equivalent, reordered), List.of("108", "104")));
+    }
+
+    @Test
+    void shouldCountTheUnionOfPartiallyOverlappingAllocations() {
+        var firstBag = allocatedBag("first", "104", "first-prescription");
+        var sharedBag = allocatedBag("shared", "104", "shared-prescription");
+        var lastBag = allocatedBag("last", "108", "last-prescription");
+        var first = new OutboundAllocationSnapshot(Map.of(), List.of(
+                outboundTote("first", "line-1", "104", true, List.of(firstBag)),
+                outboundTote("shared", "line-2", "104", true, List.of(sharedBag))),
+                List.of(firstBag, sharedBag));
+        var second = new OutboundAllocationSnapshot(Map.of(), List.of(
+                outboundTote("last", "line-3", "108", true, List.of(lastBag)),
+                outboundTote("shared", "line-2", "104", true, List.of(sharedBag))),
+                List.of(lastBag, sharedBag));
+
+        assertEquals("ClosedOutboundTotesByServiceCentre: 104=2 108=1"
+                        + " | AllocatedBagsByServiceCentre: 104=2 108=1"
+                        + " | MissingPacksByServiceCentre: 104=0 108=0",
+                DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                        List.of(first, second), List.of("104", "108")));
+    }
+
+    @Test
+    void shouldRejectConflictingToteValuesIncludingOpenVersusClosed() {
+        var bag = allocatedBag("same-tote", "104", "prescription");
+        var closedTote = outboundTote("same-tote", "line-1", "104", true, List.of(bag));
+        var first = new OutboundAllocationSnapshot(Map.of(), List.of(closedTote), List.of(bag));
+        var differentCapacity = new OutboundToteSnapshot(closedTote.physicalToteId(),
+                closedTote.p2pLineId(), closedTote.serviceCentreId(), closedTote.pharmacyId(),
+                3, closedTote.allocatedBags(), closedTote.closureReason());
+        var conflictingClosed = new OutboundAllocationSnapshot(
+                Map.of(), List.of(differentCapacity), List.of(bag));
+        var conflictingOpen = new OutboundAllocationSnapshot(
+                Map.of(new P2pLineId("line-1"), outboundTote(
+                        "same-tote", "line-1", "104", false, List.of(bag))),
+                List.of(), List.of(bag));
+
+        for (var conflicting : List.of(conflictingClosed, conflictingOpen)) {
+            for (var publications : List.of(List.of(first, conflicting), List.of(conflicting, first))) {
+                var failure = assertThrows(IllegalStateException.class,
+                        () -> DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                                publications, List.of("104")));
+                assertTrue(failure.getMessage().contains("Conflicting outbound tote snapshot"));
+                assertTrue(failure.getMessage().contains("same-tote"));
+            }
+        }
+    }
+
+    @Test
+    void shouldRejectConflictingAllocatedBagValuesAcrossDistinctTotes() {
+        var firstBag = allocatedBag("first", "104", "same-prescription");
+        var conflictingBag = allocatedBag("second", "104", "same-prescription");
+        var first = new OutboundAllocationSnapshot(Map.of(),
+                List.of(outboundTote("first", "line-1", "104", true, List.of(firstBag))),
+                List.of(firstBag));
+        var second = new OutboundAllocationSnapshot(Map.of(),
+                List.of(outboundTote("second", "line-2", "104", true, List.of(conflictingBag))),
+                List.of(conflictingBag));
+
+        var failure = assertThrows(IllegalStateException.class,
+                () -> DspFullDayAnalysisRunner.closedOutboundTotesByServiceCentre(
+                        List.of(first, second), List.of("104")));
+        assertTrue(failure.getMessage().contains("Conflicting allocated outbound bag"));
+        assertTrue(failure.getMessage().contains("same-prescription"));
     }
 
     @Test

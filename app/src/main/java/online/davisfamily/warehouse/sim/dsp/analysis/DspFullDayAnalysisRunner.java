@@ -11,7 +11,10 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,12 +38,15 @@ import online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJson
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntime;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
 import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeSnapshot;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
 import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.outbound.OutboundAllocationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.AllocatedOutboundBag;
+import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 
 /** Executes one loaded full-day DSP analysis through bounded headless fixed steps. */
@@ -433,9 +439,9 @@ public final class DspFullDayAnalysisRunner {
                 || missingPackCountsByServiceCentre == null) {
             throw new IllegalArgumentException("closed outbound count values must not be null");
         }
-        Map<String, Integer> counts = new TreeMap<>();
-        Map<String, Integer> bagCounts = new TreeMap<>();
-        Map<String, Integer> missingCounts = new TreeMap<>();
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, Integer> bagCounts = new LinkedHashMap<>();
+        Map<String, Integer> missingCounts = new LinkedHashMap<>();
         for (String serviceCentreId : serviceCentreIds) {
             counts.put(serviceCentreId, 0);
             bagCounts.put(serviceCentreId, 0);
@@ -449,12 +455,37 @@ public final class DspFullDayAnalysisRunner {
             }
             missingCounts.put(entry.getKey(), entry.getValue());
         }
+        Set<OutboundAllocationSnapshot> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Map<PhysicalToteId, OutboundToteSnapshot> totesById = new HashMap<>();
+        Map<BagKey, AllocatedOutboundBag> bagsByKey = new HashMap<>();
         for (OutboundAllocationSnapshot allocation : allocations) {
+            if (!visited.add(allocation)) {
+                continue;
+            }
+            for (var tote : allocation.openTotesByLine().values()) {
+                var previous = totesById.putIfAbsent(tote.physicalToteId(), tote);
+                if (previous != null && !previous.equals(tote)) {
+                    throw new IllegalStateException(
+                            "Conflicting outbound tote snapshot: " + tote.physicalToteId());
+                }
+            }
             for (var tote : allocation.closedTotes()) {
-                counts.merge(tote.serviceCentreId().orElseThrow(), 1, Integer::sum);
+                var previous = totesById.putIfAbsent(tote.physicalToteId(), tote);
+                if (previous == null) {
+                    counts.merge(tote.serviceCentreId().orElseThrow(), 1, Integer::sum);
+                } else if (!previous.equals(tote)) {
+                    throw new IllegalStateException(
+                            "Conflicting outbound tote snapshot: " + tote.physicalToteId());
+                }
             }
             for (var bag : allocation.allocatedBags()) {
-                bagCounts.merge(bag.plannedBag().serviceCentreId(), 1, Integer::sum);
+                var previous = bagsByKey.putIfAbsent(bag.bagKey(), bag);
+                if (previous == null) {
+                    bagCounts.merge(bag.plannedBag().serviceCentreId(), 1, Integer::sum);
+                } else if (!previous.equals(bag)) {
+                    throw new IllegalStateException(
+                            "Conflicting allocated outbound bag: " + bag.bagKey());
+                }
             }
         }
         StringBuilder line = new StringBuilder("ClosedOutboundTotesByServiceCentre:");
