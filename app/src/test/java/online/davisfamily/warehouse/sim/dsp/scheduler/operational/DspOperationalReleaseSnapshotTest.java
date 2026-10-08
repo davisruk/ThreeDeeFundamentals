@@ -41,8 +41,82 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pInputActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pBaggingActivitySnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentrePolicySnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 
 class DspOperationalReleaseSnapshotTest {
+
+    @Test
+    void shouldAcceptFutureUnsuppliedAndReleaseCompleteCentresWithoutDemandOnlyInWholeMode() {
+        var definition = new P2pLineDefinition(new P2pLineId("line-1"),
+                new OperationalRouteDestination(StationType.P2P, "target-1"));
+        var leases = new P2pLineLeaseCatalogSnapshot(List.of(new P2pLineLeaseSnapshot(
+                definition, Optional.empty(), P2pLineActivitySnapshot.idle(), List.of())));
+        var releases = new WholeServiceCentreReleaseSnapshot(0, List.of("retired", "current", "future"),
+                Optional.of("current"), Map.of("retired", 0, "current", 1, "future", 1),
+                Map.of("retired", 0, "current", 0, "future", 0),
+                Map.of("retired", Map.of(definition.lineId(), 1), "current", Map.of(definition.lineId(), 0),
+                        "future", Map.of(definition.lineId(), 0)));
+        var candidates = List.of("retired", "current", "future").stream().map(id -> candidate("tote-" + id, 1,
+                logicalState("order-" + id, OrderType.FULL_PACK, id, "pharmacy-1"), List.of("pharmacy-1"))).toList();
+        var groups = candidates.stream().map(c -> group(c.physicalCandidate().serviceCentreId(), "pharmacy-1", 0, 1)).toList();
+        var metadata = new WholeServiceCentrePolicySnapshot(releases, Optional.empty(), List.of(definition.lineId()));
+        var whole = wholeAllocation(definition, metadata);
+        var snapshot = new DspOperationalReleaseSnapshot(candidates, groups, Map.of(), Set.of(), List.of(),
+                leases, Map.of(definition.destination(), true), Optional.of(whole));
+        assertEquals(candidates, snapshot.candidates());
+        assertTrue(snapshot.elasticP2pAllocation().orElseThrow().serviceCentres().isEmpty());
+        var legacy = new P2pElasticAllocationSnapshot(P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                whole.calibrationStatus(), whole.evaluatedAt(), whole.configuredLineIds(), 1, List.of(), List.of());
+        assertThrows(IllegalArgumentException.class, () -> new DspOperationalReleaseSnapshot(
+                candidates, groups, Map.of(), Set.of(), List.of(), leases,
+                Map.of(definition.destination(), true), Optional.of(legacy)));
+        var unknown = candidate("unknown-tote", 1, logicalState("unknown-order", OrderType.FULL_PACK,
+                "unknown", "pharmacy-1"), List.of("pharmacy-1"));
+        assertThrows(IllegalArgumentException.class, () -> new DspOperationalReleaseSnapshot(
+                List.of(unknown), List.of(group("unknown", "pharmacy-1", 0, 1)), Map.of(), Set.of(), List.of(),
+                leases, Map.of(definition.destination(), true), Optional.of(whole)));
+    }
+
+    @Test
+    void shouldRejectWholeMetadataThatDisagreesWithCapturedLineOwnershipActivityOrConfiguration() {
+        var definition = new P2pLineDefinition(new P2pLineId("line-1"),
+                new OperationalRouteDestination(StationType.P2P, "target-1"));
+        var releases = new WholeServiceCentreReleaseSnapshot(0, List.of("current"), Optional.of("current"),
+                Map.of("current", 1), Map.of("current", 0), Map.of("current", Map.of(definition.lineId(), 0)));
+        var allocation = wholeAllocation(definition, new WholeServiceCentrePolicySnapshot(
+                releases, Optional.of("current"), List.of(definition.lineId())));
+        var busy = new P2pLineActivitySnapshot(new P2pInputActivitySnapshot(1, 0, false, 0),
+                P2pPackPathActivitySnapshot.idle(), P2pBaggingActivitySnapshot.idle(), Optional.empty());
+        for (var line : List.of(new P2pLineLeaseSnapshot(definition, Optional.of("current"), P2pLineActivitySnapshot.idle(), List.of()),
+                new P2pLineLeaseSnapshot(definition, Optional.empty(), busy, List.of()))) {
+            assertThrows(IllegalArgumentException.class, () -> new DspOperationalReleaseSnapshot(
+                    List.of(), List.of(), Map.of(), Set.of(), List.of(), new P2pLineLeaseCatalogSnapshot(List.of(line)),
+                    Map.of(definition.destination(), true), Optional.of(allocation)));
+        }
+        var different = new P2pLineDefinition(new P2pLineId("other"), definition.destination());
+        assertThrows(IllegalArgumentException.class, () -> new DspOperationalReleaseSnapshot(
+                List.of(), List.of(), Map.of(), Set.of(), List.of(), new P2pLineLeaseCatalogSnapshot(List.of(
+                        new P2pLineLeaseSnapshot(different, Optional.empty(), P2pLineActivitySnapshot.idle(), List.of()))),
+                Map.of(definition.destination(), true), Optional.of(allocation)));
+        assertThrows(IllegalArgumentException.class, () -> new WholeServiceCentrePolicySnapshot(releases, Optional.of("future"), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new WholeServiceCentrePolicySnapshot(releases,
+                Optional.empty(), List.of(definition.lineId(), definition.lineId())));
+    }
+
+    private static P2pElasticAllocationSnapshot wholeAllocation(P2pLineDefinition definition,
+            WholeServiceCentrePolicySnapshot metadata) {
+        return new P2pElasticAllocationSnapshot(DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name(),
+                P2pElasticAllocationCalibrationStatus.UNCALIBRATED, LocalDateTime.of(2026, 8, 24, 6, 0),
+                List.of(definition.lineId()), 1, List.of(), List.of(), Optional.of(metadata));
+    }
 
     @Test
     void shouldRetainDistinctPhysicalCandidatesForOneLogicalSheet() {

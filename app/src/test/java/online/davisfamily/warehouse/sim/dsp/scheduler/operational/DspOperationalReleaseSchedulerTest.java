@@ -54,11 +54,74 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationCapacity;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationSnapshot;
+import online.davisfamily.warehouse.sim.dsp.av02.Av02OperationalPhysicalToteCandidate;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteRole;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteIdentity;
+import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
+import online.davisfamily.warehouse.sim.dsp.p2p.allocation.WholeServiceCentreP2pLineAllocationPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentrePolicySnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 
 class DspOperationalReleaseSchedulerTest {
 
     private final DspOperationalReleaseScheduler scheduler =
             new DspOperationalReleaseScheduler();
+
+    @Test
+    void shouldGateAllLaterOrderTypesBeforeDependencyAdmissionOrCorrelationEvenWhenCurrentWhollyBlocked() {
+        var earlier = candidate("earlier", logicalState("earlier-order", 1, OrderType.ASSOCIATED,
+                "sc-1", 999, DspOrderLineType.ADAPTED, p2pRoute()), 0,
+                OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty());
+        List<DspOperationalReleaseCandidate> candidates = new java.util.ArrayList<>(List.of(earlier));
+        for (OrderType type : List.of(OrderType.ADAPTED, OrderType.FULL_PACK, OrderType.ASSOCIATED)) {
+            var route = type == OrderType.ADAPTED
+                    ? new RouteRequirements(false, true, false, false, false, StartLocation.OSR) : p2pRoute();
+            candidates.add(candidate("later-" + type, logicalState("later-order-" + type, 1, type, "sc-2", 998,
+                    type == OrderType.FULL_PACK ? DspOrderLineType.FULL_PACK : DspOrderLineType.ADAPTED, route),
+                    candidates.size(), OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty()));
+        }
+        var empty = logicalState("empty-order", 1, OrderType.EMPTY, "sc-2", 998, DspOrderLineType.FULL_PACK,
+                new RouteRequirements(false, false, false, true, false, StartLocation.AV02));
+        candidates.add(new DspOperationalReleaseCandidate(new Av02OperationalPhysicalToteCandidate(
+                new OperationalPhysicalToteIdentity(OperationalPhysicalToteSource.AV02, new PhysicalToteId("av02"),
+                        empty.order().orderSheetKey(), OrderType.EMPTY, "sc-2", PhysicalToteRole.PRE_P2P, 4)),
+                empty, List.of("pharmacy-1")));
+        var line = leasedLine("line-1", "sc-1", Optional.empty());
+        var leases = new P2pLineLeaseCatalogSnapshot(List.of(line));
+        var releases = new WholeServiceCentreReleaseSnapshot(0, List.of("sc-1", "sc-2"), Optional.of("sc-1"),
+                Map.of("sc-1", 1, "sc-2", 3), Map.of("sc-1", 0, "sc-2", 1),
+                Map.of("sc-1", Map.of(line.definition().lineId(), 0), "sc-2", Map.of(line.definition().lineId(), 0)));
+        AtomicInteger correlationReads = new AtomicInteger();
+        var wholeScheduler = new DspOperationalReleaseScheduler(new OperationalDependencyReadinessPolicy(),
+                new OperationalRouteEntryAdmissionPolicy(), new AdaptedFirstPharmacyGroupedSourceSequenceRankingPolicy(),
+                new WholeServiceCentreP2pLineAllocationPolicy(), P2pBagCorrelationRequirementCatalog.empty(),
+                () -> { correlationReads.incrementAndGet(); return P2pBagCorrelationAssignmentSnapshot.empty(); },
+                new WholeServiceCentreReleaseEligibilityPolicy());
+        for (Optional<String> eligible : List.of(Optional.of("sc-1"), Optional.<String>empty())) {
+            var allocation = new P2pElasticAllocationSnapshot(DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name(),
+                    P2pElasticAllocationCalibrationStatus.UNCALIBRATED, LocalDateTime.of(2026, 8, 24, 6, 0),
+                    List.of(line.definition().lineId()), 1, List.of(), List.of(),
+                    Optional.of(new WholeServiceCentrePolicySnapshot(releases, eligible, List.of())));
+            var snapshot = elasticSnapshot(candidates, Map.of(), Set.of(), leases,
+                    Map.of(line.definition().destination(), false), allocation);
+            var evaluated = wholeScheduler.evaluate(snapshot);
+            assertTrue(evaluated.releaseDecision().isEmpty());
+            assertEquals(candidates.size(), evaluated.blockedCandidates().size());
+            assertEquals(eligible.isPresent() ? OperationalReleaseBlockType.ADAPTED_DEPENDENCY
+                    : OperationalReleaseBlockType.SERVICE_CENTRE_SEQUENCE,
+                    evaluated.blockedCandidates().getFirst().blocks().getFirst().type());
+            for (var blocked : evaluated.blockedCandidates().subList(1, candidates.size())) {
+                assertEquals(OperationalReleaseBlockType.SERVICE_CENTRE_SEQUENCE, blocked.blocks().getFirst().type());
+                assertTrue(blocked.blocks().getFirst().reason().contains("current=sc-1"));
+            }
+            assertEquals(0, correlationReads.get());
+            assertSame(releases, snapshot.elasticP2pAllocation().orElseThrow().wholeServiceCentrePolicy().orElseThrow().releases());
+            assertEquals(candidates, snapshot.candidates());
+        }
+        assertThrows(IllegalArgumentException.class, () -> new WholeServiceCentreReleaseEligibilityPolicy()
+                .blockFor(earlier, snapshot(List.of(earlier), Map.of(), Set.of())));
+    }
 
     @Test
     void shouldPreserveCandidateOrderAndBlocksAcrossCorrelationLineCompatibility() {

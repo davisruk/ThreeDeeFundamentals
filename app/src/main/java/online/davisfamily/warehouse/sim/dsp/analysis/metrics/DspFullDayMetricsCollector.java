@@ -511,6 +511,11 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                     operational.dependencyCount(),
                     operational.dependencyReason()));
         }
+        if (operational != null && operational.sequenceCount() > 0) {
+            return Optional.of(new BlockObservation(
+                    DspFullDayBlockCategory.OSR_STATE,
+                    operational.sequenceCount(), operational.sequenceReason()));
+        }
         ServiceCentreSupplySnapshot supply = current.supply().serviceCentres().stream()
                 .filter(value -> value.serviceCentreId().equals(completion.serviceCentreId()))
                 .findFirst()
@@ -1124,7 +1129,9 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             long p2pCount,
             String dependencyReason,
             String stationReason,
-            String p2pReason) {
+            String p2pReason,
+            long sequenceCount,
+            String sequenceReason) {
 
         private OperationalBlockCounts {
             dependencyReason = dependencyReason == null
@@ -1132,6 +1139,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             stationReason = stationReason == null
                     ? "station or route-entry admission is blocked" : stationReason;
             p2pReason = p2pReason == null ? "P2P assignment is blocked" : p2pReason;
+            sequenceReason = sequenceReason == null ? "service-centre release barrier" : sequenceReason;
         }
     }
 
@@ -1142,6 +1150,8 @@ public final class DspFullDayMetricsCollector implements SimulationController {
         private String dependencyReason;
         private String stationReason;
         private String p2pReason;
+        private long sequenceCount;
+        private String sequenceReason;
 
         private void add(OperationalReleaseBlock block) {
             String reason = block.type() + ": " + block.reason();
@@ -1158,6 +1168,10 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                     p2pCount = saturatingAdd(p2pCount, 1);
                     p2pReason = reason;
                 }
+                case SERVICE_CENTRE_SEQUENCE -> {
+                    sequenceCount = saturatingAdd(sequenceCount, 1);
+                    sequenceReason = reason;
+                }
             }
         }
 
@@ -1168,7 +1182,9 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                     p2pCount,
                     dependencyReason,
                     stationReason,
-                    p2pReason);
+                    p2pReason,
+                    sequenceCount,
+                    sequenceReason);
         }
     }
 

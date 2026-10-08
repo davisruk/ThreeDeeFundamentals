@@ -24,6 +24,7 @@ public final class DspOperationalReleaseScheduler {
     private final OperationalRouteEntryAdmissionPolicy routeEntryAdmissionPolicy;
     private final OperationalCandidateRankingPolicy candidateRankingPolicy;
     private final P2pLineAllocationPolicy p2pLineAllocationPolicy;
+    private final OperationalServiceCentreReleasePolicy serviceCentreReleasePolicy;
     private final OperationalRouteEntrySelector routeEntrySelector;
     private final P2pBagCorrelationRequirementCatalog correlationRequirementCatalog;
     private final Supplier<P2pBagCorrelationAssignmentSnapshot>
@@ -74,6 +75,19 @@ public final class DspOperationalReleaseScheduler {
             P2pBagCorrelationRequirementCatalog correlationRequirementCatalog,
             Supplier<P2pBagCorrelationAssignmentSnapshot>
                     correlationAssignmentSnapshotSupplier) {
+        this(dependencyReadinessPolicy, routeEntryAdmissionPolicy, candidateRankingPolicy,
+                p2pLineAllocationPolicy, correlationRequirementCatalog,
+                correlationAssignmentSnapshotSupplier, OperationalServiceCentreReleasePolicy.allowAll());
+    }
+
+    public DspOperationalReleaseScheduler(
+            OperationalDependencyReadinessPolicy dependencyReadinessPolicy,
+            OperationalRouteEntryAdmissionPolicy routeEntryAdmissionPolicy,
+            OperationalCandidateRankingPolicy candidateRankingPolicy,
+            P2pLineAllocationPolicy p2pLineAllocationPolicy,
+            P2pBagCorrelationRequirementCatalog correlationRequirementCatalog,
+            Supplier<P2pBagCorrelationAssignmentSnapshot> correlationAssignmentSnapshotSupplier,
+            OperationalServiceCentreReleasePolicy serviceCentreReleasePolicy) {
         if (dependencyReadinessPolicy == null) {
             throw new IllegalArgumentException("dependencyReadinessPolicy must not be null");
         }
@@ -93,6 +107,10 @@ public final class DspOperationalReleaseScheduler {
             throw new IllegalArgumentException(
                     "correlationAssignmentSnapshotSupplier must not be null");
         }
+        if (serviceCentreReleasePolicy == null) {
+            throw new IllegalArgumentException("serviceCentreReleasePolicy must not be null");
+        }
+        this.serviceCentreReleasePolicy = serviceCentreReleasePolicy;
         this.dependencyReadinessPolicy = dependencyReadinessPolicy;
         this.routeEntryAdmissionPolicy = routeEntryAdmissionPolicy;
         this.candidateRankingPolicy = candidateRankingPolicy;
@@ -112,6 +130,15 @@ public final class DspOperationalReleaseScheduler {
         List<OperationalReleaseSelection> eligibleCandidates = new ArrayList<>();
         P2pLineAllocationRequestFactory requestFactory = null;
         for (DspOperationalReleaseCandidate candidate : snapshot.candidates()) {
+            Optional<OperationalReleaseBlock> sequenceBlock =
+                    serviceCentreReleasePolicy.blockFor(candidate, snapshot);
+            if (sequenceBlock == null) {
+                throw new IllegalStateException("serviceCentreReleasePolicy returned null");
+            }
+            if (sequenceBlock.isPresent()) {
+                blockedCandidates.add(blockedCandidate(candidate, List.of(sequenceBlock.orElseThrow())));
+                continue;
+            }
             List<OperationalReleaseBlock> dependencyBlocks =
                     dependencyReadinessPolicy.findBlocks(candidate, snapshot);
             if (!dependencyBlocks.isEmpty()) {

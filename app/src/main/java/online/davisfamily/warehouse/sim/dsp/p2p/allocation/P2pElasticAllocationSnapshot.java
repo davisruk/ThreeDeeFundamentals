@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentrePolicySnapshot;
 
 public record P2pElasticAllocationSnapshot(
         String profileId,
@@ -15,14 +17,32 @@ public record P2pElasticAllocationSnapshot(
         List<P2pLineId> configuredLineIds,
         int maximumConcurrentServiceCentres,
         List<P2pServiceCentreLineDemandSnapshot> serviceCentres,
-        List<P2pElasticAllocationIssue> issues) {
+        List<P2pElasticAllocationIssue> issues,
+        Optional<WholeServiceCentrePolicySnapshot> wholeServiceCentrePolicy) {
 
     public static final String DEADLINE_AWARE_ELASTIC_STICKY_LEASES =
             "DEADLINE_AWARE_ELASTIC_STICKY_LEASES";
 
+    public P2pElasticAllocationSnapshot(
+            String profileId,
+            P2pElasticAllocationCalibrationStatus calibrationStatus,
+            LocalDateTime evaluatedAt,
+            List<P2pLineId> configuredLineIds,
+            int maximumConcurrentServiceCentres,
+            List<P2pServiceCentreLineDemandSnapshot> serviceCentres,
+            List<P2pElasticAllocationIssue> issues) {
+        this(profileId, calibrationStatus, evaluatedAt, configuredLineIds,
+                maximumConcurrentServiceCentres, serviceCentres, issues, Optional.empty());
+    }
+
     public P2pElasticAllocationSnapshot {
-        if (!DEADLINE_AWARE_ELASTIC_STICKY_LEASES.equals(profileId)) {
+        boolean whole = DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name()
+                .equals(profileId);
+        if (!whole && !DEADLINE_AWARE_ELASTIC_STICKY_LEASES.equals(profileId)) {
             throw new IllegalArgumentException("unsupported elastic allocation profileId");
+        }
+        if (wholeServiceCentrePolicy == null || whole != wholeServiceCentrePolicy.isPresent()) {
+            throw new IllegalArgumentException("allocation profile and whole metadata must match");
         }
         if (calibrationStatus == null || evaluatedAt == null) {
             throw new IllegalArgumentException(
@@ -66,6 +86,30 @@ public record P2pElasticAllocationSnapshot(
             throw new IllegalArgumentException("issues must not be null or contain null");
         }
         issues = List.copyOf(issues);
+        if (whole) {
+            WholeServiceCentrePolicySnapshot policy = wholeServiceCentrePolicy.orElseThrow();
+            if (maximumConcurrentServiceCentres != 1 || serviceCentres.size() > 1
+                    || !issues.isEmpty()) {
+                throw new IllegalArgumentException("whole policy has one release centre and no deadline issues");
+            }
+            Set<P2pLineId> configured = new LinkedHashSet<>(configuredLineIds);
+            if (!configured.containsAll(policy.availableUnleasedLineIds())) {
+                throw new IllegalArgumentException("available lines must be configured");
+            }
+            for (var counts : policy.releases().committedP2pToteCounts().values()) {
+                if (!counts.keySet().equals(configured)) {
+                    throw new IllegalArgumentException("release counts must match configured lines");
+                }
+            }
+            for (var demand : serviceCentres) {
+                if (!policy.releases().releaseServiceCentreId()
+                        .filter(demand.serviceCentreId()::equals).isPresent()
+                        || !demand.drainingSurplusLineIds().isEmpty()
+                        || !demand.issues().isEmpty()) {
+                    throw new IllegalArgumentException("whole demand must describe only the release centre");
+                }
+            }
+        }
     }
 
     public Optional<P2pServiceCentreLineDemandSnapshot> find(String serviceCentreId) {

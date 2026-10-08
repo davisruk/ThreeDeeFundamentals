@@ -37,6 +37,11 @@ import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalRe
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseEvaluation;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
+import online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalBlockedCandidate;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalReleaseBlock;
+import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalReleaseBlockType;
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 
 class DspFullDayMetricsCollectorTest {
@@ -45,6 +50,54 @@ class DspFullDayMetricsCollectorTest {
     private static final List<Integer> UPDATE_SUPPLIER_READ_INDICES = List.of(
             0, 1, 2, 3, 4, 5, 7, 9, 10, 12, 14, 15, 16, 17, 18);
     private static final List<Integer> UNUSED_SUPPLIER_READ_INDICES = List.of(8, 11, 13);
+
+    @Test
+    void shouldClassifySequenceBarrierAsOsrStateAndRetainExplicitReasonOverUpstreamWaiting(
+            @TempDir Path directory) throws IOException {
+        var profile = profile();
+        var input = loadInput(directory, profile);
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var fixed = fixedSuppliers(runtime);
+            var order = fixed.schedulerSnapshotSupplier().get().orderStates().stream()
+                    .filter(state -> state.order().serviceCentreId().equals("104")).findFirst().orElseThrow();
+            String reason = "whole-service-centre release barrier: current=108, eligible=108";
+            var block = new OperationalReleaseBlock(OperationalReleaseBlockType.SERVICE_CENTRE_SEQUENCE, reason);
+            var evaluation = new DspOperationalReleaseEvaluation(Optional.empty(), List.of(new OperationalBlockedCandidate(
+                    new PhysicalToteId("tote-104"), order.order().orderSheetKey(), List.of(block, block))));
+            var operational = operationalSnapshot(fixed.operationalReleaseSnapshotSupplier().get(), Optional.of(evaluation));
+            var completions = fixed.completionSnapshotsSupplier().get().stream().map(completion -> {
+                if (!completion.serviceCentreId().equals("104")) {
+                    return completion;
+                }
+                return new DspServiceCentreCompletionSnapshot(completion.serviceCentreId(), false, 1,
+                        completion.capacityBlockedManifestCount(), completion.osrWaitingCount(), completion.av02WaitingCount(),
+                        completion.nonTerminalInboundToteCount(), completion.remainingPhysicalToteCount(),
+                        completion.remainingPhysicalPackCount(), completion.remainingPlannedBagCount(),
+                        completion.activeStationClaimCount(), completion.pendingStationDispositionCount(),
+                        completion.transportEnvelopeCount(), completion.tipperInputCount(), completion.p2pAssignmentCount(),
+                        completion.openOutboundToteCount(), completion.unallocatedCompletedBagCount(),
+                        completion.unsupportedWork(), Optional.empty(), Optional.empty(), completion.outcome(),
+                        completion.deadline(), false);
+            }).toList();
+            var suppliers = new DspFullDayMetricsCollector.SnapshotSuppliers(fixed.clockSnapshotSupplier(),
+                    fixed.supplySnapshotSupplier(), fixed.osrSnapshotSupplier(), fixed.av02SnapshotSupplier(),
+                    fixed.lifecycleSnapshotSupplier(), fixed.elasticSnapshotSupplier(), fixed.p2pLineSnapshotsSupplier(),
+                    () -> operational, fixed.transportInFlightSnapshotSupplier(), fixed.transportIngressSnapshotSupplier(),
+                    fixed.transportArrivalSnapshotSupplier(), fixed.outboundTransportSnapshotSupplier(),
+                    fixed.stationArrivalSnapshotsSupplier(), fixed.stationProcessingSnapshotSupplier(),
+                    fixed.stationClaimSnapshotsSupplier(), fixed.outboundSnapshotSupplier(), fixed.schedulerSnapshotSupplier(),
+                    () -> completions, fixed.runtimeStateSupplier());
+            var collector = collector(profile, input, suppliers);
+            collector.update(new SimulationContext(), 2d);
+            var metrics = collector.snapshot().serviceCentres().stream()
+                    .filter(centre -> centre.serviceCentreId().equals("104")).findFirst().orElseThrow();
+            var sequence = metrics.block(DspFullDayBlockCategory.OSR_STATE);
+            assertEquals(1, sequence.blockedUnitCount());
+            assertEquals(Duration.ofSeconds(2), sequence.blockedSimulationDuration());
+            assertEquals(Optional.of("SERVICE_CENTRE_SEQUENCE: " + reason), sequence.latestReason());
+            assertEquals(Duration.ZERO, metrics.block(DspFullDayBlockCategory.STATION_CAPACITY).blockedSimulationDuration());
+        }
+    }
 
     @Test
     void shouldExposeZeroStateMetadataAndInitialOccupancySample(@TempDir Path directory)

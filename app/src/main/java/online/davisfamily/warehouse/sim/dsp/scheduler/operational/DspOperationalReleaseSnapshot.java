@@ -19,6 +19,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapsho
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
 
 public final class DspOperationalReleaseSnapshot {
     private final CandidateState candidateState;
@@ -355,6 +356,37 @@ public final class DspOperationalReleaseSnapshot {
             if (!allocation.configuredLineIds().equals(lineIds)) {
                 throw new IllegalArgumentException(
                         "elastic allocation lines must match operational P2P leases");
+            }
+            if (DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name()
+                    .equals(allocation.profileId())) {
+                var policy = allocation.wholeServiceCentrePolicy().orElseThrow();
+                for (var lineId : policy.availableUnleasedLineIds()) {
+                    var line = lineLeases.findLine(lineId).orElseThrow(() ->
+                            new IllegalArgumentException("available line must be configured"));
+                    if (line.leased() || !line.activity().quiescent()) {
+                        throw new IllegalArgumentException("available line must be unleased and quiescent");
+                    }
+                }
+                for (var demand : allocation.serviceCentres()) {
+                    if (!policy.releases().releaseServiceCentreId()
+                            .filter(demand.serviceCentreId()::equals).isPresent()) {
+                        throw new IllegalArgumentException("demand must belong to the release centre");
+                    }
+                    for (var lineId : demand.feedingOwnedLineIds()) {
+                        if (!lineLeases.findLine(lineId).orElseThrow().serviceCentreId()
+                                .filter(demand.serviceCentreId()::equals).isPresent()) {
+                            throw new IllegalArgumentException("feeding line must belong to the release centre");
+                        }
+                    }
+                }
+                for (var candidate : candidates) {
+                    if (candidate.logicalOrderState().routeRequirements().requiresP2p()
+                            && !policy.releases().unreleasedOsrToteCounts()
+                                    .containsKey(candidate.physicalCandidate().serviceCentreId())) {
+                        throw new IllegalArgumentException("P2P candidate centre is absent from release counts");
+                    }
+                }
+                return;
             }
             for (DspOperationalReleaseCandidate candidate : candidates) {
                 if (!candidate.logicalOrderState().routeRequirements().requiresP2p()) {
