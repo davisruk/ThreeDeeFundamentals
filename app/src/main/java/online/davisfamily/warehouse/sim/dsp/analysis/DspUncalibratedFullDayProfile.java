@@ -20,6 +20,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspOperationalSchedulingBaselineFactory;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
 import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreSchedule;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
 import online.davisfamily.warehouse.sim.dsp.supply.FixedIntervalInboundToteArrivalPolicy;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplyConfig;
 import online.davisfamily.warehouse.sim.dsp.thirdparty.ThirdPartyAreaConfig;
@@ -31,8 +32,8 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteD
  * Complete, immutable assumptions for the first full-day analysis profile.
  *
  * <p>The values in this type describe an analytical execution model. They are deliberately not
- * production calibration data. In particular, the profile always identifies the deadline-aware
- * elastic policy as {@link #PROFILE_ID} and timing as {@code UNCALIBRATED}.</p>
+ * production calibration data. The selected policy set is explicit; {@link #PROFILE_ID}
+ * retains the legacy identifier, and timing remains {@code UNCALIBRATED}.</p>
  */
 public record DspUncalibratedFullDayProfile(
         LocalDate operatingDate,
@@ -54,7 +55,54 @@ public record DspUncalibratedFullDayProfile(
         P2pPlaceholderDurations p2pPlaceholderDurations,
         List<P2pLineDefinition> p2pLineDefinitions,
         int prlCountPerLine,
-        DspServiceCentreTimetable timetable) {
+        DspServiceCentreTimetable timetable,
+        DspSchedulerPolicy schedulerPolicy) {
+
+    /** Compatibility constructor retaining the deadline-aware policy set. */
+    public DspUncalibratedFullDayProfile(
+            LocalDate operatingDate,
+            online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig osrInventoryConfig,
+            ServiceCentreSupplyConfig serviceCentreSupplyConfig,
+            FixedIntervalInboundToteArrivalPolicy inboundToteArrivalPolicy,
+            Av02AllocationConfig av02AllocationConfig,
+            P2pElasticAllocationConfig p2pElasticAllocationConfig,
+            OutboundToteConfig outboundToteConfig,
+            int maximumPacksPerBag,
+            Duration fixedStep,
+            int maximumStepsPerAdvance,
+            Duration metricSampleInterval,
+            double routeSpeedUnitsPerSecond,
+            QueueCapacities queueCapacities,
+            ThirdPartyAreaConfig thirdPartyAreaConfig,
+            AdaptingStorageConfig adaptingStorageConfig,
+            List<AdaptingBenchDefinition> adaptingBenchDefinitions,
+            P2pPlaceholderDurations p2pPlaceholderDurations,
+            List<P2pLineDefinition> p2pLineDefinitions,
+            int prlCountPerLine,
+            DspServiceCentreTimetable timetable) {
+        this(
+                operatingDate,
+                osrInventoryConfig,
+                serviceCentreSupplyConfig,
+                inboundToteArrivalPolicy,
+                av02AllocationConfig,
+                p2pElasticAllocationConfig,
+                outboundToteConfig,
+                maximumPacksPerBag,
+                fixedStep,
+                maximumStepsPerAdvance,
+                metricSampleInterval,
+                routeSpeedUnitsPerSecond,
+                queueCapacities,
+                thirdPartyAreaConfig,
+                adaptingStorageConfig,
+                adaptingBenchDefinitions,
+                p2pPlaceholderDurations,
+                p2pLineDefinitions,
+                prlCountPerLine,
+                timetable,
+                DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
+    }
 
     public static final String PROFILE_ID =
             P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES;
@@ -71,6 +119,9 @@ public record DspUncalibratedFullDayProfile(
     public static final int PRL_COUNT_PER_LINE = 31;
 
     public DspUncalibratedFullDayProfile {
+        if (schedulerPolicy == null) {
+            throw new IllegalArgumentException("schedulerPolicy must not be null");
+        }
         if (operatingDate == null) {
             throw new IllegalArgumentException("operatingDate must not be null");
         }
@@ -267,7 +318,7 @@ public record DspUncalibratedFullDayProfile(
     }
 
     public String profileId() {
-        return PROFILE_ID;
+        return schedulerPolicy.name();
     }
 
     public String timingCalibrationStatus() {
@@ -287,15 +338,19 @@ public record DspUncalibratedFullDayProfile(
     }
 
     public String orderEligibilityPolicyId() {
-        return ORDER_ELIGIBILITY_POLICY_ID;
+        return schedulerPolicy == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER
+                ? "WHOLE_SERVICE_CENTRE_ORDER_WIDE_PREPARATION_READY"
+                : ORDER_ELIGIBILITY_POLICY_ID;
     }
 
     public String candidateRankingPolicyId() {
-        return CANDIDATE_RANKING_POLICY_ID;
+        return schedulerPolicy == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER
+                ? "WHOLE_SERVICE_CENTRE_ADAPTED_FIRST_PHARMACY_SOURCE_SEQUENCE"
+                : CANDIDATE_RANKING_POLICY_ID;
     }
 
     public String p2pLineAllocationPolicyId() {
-        return PROFILE_ID;
+        return schedulerPolicy.name();
     }
 
     public String outboundAllocationPolicyId() {

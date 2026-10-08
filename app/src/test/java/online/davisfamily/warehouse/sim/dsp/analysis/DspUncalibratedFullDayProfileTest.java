@@ -21,9 +21,78 @@ import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadCostConfig
 import online.davisfamily.warehouse.sim.dsp.supply.FixedIntervalInboundToteArrivalPolicy;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplyConfig;
 import online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
 
 class DspUncalibratedFullDayProfileTest {
     private static final LocalDate OPERATING_DATE = LocalDate.of(2026, 9, 2);
+
+    @Test
+    void shouldSelectExactPolicyIdsWhileKeepingLegacyDefaultsAndAllOtherValues() {
+        var legacy = profile();
+        var explicitLegacy = selectedProfile(legacy, DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
+        assertEquals(legacy, explicitLegacy);
+        assertEquals(DspUncalibratedFullDayProfile.PROFILE_ID, legacy.profileId());
+        assertEquals(DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES, legacy.schedulerPolicy());
+        assertEquals(legacy.profileId(), legacy.p2pLineAllocationPolicyId());
+        var whole = selectedProfile(legacy, DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        assertEquals("WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER", whole.profileId());
+        assertEquals(whole.profileId(), whole.p2pLineAllocationPolicyId());
+        assertEquals("WHOLE_SERVICE_CENTRE_ORDER_WIDE_PREPARATION_READY", whole.orderEligibilityPolicyId());
+        assertEquals("WHOLE_SERVICE_CENTRE_ADAPTED_FIRST_PHARMACY_SOURCE_SEQUENCE",
+                whole.candidateRankingPolicyId());
+        assertEquals(legacy.serviceCentreSupplyPolicyId(), whole.serviceCentreSupplyPolicyId());
+        assertEquals(legacy.outboundAllocationPolicyId(), whole.outboundAllocationPolicyId());
+        assertEquals(legacy.inboundToteArrivalPolicy().policyId(), whole.inboundToteArrivalPolicy().policyId());
+        assertEquals(legacy.operationalClockConfig(), whole.operationalClockConfig());
+        assertEquals(legacy.p2pElasticAllocationConfig(), whole.p2pElasticAllocationConfig());
+        assertSame(legacy.adaptingBenchDefinitions(), whole.adaptingBenchDefinitions());
+        assertSame(legacy.queueCapacities(), whole.queueCapacities());
+        assertSame(legacy.thirdPartyAreaConfig(), whole.thirdPartyAreaConfig());
+        assertSame(legacy.timetable(), whole.timetable());
+        assertEquals("UNCALIBRATED", whole.calibrationStatus());
+        assertEquals("P2P_OUTPUT_CLOSED", whole.completionMilestone());
+        assertThrows(IllegalArgumentException.class, () -> selectedProfile(legacy, null));
+    }
+
+    @Test
+    void shouldRejectNonExactExternalPolicyIdentifiers() {
+        assertEquals(List.of("DEADLINE_AWARE_ELASTIC_STICKY_LEASES", "WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER"),
+                java.util.Arrays.stream(DspSchedulerPolicy.values()).map(Enum::name).toList());
+        for (var policy : DspSchedulerPolicy.values()) {
+            assertEquals(policy, DspSchedulerPolicy.parse(policy.name()));
+        }
+        assertThrows(IllegalArgumentException.class, () -> DspSchedulerPolicy.parse(null));
+        for (String invalid : List.of("", " ", "UNKNOWN", "whole_service_centre_drained_handover",
+                " WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER", "DEADLINE_AWARE_ELASTIC_STICKY_LEASES ")) {
+            assertThrows(IllegalArgumentException.class, () -> DspSchedulerPolicy.parse(invalid));
+        }
+    }
+
+    private static DspUncalibratedFullDayProfile selectedProfile(
+            DspUncalibratedFullDayProfile base, DspSchedulerPolicy selected) {
+        return new DspUncalibratedFullDayProfile(
+                base.operatingDate(),
+                base.osrInventoryConfig(),
+                base.serviceCentreSupplyConfig(),
+                base.inboundToteArrivalPolicy(),
+                base.av02AllocationConfig(),
+                base.p2pElasticAllocationConfig(),
+                base.outboundToteConfig(),
+                base.maximumPacksPerBag(),
+                base.fixedStep(),
+                base.maximumStepsPerAdvance(),
+                base.metricSampleInterval(),
+                base.routeSpeedUnitsPerSecond(),
+                base.queueCapacities(),
+                base.thirdPartyAreaConfig(),
+                base.adaptingStorageConfig(),
+                base.adaptingBenchDefinitions(),
+                base.p2pPlaceholderDurations(),
+                base.p2pLineDefinitions(),
+                base.prlCountPerLine(),
+                base.timetable(),
+                selected);
+    }
 
     @Test
     void shouldKeepLegacyBenchConstructionAndValidateSeparateDurationsAndPositions() {

@@ -37,6 +37,7 @@ import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationConfig;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pWorkloadCostConfig;
 import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreSchedule;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockConfig;
@@ -455,6 +456,7 @@ public final class DspFullDayReportFactory {
         LinkedHashMap<String, Object> result = new LinkedHashMap<>();
         DspOperationalClockConfig clock = profile.operationalClockConfig();
         result.put("profileId", profile.profileId());
+        result.put("schedulerPolicy", profile.schedulerPolicy().name());
         result.put("operatingDate", profile.operatingDate().toString());
         result.put("calibrationStatus", profile.calibrationStatus());
         result.put("completionMilestone", profile.completionMilestone());
@@ -487,6 +489,9 @@ public final class DspFullDayReportFactory {
         P2pElasticAllocationConfig elastic = profile.p2pElasticAllocationConfig();
         P2pWorkloadCostConfig costs = elastic.workloadCostConfig();
         result.put("p2pElastic", linkedMap(
+                "deadlineAndWorkloadInputRole",
+                profile.schedulerPolicy() == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER
+                        ? "DIAGNOSTIC_ONLY" : "ACTIVE_DECISION_INPUTS",
                 "p2pLineCount", elastic.p2pLineCount(),
                 "maximumConcurrentServiceCentres", elastic.maximumConcurrentServiceCentres(),
                 "minimumReservedLinesForEarlierCentre", elastic.minimumReservedLinesForEarlierCentre(),

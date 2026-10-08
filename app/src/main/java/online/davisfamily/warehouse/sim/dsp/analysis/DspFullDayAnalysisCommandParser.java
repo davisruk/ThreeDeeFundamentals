@@ -20,6 +20,8 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+
 /** Package-private parser for the exact full-day command-line contract. */
 final class DspFullDayAnalysisCommandParser {
     private static final String CONFIG = "config";
@@ -41,6 +43,7 @@ final class DspFullDayAnalysisCommandParser {
     private static final String STEPS_PER_BATCH = "steps-per-batch";
     private static final String METRIC_SAMPLE_SECONDS = "metric-sample-seconds";
     private static final String OVERWRITE = "overwrite";
+    private static final String SCHEDULER_POLICY = "scheduler-policy";
 
     DspFullDayAnalysisCommand parse(String[] arguments) {
         if (arguments == null) {
@@ -75,8 +78,12 @@ final class DspFullDayAnalysisCommandParser {
         Duration metricSampleInterval = Duration.ofSeconds(60);
         Duration progressInterval = Duration.ofSeconds(300);
         boolean overwrite = false;
+        DspSchedulerPolicy schedulerPolicy = DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES;
 
         if (config != null) {
+            if (config.schedulerPolicy() != null) {
+                schedulerPolicy = DspSchedulerPolicy.parse(config.schedulerPolicy());
+            }
             productMasterPath = configuredPath(
                     config.productMaster(), configBaseDirectory, PRODUCT_MASTER);
             if (config.orders() != null) {
@@ -139,7 +146,8 @@ final class DspFullDayAnalysisCommandParser {
         }
 
         boolean commandLineOrderModeSeen = false;
-        for (String argument : arguments) {
+        for (int argumentIndex = 0; argumentIndex < arguments.length; argumentIndex++) {
+            String argument = arguments[argumentIndex];
             if (argument == null || argument.isBlank()) {
                 throw new IllegalArgumentException("arguments must not contain blank values");
             }
@@ -148,6 +156,14 @@ final class DspFullDayAnalysisCommandParser {
                     throw new IllegalArgumentException("duplicate option: --overwrite");
                 }
                 overwrite = true;
+                continue;
+            }
+            if (argument.equals("--scheduler-policy")) {
+                ensureSingleton(seenSingletons, SCHEDULER_POLICY);
+                if (++argumentIndex >= arguments.length) {
+                    throw new IllegalArgumentException("missing value for --scheduler-policy");
+                }
+                schedulerPolicy = DspSchedulerPolicy.parse(arguments[argumentIndex]);
                 continue;
             }
             if (!argument.startsWith("--")) {
@@ -160,6 +176,10 @@ final class DspFullDayAnalysisCommandParser {
             String name = argument.substring(2, equals);
             String value = argument.substring(equals + 1);
             switch (name) {
+                case SCHEDULER_POLICY -> {
+                    ensureSingleton(seenSingletons, name);
+                    schedulerPolicy = DspSchedulerPolicy.parse(value);
+                }
                 case CONFIG -> ensureSingleton(seenSingletons, name);
                 case PRODUCT_MASTER -> {
                     ensureSingleton(seenSingletons, name);
@@ -287,7 +307,8 @@ final class DspFullDayAnalysisCommandParser {
                 Optional.ofNullable(progressLogPath),
                 progressInterval,
                 Optional.ofNullable(serviceCentreSchedulePath),
-                stationProcessingOverrides);
+                stationProcessingOverrides,
+                schedulerPolicy);
     }
 
     private static DspFullDayStationProcessingOverrides stationOverrides(

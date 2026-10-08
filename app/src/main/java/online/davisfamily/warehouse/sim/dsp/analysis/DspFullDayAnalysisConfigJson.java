@@ -24,7 +24,8 @@ record DspFullDayAnalysisConfigJson(
         Integer progressIntervalSeconds,
         String serviceCentreSchedule,
         ThirdPartyJson thirdParty,
-        AdaptingJson adapting) {
+        AdaptingJson adapting,
+        String schedulerPolicy) {
 
     DspFullDayAnalysisConfigJson {
         if (orders != null) {

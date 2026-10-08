@@ -30,6 +30,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfi
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.AdaptingBenchDefinition;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.QueueCapacities;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspDeferredNsCandidateCatalog;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.*;
 import online.davisfamily.warehouse.sim.dsp.av02.*;
@@ -85,6 +86,10 @@ public final class DspFullDayAnalysisRuntimeFactory {
             DspFullDayLoadedInput input,
             DspUncalibratedFullDayProfile profile) {
         validateInputs(simulationWorld, input, profile);
+        if (profile.schedulerPolicy() == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER) {
+            throw new IllegalArgumentException(
+                    "Whole-service-centre runtime composition is not implemented yet");
+        }
 
         List<AutoCloseable> closeables = new ArrayList<>();
         try {

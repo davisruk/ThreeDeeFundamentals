@@ -99,7 +99,8 @@ public final class DspFullDayAnalysisMain {
                 baseline.p2pPlaceholderDurations(),
                 baseline.p2pLineDefinitions(),
                 baseline.prlCountPerLine(),
-                timetable);
+                timetable,
+                command.schedulerPolicy());
     }
 
     private static List<AdaptingBenchDefinition> adaptingDefinitions(

@@ -13,6 +13,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+
 /** Reads and validates the raw JSON shape for a full-day command configuration. */
 final class DspFullDayAnalysisConfigLoader {
     private static final Set<String> PROPERTY_NAMES = Set.of(
@@ -35,7 +37,8 @@ final class DspFullDayAnalysisConfigLoader {
             "progressIntervalSeconds",
             "serviceCentreSchedule",
             "thirdParty",
-            "adapting");
+            "adapting",
+            "schedulerPolicy");
 
     private static final Set<String> THIRD_PARTY_PROPERTIES = Set.of("processingDurationSeconds");
     private static final Set<String> ADAPTING_PROPERTIES = Set.of(
@@ -95,6 +98,10 @@ final class DspFullDayAnalysisConfigLoader {
 
     private static void validateProperty(String name, JsonNode value) {
         switch (name) {
+            case "schedulerPolicy" -> {
+                requireText(name, value);
+                DspSchedulerPolicy.parse(value.textValue());
+            }
             case "thirdParty" -> validateStationObject(name, value, THIRD_PARTY_PROPERTIES);
             case "adapting" -> validateStationObject(name, value, ADAPTING_PROPERTIES);
             case "productMaster", "ordersDirectory", "output", "inspectionOutput", "operatingDate",

@@ -20,7 +20,175 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactory;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+
 class DspFullDayAnalysisCommandTest {
+
+    @Test
+    void shouldSelectEitherPolicyFromCliOrJsonWithCliPrecedence(@TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        var parser = new DspFullDayAnalysisCommandParser();
+        var baseline = parser.parse(arguments(fixture));
+        assertEquals(DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES, baseline.schedulerPolicy());
+        var stationAwareLegacy = new DspFullDayAnalysisCommand(
+                baseline.productMasterPath(),
+                baseline.orderPaths(),
+                baseline.outputPath(),
+                baseline.inspectionOutputPath(),
+                baseline.operatingDate(),
+                baseline.osrLowWaterMark(),
+                baseline.inboundInterval(),
+                baseline.av02Capacity(),
+                baseline.outboundBagCapacity(),
+                baseline.maximumPacksPerBag(),
+                baseline.fixedStep(),
+                baseline.stepsPerBatch(),
+                baseline.metricSampleInterval(),
+                baseline.overwrite(),
+                baseline.progressLogPath(),
+                baseline.progressInterval(),
+                baseline.serviceCentreSchedulePath(),
+                baseline.stationProcessingOverrides());
+        assertEquals(baseline, stationAwareLegacy);
+        assertThrows(IllegalArgumentException.class, () -> new DspFullDayAnalysisCommand(
+                baseline.productMasterPath(),
+                baseline.orderPaths(),
+                baseline.outputPath(),
+                baseline.inspectionOutputPath(),
+                baseline.operatingDate(),
+                baseline.osrLowWaterMark(),
+                baseline.inboundInterval(),
+                baseline.av02Capacity(),
+                baseline.outboundBagCapacity(),
+                baseline.maximumPacksPerBag(),
+                baseline.fixedStep(),
+                baseline.stepsPerBatch(),
+                baseline.metricSampleInterval(),
+                baseline.overwrite(),
+                baseline.progressLogPath(),
+                baseline.progressInterval(),
+                baseline.serviceCentreSchedulePath(),
+                baseline.stationProcessingOverrides(),
+                null));
+        Path config = directory.resolve("policy.json");
+        for (DspSchedulerPolicy selected : DspSchedulerPolicy.values()) {
+            assertEquals(selected, parser.parse(arguments(fixture,
+                    "--scheduler-policy=" + selected.name())).schedulerPolicy());
+            assertEquals(selected, parser.parse(arguments(fixture,
+                    "--scheduler-policy", selected.name())).schedulerPolicy());
+            Files.writeString(config, stationConfig(fixture,
+                    "\"schedulerPolicy\": \"" + selected.name() + "\""));
+            assertEquals(selected, parser.parse(new String[] {"--config=" + config}).schedulerPolicy());
+            for (DspSchedulerPolicy override : DspSchedulerPolicy.values()) {
+                assertEquals(override, parser.parse(new String[] {
+                        "--config=" + config, "--scheduler-policy=" + override.name()}).schedulerPolicy());
+                assertEquals(override, parser.parse(new String[] {
+                        "--scheduler-policy", override.name(), "--config=" + config}).schedulerPolicy());
+            }
+        }
+    }
+
+    @Test
+    void shouldRejectEveryInvalidPolicyValueEvenWhenCliWouldOverrideJson(@TempDir Path directory)
+            throws Exception {
+        Fixture fixture = fixture(directory);
+        var parser = new DspFullDayAnalysisCommandParser();
+        Path config = directory.resolve("policy.json");
+        for (String invalid : List.of("null", "\"\"", "\" \"", "7", "true", "[]", "{}",
+                "\"UNKNOWN\"", "\"whole_service_centre_drained_handover\"",
+                "\" WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER\"",
+                "\"DEADLINE_AWARE_ELASTIC_STICKY_LEASES \"")) {
+            Files.writeString(config, stationConfig(fixture, "\"schedulerPolicy\": " + invalid));
+            assertThrows(IllegalArgumentException.class,
+                    () -> parser.parse(new String[] {"--config=" + config}), invalid);
+            for (DspSchedulerPolicy override : DspSchedulerPolicy.values()) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> parser.parse(new String[] {"--config=" + config,
+                                "--scheduler-policy=" + override.name()}), invalid);
+            }
+        }
+        Files.writeString(config, stationConfig(fixture,
+                "\"schedulerPolicy\": \"DEADLINE_AWARE_ELASTIC_STICKY_LEASES\","
+                        + "\"schedulerPolicy\": \"WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER\""));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(new String[] {"--config=" + config}));
+        for (String invalid : List.of("", " ", "UNKNOWN", "whole_service_centre_drained_handover",
+                " WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER", "DEADLINE_AWARE_ELASTIC_STICKY_LEASES ")) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> parser.parse(arguments(fixture, "--scheduler-policy=" + invalid)), invalid);
+            assertThrows(IllegalArgumentException.class,
+                    () -> parser.parse(arguments(fixture, "--scheduler-policy", invalid)), invalid);
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture, "--scheduler-policy")));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture, "--scheduler-policy", (String) null)));
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.parse(arguments(fixture, "--scheduler-policy", "--overwrite")));
+        for (String[] duplicate : List.of(
+                new String[] {"--scheduler-policy", "WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER",
+                        "--scheduler-policy=DEADLINE_AWARE_ELASTIC_STICKY_LEASES"},
+                new String[] {"--scheduler-policy=DEADLINE_AWARE_ELASTIC_STICKY_LEASES",
+                        "--scheduler-policy", "WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER"},
+                new String[] {"--scheduler-policy=DEADLINE_AWARE_ELASTIC_STICKY_LEASES",
+                        "--scheduler-policy=WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER"},
+                new String[] {"--scheduler-policy", "DEADLINE_AWARE_ELASTIC_STICKY_LEASES",
+                        "--scheduler-policy", "WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER"})) {
+            assertThrows(IllegalArgumentException.class, () -> parser.parse(arguments(fixture, duplicate)));
+        }
+    }
+
+    @Test
+    void shouldRetainStationOverridesAndTimetableButFailFastForUnwiredPolicy(@TempDir Path directory)
+            throws Exception {
+        Fixture fixture = fixture(directory);
+        Path schedule = Files.writeString(directory.resolve("schedule.json"), """
+                {"serviceCentres":[
+                {"serviceCentreId":"104","displayName":"Letchworth","priority":999,
+                "trunkerDepartureTime":{"dayOffset":0,"localTime":{"hour":18,"minute":30}}},
+                {"serviceCentreId":"108","displayName":"Swansea","priority":998,
+                "trunkerDepartureTime":{"dayOffset":0,"localTime":{"hour":19,"minute":0}}}]}
+                """);
+        Path config = directory.resolve("policy.json");
+        Files.writeString(config, withSchedule(stationConfig(fixture, """
+                "schedulerPolicy": "WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER",
+                "thirdParty": {"processingDurationSeconds": 20},
+                "adapting": {"storeDurationSeconds":60,"collectDurationSeconds":10,
+                "processingPositionsPerBench":3,"waitingCapacityPerBench":3,
+                "benchIds":["bench-1","bench-2","bench-3","bench-4","bench-5","bench-6"]}
+                """), jsonPath(schedule)));
+        var command = new DspFullDayAnalysisCommandParser().parse(new String[] {
+                "--config=" + config});
+        var profile = DspFullDayAnalysisMain.profile(command);
+        assertEquals(DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER, profile.schedulerPolicy());
+        assertEquals(6, profile.adaptingBenchDefinitions().size());
+        assertTrue(profile.adaptingBenchDefinitions().stream().allMatch(bench ->
+                bench.storeDurationSeconds() == 60d && bench.collectDurationSeconds() == 10d
+                        && bench.processingPositions() == 3));
+        assertEquals(3, profile.queueCapacities().adaptingQueueCapacityPerBench());
+        assertEquals(20d, profile.thirdPartyAreaConfig().processingDurationSeconds());
+        assertEquals(java.time.LocalTime.of(18, 30), profile.timetable().require("104")
+                .trunkerDepartureTime().localTime());
+        var input = new DspFullDayInputLoader().load(command.inputPaths(), profile);
+        String expected = "Whole-service-centre runtime composition is not implemented yet";
+        var factory = new DspFullDayAnalysisRuntimeFactory();
+        assertEquals(expected, assertThrows(IllegalArgumentException.class,
+                () -> factory.create(input, profile)).getMessage());
+        assertEquals(expected, assertThrows(IllegalArgumentException.class,
+                () -> factory.create(profile, input)).getMessage());
+        assertEquals(expected, assertThrows(IllegalArgumentException.class,
+                () -> factory.create(new online.davisfamily.threedee.sim.framework.SimulationWorld(),
+                        input, profile)).getMessage());
+        ByteArrayOutputStream errors = new ByteArrayOutputStream();
+        assertEquals(2, DspFullDayAnalysisMain.run(
+                new String[] {"--config=" + config},
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
+                new PrintStream(errors, true, StandardCharsets.UTF_8)));
+        assertTrue(errors.toString(StandardCharsets.UTF_8).contains(expected));
+        assertFalse(Files.exists(fixture.output()));
+        assertFalse(Files.exists(fixture.inspection()));
+    }
 
     @Test
     void shouldResolveTheAgreedStationSettingsWithoutChangingOtherProfileValues(

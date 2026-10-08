@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -13,8 +14,84 @@ import org.junit.jupiter.api.io.TempDir;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayTerminationReason;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspServiceCentreCompletionOutcome;
+import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
 
 class DspFullDayReportFactoryTest {
+
+    @Test
+    void shouldReportSelectedComponentIdsAndDiagnosticOnlyNewPolicyInputs(@TempDir Path directory)
+            throws Exception {
+        var base = DspFullDayReportTestSupport.configuredStations(DspFullDayReportTestSupport.profile());
+        var legacy = selectedProfile(base, DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
+        var legacyReport = DspFullDayReportTestSupport.earlyCompletionReport(directory, legacy);
+        assertEquals(legacy.schedulerPolicy().name(), legacyReport.configuration().get("schedulerPolicy"));
+        assertEquals(Map.of(
+                "serviceCentreSupply", "PRIORITY_ORDERED_OSR_LOW_WATERMARK",
+                "orderEligibility", "ORDER_WIDE_PREPARATION_READY_OVERLAP",
+                "candidateRanking", "ADAPTED_FIRST_PHARMACY_GROUPED_THEN_SOURCE_SEQUENCE",
+                "p2pLineAllocation", "DEADLINE_AWARE_ELASTIC_STICKY_LEASES",
+                "outboundAllocation", "PHARMACY_PURE_FIXED_BAG_CAPACITY",
+                "inboundArrival", base.inboundToteArrivalPolicy().policyId()),
+                legacyReport.configuration().get("policies"));
+        assertEquals("ACTIVE_DECISION_INPUTS", ((Map<?, ?>) legacyReport.configuration()
+                .get("p2pElastic")).get("deadlineAndWorkloadInputRole"));
+
+        var whole = selectedProfile(base, DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        // Only the static reporting projection is exercised: Step 3 intentionally forbids a new-mode run.
+        var projection = DspFullDayReportFactory.class.getDeclaredMethod(
+                "configuration", DspUncalibratedFullDayProfile.class);
+        projection.setAccessible(true);
+        var configuration = (Map<?, ?>) projection.invoke(null, whole);
+        assertEquals(whole.schedulerPolicy().name(), configuration.get("schedulerPolicy"));
+        assertEquals(whole.schedulerPolicy().name(), configuration.get("profileId"));
+        assertEquals(Map.of(
+                "serviceCentreSupply", "PRIORITY_ORDERED_OSR_LOW_WATERMARK",
+                "orderEligibility", "WHOLE_SERVICE_CENTRE_ORDER_WIDE_PREPARATION_READY",
+                "candidateRanking", "WHOLE_SERVICE_CENTRE_ADAPTED_FIRST_PHARMACY_SOURCE_SEQUENCE",
+                "p2pLineAllocation", "WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER",
+                "outboundAllocation", "PHARMACY_PURE_FIXED_BAG_CAPACITY",
+                "inboundArrival", base.inboundToteArrivalPolicy().policyId()), configuration.get("policies"));
+        var elastic = (Map<?, ?>) configuration.get("p2pElastic");
+        assertEquals("DIAGNOSTIC_ONLY", elastic.get("deadlineAndWorkloadInputRole"));
+        var legacyElastic = (Map<?, ?>) legacyReport.configuration().get("p2pElastic");
+        for (String field : List.of("workloadCosts", "downstreamHandlingDuration",
+                "downstreamHandlingDurationNanos", "safetyFactorPermille", "parallelEfficiencyPermille")) {
+            assertEquals(legacyElastic.get(field), elastic.get(field), field);
+        }
+        for (String field : List.of("adapting", "thirdParty", "queues", "timetable", "clock",
+                "execution", "osr", "outbound", "p2pPlaceholders", "p2pLines")) {
+            assertEquals(legacyReport.configuration().get(field), configuration.get(field), field);
+        }
+        assertEquals("UNCALIBRATED", configuration.get("calibrationStatus"));
+        assertEquals("P2P_OUTPUT_CLOSED", configuration.get("completionMilestone"));
+    }
+
+    private static DspUncalibratedFullDayProfile selectedProfile(
+            DspUncalibratedFullDayProfile base, DspSchedulerPolicy selected) {
+        return new DspUncalibratedFullDayProfile(
+                base.operatingDate(),
+                base.osrInventoryConfig(),
+                base.serviceCentreSupplyConfig(),
+                base.inboundToteArrivalPolicy(),
+                base.av02AllocationConfig(),
+                base.p2pElasticAllocationConfig(),
+                base.outboundToteConfig(),
+                base.maximumPacksPerBag(),
+                base.fixedStep(),
+                base.maximumStepsPerAdvance(),
+                base.metricSampleInterval(),
+                base.routeSpeedUnitsPerSecond(),
+                base.queueCapacities(),
+                base.thirdPartyAreaConfig(),
+                base.adaptingStorageConfig(),
+                base.adaptingBenchDefinitions(),
+                base.p2pPlaceholderDurations(),
+                base.p2pLineDefinitions(),
+                base.prlCountPerLine(),
+                base.timetable(),
+                selected);
+    }
 
     @Test
     void shouldReportEffectiveStationSettingsAndRetainTheLegacyStoreAlias(@TempDir Path directory)
