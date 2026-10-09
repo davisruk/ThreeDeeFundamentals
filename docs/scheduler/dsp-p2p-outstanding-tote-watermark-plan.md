@@ -1,6 +1,6 @@
 # P2P Outstanding Inbound Tote Watermark Plan
 
-Status: implementation in progress; Steps 1-2 are implemented and focused-verified,
+Status: implementation in progress; Steps 1-3 are implemented and focused-verified,
 later steps remain planned. Created 2026-10-09 against clean commit
 `cdce510` (`Wire live release guards and prove the production-shaped journey`).
 The planning-session initial `git status --short` was empty. Remain on the
@@ -746,5 +746,28 @@ Result: `BUILD SUCCESSFUL`; all four named test classes passed. Reviewed the
 complete Step 2 diff against Section 3 and ran `git diff --check`. Production
 configuration/activation and real tipper callback wiring remain unproven until
 Steps 3-4; the production-shaped cap/reopen journey and full-day performance
-validation remain unproven until Step 6 and user verification. Step 3 awaits
-separate user authorization.
+validation remain unproven until Step 6 and user verification. Step 3 was awaiting
+separate user authorization at this Step 2 completion point.
+
+Step 3 completed 2026-10-09. Created
+`M/p2p/allocation/WholeServiceCentreP2pToteCompletedListener.java` and
+`T/p2p/allocation/WholeServiceCentreP2pToteCompletedListenerTest.java`. The new
+per-line wrapper validates the configured line and exact committed tote before
+delegation, preserves the existing station/lifecycle completion chain, and records
+tipper completion only after that chain succeeds. Tests cover committed OSR and
+generated AV02 assignments, input-only acceptance, invalid/duplicate/wrong-line
+callbacks, delegate failure, and the exact-tote lifecycle/disposition ordering.
+
+Implementation verification run exactly as specified:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.WholeServiceCentreP2pToteCompletedListenerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.arrival.StationProcessingP2pToteCompletedListenerTest
+```
+
+Result: `BUILD SUCCESSFUL`; both named test classes passed. Reviewed the complete
+Step 3 diff against Section 3.5 and ran `git diff --check`. Full-day factory
+composition and runtime callback wiring remain unproven until Step 4; the
+production-shaped cap/reopen journey and full-day performance validation remain
+unproven until Step 6 and user verification. Step 4 awaits separate user
+authorization.
