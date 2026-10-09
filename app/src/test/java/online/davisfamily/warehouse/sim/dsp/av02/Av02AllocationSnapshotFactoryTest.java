@@ -30,6 +30,10 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysic
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspDependencyEvaluator;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DependencyBlock;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
@@ -218,6 +222,78 @@ class Av02AllocationSnapshotFactoryTest {
                 -1, scheduler(states, Set.of()), supply(states, Set.of()), inventory(1), emptyLifecycle()));
         assertThrows(IllegalArgumentException.class, () -> factory.create(
                 0, null, supply(states, Set.of()), inventory(1), emptyLifecycle()));
+    }
+
+    @Test
+    void shouldHoldReadyFutureEmptyWhenCurrentEmptyIsUnreadyOrUnauthorized() {
+        var current = state(order("current", "104", 999, 0, "old", DspOrderLineType.ADAPTED));
+        var future = state(order("future", "108", 998, 1, "new", DspOrderLineType.FULL_PACK));
+        var states = List.of(current, future);
+        var releases = releaseFacts(0, 0, 1, 1);
+        var blocked = factory.create(0, scheduler(states, Set.of()), supply(states, sheetKeys(states)),
+                inventory(2), emptyLifecycle(), Optional.of(releases));
+        assertTrue(blocked.command().isEmpty());
+        assertEquals(List.of(Av02AllocationBlockReason.DEPENDENCY_NOT_READY),
+                candidate(blocked, "current").blockReasons());
+        assertEquals(List.of(Av02AllocationBlockReason.SERVICE_CENTRE_SEQUENCE),
+                candidate(blocked, "future").blockReasons());
+
+        var prepared = Set.of(PreparedLineKey.forDispatchLine(current.order(), current.order().items().getFirst()));
+        var unauthorized = factory.create(1, scheduler(states, prepared),
+                supply(states, Set.of(future.order().orderSheetKey())), inventory(2), emptyLifecycle(), Optional.of(releases));
+        assertTrue(unauthorized.command().isEmpty());
+        assertEquals(List.of(Av02AllocationBlockReason.EMPTY_NOT_AUTHORIZED),
+                candidate(unauthorized, "current").blockReasons());
+        var ready = factory.create(2, scheduler(states, prepared), supply(states, sheetKeys(states)),
+                inventory(2), emptyLifecycle(), Optional.of(releases));
+        assertEquals(current.order().orderSheetKey(), ready.command().orElseThrow().orderSheetKey());
+        assertEquals(1, releases.unreleasedEmptySheetCounts().get("104"), "Allocation does not count a departure");
+
+        var advanced = factory.create(3, scheduler(states, prepared), supply(states, sheetKeys(states)),
+                inventory(2), emptyLifecycle(), Optional.of(releaseFacts(1, 0, 0, 1)));
+        assertEquals(future.order().orderSheetKey(), advanced.command().orElseThrow().orderSheetKey());
+        assertEquals(List.of(Av02AllocationBlockReason.SERVICE_CENTRE_SEQUENCE),
+                candidate(advanced, "current").blockReasons());
+        var legacy = factory.create(4, scheduler(states, Set.of()), supply(states, sheetKeys(states)),
+                inventory(2), emptyLifecycle(), Optional.empty());
+        assertEquals(future.order().orderSheetKey(), legacy.command().orElseThrow().orderSheetKey());
+    }
+
+    @Test
+    void shouldHoldFutureEmptyForOutstandingCurrentOsrAndSkipItsDependencyEvaluation() {
+        var future = state(order("future", "108", 998, 1, "new", DspOrderLineType.FULL_PACK));
+        var states = List.of(future);
+        var noDependencyReads = new Av02AllocationSnapshotFactory(new DspDependencyEvaluator() {
+            @Override
+            public List<DependencyBlock> findBlocks(DspSchedulerOrderState candidate, WarehouseSchedulerSnapshot snapshot) {
+                throw new AssertionError("Future-centre dependency evaluation must be skipped");
+            }
+        });
+        for (var releases : List.of(releaseFacts(0, 1, 0, 1), releaseFacts(2, 0, 0, 0))) {
+            var snapshot = noDependencyReads.create(0, scheduler(states, Set.of()), supply(states, sheetKeys(states)),
+                    inventory(2), emptyLifecycle(), Optional.of(releases));
+            assertTrue(snapshot.command().isEmpty());
+            assertEquals(List.of(Av02AllocationBlockReason.SERVICE_CENTRE_SEQUENCE),
+                    snapshot.candidates().getFirst().blockReasons());
+        }
+    }
+
+    @Test
+    void shouldRejectNullReleaseOptionalAndUnknownCandidateCentre() {
+        var unknown = state(order("unknown", "109", 997, 0, "unknown", DspOrderLineType.FULL_PACK));
+        var states = List.of(unknown);
+        assertThrows(IllegalArgumentException.class, () -> factory.create(0, scheduler(states, Set.of()),
+                supply(states, sheetKeys(states)), inventory(2), emptyLifecycle(), null));
+        assertThrows(IllegalArgumentException.class, () -> factory.create(0, scheduler(states, Set.of()),
+                supply(states, sheetKeys(states)), inventory(2), emptyLifecycle(), Optional.of(releaseFacts(0, 1, 0, 1))));
+    }
+
+    static WholeServiceCentreReleaseSnapshot releaseFacts(long version, int currentOsr, int currentEmpty, int nextEmpty) {
+        return new WholeServiceCentreReleaseSnapshot(version, List.of("104", "108"),
+                currentOsr + currentEmpty > 0 ? Optional.of("104")
+                        : nextEmpty > 0 ? Optional.of("108") : Optional.empty(),
+                Map.of("104", currentOsr, "108", 0), Map.of("104", currentEmpty, "108", nextEmpty),
+                Map.of("104", Map.of(new P2pLineId("p2p-1"), 0), "108", Map.of(new P2pLineId("p2p-1"), 0)));
     }
 
     private static Av02AllocationCandidate candidate(

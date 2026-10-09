@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -79,6 +80,76 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.pack.PackDimensions;
 
 class DspFullDayAnalysisRuntimeFactoryTest {
+
+    @Test
+    void shouldKeepAbsentAndExplicitDeadlineSelectionIdentical(@TempDir Path directory) throws Exception {
+        var absent = profile();
+        var explicit = DspFullDayWholeServiceCentreScenarioTest.withPolicy(absent,
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
+        var input = loadSingleFullPack(directory, absent);
+        try (var first = new DspFullDayAnalysisRuntimeFactory().create(input, absent);
+                var second = new DspFullDayAnalysisRuntimeFactory().create(input, explicit)) {
+            assertEquals(first.snapshot().elastic(), second.snapshot().elastic());
+            assertTrue(first.snapshot().elastic().allocation().wholeServiceCentrePolicy().isEmpty());
+            for (int step = 0; step < 300 && first.state() == DspFullDayRuntimeState.RUNNING; step++) {
+                first.update(1d);
+                second.update(1d);
+                assertEquals(first.snapshot().elastic(), second.snapshot().elastic());
+            }
+            assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, first.state());
+            assertEquals(first.state(), second.state());
+            assertEquals(first.outboundToteAllocator().snapshot(), second.outboundToteAllocator().snapshot());
+        }
+    }
+
+    @Test
+    void shouldSelectConnectedWholePolicyAndRejectMixedEvaluationSetsAtBothOperationalSeams(@TempDir Path directory)
+            throws Exception {
+        var old = profile();
+        var whole = DspFullDayWholeServiceCentreScenarioTest.withPolicy(old,
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        var input = loadSingleFullPack(directory, old);
+        for (var selected : List.of(old, whole)) {
+            try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, selected)) {
+                var allocation = runtime.snapshot().elastic().allocation();
+                assertEquals(selected.schedulerPolicy().name(), allocation.profileId());
+                assertEquals(selected == whole, allocation.wholeServiceCentrePolicy().isPresent());
+                var opposite = selected == whole ? old : whole;
+                var source = new online.davisfamily.warehouse.sim.dsp.runtime.operational.OperationalReleaseEvaluationSource() {
+                    public boolean canSubmit() { return fail("Mixed policy must fail before controller use"); }
+                    public void submit(online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshot snapshot) {
+                        throw new AssertionError("Unexpected evaluation");
+                    }
+                    public Optional<online.davisfamily.warehouse.sim.dsp.runtime.operational.OperationalReleaseEvaluationResult> pollResult() {
+                        return fail("Unexpected evaluation poll");
+                    }
+                    public Optional<String> p2pAllocationProfileId() { return Optional.of(opposite.schedulerPolicy().name()); }
+                    public void close() { }
+                };
+                var manifests = new InboundToteManifestCatalog(input.data().inboundToteManifests());
+                var ledger = new online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger();
+                var inbound = new online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController(ledger, manifests);
+                var targets = new online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchTargetRegistry(
+                        new online.davisfamily.warehouse.sim.dsp.osr.release.launch.OsrOutboundRouteLaunchQueue("unused", 1), List.of());
+                online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionResolver admissions =
+                        (station, candidate, snapshot) -> fail("Mixed policy must fail before admission capture");
+                var factory = new online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseRuntimeFactory();
+                assertThrows(IllegalArgumentException.class, () -> factory.createElastic(source, runtime.osrInventory(), inbound,
+                        manifests, runtime.schedulerRuntimeState()::snapshot, runtime.clockController()::snapshot, admissions,
+                        targets, runtime.elasticRuntime()));
+                assertThrows(IllegalArgumentException.class, () -> factory.createElasticWithAv02(source, runtime.osrInventory(), inbound,
+                        manifests, runtime.schedulerRuntimeState()::snapshot, runtime.clockController()::snapshot, admissions,
+                        targets, runtime.av02Inventory(), ledger, runtime.loadPlanRegistry(), runtime.elasticRuntime()));
+            }
+        }
+    }
+
+    @Test
+    void shouldPreserveExactSourceFulfilmentMembershipAndPhysicalExceptionsInWholeMode() {
+        var profile = DspFullDayWholeServiceCentreScenarioTest.withPolicy(sheetOwnedProfile(),
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        assertExceptionFixtureCompletes(exceptionFixtureInput(profile, true), profile);
+    }
 
     @Test
     void shouldComposeSixPhysicalBenchesWithEighteenPositionsAndSharedWaiting() {

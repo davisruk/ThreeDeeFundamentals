@@ -40,6 +40,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreAuthorizationState;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
@@ -528,6 +529,109 @@ class DspAv02AllocationRuntimeControllerTest {
         assertEquals(5, lifecycleSupplier.calls);
     }
 
+    @Test
+    void shouldReuseBlockedReleaseFactsAndReevaluateReleaseChangesAlone() throws Exception {
+        var original = emptyOrder("future-empty", 0, DspOrderLineType.FULL_PACK);
+        var future = new NotionalToteOrder(original.orderId(), original.notionalToteId(), "108", 1,
+                OrderType.EMPTY, original.items(), 998, 0);
+        var blockedFacts = Av02AllocationSnapshotFactoryTest.releaseFacts(0, 1, 0, 1);
+        var releases = new ControlledSupplier<>(List.of(blockedFacts));
+        Fixture fixture = releaseFixture(List.of(future), releases);
+        var published = fixture.runtime.snapshot();
+        var cachedFactsField = DspAv02AllocationRuntimeController.class.getDeclaredField("cachedReleaseFacts");
+        cachedFactsField.setAccessible(true);
+        var cachedWrapper = cachedFactsField.get(fixture.runtime);
+
+        fixture.runtime.update(new SimulationContext(), 0d);
+        fixture.runtime.update(new SimulationContext(), 30d);
+        assertSame(published, fixture.runtime.snapshot());
+        assertSame(published.snapshot(), fixture.runtime.snapshot().snapshot());
+        assertSame(cachedWrapper, cachedFactsField.get(fixture.runtime));
+        assertEquals(0, fixture.idAllocator.calls);
+        assertEquals(List.of(Av02AllocationBlockReason.SERVICE_CENTRE_SEQUENCE),
+                published.snapshot().candidates().getFirst().blockReasons());
+        assertEquals(3, releases.calls, "One release capture per blocked update, no fresh revalidation");
+
+        releases.values = List.of(Av02AllocationSnapshotFactoryTest.releaseFacts(1, 1, 0, 1));
+        fixture.runtime.update(new SimulationContext(), 0d);
+        var versionChanged = fixture.runtime.snapshot();
+        assertEquals(1, versionChanged.sequence());
+        assertNotSame(published, versionChanged);
+        assertTrue(versionChanged.selectedCommand().isEmpty());
+        fixture.runtime.update(new SimulationContext(), 0d);
+        assertSame(versionChanged, fixture.runtime.snapshot());
+
+        releases.values = List.of(Av02AllocationSnapshotFactoryTest.releaseFacts(2, 0, 0, 1));
+        fixture.runtime.update(new SimulationContext(), 0d);
+        assertEquals(2, fixture.runtime.snapshot().sequence());
+        assertEquals(future.orderSheetKey(), fixture.runtime.snapshot().selectedCommand().orElseThrow().orderSheetKey());
+        assertEquals(1, fixture.idAllocator.calls);
+        assertEquals("108", fixture.inventory.head().orElseThrow().serviceCentreId());
+    }
+
+    @Test
+    void shouldRevalidateChangedReleaseFactsBeforeRequestingAnId() {
+        var current = emptyOrder("current-empty", 0, DspOrderLineType.FULL_PACK);
+        var selected = Av02AllocationSnapshotFactoryTest.releaseFacts(0, 0, 1, 1);
+        var advanced = Av02AllocationSnapshotFactoryTest.releaseFacts(1, 0, 0, 1);
+        Fixture fixture = releaseFixture(List.of(current), new ControlledSupplier<>(List.of(selected, selected, advanced)));
+        assertRejectedAfterFreshCommand(fixture);
+        assertEquals(List.of(Av02AllocationBlockReason.SERVICE_CENTRE_SEQUENCE),
+                fixture.runtime.snapshot().freshRevalidationSnapshot().orElseThrow().candidates().getFirst().blockReasons());
+    }
+
+    @Test
+    void shouldPreservePublishedStateWhenReleaseSupplierIsNullOrThrows() {
+        for (boolean throwing : List.of(false, true)) {
+            for (boolean fresh : List.of(false, true)) {
+                var releases = new ControlledSupplier<>(List.of(Av02AllocationSnapshotFactoryTest.releaseFacts(0, 0, 2, 1)));
+                Supplier<WholeServiceCentreReleaseSnapshot> supplier = () -> {
+                    if (fresh && releases.calls == 4) {
+                        if (throwing) { throw new IllegalStateException("fresh release failure"); }
+                        return null;
+                    }
+                    return releases.get();
+                };
+                Fixture fixture = releaseFixture(List.of(
+                        emptyOrder("first", 0, DspOrderLineType.FULL_PACK),
+                        emptyOrder("second", 1, DspOrderLineType.FULL_PACK)), supplier);
+                fixture.runtime.update(new SimulationContext(), 0d);
+                var published = fixture.runtime.snapshot();
+                var inventory = fixture.inventory.snapshot();
+                var lifecycle = fixture.lifecycle.snapshot();
+                var firstId = fixture.inventory.head().orElseThrow().physicalToteId();
+                var loadPlan = fixture.loadPlans.getLoadPlanFor(firstId);
+                if (!fresh) {
+                    if (throwing) { releases.setFailure(new IllegalStateException("release failure")); }
+                    else { releases.setNull(true); }
+                }
+                assertThrows(IllegalStateException.class, () -> fixture.runtime.update(new SimulationContext(), 0d));
+                assertSame(published, fixture.runtime.snapshot());
+                assertSame(inventory, fixture.inventory.snapshot());
+                assertSame(lifecycle, fixture.lifecycle.snapshot());
+                assertSame(loadPlan, fixture.loadPlans.getLoadPlanFor(firstId));
+                assertEquals(1, fixture.idAllocator.calls);
+                assertNull(fixture.loadPlans.getLoadPlanFor(new PhysicalToteId("av02-000002")));
+            }
+        }
+    }
+
+    @Test
+    void shouldRejectNullReleaseSupplierOptional() {
+        Fixture fixture = fixture(1, List.of(emptyOrder("empty", 0, DspOrderLineType.FULL_PACK)));
+        assertThrows(IllegalArgumentException.class, () -> new DspAv02AllocationRuntimeController(
+                fixture.schedulerSupplier, fixture.supplySupplier, fixture.lifecycleSupplier,
+                fixture.inventory, fixture.lifecycle, fixture.idAllocator, fixture.loadPlans,
+                new Av02AllocationSnapshotFactory(), null));
+    }
+
+    private static Fixture releaseFixture(List<NotionalToteOrder> orders, Supplier<WholeServiceCentreReleaseSnapshot> releases) {
+        return new Fixture(2, orders, new SequenceSupplier<>(List.of(scheduler(orders, Set.of()))),
+                new SequenceSupplier<>(List.of(supply(orders, sheetKeys(orders)))),
+                new SequenceSupplier<>(List.of(emptyLifecycle())),
+                new Av02PhysicalToteInventory(new Av02AllocationConfig(2)), Optional.of(releases));
+    }
+
     private static void assertUnchangedAfterInvalidUpdate(
             Fixture fixture,
             DspAv02AllocationRuntimeSnapshot before,
@@ -707,6 +811,17 @@ class DspAv02AllocationRuntimeControllerTest {
                 Supplier<DspSupplySnapshot> supplySupplier,
                 Supplier<PhysicalToteLifecycleSnapshot> lifecycleSupplier,
                 Av02PhysicalToteInventory inventory) {
+            this(capacity, orders, schedulerSupplier, supplySupplier, lifecycleSupplier, inventory, Optional.empty());
+        }
+
+        private Fixture(
+                int capacity,
+                List<NotionalToteOrder> orders,
+                Supplier<WarehouseSchedulerSnapshot> schedulerSupplier,
+                Supplier<DspSupplySnapshot> supplySupplier,
+                Supplier<PhysicalToteLifecycleSnapshot> lifecycleSupplier,
+                Av02PhysicalToteInventory inventory,
+                Optional<Supplier<WholeServiceCentreReleaseSnapshot>> releases) {
             this.orders = List.copyOf(orders);
             this.schedulerSupplier = requireControlled(schedulerSupplier);
             this.supplySupplier = requireControlled(supplySupplier);
@@ -719,7 +834,8 @@ class DspAv02AllocationRuntimeControllerTest {
                     inventory,
                     lifecycle,
                     idAllocator,
-                    loadPlans);
+                    loadPlans,
+                    new Av02AllocationSnapshotFactory(), releases);
         }
 
         @SuppressWarnings("unchecked")

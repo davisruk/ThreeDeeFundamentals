@@ -31,6 +31,8 @@ import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfi
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.QueueCapacities;
 import online.davisfamily.warehouse.sim.dsp.analysis.input.DspDeferredNsCandidateCatalog;
 import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseLedger;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfile.P2pPlaceholderDurations;
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.*;
 import online.davisfamily.warehouse.sim.dsp.av02.*;
@@ -86,10 +88,10 @@ public final class DspFullDayAnalysisRuntimeFactory {
             DspFullDayLoadedInput input,
             DspUncalibratedFullDayProfile profile) {
         validateInputs(simulationWorld, input, profile);
-        if (profile.schedulerPolicy() == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER) {
-            throw new IllegalArgumentException(
-                    "Whole-service-centre runtime composition is not implemented yet");
-        }
+        boolean wholeCentre = profile.schedulerPolicy() == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER;
+        Optional<WholeServiceCentreReleaseLedger> releaseLedger = wholeCentre
+                ? Optional.of(new WholeServiceCentreReleaseLedger(input.data(), profile.timetable(),
+                        profile.p2pLineDefinitions())) : Optional.empty();
 
         List<AutoCloseable> closeables = new ArrayList<>();
         try {
@@ -300,7 +302,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             profile.p2pElasticAllocationConfig(),
                             requirementCatalog,
                             correlationAssignments,
-                            exceptionLedger::snapshot);
+                            exceptionLedger::snapshot,
+                            profile.schedulerPolicy(), releaseLedger);
             elasticReference.set(elasticRuntime);
             closeables.add(elasticRuntime);
 
@@ -312,7 +315,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             av02Inventory,
                             lifecycleLedger,
                             av02IdAllocator,
-                            loadPlans);
+                            loadPlans,
+                            new Av02AllocationSnapshotFactory(),
+                            releaseLedger.<Supplier<WholeServiceCentreReleaseSnapshot>>map(ledger -> ledger::snapshot));
             simulationWorld.addController(av02AllocationController);
 
             OsrOutboundRouteLaunchQueue launchQueue = new OsrOutboundRouteLaunchQueue(
@@ -335,9 +340,12 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     new OperationalDependencyReadinessPolicy(orderPreparationCatalog),
                     new OperationalRouteEntryAdmissionPolicy(),
                     new AdaptedFirstPharmacyGroupedSourceSequenceRankingPolicy(),
-                    new DeadlineAwareElasticStickyP2pLineAllocationPolicy(),
+                    wholeCentre ? new WholeServiceCentreP2pLineAllocationPolicy()
+                            : new DeadlineAwareElasticStickyP2pLineAllocationPolicy(),
                     requirementCatalog,
-                    elasticRuntime::correlationAssignmentSnapshot);
+                    elasticRuntime::correlationAssignmentSnapshot,
+                    wholeCentre ? new WholeServiceCentreReleaseEligibilityPolicy()
+                            : OperationalServiceCentreReleasePolicy.allowAll());
             DspOperationalReleaseRuntime operationalRuntime =
                     new DspOperationalReleaseRuntimeFactory().createElasticWithAv02(
                             new SynchronousOperationalReleaseEvaluationSource(operationalScheduler),
@@ -352,7 +360,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             lifecycleLedger,
                             loadPlans,
                             elasticRuntime,
-                            exceptionLedger::snapshot);
+                            exceptionLedger::snapshot, releaseLedger);
             simulationWorld.addController(operationalRuntime.controller());
             closeables.add(operationalRuntime);
 

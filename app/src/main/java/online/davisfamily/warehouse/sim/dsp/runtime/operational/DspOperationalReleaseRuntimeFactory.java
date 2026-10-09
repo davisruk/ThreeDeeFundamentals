@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.runtime.operational;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -24,10 +25,13 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.route.OperationalRouteTa
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.DspP2pStickyLeaseRuntime;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntime;
-import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pElasticAllocationSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.P2pMissingPackSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.StationAdmissionResolver;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseLedger;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseCommandHandler;
+import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandHandler;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSnapshotFactory;
 import online.davisfamily.warehouse.sim.dsp.scheduler.operational.OperationalCandidateRouteAdmissionFactory;
@@ -55,13 +59,7 @@ public final class DspOperationalReleaseRuntimeFactory {
         requireNonNull(clockSnapshotSupplier, "clockSnapshotSupplier");
         requireNonNull(stationAdmissionResolver, "stationAdmissionResolver");
         requireNonNull(routeTargetAdmissionCatalog, "routeTargetAdmissionCatalog");
-        if (!evaluationSource.p2pAllocationProfileId()
-                .filter(P2pElasticAllocationSnapshot
-                        .DEADLINE_AWARE_ELASTIC_STICKY_LEASES::equals)
-                .isPresent()) {
-            throw new IllegalArgumentException(
-                    "Elastic runtime requires an elastic P2P evaluation source");
-        }
+        validateAllocationProfile(evaluationSource, elasticRuntime);
         validateP2pTargets(routeTargetAdmissionCatalog, elasticRuntime.lineDefinitions());
 
         OsrProcessingReleaseSnapshotFactory physicalSnapshotFactory =
@@ -141,6 +139,27 @@ public final class DspOperationalReleaseRuntimeFactory {
             MutableToteLoadPlanRegistry loadPlanRegistry,
             DspP2pElasticAllocationRuntime elasticRuntime,
             Supplier<P2pMissingPackSnapshot> missingPacksSupplier) {
+        return createElasticWithAv02(evaluationSource, inventory, lifecycleController,
+                manifestCatalog, logicalSnapshotSupplier, clockSnapshotSupplier,
+                stationAdmissionResolver, routeTargetRegistry, av02Inventory,
+                lifecycleLedger, loadPlanRegistry, elasticRuntime, missingPacksSupplier, Optional.empty());
+    }
+
+    public DspOperationalReleaseRuntime createElasticWithAv02(
+            OperationalReleaseEvaluationSource evaluationSource,
+            OsrPhysicalInventory inventory,
+            InboundToteLifecycleController lifecycleController,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<WarehouseSchedulerSnapshot> logicalSnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            StationAdmissionResolver stationAdmissionResolver,
+            OsrOutboundRouteLaunchTargetRegistry routeTargetRegistry,
+            Av02PhysicalToteInventory av02Inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            DspP2pElasticAllocationRuntime elasticRuntime,
+            Supplier<P2pMissingPackSnapshot> missingPacksSupplier,
+            Optional<WholeServiceCentreReleaseLedger> releaseLedger) {
         requireNonNull(elasticRuntime, "elasticRuntime");
         requireNonNull(evaluationSource, "evaluationSource");
         requireNonNull(inventory, "inventory");
@@ -154,12 +173,11 @@ public final class DspOperationalReleaseRuntimeFactory {
         requireNonNull(lifecycleLedger, "lifecycleLedger");
         requireNonNull(loadPlanRegistry, "loadPlanRegistry");
         requireNonNull(missingPacksSupplier, "missingPacksSupplier");
-        if (!evaluationSource.p2pAllocationProfileId()
-                .filter(P2pElasticAllocationSnapshot
-                        .DEADLINE_AWARE_ELASTIC_STICKY_LEASES::equals)
-                .isPresent()) {
-            throw new IllegalArgumentException(
-                    "Elastic runtime requires an elastic P2P evaluation source");
+        requireNonNull(releaseLedger, "releaseLedger");
+        String profileId = validateAllocationProfile(evaluationSource, elasticRuntime);
+        if (releaseLedger.isPresent() != profileId.equals(
+                DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name())) {
+            throw new IllegalArgumentException("Whole-centre operational composition requires its shared ledger");
         }
         validateP2pTargets(routeTargetRegistry, elasticRuntime.lineDefinitions());
         validateReleaseTargets(routeTargetRegistry);
@@ -211,10 +229,15 @@ public final class DspOperationalReleaseRuntimeFactory {
                 clockSnapshotSupplier,
                 routeTargetRegistry.operationalPhysicalToteReleaseTargetRegistry(),
                 elasticRuntime.operationalReleaseAssignmentCommitter());
+        SchedulerCommandHandler commandHandler = new CompositeOperationalCommandHandler(osrHandler, av02Handler);
+        if (releaseLedger.isPresent()) {
+            commandHandler = new WholeServiceCentreReleaseCommandHandler(commandHandler,
+                    releaseLedger.orElseThrow(), elasticRuntime::allocationSnapshot);
+        }
         DspOperationalReleaseController controller = new DspOperationalReleaseController(
                 evaluationSource,
                 operationalSnapshotSupplier,
-                new CompositeOperationalCommandHandler(osrHandler, av02Handler));
+                commandHandler);
         return new DspOperationalReleaseRuntime(controller, routeTargetRegistry);
     }
 
@@ -368,6 +391,17 @@ public final class DspOperationalReleaseRuntimeFactory {
         if (value == null) {
             throw new IllegalArgumentException(fieldName + " must not be null");
         }
+    }
+
+    private static String validateAllocationProfile(OperationalReleaseEvaluationSource source,
+            DspP2pElasticAllocationRuntime runtime) {
+        String runtimeId = runtime.allocationSnapshot().profileId();
+        boolean supported = runtimeId.equals(DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES.name())
+                || runtimeId.equals(DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name());
+        if (!supported || !source.p2pAllocationProfileId().filter(runtimeId::equals).isPresent()) {
+            throw new IllegalArgumentException("Evaluation and runtime P2P policy sets must match");
+        }
+        return runtimeId;
     }
 
     private static void validateP2pTargets(

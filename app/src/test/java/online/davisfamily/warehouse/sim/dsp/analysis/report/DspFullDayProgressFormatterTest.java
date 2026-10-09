@@ -22,6 +22,32 @@ import online.davisfamily.warehouse.sim.dsp.io.UnresolvedProductLine;
 class DspFullDayProgressFormatterTest {
 
     @Test
+    void shouldProjectBoundedWholeCentreMetadataFromTheCapturedSnapshot(@TempDir Path directory) throws Exception {
+        var profile = online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayWholeServiceCentreScenarioTest.withPolicy(
+                DspFullDayReportTestSupport.profile(),
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        var input = DspFullDayReportTestSupport.input(directory, profile);
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var captured = runtime.snapshot();
+            var progress = DspFullDayProgressSnapshot.from(captured, input, profile);
+            var formatter = new DspFullDayProgressFormatter();
+            var before = formatter.describe(progress);
+            String wholeLine = before.get(indexOfPrefix(before, "WholeServiceCentre:"));
+            assertTrue(wholeLine.contains("releaseCentre=104 eligibleCentre=104 unreleasedOsr=1 unreleasedEmpty=0"));
+            assertTrue(wholeLine.contains("availableUnleasedLines=[dsp-p2p-line-1, dsp-p2p-line-2, dsp-p2p-line-3, dsp-p2p-line-4, dsp-p2p-line-5]"));
+            assertTrue(wholeLine.contains("deadlinesAndWorkloadCosts=diagnosticOnly"));
+            var inspection = new DspFullDayInspectionSnapshot(captured, input, List.of(), List.of());
+            var inspectionFormatter = new DspFullDayInspectionFormatter();
+            assertTrue(inspectionFormatter.describe(inspection).contains(wholeLine));
+            runtime.update(1d);
+            assertEquals(before, formatter.describe(progress));
+            assertTrue(inspectionFormatter.describe(inspection).contains(wholeLine));
+            assertFalse(wholeLine.contains("order-104"));
+            assertFalse(wholeLine.contains("tote-104"));
+        }
+    }
+
+    @Test
     void shouldFormatBoundedDeterministicSectionsAndAggregateRemainingWork(@TempDir Path directory)
             throws Exception {
         DspUncalibratedFullDayProfile profile = DspFullDayReportTestSupport.profile();

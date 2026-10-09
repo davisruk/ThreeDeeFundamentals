@@ -17,6 +17,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspDependencyEvaluator;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
 
 public final class Av02AllocationSnapshotFactory {
@@ -39,11 +40,23 @@ public final class Av02AllocationSnapshotFactory {
             DspSupplySnapshot supplySnapshot,
             Av02InventorySnapshot inventorySnapshot,
             PhysicalToteLifecycleSnapshot lifecycleSnapshot) {
+        return create(snapshotSequence, schedulerSnapshot, supplySnapshot, inventorySnapshot,
+                lifecycleSnapshot, Optional.empty());
+    }
+
+    public Av02AllocationSnapshot create(
+            long snapshotSequence,
+            WarehouseSchedulerSnapshot schedulerSnapshot,
+            DspSupplySnapshot supplySnapshot,
+            Av02InventorySnapshot inventorySnapshot,
+            PhysicalToteLifecycleSnapshot lifecycleSnapshot,
+            Optional<WholeServiceCentreReleaseSnapshot> wholeServiceCentreReleases) {
         if (snapshotSequence < 0) {
             throw new IllegalArgumentException("snapshotSequence must be >= 0");
         }
         if (schedulerSnapshot == null || supplySnapshot == null
-                || inventorySnapshot == null || lifecycleSnapshot == null) {
+                || inventorySnapshot == null || lifecycleSnapshot == null
+                || wholeServiceCentreReleases == null) {
             throw new IllegalArgumentException("AV02 allocation snapshot inputs must not be null");
         }
 
@@ -61,6 +74,19 @@ public final class Av02AllocationSnapshotFactory {
             }
 
             List<Av02AllocationBlockReason> blockReasons = new ArrayList<>();
+            if (wholeServiceCentreReleases.isPresent()) {
+                WholeServiceCentreReleaseSnapshot releases = wholeServiceCentreReleases.orElseThrow();
+                String centre = order.serviceCentreId().trim();
+                if (!releases.unreleasedOsrToteCounts().containsKey(centre)
+                        || !releases.unreleasedEmptySheetCounts().containsKey(centre)) {
+                    throw new IllegalArgumentException("Unknown AV02 candidate service centre: " + centre);
+                }
+                if (!releases.releaseServiceCentreId().equals(Optional.of(centre))) {
+                    candidates.add(new Av02AllocationCandidate(order, pharmacyId(order),
+                            List.of(Av02AllocationBlockReason.SERVICE_CENTRE_SEQUENCE)));
+                    continue;
+                }
+            }
             if (inventorySnapshot.full()) {
                 blockReasons.add(Av02AllocationBlockReason.NO_AV02_CAPACITY);
             }

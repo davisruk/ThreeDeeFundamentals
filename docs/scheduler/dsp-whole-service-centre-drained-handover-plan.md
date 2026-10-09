@@ -1,11 +1,52 @@
 # Whole-Service-Centre Release and Drained-Line Handover Plan
 
-Status: planned, not implemented. Created 2026-10-08 against clean commit
+Status: implementation in progress; Step 6 is incomplete and not ready for user
+verification. Created 2026-10-08 against clean commit
 `d8524b2` on `feature/dsp-full-day-analysis-metrics-inspection`. Remain on the
 user-selected branch; do not create, switch, merge or commit branches automatically.
 The user initiates each step separately. Planning authorization is not implementation
 authorization. Execute directly; agents require the user's explicit request for the
 current step.
+
+## Session handoff (2026-10-08): Step 6 correction pending
+
+The user approved the plan correction recorded below, but explicitly deferred its
+implementation until a later session. This handoff is not authorization to edit
+code or tests, run Gradle, or begin Steps 7/8. Await an explicit request to resume
+the corrected Step 6. Read this entire plan and its prerequisites afresh then.
+
+Steps 1-5 are present in the current source baseline. Step 6 production wiring and
+tests are present as uncommitted work: seven modified production files, four modified
+test files and three new untracked files (the release guard and its two new test
+classes). Record fresh `git status --short` and preserve all of that work; do not
+recreate the implementation or discard the failing scenario. This revision changes
+only this plan, not any production or test file.
+
+Latest implementation verification used the original Step 6 seven-class command on
+2026-10-08: 65 tests, 64 passed, one failed; Gradle `BUILD FAILED`. The sole failure
+is `DspFullDayWholeServiceCentreScenarioTest.`
+`shouldHoldPreloadedAndAllocatedFutureWorkThroughUpstreamStoreFirstCollectAndLastEmptyDeparture`:
+`IllegalStateException: Physical tote is not at the head of AV02 inventory: av02-000002`.
+The scenario's helper now gives each sheet a distinct notional carrier ID while
+retaining its logical order identity. That fixture-only correction removed an
+irrelevant legacy logical sheet-sequence stall and exposed the AV02 ordering defect.
+
+Cause: 104's EMPTY awaits ADAPTED preparation while an independently ready,
+authorized 108 EMPTY allocates first. The new release gate holds 108, but AV02's FIFO
+then prevents the subsequently allocated 104 tote from departing. The existing
+handler reaches target acceptance and assignment commit before the FIFO departure
+throws; do not mask this failure or fake rollback. This is advance allocation before
+handover, not a newly discovered 104 obligation after 108 starts processing.
+
+The user confirmed that AV02 must not allocate 108 while 104 remains the release
+centre. The corrected Step 6 below replaces the former permission to allocate
+future-centre EMPTY totes; it preserves FIFO and old-policy behavior. Update the
+scenario's superseded positive `futureAllocated` expectation, not its delayed
+STORE/COLLECT/EMPTY journey or completion proof. The complete original Step 6 diff
+was reviewed and `git diff --check` passed before this planning revision. The revised
+implementation, revised focused command, user regression/install and full-day run
+are all unproven. The prior checkpoint exhausted its correction cycles; this
+architectural correction was not implemented as another speculative retry.
 
 ## 1. Purpose and agreed meaning
 
@@ -26,6 +67,12 @@ manifests, including ADAPTED, and every executable EMPTY sheet's AV02 departure.
 Count obligations still held upstream or not yet allocated. Do not infer completion
 from current OSR occupancy, logical order status, supply authorization, tote selection,
 AV02 allocation, or an empty local queue.
+
+For the new set, AV02 EMPTY allocation also stays within that current release
+centre. If its EMPTY work is unready, wait; do not allocate ready EMPTY work from
+a later centre. All executable EMPTY obligations are known from input before the
+run; readiness becoming true later is not discovery of a new obligation. This rule
+concerns inbound EMPTY carriers, not independently allocated P2P outbound totes.
 
 No next-centre processing release occurs before that global release boundary.
 Afterwards, a line transfers independently only after no old-centre inbound tote is
@@ -117,6 +164,10 @@ Paths below relative to M/T refer to those exact roots.
 - Those handlers obtain downstream acceptance before committing assignment/departure.
   The generic handlers and the machine controllers remain unchanged. Add a bounded
   outer command handler for live centre validation and successful-release accounting.
+- `av02/Av02AllocationSnapshotFactory` currently skips blocked higher-priority work
+  and selects the first eligible centre. That remains the old-policy behavior, but
+  is incompatible with the new release barrier and AV02's FIFO. Step 6 adds a
+  snapshot-based current-centre gate to EMPTY allocation and its fresh revalidation.
 - Sticky assignment history remains inspectable after a lease changes owner. It is
   **history**, not a list of currently outstanding arrivals. Filter by current owner
   and the remaining-work projection before using it for drain decisions.
@@ -143,7 +194,9 @@ ADAPTED first under contested release capacity, FULL_PACK parallel eligibility,
 order-wide preparation readiness, designated first-COLLECT and physical overpick/
 underpick behavior remain unchanged inside the selected centre. Generic P2P machinery,
 PCR's one-group baseline, timings, transport FIFO/arrival ownership, station claims,
-continuation and EMPTY allocation mechanics remain unchanged. Do not tune timings to
+continuation and EMPTY allocation mutation mechanics remain unchanged. The only
+EMPTY selection change is the new-set current-centre gate specified in Step 6;
+the old set retains its eligible-centre fallback. Do not tune timings to
 prove throughput. Keep UNCALIBRATED and provisional P2P output closure.
 
 Old public constructor shapes and runtime-factory overloads delegate to their existing
@@ -165,6 +218,12 @@ advance the centre cursor or counters. No counts from completion/logical state.
 
 The earliest centre with an unreleased obligation is the release centre. It cannot
 be skipped because blocked, held upstream, not supplied yet or not allocated at AV02.
+Apply that same release-centre identity to new-set AV02 allocation; supply
+authorization for a later centre does not permit its EMPTY carrier allocation.
+Once the cursor advances, that next centre may allocate ready EMPTY totes even
+while predecessor lines drain; physical departure remains subject to the separate
+release/line-availability gate. Do not use `eligibleServiceCentreId` to decide
+EMPTY allocation or add a second centre cursor.
 Centres with no executable obligations are absent from the release sequence; retain
 their NS/reporting evidence. A wholly non-executable dataset still follows the existing
 input-loader rejection; this feature does not add an empty-run mode.
@@ -584,6 +643,13 @@ both existing OSR/AV02 command handlers, `p2p/lease/StrictP2pReleaseAssignmentCo
 `p2p/bag/BagCoherentOperationalP2pReleaseAssignmentCommitter.java`, plus existing T
 `analysis/runtime/DspFullDayConcurrentAdaptingScenarioTest.java`,
 `DspFullDayPdcPackDispositionTest.java` and `DspFullDayAnalysisRuntimeFactoryTest.java`.
+Also read M `av02/Av02AllocationSnapshotFactory.java`,
+`Av02AllocationBlockReason.java`, `Av02AllocationController.java`,
+`DspAv02AllocationRuntimeController.java`, `Av02PhysicalToteInventory.java`, and
+`Av02InventorySnapshot.java`, all in `av02/`, plus existing T
+`av02/Av02AllocationSnapshotFactoryTest.java`, `Av02AllocationControllerTest.java`
+and `DspAv02AllocationRuntimeControllerTest.java` in that test package. The EMPTY
+allocation correction below is part of Step 6, not a new later step.
 
 Create M `scheduler/policy/WholeServiceCentreReleaseCommandHandler.java`, implementing
 `SchedulerCommandHandler`, constructor
@@ -629,8 +695,101 @@ In full-day runtime construction, create the ledger once for the new enum, befor
 composition registration. Share that exact instance across new allocation, retention
 and outer release guard. Select new eligibility/allocation policies and existing
 ADAPTED-first ranking; old enum keeps its original choices. Remove Step 3's temporary
-guard only after all these seams are connected. AV02 may allocate waiting totes of
-later centres; the new processing release guard must still hold them.
+guard only after all these seams are connected, including the AV02 allocation gate
+below. Later-centre OSR preload/supply remains permitted; later-centre EMPTY carrier
+allocation is not permitted until that centre becomes the release centre.
+
+### Corrected AV02 EMPTY allocation composition
+
+Modify only M `av02/Av02AllocationSnapshotFactory.java`,
+`Av02AllocationBlockReason.java`, `DspAv02AllocationRuntimeController.java` and
+the existing full-day runtime composition for this correction. Do not introduce a
+parallel allocator, general policy registry, new polling controller or mutable worker
+input. Leave `Av02AllocationController`, `Av02PhysicalToteInventory`,
+`Av02OperationalCommandHandler`, physical ID generation, load-plan/lifecycle mutation,
+FIFO departure and generic routing unchanged. Do not alter legacy logical release
+marking, preparation dependencies, first-COLLECT or input sheet identities to make
+this gate pass. Do not reduce AV02 capacity or tune timings to hide the defect.
+
+Add an overload of `Av02AllocationSnapshotFactory.create` with final
+`Optional<WholeServiceCentreReleaseSnapshot> wholeServiceCentreReleases` after its
+existing lifecycle snapshot parameter. The existing five-argument method delegates
+with empty. Reject a null Optional before evaluation. Empty selects exactly the old
+algorithm. Present selects the new gate using only detached immutable facts:
+
+- Validate candidate centre membership in the preindexed release count maps;
+  missing membership is an invalid composition, not permission to fall back.
+- Add `SERVICE_CENTRE_SEQUENCE` to `Av02AllocationBlockReason`. For each unallocated
+  EMPTY candidate outside `releaseServiceCentreId` (including an absent cursor),
+  publish that block and do not run its dependency evaluation or select it. Retain
+  the candidate for deterministic inspection; do not filter an already selected
+  command. Centre checks are O(1); no obligation scans or ledger access.
+- Within the current centre retain existing authorization, dependency, capacity,
+  active-assignment and priority/pharmacy/source checks. If none is ready, publish
+  no command, even when a future-centre EMPTY is otherwise ready and authorized.
+- Readiness and allocation do not advance release counts. Only the existing applied
+  AV02 departure advances the ledger. An absent current centre yields no allocation.
+
+Add a most-specific `DspAv02AllocationRuntimeController` constructor preserving its
+existing eight parameters (including `Av02AllocationSnapshotFactory`) and appending
+`Optional<Supplier<WholeServiceCentreReleaseSnapshot>> wholeServiceCentreReleaseSupplier`.
+Both former constructor shapes delegate with empty. Reject a null Optional;
+a configured supplier returning null is an invariant failure before allocation,
+never a fallback to old behavior. The supplier is called only on the simulation
+thread. Pass empty in old full-day composition; in new composition pass a supplier
+of the exact shared ledger's `snapshot()`, not the P2P eligible-centre projection.
+No second ledger or centre ordering state is introduced.
+
+Extend the controller's private `AllocationInputs` with the optional release facts.
+Capture once per evaluation and once again for existing fresh revalidation, and pass
+those captured facts to the factory overload. Compare the contained release snapshot
+by identity in `sameInputReferences`, alongside its existing inputs. Cursor/version
+changes must invalidate the no-command fast path even if scheduler/supply/inventory/
+lifecycle references do not change. Reuse the optional release wrapper while the
+ledger snapshot reference is unchanged; keep that bounded cache controller-owned.
+Unchanged blocked inputs retain the existing published runtime snapshot/sequence.
+Do not rebuild whole-day indexes or allocation snapshots merely because time ticks.
+
+The existing `Av02AllocationController` remains the sole mutation boundary. Its
+fresh snapshot must include the new gate. If a selected command is no longer valid
+against fresh release facts, existing command equality/eligibility revalidation
+must stop before allocating an ID, registering lifecycle state, storing inventory
+or installing a load plan. Do not merely suppress a command after these mutations.
+
+Update the three named AV02 tests above for these explicit obligations:
+
+- Factory: blocked/unready or unauthorized current-centre EMPTY plus a ready,
+  authorized future-centre EMPTY selects no new-mode command and reports the future
+  sequence block. Also cover current outstanding OSR with no current EMPTY, current
+  EMPTY ready, cursor advancement to the next centre, absent cursor, null Optional
+  and invalid candidate centre. Former API/empty facts preserve the existing
+  `shouldAllowEligibleLowerPriorityCentreWhenHigherPriorityCentreIsBlocked` case.
+- Runtime: stable blocked release facts reuse snapshot identity/sequence; changed
+  release facts alone trigger reevaluation. A selected command invalidated by fresh
+  release facts causes zero ID allocations and no inventory/lifecycle/load-plan
+  mutation. A null or throwing configured supplier preserves published state and
+  causes no allocation. Former constructors preserve existing behavior.
+- Allocation controller: exercise its existing fresh-snapshot boundary with a
+  new-mode selected command and a sequence-blocked fresh snapshot; prove no physical
+  ID request or lifecycle/inventory/load-plan mutation. Do not change its algorithm.
+
+Keep the existing mixed full-day scenario's delayed upstream 104 work, ADAPTED STORE,
+ASSOCIATED first-COLLECT, last 104 EMPTY, preloaded 108 FULL_PACK and independently
+ready/authorized 108 EMPTY. Rename the scenario to describe holding future EMPTY
+allocation rather than positively expecting advance allocation. Until
+`releases.allReleased("104")`, assert no 108 waiting or departed AV02 tote, no
+allocated 108 EMPTY lifecycle assignment, and no 108 OSR departure. Observe the
+ready/authorized 108 EMPTY as sequence-blocked while 104's EMPTY is unready; absence
+of supply authorization alone must not satisfy the proof. Prove the 104 EMPTY
+allocates/departs, its exact obligation advances the cursor, and only then the 108
+EMPTY allocates/departs. Retain bounded supported completion, first-COLLECT,
+STORE/global-count, exact commitment/output and NS assertions. This prevents both
+the old skip-blocked allocator and an over-restrictive never-allocate-next fix from
+passing. Use normal production updates; do not preallocate or mutate registries in
+the integration fixture. Full-day old-mode coverage must include a blocked higher
+centre with a ready authorized later EMPTY, proving the old selection still works.
+
+### Existing Step 6 projections and integration proof
 
 Update `analysis/metrics/DspFullDayMetricsCollector.serviceCentreMetrics` in new mode
 to derive actual owned-line counts from the captured lease catalog, including old
@@ -663,8 +822,11 @@ lease registries or direct machine calls, and bounded `advanceUntil` outcomes.
 Required integration proof:
 
 - Five independent FULL_PACK totes of one centre commit to five distinct lines.
-- A next centre can be preloaded/AV02-allocated, but no departure occurs before the
-  last current-centre obligation, including delayed upstream/EMPTY work.
+- A next centre can be OSR-preloaded and its EMPTY sheets supply-authorized, but no
+  future EMPTY carrier is AV02-allocated and no next-centre departure occurs before
+  the last current-centre obligation, including delayed upstream/EMPTY work.
+  After cursor advancement, allocation resumes for the next centre without waiting
+  for all predecessor lines to drain; departure still needs a usable line.
 - Include ADAPTED STORE, ASSOCIATED COLLECT and order-wide readiness/first-COLLECT;
   not merely FULL_PACK. Include a non-P2P ADAPTED release in the global count.
 - Every new-line assignment records one exact commit; bag correlations remain pinned.
@@ -689,7 +851,7 @@ Implementation verification:
 
 ```powershell
 $env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
-.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseCommandHandlerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayWholeServiceCentreScenarioTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayPdcPackDispositionTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriterTest
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseCommandHandlerTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayWholeServiceCentreScenarioTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayPdcPackDispositionTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriterTest --tests online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationSnapshotFactoryTest --tests online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationControllerTest --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02AllocationRuntimeControllerTest
 ```
 
 User verification, in order (not model-run):
@@ -723,7 +885,10 @@ Report PASS/FAIL/UNPROVEN with concrete class/method/control-flow evidence for:
 2. No deadline/weight dependence in new release, allocation or retention decisions;
    preserved hard cutoff and old algorithm.
 3. Whole-day obligation accounting, exact manifest multiplicity and unallocated EMPTY;
-   no centre skipping and no premature advancement.
+   no centre skipping and no premature advancement. AV02 EMPTY allocation uses the
+   same current release centre, blocks ready future-centre sheets before ID/lifecycle
+   mutation, revalidates fresh facts and resumes after cursor advancement. Old-policy
+   skip-blocked allocation remains unchanged; FIFO is not bypassed.
 4. Immutable worker facts plus live simulation-thread revalidation and downstream-first
    mutation; rejected/stale/duplicate operations leave all state unchanged.
 5. Deterministic real five-line distribution without moving pinned work or imposing
@@ -760,6 +925,7 @@ not chat memory. Stop if a contract conflicts or closure requires a new decision
   working rules and historical plans; do not declare unverified prior closure complete.
 - Operational scheduling requirements: implemented whole-centre release/per-line
   drained handover, config/CLI precedence, reporting-only deadlines for this set,
+  current-centre-only AV02 EMPTY allocation with fresh pre-mutation validation,
   explicit remaining future sequential queuing/overlap, actual ADAPTED preference and
   order-wide preparation. Remove stale "not implemented" notes only where source and
   verification prove that exact behavior.

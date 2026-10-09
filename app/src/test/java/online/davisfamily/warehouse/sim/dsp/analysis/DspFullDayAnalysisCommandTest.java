@@ -140,7 +140,7 @@ class DspFullDayAnalysisCommandTest {
     }
 
     @Test
-    void shouldRetainStationOverridesAndTimetableButFailFastForUnwiredPolicy(@TempDir Path directory)
+    void shouldRetainStationOverridesAndTimetableWithUsableWholeCentrePolicy(@TempDir Path directory)
             throws Exception {
         Fixture fixture = fixture(directory);
         Path schedule = Files.writeString(directory.resolve("schedule.json"), """
@@ -171,22 +171,24 @@ class DspFullDayAnalysisCommandTest {
         assertEquals(java.time.LocalTime.of(18, 30), profile.timetable().require("104")
                 .trunkerDepartureTime().localTime());
         var input = new DspFullDayInputLoader().load(command.inputPaths(), profile);
-        String expected = "Whole-service-centre runtime composition is not implemented yet";
         var factory = new DspFullDayAnalysisRuntimeFactory();
-        assertEquals(expected, assertThrows(IllegalArgumentException.class,
-                () -> factory.create(input, profile)).getMessage());
-        assertEquals(expected, assertThrows(IllegalArgumentException.class,
-                () -> factory.create(profile, input)).getMessage());
-        assertEquals(expected, assertThrows(IllegalArgumentException.class,
-                () -> factory.create(new online.davisfamily.threedee.sim.framework.SimulationWorld(),
-                        input, profile)).getMessage());
+        try (var first = factory.create(input, profile);
+                var second = factory.create(profile, input);
+                var third = factory.create(new online.davisfamily.threedee.sim.framework.SimulationWorld(), input, profile)) {
+            for (var runtime : List.of(first, second, third)) {
+                assertEquals(profile.p2pLineAllocationPolicyId(), runtime.elasticRuntime().allocationSnapshot().profileId());
+                assertEquals("104", runtime.elasticRuntime().allocationSnapshot().wholeServiceCentrePolicy()
+                        .orElseThrow().eligibleServiceCentreId().orElseThrow());
+            }
+        }
         ByteArrayOutputStream errors = new ByteArrayOutputStream();
-        assertEquals(2, DspFullDayAnalysisMain.run(
+        assertEquals(0, DspFullDayAnalysisMain.run(
                 new String[] {"--config=" + config},
                 new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
                 new PrintStream(errors, true, StandardCharsets.UTF_8)));
-        assertTrue(errors.toString(StandardCharsets.UTF_8).contains(expected));
-        assertFalse(Files.exists(fixture.output()));
+        assertTrue(errors.toString(StandardCharsets.UTF_8).isEmpty());
+        assertTrue(Files.readString(fixture.output()).contains("WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER"));
+        assertTrue(Files.readString(fixture.output()).contains("wholeServiceCentrePolicy"));
         assertFalse(Files.exists(fixture.inspection()));
     }
 

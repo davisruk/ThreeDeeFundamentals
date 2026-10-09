@@ -36,6 +36,7 @@ import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
 import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
 import online.davisfamily.warehouse.sim.dsp.scheduler.PreparedLineKey;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreAuthorizationState;
 import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
@@ -219,6 +220,28 @@ class Av02AllocationControllerTest {
                 reconstructed.inventory.head().orElseThrow().physicalToteId());
     }
 
+    @Test
+    void shouldRejectFreshSequenceBlockBeforeAnyAllocationMutation() {
+        CountingIdAllocator ids = new CountingIdAllocator();
+        Fixture fixture = fixture(2, ids, fullPackOrder("current-empty", 0));
+        fixture.releases.set(Optional.of(Av02AllocationSnapshotFactoryTest.releaseFacts(0, 0, 1, 1)));
+        fixture.submitCurrentCommand();
+        assertTrue(fixture.command.get().isPresent());
+        var inventory = fixture.inventory.snapshot();
+        var lifecycle = fixture.ledger.snapshot();
+        fixture.releases.set(Optional.of(Av02AllocationSnapshotFactoryTest.releaseFacts(1, 0, 0, 1)));
+        assertEquals(List.of(Av02AllocationBlockReason.SERVICE_CENTRE_SEQUENCE),
+                fixture.freshSnapshot().candidates().getFirst().blockReasons());
+
+        fixture.controller.update(new SimulationContext(), 0d);
+
+        assertEquals(0, ids.calls);
+        assertEquals(inventory, fixture.inventory.snapshot());
+        assertEquals(lifecycle, fixture.ledger.snapshot());
+        assertTrue(fixture.loadPlans.getLoadPlanFor(new PhysicalToteId("counted-1")) == null);
+        assertTrue(fixture.controller.lastAllocatedTote().isEmpty());
+    }
+
     private static Fixture fixture(
             int capacity,
             PhysicalToteIdAllocator idAllocator,
@@ -317,6 +340,8 @@ class Av02AllocationControllerTest {
         private final PhysicalToteLifecycleLedger ledger = new PhysicalToteLifecycleLedger();
         private final MapBackedToteLoadPlanRegistry loadPlans = new MapBackedToteLoadPlanRegistry();
         private final AtomicLong sequence = new AtomicLong(7);
+        private final AtomicReference<Optional<WholeServiceCentreReleaseSnapshot>> releases =
+                new AtomicReference<>(Optional.empty());
         private final AtomicReference<Optional<AllocateEmptyToteAtAv02Command>> command =
                 new AtomicReference<>(Optional.empty());
         private final Av02AllocationSnapshotFactory snapshotFactory =
@@ -355,7 +380,7 @@ class Av02AllocationControllerTest {
                     scheduler.get(),
                     supply.get(),
                     inventory.snapshot(),
-                    ledger.snapshot());
+                    ledger.snapshot(), releases.get());
         }
 
         private void submitCurrentCommand() {

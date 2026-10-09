@@ -28,6 +28,38 @@ import online.davisfamily.warehouse.sim.dsp.io.UnresolvedProductLine;
 class DspFullDayReportJsonWriterTest {
 
     @Test
+    void shouldSerializeConnectedWholePolicyCountsAndExplicitDiagnosticCosts(@TempDir Path directory) throws Exception {
+        var profile = online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayWholeServiceCentreScenarioTest.withPolicy(
+                DspFullDayReportTestSupport.profile(),
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        var input = DspFullDayReportTestSupport.input(directory, profile);
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            runtime.update(24 * 60 * 60d); // Terminal cutoff captures the single applied release before cutoff.
+            var report = new DspFullDayReportFactory().create(runtime.snapshot(), input, profile);
+            var writer = new DspFullDayReportJsonWriter();
+            byte[] captured = writer.serialize(report);
+            JsonNode root = new ObjectMapper().readTree(captured);
+            var elastic = root.at("/current/elastic");
+            assertEquals(profile.schedulerPolicy().name(), elastic.get("profileId").textValue());
+            assertTrue(elastic.get("deadlinesAndWorkloadCostsDiagnosticOnly").booleanValue());
+            var whole = elastic.get("wholeServiceCentrePolicy");
+            assertEquals("108", whole.get("eligibleServiceCentreId").textValue());
+            assertEquals(4, whole.get("availableUnleasedLineIds").size());
+            var releases = whole.get("releases");
+            assertEquals(1, releases.get("version").longValue());
+            assertEquals("108", releases.get("releaseServiceCentreId").textValue());
+            assertEquals(2, releases.get("orderedServiceCentreIds").size());
+            assertEquals(0, releases.at("/unreleasedOsrToteCounts/104").intValue());
+            assertEquals(1, releases.at("/unreleasedOsrToteCounts/108").intValue());
+            assertEquals(0, releases.at("/unreleasedEmptySheetCounts/104").intValue());
+            assertEquals(1, releases.at("/committedP2pToteCounts/104/dsp-p2p-line-1").intValue());
+            assertEquals(5, releases.at("/committedP2pToteCounts/104").size());
+            runtime.update(1d);
+            assertArrayEquals(captured, writer.serialize(report));
+        }
+    }
+
+    @Test
     void shouldRoundTripConfiguredBenchDurationsAndPositionCounts(@TempDir Path directory) throws Exception {
         var profile = DspFullDayReportTestSupport.configuredStations(DspFullDayReportTestSupport.profile());
         var report = DspFullDayReportTestSupport.earlyCompletionReport(directory, profile);
@@ -92,6 +124,7 @@ class DspFullDayReportJsonWriterTest {
         assertEquals(false, root.get("completedWithNsCandidates").booleanValue());
         assertEquals(0, root.get("nsCandidateInputLineCountByServiceCentreId").size());
         assertEquals("dsp-p2p-line-1", root.at("/p2pLines/0/lineId").textValue());
+        assertTrue(root.at("/current/elastic/wholeServiceCentrePolicy").isNull());
         assertEquals(
                 new String(bytes, StandardCharsets.UTF_8),
                 writer.serializeToString(report));

@@ -17,6 +17,7 @@ import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspP2pLineMetricsSn
 import online.davisfamily.warehouse.sim.dsp.analysis.metrics.DspServiceCentreMetricsSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.runtime.SchedulerCommandApplicationResult;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentrePolicySnapshot;
 
 /** Deterministic compact formatter for routine full-day progress milestones. */
 public final class DspFullDayProgressFormatter {
@@ -56,6 +57,8 @@ public final class DspFullDayProgressFormatter {
                 + " inboundRate=" + decimal(metrics.actualInboundTotesPerSecond())
                 + " outboundToteRate=" + decimal(metrics.closedOutboundTotesPerSecond())
                 + " bagRate=" + decimal(metrics.allocatedBagsPerSecond()));
+        runtime.elastic().allocation().wholeServiceCentrePolicy()
+                .ifPresent(policy -> lines.add(wholeServiceCentreLine(policy)));
 
         List<DspServiceCentreMetricsSnapshot> serviceCentres = metrics.serviceCentres().stream()
                 .sorted(Comparator.comparingInt(DspServiceCentreMetricsSnapshot::priority)
@@ -161,6 +164,18 @@ public final class DspFullDayProgressFormatter {
                 + ",pendingEmptyBags:" + completionSnapshot.pendingEmptyBagCount()
                 + ",nsCandidateInputLines:" + completionSnapshot.nsCandidateInputLineCount()
                 + " blocks=" + blocks;
+    }
+
+    static String wholeServiceCentreLine(WholeServiceCentrePolicySnapshot policy) {
+        var releases = policy.releases();
+        var current = releases.releaseServiceCentreId();
+        return "WholeServiceCentre: releaseCentre=" + current.orElse("none")
+                + " eligibleCentre=" + policy.eligibleServiceCentreId().orElse("none")
+                + " unreleasedOsr=" + current.map(releases.unreleasedOsrToteCounts()::get).orElse(0)
+                + " unreleasedEmpty=" + current.map(releases.unreleasedEmptySheetCounts()::get).orElse(0)
+                + " availableUnleasedLines=" + policy.availableUnleasedLineIds().stream()
+                        .map(line -> line.value()).toList()
+                + " deadlinesAndWorkloadCosts=diagnosticOnly";
     }
 
     private String lineLine(DspP2pLineMetricsSnapshot line) {

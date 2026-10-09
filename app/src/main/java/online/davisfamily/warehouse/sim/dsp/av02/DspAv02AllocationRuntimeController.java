@@ -11,6 +11,7 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteIdAllocator;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
 
 /**
@@ -30,6 +31,8 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
     private final MutableToteLoadPlanRegistry loadPlanRegistry;
     private final Av02AllocationSnapshotFactory snapshotFactory;
     private final Av02AllocationController allocationController;
+    private final Optional<Supplier<WholeServiceCentreReleaseSnapshot>> wholeServiceCentreReleaseSupplier;
+    private Optional<WholeServiceCentreReleaseSnapshot> cachedReleaseFacts = Optional.empty();
     private long nextSequence;
     private AllocationInputs lastEvaluatedInputs;
     private long activeSequence = -1L;
@@ -65,6 +68,21 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
             PhysicalToteIdAllocator idAllocator,
             MutableToteLoadPlanRegistry loadPlanRegistry,
             Av02AllocationSnapshotFactory snapshotFactory) {
+        this(schedulerSnapshotSupplier, supplySnapshotSupplier, lifecycleSnapshotSupplier,
+                inventory, lifecycleLedger, idAllocator, loadPlanRegistry, snapshotFactory,
+                Optional.empty());
+    }
+
+    public DspAv02AllocationRuntimeController(
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Av02PhysicalToteInventory inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            PhysicalToteIdAllocator idAllocator,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            Av02AllocationSnapshotFactory snapshotFactory,
+            Optional<Supplier<WholeServiceCentreReleaseSnapshot>> wholeServiceCentreReleaseSupplier) {
         requireNonNull(schedulerSnapshotSupplier, "schedulerSnapshotSupplier");
         requireNonNull(supplySnapshotSupplier, "supplySnapshotSupplier");
         requireNonNull(lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
@@ -73,6 +91,7 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
         requireNonNull(idAllocator, "idAllocator");
         requireNonNull(loadPlanRegistry, "loadPlanRegistry");
         requireNonNull(snapshotFactory, "snapshotFactory");
+        requireNonNull(wholeServiceCentreReleaseSupplier, "wholeServiceCentreReleaseSupplier");
         this.schedulerSnapshotSupplier = schedulerSnapshotSupplier;
         this.supplySnapshotSupplier = supplySnapshotSupplier;
         this.lifecycleSnapshotSupplier = lifecycleSnapshotSupplier;
@@ -81,6 +100,7 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
         this.idAllocator = idAllocator;
         this.loadPlanRegistry = loadPlanRegistry;
         this.snapshotFactory = snapshotFactory;
+        this.wholeServiceCentreReleaseSupplier = wholeServiceCentreReleaseSupplier;
 
         this.allocationController = new Av02AllocationController(
                 () -> activeAllocationSnapshot == null
@@ -173,7 +193,8 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
                 inputs.scheduler(),
                 inputs.supply(),
                 inputs.inventory(),
-                inputs.lifecycle());
+                inputs.lifecycle(),
+                inputs.releases());
     }
 
     private AllocationInputs captureInputs() {
@@ -184,7 +205,14 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
         PhysicalToteLifecycleSnapshot lifecycle = requireSupplied(
                 lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
         Av02InventorySnapshot inventorySnapshot = inventory.snapshot();
-        return new AllocationInputs(scheduler, supply, lifecycle, inventorySnapshot);
+        if (wholeServiceCentreReleaseSupplier.isPresent()) {
+            WholeServiceCentreReleaseSnapshot releases = requireSupplied(
+                    wholeServiceCentreReleaseSupplier.orElseThrow(), "wholeServiceCentreReleaseSupplier");
+            if (cachedReleaseFacts.orElse(null) != releases) {
+                cachedReleaseFacts = Optional.of(releases);
+            }
+        }
+        return new AllocationInputs(scheduler, supply, lifecycle, inventorySnapshot, cachedReleaseFacts);
     }
 
     private static boolean sameInputReferences(AllocationInputs first, AllocationInputs second) {
@@ -193,7 +221,8 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
                 && first.scheduler() == second.scheduler()
                 && first.supply() == second.supply()
                 && first.lifecycle() == second.lifecycle()
-                && first.inventory() == second.inventory();
+                && first.inventory() == second.inventory()
+                && first.releases().orElse(null) == second.releases().orElse(null);
     }
 
     private DspAv02AllocationRuntimeSnapshot runtimeSnapshot(
@@ -232,7 +261,8 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
             WarehouseSchedulerSnapshot scheduler,
             DspSupplySnapshot supply,
             PhysicalToteLifecycleSnapshot lifecycle,
-            Av02InventorySnapshot inventory) {
+            Av02InventorySnapshot inventory,
+            Optional<WholeServiceCentreReleaseSnapshot> releases) {
     }
 
     private static void requireNonNull(Object value, String fieldName) {

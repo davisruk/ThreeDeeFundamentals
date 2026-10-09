@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -21,6 +22,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineActivityProbe;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineDefinition;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseCatalogSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
+import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLeaseRetentionPolicy;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pServiceCentreWorkSnapshotFactory;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pStickyArrivalBinding;
@@ -28,6 +30,8 @@ import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationAssignmentR
 import online.davisfamily.warehouse.sim.dsp.p2p.bag.P2pBagCorrelationRequirementCatalog;
 import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseLedger;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
 import online.davisfamily.warehouse.sim.dsp.time.DspOperationalClockSnapshot;
 
@@ -102,7 +106,9 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                 requirementCatalog,
                 correlationAssignmentRegistry,
                 P2pMissingPackSnapshot::empty,
-                true);
+                true,
+                DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                Optional.empty());
     }
 
     /** Creates the elastic runtime while leaving station-arrival ownership to the caller. */
@@ -159,6 +165,33 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             P2pBagCorrelationRequirementCatalog requirementCatalog,
             P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry,
             Supplier<P2pMissingPackSnapshot> missingPackSnapshotSupplier) {
+        return createWithoutArrivalConsumers(simulationWorld, lineDefinitions, activityProbes,
+                schedulerSnapshotSupplier, manifestCatalog, lifecycleSnapshotSupplier,
+                av02InventorySnapshotSupplier, clockSnapshotSupplier, supplySnapshotSupplier,
+                timetable, bagPlanningResultSupplier, outboundToteAllocator, config,
+                requirementCatalog, correlationAssignmentRegistry, missingPackSnapshotSupplier,
+                DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES, Optional.empty());
+    }
+
+    public DspP2pElasticAllocationRuntime createWithoutArrivalConsumers(
+            SimulationWorld simulationWorld,
+            List<P2pLineDefinition> lineDefinitions,
+            Map<P2pLineId, P2pLineActivityProbe> activityProbes,
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            InboundToteManifestCatalog manifestCatalog,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Supplier<Av02InventorySnapshot> av02InventorySnapshotSupplier,
+            Supplier<DspOperationalClockSnapshot> clockSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            DspServiceCentreTimetable timetable,
+            Supplier<BagPlanningResult> bagPlanningResultSupplier,
+            OutboundToteAllocator outboundToteAllocator,
+            P2pElasticAllocationConfig config,
+            P2pBagCorrelationRequirementCatalog requirementCatalog,
+            P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry,
+            Supplier<P2pMissingPackSnapshot> missingPackSnapshotSupplier,
+            DspSchedulerPolicy policy,
+            Optional<WholeServiceCentreReleaseLedger> releaseLedger) {
         return createInternal(
                 simulationWorld,
                 lineDefinitions,
@@ -177,7 +210,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                 requirementCatalog,
                 correlationAssignmentRegistry,
                 missingPackSnapshotSupplier,
-                false);
+                false, policy, releaseLedger);
     }
 
     private DspP2pElasticAllocationRuntime createInternal(
@@ -198,7 +231,9 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             P2pBagCorrelationRequirementCatalog requirementCatalog,
             P2pBagCorrelationAssignmentRegistry correlationAssignmentRegistry,
             Supplier<P2pMissingPackSnapshot> missingPackSnapshotSupplier,
-            boolean registerArrivalConsumers) {
+            boolean registerArrivalConsumers,
+            DspSchedulerPolicy policy,
+            Optional<WholeServiceCentreReleaseLedger> releaseLedger) {
         requireNonNull(simulationWorld, "simulationWorld");
         requireNonNull(lineDefinitions, "lineDefinitions");
         requireNonNull(activityProbes, "activityProbes");
@@ -216,6 +251,12 @@ public final class DspP2pElasticAllocationRuntimeFactory {
         requireNonNull(requirementCatalog, "requirementCatalog");
         requireNonNull(correlationAssignmentRegistry, "correlationAssignmentRegistry");
         requireNonNull(missingPackSnapshotSupplier, "missingPackSnapshotSupplier");
+        requireNonNull(policy, "policy");
+        requireNonNull(releaseLedger, "releaseLedger");
+        boolean wholeCentre = policy == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER;
+        if (wholeCentre != releaseLedger.isPresent()) {
+            throw new IllegalArgumentException("Whole-centre policy requires its ledger; legacy policy forbids it");
+        }
         if (lineDefinitions.size() != DspP2pStickyLeaseRuntimeFactory.DSP_P2P_LINE_COUNT
                 || config.p2pLineCount()
                         != DspP2pStickyLeaseRuntimeFactory.DSP_P2P_LINE_COUNT) {
@@ -237,8 +278,10 @@ public final class DspP2pElasticAllocationRuntimeFactory {
         P2pServiceCentreWorkSnapshotFactory workFactory =
                 new P2pServiceCentreWorkSnapshotFactory();
         P2pWorkloadSnapshotFactory workloadFactory = new P2pWorkloadSnapshotFactory();
-        DeadlineAwareElasticP2pAllocationPlanner planner =
-                new DeadlineAwareElasticP2pAllocationPlanner();
+        DeadlineAwareElasticP2pAllocationPlanner planner = wholeCentre ? null
+                : new DeadlineAwareElasticP2pAllocationPlanner();
+        WholeServiceCentreP2pAllocationPlanner wholePlanner = wholeCentre
+                ? new WholeServiceCentreP2pAllocationPlanner() : null;
         Function<P2pLineLeaseCatalogSnapshot, P2pElasticAllocationSnapshot> allocationFactory =
                 leases -> {
                     WarehouseSchedulerSnapshot scheduler = requireSupplied(
@@ -268,8 +311,14 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                             requireSupplied(
                                     missingPackSnapshotSupplier,
                                     "missingPackSnapshotSupplier"));
+                    DspOperationalClockSnapshot clock = requireSupplied(
+                            clockSnapshotSupplier, "clockSnapshotSupplier");
+                    if (wholeCentre) {
+                        return wholePlanner.create(clock, supply, workload, timetable, leases,
+                                releaseLedger.orElseThrow().snapshot(), config.downstreamHandlingDuration());
+                    }
                     return planner.create(
-                            requireSupplied(clockSnapshotSupplier, "clockSnapshotSupplier"),
+                            clock,
                             supply,
                             workload,
                             timetable,
@@ -289,6 +338,9 @@ public final class DspP2pElasticAllocationRuntimeFactory {
             throw new IllegalStateException("elastic runtime prevalidation returned null");
         }
 
+        P2pLeaseRetentionPolicy retention = wholeCentre
+                ? new WholeServiceCentreP2pLeaseRetentionPolicy(releaseLedger.orElseThrow()::snapshot)
+                : new ElasticP2pLeaseRetentionPolicy(allocationFactory);
         DspP2pStickyLeaseRuntime leaseRuntime = registerArrivalConsumers
                 ? new DspP2pStickyLeaseRuntimeFactory().create(
                 simulationWorld,
@@ -303,7 +355,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                         "supplySnapshotSupplier").authorizedEmptyOrderSheetKeys(),
                 outboundToteAllocator,
                 arrivalBindings,
-                new ElasticP2pLeaseRetentionPolicy(allocationFactory),
+                retention,
                 requirementCatalog,
                 correlationAssignmentRegistry)
                 : new DspP2pStickyLeaseRuntimeFactory().createWithoutArrivalConsumers(
@@ -318,7 +370,7 @@ public final class DspP2pElasticAllocationRuntimeFactory {
                         supplySnapshotSupplier,
                         "supplySnapshotSupplier").authorizedEmptyOrderSheetKeys(),
                 outboundToteAllocator,
-                new ElasticP2pLeaseRetentionPolicy(allocationFactory),
+                retention,
                 requirementCatalog,
                 correlationAssignmentRegistry);
         return new DspP2pElasticAllocationRuntime(leaseRuntime, allocationFactory);

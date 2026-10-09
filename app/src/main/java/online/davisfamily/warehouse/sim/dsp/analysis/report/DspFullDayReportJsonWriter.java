@@ -769,6 +769,25 @@ public final class DspFullDayReportJsonWriter {
         node.put("calibrationStatus", allocation.calibrationStatus().name());
         node.put("evaluatedAt", allocation.evaluatedAt().toString());
         node.put("maximumConcurrentServiceCentres", allocation.maximumConcurrentServiceCentres());
+        allocation.wholeServiceCentrePolicy().ifPresentOrElse(policy -> {
+            ObjectNode whole = node.putObject("wholeServiceCentrePolicy");
+            optionalString(whole, "eligibleServiceCentreId", policy.eligibleServiceCentreId());
+            ArrayNode available = whole.putArray("availableUnleasedLineIds");
+            policy.availableUnleasedLineIds().forEach(line -> available.add(line.value()));
+            var releases = policy.releases();
+            ObjectNode counts = whole.putObject("releases");
+            counts.put("version", releases.version());
+            addStrings(counts, "orderedServiceCentreIds", releases.orderedServiceCentreIds());
+            optionalString(counts, "releaseServiceCentreId", releases.releaseServiceCentreId());
+            counts.set("unreleasedOsrToteCounts", objectMapper.valueToTree(releases.unreleasedOsrToteCounts()));
+            counts.set("unreleasedEmptySheetCounts", objectMapper.valueToTree(releases.unreleasedEmptySheetCounts()));
+            ObjectNode committed = counts.putObject("committedP2pToteCounts");
+            releases.orderedServiceCentreIds().forEach(owner -> {
+                ObjectNode lines = committed.putObject(owner);
+                releases.committedP2pToteCounts().get(owner).forEach((line, count) -> lines.put(line.value(), count));
+            });
+            node.put("deadlinesAndWorkloadCostsDiagnosticOnly", true);
+        }, () -> node.set("wholeServiceCentrePolicy", NullNode.instance));
         ArrayNode issues = node.putArray("issues");
         allocation.issues().forEach(issue -> issues.add(issueNode(issue)));
         return node;

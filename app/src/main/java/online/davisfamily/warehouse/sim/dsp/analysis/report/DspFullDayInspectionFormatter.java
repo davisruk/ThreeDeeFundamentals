@@ -69,6 +69,8 @@ public final class DspFullDayInspectionFormatter {
                 + " inboundRate=" + decimal(metrics.actualInboundTotesPerSecond())
                 + " outboundToteRate=" + decimal(metrics.closedOutboundTotesPerSecond())
                 + " bagRate=" + decimal(metrics.allocatedBagsPerSecond()));
+        runtime.elastic().allocation().wholeServiceCentrePolicy()
+                .ifPresent(policy -> lines.add(DspFullDayProgressFormatter.wholeServiceCentreLine(policy)));
 
         for (DspServiceCentreAnalysisResult result : snapshot.serviceCentres()) {
             lines.add(serviceCentreLine(result));

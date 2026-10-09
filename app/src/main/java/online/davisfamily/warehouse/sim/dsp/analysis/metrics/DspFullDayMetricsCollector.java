@@ -331,6 +331,13 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                 current.completions().stream().sorted(CENTRE_ORDER).toList();
         ElasticIssueProjection elasticIssues = elasticIssueProjection(
                 current.elastic().allocation());
+        boolean wholeCentre = current.elastic().allocation().wholeServiceCentrePolicy().isPresent();
+        Map<String, Integer> ownedLines = new HashMap<>();
+        if (wholeCentre) {
+            for (var lease : current.elastic().leases().lines()) {
+                lease.serviceCentreId().ifPresent(owner -> ownedLines.merge(owner, 1, Integer::sum));
+            }
+        }
         List<DspServiceCentreMetricsSnapshot> result = new ArrayList<>(completions.size());
         for (DspServiceCentreCompletionSnapshot completion : completions) {
             String serviceCentreId = completion.serviceCentreId();
@@ -379,7 +386,8 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                     lateness(completion, false),
                     demand == null ? 0 : demand.requiredLines(),
                     demand == null ? 0 : demand.desiredLines(),
-                    demand == null ? 0 : demand.ownedLineCount(),
+                    wholeCentre ? ownedLines.getOrDefault(serviceCentreId, 0)
+                            : demand == null ? 0 : demand.ownedLineCount(),
                     demand == null ? 0 : demand.unmetRequiredLines(),
                     (demand != null && demand.infeasible()) || !serviceIssues.isEmpty(),
                     metricIssues,
@@ -410,6 +418,7 @@ public final class DspFullDayMetricsCollector implements SimulationController {
                 outboundToteLines.put(tote.physicalToteId(), tote.p2pLineId()));
 
         List<DspP2pLineMetricsSnapshot> result = new ArrayList<>();
+        var wholePolicy = current.elastic().allocation().wholeServiceCentrePolicy();
         for (P2pLineLeaseSnapshot lease : current.elastic().leases().lines()) {
             P2pLineId lineId = lease.definition().lineId();
             DspHeadlessP2pLineRuntimeSnapshot runtimeLine = runtimeLines.get(lineId);
@@ -439,8 +448,12 @@ public final class DspFullDayMetricsCollector implements SimulationController {
             result.add(new DspP2pLineMetricsSnapshot(
                     lineId,
                     lease.serviceCentreId(),
-                    demand != null && demand.feedingOwnedLineIds().contains(lineId),
-                    demand != null && demand.drainingSurplusLineIds().contains(lineId),
+                    wholePolicy.isPresent() ? lease.leased() && lease.serviceCentreId().equals(
+                            wholePolicy.orElseThrow().releases().releaseServiceCentreId())
+                            : demand != null && demand.feedingOwnedLineIds().contains(lineId),
+                    wholePolicy.isPresent() ? lease.serviceCentreId().filter(owner ->
+                            wholePolicy.orElseThrow().releases().allReleased(owner)).isPresent()
+                            : demand != null && demand.drainingSurplusLineIds().contains(lineId),
                     activity,
                     observedSimulationDuration,
                     busy,
