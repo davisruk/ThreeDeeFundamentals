@@ -38,7 +38,8 @@ final class DspFullDayAnalysisConfigLoader {
             "serviceCentreSchedule",
             "thirdParty",
             "adapting",
-            "schedulerPolicy");
+            "schedulerPolicy",
+            "p2pOutstandingToteWatermark");
 
     private static final Set<String> THIRD_PARTY_PROPERTIES = Set.of("processingDurationSeconds");
     private static final Set<String> ADAPTING_PROPERTIES = Set.of(
@@ -101,6 +102,13 @@ final class DspFullDayAnalysisConfigLoader {
             case "schedulerPolicy" -> {
                 requireText(name, value);
                 DspSchedulerPolicy.parse(value.textValue());
+            }
+            case "p2pOutstandingToteWatermark" -> {
+                if (!value.isIntegralNumber() || !value.canConvertToInt()
+                        || value.intValue() < 1) {
+                    throw new IllegalArgumentException(
+                            "--config property p2pOutstandingToteWatermark must be a positive JSON integer in int range");
+                }
             }
             case "thirdParty" -> validateStationObject(name, value, THIRD_PARTY_PROPERTIES);
             case "adapting" -> validateStationObject(name, value, ADAPTING_PROPERTIES);

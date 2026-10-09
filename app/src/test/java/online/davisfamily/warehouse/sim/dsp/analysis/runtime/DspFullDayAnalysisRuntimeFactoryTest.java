@@ -84,11 +84,21 @@ class DspFullDayAnalysisRuntimeFactoryTest {
     @Test
     void shouldKeepAbsentAndExplicitDeadlineSelectionIdentical(@TempDir Path directory) throws Exception {
         var absent = profile();
-        var explicit = DspFullDayWholeServiceCentreScenarioTest.withPolicy(absent,
-                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
+        var explicit = profileWithWatermark(
+                1,
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                absent.p2pPlaceholderDurations(),
+                absent.osrInventoryConfig());
         var input = loadSingleFullPack(directory, absent);
+        assertEquals(1, explicit.p2pOutstandingToteWatermark());
         try (var first = new DspFullDayAnalysisRuntimeFactory().create(input, absent);
                 var second = new DspFullDayAnalysisRuntimeFactory().create(input, explicit)) {
+            var originalCompletionListener = first.lineRuntimes().getFirst().config()
+                    .toteCompletedListener();
+            assertTrue(originalCompletionListener instanceof
+                    online.davisfamily.warehouse.sim.dsp.p2p.arrival.StationProcessingP2pToteCompletedListener);
+            assertTrue(first.lineRuntimes().stream().allMatch(line ->
+                    line.config().toteCompletedListener() == originalCompletionListener));
             assertEquals(first.snapshot().elastic(), second.snapshot().elastic());
             assertTrue(first.snapshot().elastic().allocation().wholeServiceCentrePolicy().isEmpty());
             for (int step = 0; step < 300 && first.state() == DspFullDayRuntimeState.RUNNING; step++) {
@@ -99,6 +109,63 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, first.state());
             assertEquals(first.state(), second.state());
             assertEquals(first.outboundToteAllocator().snapshot(), second.outboundToteAllocator().snapshot());
+        }
+    }
+
+    @Test
+    void shouldActivateFiniteWatermarkWithActualPerLineTipperCompletion(
+            @TempDir Path directory) throws IOException {
+        DspUncalibratedFullDayProfile profile = profileWithWatermark(
+                1,
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER,
+                new DspUncalibratedFullDayProfile.P2pPlaceholderDurations(
+                        15d, 0.1d, 1d, 1d, 0.1d, 0.1d, 0.1d, 0.1d, 0.1d, 0.1d, 0.1d),
+                new OsrInventoryConfig(profile().osrInventoryConfig().capacity(), List.of("104")));
+        DspFullDayLoadedInput input = loadFullPacksAtOneCentre(directory, profile, 6);
+
+        try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            var configuredLines = runtime.lineRuntimes();
+            assertEquals(5, configuredLines.size());
+            assertEquals(5, configuredLines.stream()
+                    .map(line -> line.config().toteCompletedListener()).distinct().count());
+            assertTrue(configuredLines.stream().allMatch(line ->
+                    line.config().toteCompletedListener() instanceof
+                            online.davisfamily.warehouse.sim.dsp.p2p.allocation.WholeServiceCentreP2pToteCompletedListener));
+
+            var initialReleases = runtime.snapshot().elastic().allocation()
+                    .wholeServiceCentrePolicy().orElseThrow().releases();
+            assertEquals(1, initialReleases.p2pOutstandingToteWatermark());
+            assertTrue(initialReleases.outstandingP2pToteCounts().values()
+                    .stream().allMatch(count -> count == 0));
+
+            boolean reachedFullCapacity = false;
+            boolean reopenedByMachineCallback = false;
+            String[] diagnostic = {""};
+            for (int step = 0; step < 50 && !reopenedByMachineCallback; step++) {
+                runtime.update(1d);
+                var releases = runtime.snapshot().elastic().allocation()
+                        .wholeServiceCentrePolicy().orElseThrow().releases();
+                int committed = releases.committedP2pToteCounts().values().stream()
+                        .flatMap(byLine -> byLine.values().stream())
+                        .mapToInt(Integer::intValue).sum();
+                assertTrue(releases.outstandingP2pToteCounts().values().stream()
+                        .allMatch(count -> count <= 1), () -> "watermark exceeded: " + releases);
+                diagnostic[0] = "committed=" + committed + ", releases=" + releases;
+                if (committed == 5 && releases.outstandingP2pToteCounts().values()
+                        .stream().allMatch(count -> count == 1)) {
+                    reachedFullCapacity = true;
+                }
+                if (reachedFullCapacity && committed > 5) {
+                    assertTrue(releases.outstandingVersion() > committed,
+                            "a real tipper callback must account for completion before capacity reopens");
+                    reopenedByMachineCallback = true;
+                }
+            }
+            assertTrue(reachedFullCapacity,
+                    () -> "five per-line slots were not filled: " + diagnostic[0]);
+            assertTrue(reopenedByMachineCallback,
+                    () -> "no later release used capacity freed by actual machine completion: "
+                            + diagnostic[0]);
         }
     }
 
@@ -1122,6 +1189,37 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                 OPERATING_DATE, 10, Duration.ofSeconds(1), 2, 4, 4);
     }
 
+    private static DspUncalibratedFullDayProfile profileWithWatermark(
+            int watermark,
+            online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy policy,
+            DspUncalibratedFullDayProfile.P2pPlaceholderDurations durations,
+            OsrInventoryConfig osrInventoryConfig) {
+        DspUncalibratedFullDayProfile base = profile();
+        return new DspUncalibratedFullDayProfile(
+                base.operatingDate(),
+                osrInventoryConfig,
+                base.serviceCentreSupplyConfig(),
+                base.inboundToteArrivalPolicy(),
+                base.av02AllocationConfig(),
+                base.p2pElasticAllocationConfig(),
+                base.outboundToteConfig(),
+                base.maximumPacksPerBag(),
+                base.fixedStep(),
+                base.maximumStepsPerAdvance(),
+                base.metricSampleInterval(),
+                base.routeSpeedUnitsPerSecond(),
+                base.queueCapacities(),
+                base.thirdPartyAreaConfig(),
+                base.adaptingStorageConfig(),
+                base.adaptingBenchDefinitions(),
+                durations,
+                base.p2pLineDefinitions(),
+                base.prlCountPerLine(),
+                base.timetable(),
+                policy,
+                watermark);
+    }
+
     private static DspFullDayLoadedInput loadSingleFullPack(
             Path directory,
             DspUncalibratedFullDayProfile profile) throws IOException {
@@ -1169,6 +1267,24 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             orderPaths.add(Files.writeString(
                     directory.resolve(orderId + ".json"),
                     message(orderId, "tote-large-" + index, serviceCentreId, priority)));
+        }
+        return new DspFullDayInputLoader().load(
+                new DspFullDayInputPaths(productMaster, orderPaths), profile);
+    }
+
+    private static DspFullDayLoadedInput loadFullPacksAtOneCentre(
+            Path directory,
+            DspUncalibratedFullDayProfile profile,
+            int orderCount) throws IOException {
+        Path productMaster = Files.writeString(directory.resolve("products.csv"), """
+                dispensingProductPackColumbusCode,name,thirdPartyLocation,length,width,height
+                product-a,Product A,,200,100,80
+                """);
+        List<Path> orderPaths = new ArrayList<>();
+        for (int index = 0; index < orderCount; index++) {
+            String orderId = "watermark-order-" + index;
+            orderPaths.add(Files.writeString(directory.resolve(orderId + ".json"),
+                    message(orderId, "watermark-tote-" + index, "104", "999")));
         }
         return new DspFullDayInputLoader().load(
                 new DspFullDayInputPaths(productMaster, orderPaths), profile);

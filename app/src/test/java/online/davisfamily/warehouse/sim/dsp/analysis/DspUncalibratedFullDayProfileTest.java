@@ -31,10 +31,14 @@ class DspUncalibratedFullDayProfileTest {
         var legacy = profile();
         var explicitLegacy = selectedProfile(legacy, DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
         assertEquals(legacy, explicitLegacy);
+        assertEquals(DspUncalibratedFullDayProfile.DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK,
+                legacy.p2pOutstandingToteWatermark());
         assertEquals(DspUncalibratedFullDayProfile.PROFILE_ID, legacy.profileId());
         assertEquals(DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES, legacy.schedulerPolicy());
         assertEquals(legacy.profileId(), legacy.p2pLineAllocationPolicyId());
         var whole = selectedProfile(legacy, DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        assertEquals(DspUncalibratedFullDayProfile.DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK,
+                whole.p2pOutstandingToteWatermark());
         assertEquals("WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER", whole.profileId());
         assertEquals(whole.profileId(), whole.p2pLineAllocationPolicyId());
         assertEquals("WHOLE_SERVICE_CENTRE_ORDER_WIDE_PREPARATION_READY", whole.orderEligibilityPolicyId());
@@ -52,6 +56,21 @@ class DspUncalibratedFullDayProfileTest {
         assertEquals("UNCALIBRATED", whole.calibrationStatus());
         assertEquals("P2P_OUTPUT_CLOSED", whole.completionMilestone());
         assertThrows(IllegalArgumentException.class, () -> selectedProfile(legacy, null));
+    }
+
+    @Test
+    void shouldAcceptPositiveConfiguredWatermarkAndRejectNonpositiveCanonicalValue() {
+        DspUncalibratedFullDayProfile base = profile();
+        DspUncalibratedFullDayProfile configured = configuredProfile(
+                base, DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER, 1);
+        assertEquals(1, configured.p2pOutstandingToteWatermark());
+        assertEquals(Integer.MAX_VALUE, configuredProfile(
+                base, DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                Integer.MAX_VALUE).p2pOutstandingToteWatermark());
+        assertThrows(IllegalArgumentException.class, () -> configuredProfile(
+                base, DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER, 0));
+        assertThrows(IllegalArgumentException.class, () -> configuredProfile(
+                base, DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER, -1));
     }
 
     @Test
@@ -92,6 +111,35 @@ class DspUncalibratedFullDayProfileTest {
                 base.prlCountPerLine(),
                 base.timetable(),
                 selected);
+    }
+
+    private static DspUncalibratedFullDayProfile configuredProfile(
+            DspUncalibratedFullDayProfile base,
+            DspSchedulerPolicy selected,
+            int watermark) {
+        return new DspUncalibratedFullDayProfile(
+                base.operatingDate(),
+                base.osrInventoryConfig(),
+                base.serviceCentreSupplyConfig(),
+                base.inboundToteArrivalPolicy(),
+                base.av02AllocationConfig(),
+                base.p2pElasticAllocationConfig(),
+                base.outboundToteConfig(),
+                base.maximumPacksPerBag(),
+                base.fixedStep(),
+                base.maximumStepsPerAdvance(),
+                base.metricSampleInterval(),
+                base.routeSpeedUnitsPerSecond(),
+                base.queueCapacities(),
+                base.thirdPartyAreaConfig(),
+                base.adaptingStorageConfig(),
+                base.adaptingBenchDefinitions(),
+                base.p2pPlaceholderDurations(),
+                base.p2pLineDefinitions(),
+                base.prlCountPerLine(),
+                base.timetable(),
+                selected,
+                watermark);
     }
 
     @Test

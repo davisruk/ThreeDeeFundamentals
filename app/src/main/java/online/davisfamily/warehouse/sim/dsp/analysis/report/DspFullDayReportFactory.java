@@ -457,6 +457,9 @@ public final class DspFullDayReportFactory {
         DspOperationalClockConfig clock = profile.operationalClockConfig();
         result.put("profileId", profile.profileId());
         result.put("schedulerPolicy", profile.schedulerPolicy().name());
+        result.put("p2pOutstandingToteWatermark", profile.p2pOutstandingToteWatermark());
+        result.put("p2pOutstandingToteWatermarkEnabled",
+                profile.schedulerPolicy() == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
         result.put("operatingDate", profile.operatingDate().toString());
         result.put("calibrationStatus", profile.calibrationStatus());
         result.put("completionMilestone", profile.completionMilestone());

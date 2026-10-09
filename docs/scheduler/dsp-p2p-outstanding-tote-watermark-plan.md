@@ -1,7 +1,7 @@
 # P2P Outstanding Inbound Tote Watermark Plan
 
-Status: implementation in progress; Steps 1-3 are implemented and focused-verified,
-later steps remain planned. Created 2026-10-09 against clean commit
+Status: implementation in progress; Steps 1-4 are implemented and focused-verified.
+Later steps remain planned. Created 2026-10-09 against clean commit
 `cdce510` (`Wire live release guards and prove the production-shaped journey`).
 The planning-session initial `git status --short` was empty. Remain on the
 user-selected branch; do not create, switch, merge or commit branches.
@@ -770,4 +770,60 @@ Step 3 diff against Section 3.5 and ran `git diff --check`. Full-day factory
 composition and runtime callback wiring remain unproven until Step 4; the
 production-shaped cap/reopen journey and full-day performance validation remain
 unproven until Step 6 and user verification. Step 4 awaits separate user
-authorization.
+authorization at that Step 3 completion point.
+
+Step 4 implementation attempt 2026-10-09; **not complete**. Modified the Step 4
+owned command/config/profile/report/runtime-factory production files and their
+four owned test files. The attempt adds the positive default-8 command/profile
+scalar, strict JSON and paired/equal-form CLI parsing with CLI-over-JSON
+precedence, selected-policy report metadata, whole-centre ledger construction
+with the configured limit, and one completion wrapper per whole-centre line. The
+deadline-aware branch retains its original listener and has no release ledger.
+
+Implementation verification was run only with the Step 4 command:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfileTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportFactoryTest
+```
+
+The first invocation could not access the user Gradle cache lock; the same
+command was rerun with approved cache access. Its first run exposed a test compile
+error in the new committed-count aggregation; after correction, a test fixture
+failed because its OSR preload list omitted centre 108. After the second and
+final permitted correction, the command completed 61 tests with 1 failure:
+`DspFullDayAnalysisRuntimeFactoryTest.shouldKeepAbsentAndExplicitDeadlineSelectionIdentical`.
+The profile helper used for the custom watermark had also changed the deadline
+comparison's preload list from 104/108 to 104, causing the baseline comparison
+to differ. No further correction or rerun was made because the two permitted
+edit-and-rerun cycles were used. `git diff --check` passed. Step 4 remains
+unverified and must not be treated as complete; the focused command must be
+rerun successfully after the fixture is corrected. Step 5 and later steps remain
+unauthorized by this Step 4 request. Production-shaped Step 6 and user full-day
+validation remain unproven.
+
+Step 4 corrective continuation completed 2026-10-09 after explicit user
+authorization. The initial `git status --short` contained the 13 modified files
+from the preceding Step 4 attempt; all existing changes were preserved. This
+continuation changed only
+`T/analysis/runtime/DspFullDayAnalysisRuntimeFactoryTest.java` and this execution
+record/status. The custom-profile helper now accepts the fixture's OSR config:
+the deadline comparison preserves the baseline 104/108 preload, while the
+single-centre cap-1 test explicitly uses only 104. No production correction,
+weakened assertion or architectural change was needed.
+
+Implementation verification reran exactly the Step 4 command:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisCommandTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspUncalibratedFullDayProfileTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportFactoryTest
+```
+
+The sandbox invocation could not access the user Gradle cache lock; the same
+command was rerun with approved cache access. Result: `BUILD SUCCESSFUL`; all
+61 tests passed with no failures, errors or skips. The deadline-policy parity and
+actual-machine cap/reopening tests both passed. Reviewed the complete Step 4
+production/test/document diff against Section 3; `git diff --check` passed.
+Step 4 requires no additional user verification and is now complete. Step 5 and
+later steps require separate authorization. Production-shaped Step 6 journeys,
+full regression, real-data completion and performance benefit remain unproven.

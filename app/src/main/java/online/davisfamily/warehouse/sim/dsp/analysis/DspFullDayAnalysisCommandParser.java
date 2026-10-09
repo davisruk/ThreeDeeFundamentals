@@ -44,6 +44,7 @@ final class DspFullDayAnalysisCommandParser {
     private static final String METRIC_SAMPLE_SECONDS = "metric-sample-seconds";
     private static final String OVERWRITE = "overwrite";
     private static final String SCHEDULER_POLICY = "scheduler-policy";
+    private static final String P2P_OUTSTANDING_TOTE_WATERMARK = "p2p-outstanding-tote-watermark";
 
     DspFullDayAnalysisCommand parse(String[] arguments) {
         if (arguments == null) {
@@ -79,10 +80,17 @@ final class DspFullDayAnalysisCommandParser {
         Duration progressInterval = Duration.ofSeconds(300);
         boolean overwrite = false;
         DspSchedulerPolicy schedulerPolicy = DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES;
+        int p2pOutstandingToteWatermark =
+                DspUncalibratedFullDayProfile.DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK;
 
         if (config != null) {
             if (config.schedulerPolicy() != null) {
                 schedulerPolicy = DspSchedulerPolicy.parse(config.schedulerPolicy());
+            }
+            if (config.p2pOutstandingToteWatermark() != null) {
+                p2pOutstandingToteWatermark = parsePositiveInt(
+                        Integer.toString(config.p2pOutstandingToteWatermark()),
+                        P2P_OUTSTANDING_TOTE_WATERMARK);
             }
             productMasterPath = configuredPath(
                     config.productMaster(), configBaseDirectory, PRODUCT_MASTER);
@@ -166,6 +174,16 @@ final class DspFullDayAnalysisCommandParser {
                 schedulerPolicy = DspSchedulerPolicy.parse(arguments[argumentIndex]);
                 continue;
             }
+            if (argument.equals("--" + P2P_OUTSTANDING_TOTE_WATERMARK)) {
+                ensureSingleton(seenSingletons, P2P_OUTSTANDING_TOTE_WATERMARK);
+                if (++argumentIndex >= arguments.length) {
+                    throw new IllegalArgumentException(
+                            "missing value for --" + P2P_OUTSTANDING_TOTE_WATERMARK);
+                }
+                p2pOutstandingToteWatermark = parsePositiveInt(
+                        arguments[argumentIndex], P2P_OUTSTANDING_TOTE_WATERMARK);
+                continue;
+            }
             if (!argument.startsWith("--")) {
                 throw new IllegalArgumentException("malformed option: " + argument);
             }
@@ -179,6 +197,10 @@ final class DspFullDayAnalysisCommandParser {
                 case SCHEDULER_POLICY -> {
                     ensureSingleton(seenSingletons, name);
                     schedulerPolicy = DspSchedulerPolicy.parse(value);
+                }
+                case P2P_OUTSTANDING_TOTE_WATERMARK -> {
+                    ensureSingleton(seenSingletons, name);
+                    p2pOutstandingToteWatermark = parsePositiveInt(value, name);
                 }
                 case CONFIG -> ensureSingleton(seenSingletons, name);
                 case PRODUCT_MASTER -> {
@@ -308,7 +330,8 @@ final class DspFullDayAnalysisCommandParser {
                 progressInterval,
                 Optional.ofNullable(serviceCentreSchedulePath),
                 stationProcessingOverrides,
-                schedulerPolicy);
+                schedulerPolicy,
+                p2pOutstandingToteWatermark);
     }
 
     private static DspFullDayStationProcessingOverrides stationOverrides(

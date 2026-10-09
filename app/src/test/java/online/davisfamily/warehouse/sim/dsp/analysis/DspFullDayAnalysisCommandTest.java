@@ -31,6 +31,17 @@ class DspFullDayAnalysisCommandTest {
         var parser = new DspFullDayAnalysisCommandParser();
         var baseline = parser.parse(arguments(fixture));
         assertEquals(DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES, baseline.schedulerPolicy());
+        assertEquals(DspUncalibratedFullDayProfile.DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK,
+                baseline.p2pOutstandingToteWatermark());
+        var policyAwareCompatibility = new DspFullDayAnalysisCommand(
+                baseline.productMasterPath(), baseline.orderPaths(), baseline.outputPath(),
+                baseline.inspectionOutputPath(), baseline.operatingDate(), baseline.osrLowWaterMark(),
+                baseline.inboundInterval(), baseline.av02Capacity(), baseline.outboundBagCapacity(),
+                baseline.maximumPacksPerBag(), baseline.fixedStep(), baseline.stepsPerBatch(),
+                baseline.metricSampleInterval(), baseline.overwrite(), baseline.progressLogPath(),
+                baseline.progressInterval(), baseline.serviceCentreSchedulePath(),
+                baseline.stationProcessingOverrides(), baseline.schedulerPolicy());
+        assertEquals(baseline, policyAwareCompatibility);
         var stationAwareLegacy = new DspFullDayAnalysisCommand(
                 baseline.productMasterPath(),
                 baseline.orderPaths(),
@@ -71,6 +82,14 @@ class DspFullDayAnalysisCommandTest {
                 baseline.serviceCentreSchedulePath(),
                 baseline.stationProcessingOverrides(),
                 null));
+        assertThrows(IllegalArgumentException.class, () -> new DspFullDayAnalysisCommand(
+                baseline.productMasterPath(), baseline.orderPaths(), baseline.outputPath(),
+                baseline.inspectionOutputPath(), baseline.operatingDate(), baseline.osrLowWaterMark(),
+                baseline.inboundInterval(), baseline.av02Capacity(), baseline.outboundBagCapacity(),
+                baseline.maximumPacksPerBag(), baseline.fixedStep(), baseline.stepsPerBatch(),
+                baseline.metricSampleInterval(), baseline.overwrite(), baseline.progressLogPath(),
+                baseline.progressInterval(), baseline.serviceCentreSchedulePath(),
+                baseline.stationProcessingOverrides(), baseline.schedulerPolicy(), 0));
         Path config = directory.resolve("policy.json");
         for (DspSchedulerPolicy selected : DspSchedulerPolicy.values()) {
             assertEquals(selected, parser.parse(arguments(fixture,
@@ -87,6 +106,72 @@ class DspFullDayAnalysisCommandTest {
                         "--scheduler-policy", override.name(), "--config=" + config}).schedulerPolicy());
             }
         }
+    }
+
+    @Test
+    void shouldResolveP2pOutstandingWatermarkDefaultsJsonCliPrecedenceAndBounds(
+            @TempDir Path directory) throws Exception {
+        Fixture fixture = fixture(directory);
+        DspFullDayAnalysisCommandParser parser = new DspFullDayAnalysisCommandParser();
+        DspFullDayAnalysisCommand baseline = parser.parse(arguments(fixture));
+        assertEquals(8, baseline.p2pOutstandingToteWatermark());
+        assertEquals(8, DspFullDayAnalysisMain.profile(baseline).p2pOutstandingToteWatermark());
+
+        Path config = directory.resolve("watermark.json");
+        Files.writeString(config, stationConfig(fixture, "\"p2pOutstandingToteWatermark\": 13"));
+        assertEquals(13, parser.parse(new String[] {"--config=" + config})
+                .p2pOutstandingToteWatermark());
+        assertEquals(5, parser.parse(new String[] {"--config=" + config,
+                "--p2p-outstanding-tote-watermark=5"}).p2pOutstandingToteWatermark());
+        assertEquals(6, parser.parse(new String[] {"--config=" + config,
+                "--p2p-outstanding-tote-watermark", "6"}).p2pOutstandingToteWatermark());
+        assertEquals(1, parser.parse(arguments(fixture,
+                "--p2p-outstanding-tote-watermark=1")).p2pOutstandingToteWatermark());
+        assertEquals(Integer.MAX_VALUE, parser.parse(arguments(fixture,
+                "--p2p-outstanding-tote-watermark", Integer.toString(Integer.MAX_VALUE)))
+                        .p2pOutstandingToteWatermark());
+
+        Files.writeString(config, stationConfig(fixture,
+                "\"p2pOutstandingToteWatermark\": " + Integer.MAX_VALUE));
+        assertEquals(Integer.MAX_VALUE, parser.parse(new String[] {"--config=" + config})
+                .p2pOutstandingToteWatermark());
+
+        for (String[] duplicate : List.of(
+                new String[] {"--config=" + config, "--p2p-outstanding-tote-watermark=1",
+                        "--p2p-outstanding-tote-watermark", "2"},
+                new String[] {"--config=" + config, "--p2p-outstanding-tote-watermark", "2",
+                        "--p2p-outstanding-tote-watermark=1"})) {
+            assertThrows(IllegalArgumentException.class, () -> parser.parse(duplicate));
+        }
+
+        var profile = DspFullDayAnalysisMain.profile(parser.parse(new String[] {
+                "--config=" + config, "--p2p-outstanding-tote-watermark=17"}));
+        assertEquals(17, profile.p2pOutstandingToteWatermark());
+    }
+
+    @Test
+    void shouldRejectInvalidP2pOutstandingWatermarksBeforeCliOverride(@TempDir Path directory)
+            throws Exception {
+        Fixture fixture = fixture(directory);
+        DspFullDayAnalysisCommandParser parser = new DspFullDayAnalysisCommandParser();
+        Path config = directory.resolve("invalid-watermark.json");
+        for (String invalid : List.of("null", "\"8\"", "true", "[]", "{}", "1.5",
+                "2147483648", "-2147483649", "0", "-1")) {
+            Files.writeString(config, stationConfig(fixture,
+                    "\"p2pOutstandingToteWatermark\": " + invalid));
+            assertThrows(IllegalArgumentException.class, () -> parser.parse(new String[] {
+                    "--config=" + config, "--p2p-outstanding-tote-watermark=1"}), invalid);
+        }
+        for (String invalid : List.of("0", "-1", "1.5", "2147483648", "not-a-number")) {
+            assertThrows(IllegalArgumentException.class, () -> parser.parse(arguments(fixture,
+                    "--p2p-outstanding-tote-watermark=" + invalid)), invalid);
+            assertThrows(IllegalArgumentException.class, () -> parser.parse(arguments(fixture,
+                    "--p2p-outstanding-tote-watermark", invalid)), invalid);
+        }
+        assertThrows(IllegalArgumentException.class, () -> parser.parse(arguments(fixture,
+                "--p2p-outstanding-tote-watermark")));
+        assertThrows(IllegalArgumentException.class, () -> parser.parse(arguments(fixture,
+                "--p2p-outstanding-tote-watermark", "")));
     }
 
     @Test
@@ -153,15 +238,17 @@ class DspFullDayAnalysisCommandTest {
         Path config = directory.resolve("policy.json");
         Files.writeString(config, withSchedule(stationConfig(fixture, """
                 "schedulerPolicy": "WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER",
+                "p2pOutstandingToteWatermark": 13,
                 "thirdParty": {"processingDurationSeconds": 20},
                 "adapting": {"storeDurationSeconds":60,"collectDurationSeconds":10,
                 "processingPositionsPerBench":3,"waitingCapacityPerBench":3,
                 "benchIds":["bench-1","bench-2","bench-3","bench-4","bench-5","bench-6"]}
                 """), jsonPath(schedule)));
         var command = new DspFullDayAnalysisCommandParser().parse(new String[] {
-                "--config=" + config});
+                "--config=" + config, "--p2p-outstanding-tote-watermark=17"});
         var profile = DspFullDayAnalysisMain.profile(command);
         assertEquals(DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER, profile.schedulerPolicy());
+        assertEquals(17, profile.p2pOutstandingToteWatermark());
         assertEquals(6, profile.adaptingBenchDefinitions().size());
         assertTrue(profile.adaptingBenchDefinitions().stream().allMatch(bench ->
                 bench.storeDurationSeconds() == 60d && bench.collectDurationSeconds() == 10d

@@ -28,7 +28,37 @@ record DspFullDayAnalysisCommand(
         Duration progressInterval,
         Optional<Path> serviceCentreSchedulePath,
         DspFullDayStationProcessingOverrides stationProcessingOverrides,
-        DspSchedulerPolicy schedulerPolicy) {
+        DspSchedulerPolicy schedulerPolicy,
+        int p2pOutstandingToteWatermark) {
+
+    /** Compatibility constructor retaining the prior policy-aware command shape. */
+    DspFullDayAnalysisCommand(
+            Path productMasterPath,
+            List<Path> orderPaths,
+            Path outputPath,
+            Optional<Path> inspectionOutputPath,
+            LocalDate operatingDate,
+            int osrLowWaterMark,
+            Duration inboundInterval,
+            int av02Capacity,
+            int outboundBagCapacity,
+            int maximumPacksPerBag,
+            Duration fixedStep,
+            int stepsPerBatch,
+            Duration metricSampleInterval,
+            boolean overwrite,
+            Optional<Path> progressLogPath,
+            Duration progressInterval,
+            Optional<Path> serviceCentreSchedulePath,
+            DspFullDayStationProcessingOverrides stationProcessingOverrides,
+            DspSchedulerPolicy schedulerPolicy) {
+        this(productMasterPath, orderPaths, outputPath, inspectionOutputPath, operatingDate,
+                osrLowWaterMark, inboundInterval, av02Capacity, outboundBagCapacity,
+                maximumPacksPerBag, fixedStep, stepsPerBatch, metricSampleInterval, overwrite,
+                progressLogPath, progressInterval, serviceCentreSchedulePath,
+                stationProcessingOverrides, schedulerPolicy,
+                DspUncalibratedFullDayProfile.DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK);
+    }
 
     /** Compatibility constructor retaining the deadline-aware policy set. */
     DspFullDayAnalysisCommand(
@@ -69,7 +99,8 @@ record DspFullDayAnalysisCommand(
                 progressInterval,
                 serviceCentreSchedulePath,
                 stationProcessingOverrides,
-                DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
+                DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES,
+                DspUncalibratedFullDayProfile.DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK);
     }
 
     DspFullDayAnalysisCommand(
@@ -113,6 +144,9 @@ record DspFullDayAnalysisCommand(
                 || metricSampleInterval.isZero() || metricSampleInterval.isNegative()
                 || progressInterval.isZero() || progressInterval.isNegative()) {
             throw new IllegalArgumentException("command numeric values must be positive or nonnegative");
+        }
+        if (p2pOutstandingToteWatermark < 1) {
+            throw new IllegalArgumentException("p2pOutstandingToteWatermark must be positive");
         }
         orderPaths = List.copyOf(orderPaths);
     }

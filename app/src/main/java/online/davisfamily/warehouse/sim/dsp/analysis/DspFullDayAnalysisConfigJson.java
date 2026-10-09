@@ -25,7 +25,8 @@ record DspFullDayAnalysisConfigJson(
         String serviceCentreSchedule,
         ThirdPartyJson thirdParty,
         AdaptingJson adapting,
-        String schedulerPolicy) {
+        String schedulerPolicy,
+        Integer p2pOutstandingToteWatermark) {
 
     DspFullDayAnalysisConfigJson {
         if (orders != null) {

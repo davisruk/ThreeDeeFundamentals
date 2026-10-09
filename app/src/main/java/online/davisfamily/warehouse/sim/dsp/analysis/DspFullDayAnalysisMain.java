@@ -100,7 +100,8 @@ public final class DspFullDayAnalysisMain {
                 baseline.p2pLineDefinitions(),
                 baseline.prlCountPerLine(),
                 timetable,
-                command.schedulerPolicy());
+                command.schedulerPolicy(),
+                command.p2pOutstandingToteWatermark());
     }
 
     private static List<AdaptingBenchDefinition> adaptingDefinitions(

@@ -56,7 +56,40 @@ public record DspUncalibratedFullDayProfile(
         List<P2pLineDefinition> p2pLineDefinitions,
         int prlCountPerLine,
         DspServiceCentreTimetable timetable,
-        DspSchedulerPolicy schedulerPolicy) {
+        DspSchedulerPolicy schedulerPolicy,
+        int p2pOutstandingToteWatermark) {
+
+    /** Compatibility constructor retaining the prior policy-aware profile shape. */
+    public DspUncalibratedFullDayProfile(
+            LocalDate operatingDate,
+            online.davisfamily.warehouse.sim.dsp.osr.OsrInventoryConfig osrInventoryConfig,
+            ServiceCentreSupplyConfig serviceCentreSupplyConfig,
+            FixedIntervalInboundToteArrivalPolicy inboundToteArrivalPolicy,
+            Av02AllocationConfig av02AllocationConfig,
+            P2pElasticAllocationConfig p2pElasticAllocationConfig,
+            OutboundToteConfig outboundToteConfig,
+            int maximumPacksPerBag,
+            Duration fixedStep,
+            int maximumStepsPerAdvance,
+            Duration metricSampleInterval,
+            double routeSpeedUnitsPerSecond,
+            QueueCapacities queueCapacities,
+            ThirdPartyAreaConfig thirdPartyAreaConfig,
+            AdaptingStorageConfig adaptingStorageConfig,
+            List<AdaptingBenchDefinition> adaptingBenchDefinitions,
+            P2pPlaceholderDurations p2pPlaceholderDurations,
+            List<P2pLineDefinition> p2pLineDefinitions,
+            int prlCountPerLine,
+            DspServiceCentreTimetable timetable,
+            DspSchedulerPolicy schedulerPolicy) {
+        this(operatingDate, osrInventoryConfig, serviceCentreSupplyConfig,
+                inboundToteArrivalPolicy, av02AllocationConfig, p2pElasticAllocationConfig,
+                outboundToteConfig, maximumPacksPerBag, fixedStep, maximumStepsPerAdvance,
+                metricSampleInterval, routeSpeedUnitsPerSecond, queueCapacities,
+                thirdPartyAreaConfig, adaptingStorageConfig, adaptingBenchDefinitions,
+                p2pPlaceholderDurations, p2pLineDefinitions, prlCountPerLine, timetable,
+                schedulerPolicy, DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK);
+    }
 
     /** Compatibility constructor retaining the deadline-aware policy set. */
     public DspUncalibratedFullDayProfile(
@@ -106,6 +139,7 @@ public record DspUncalibratedFullDayProfile(
 
     public static final String PROFILE_ID =
             P2pElasticAllocationSnapshot.DEADLINE_AWARE_ELASTIC_STICKY_LEASES;
+    public static final int DEFAULT_P2P_OUTSTANDING_TOTE_WATERMARK = 8;
     public static final String TIMING_CALIBRATION_STATUS = "UNCALIBRATED";
     public static final String COMPLETION_MILESTONE = "P2P_OUTPUT_CLOSED";
     public static final String SERVICE_CENTRE_SUPPLY_POLICY_ID =
@@ -121,6 +155,9 @@ public record DspUncalibratedFullDayProfile(
     public DspUncalibratedFullDayProfile {
         if (schedulerPolicy == null) {
             throw new IllegalArgumentException("schedulerPolicy must not be null");
+        }
+        if (p2pOutstandingToteWatermark < 1) {
+            throw new IllegalArgumentException("p2pOutstandingToteWatermark must be positive");
         }
         if (operatingDate == null) {
             throw new IllegalArgumentException("operatingDate must not be null");

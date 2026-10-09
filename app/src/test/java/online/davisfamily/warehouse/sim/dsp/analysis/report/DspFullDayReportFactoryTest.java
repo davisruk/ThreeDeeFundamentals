@@ -26,6 +26,8 @@ class DspFullDayReportFactoryTest {
         var legacy = selectedProfile(base, DspSchedulerPolicy.DEADLINE_AWARE_ELASTIC_STICKY_LEASES);
         var legacyReport = DspFullDayReportTestSupport.earlyCompletionReport(directory, legacy);
         assertEquals(legacy.schedulerPolicy().name(), legacyReport.configuration().get("schedulerPolicy"));
+        assertEquals(8, legacyReport.configuration().get("p2pOutstandingToteWatermark"));
+        assertEquals(false, legacyReport.configuration().get("p2pOutstandingToteWatermarkEnabled"));
         assertEquals(Map.of(
                 "serviceCentreSupply", "PRIORITY_ORDERED_OSR_LOW_WATERMARK",
                 "orderEligibility", "ORDER_WIDE_PREPARATION_READY_OVERLAP",
@@ -45,6 +47,8 @@ class DspFullDayReportFactoryTest {
         var configuration = (Map<?, ?>) projection.invoke(null, whole);
         assertEquals(whole.schedulerPolicy().name(), configuration.get("schedulerPolicy"));
         assertEquals(whole.schedulerPolicy().name(), configuration.get("profileId"));
+        assertEquals(8, configuration.get("p2pOutstandingToteWatermark"));
+        assertEquals(true, configuration.get("p2pOutstandingToteWatermarkEnabled"));
         assertEquals(Map.of(
                 "serviceCentreSupply", "PRIORITY_ORDERED_OSR_LOW_WATERMARK",
                 "orderEligibility", "WHOLE_SERVICE_CENTRE_ORDER_WIDE_PREPARATION_READY",

@@ -65,6 +65,7 @@ import online.davisfamily.warehouse.sim.dsp.transport.*;
 import online.davisfamily.warehouse.sim.dsp.transport.routing.*;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteToBagWorkPlanProvider;
+import online.davisfamily.warehouse.sim.totebag.control.TipperToteCompletedListener;
 
 /** Composition root for one complete, headless full-day DSP analysis runtime. */
 public final class DspFullDayAnalysisRuntimeFactory {
@@ -91,7 +92,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
         boolean wholeCentre = profile.schedulerPolicy() == DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER;
         Optional<WholeServiceCentreReleaseLedger> releaseLedger = wholeCentre
                 ? Optional.of(new WholeServiceCentreReleaseLedger(input.data(), profile.timetable(),
-                        profile.p2pLineDefinitions())) : Optional.empty();
+                        profile.p2pLineDefinitions(), profile.p2pOutstandingToteWatermark()))
+                : Optional.empty();
 
         List<AutoCloseable> closeables = new ArrayList<>();
         try {
@@ -257,6 +259,10 @@ public final class DspFullDayAnalysisRuntimeFactory {
                 RouteSegment terminal = topology.terminalSegments().get(definition.destination());
                 RouteSegment tipper = topology.tipperSegments().get(definition.destination());
                 P2pArrivalRouteBinding binding = new P2pArrivalRouteBinding(terminal, tipper);
+                TipperToteCompletedListener lineCompletionListener = wholeCentre
+                        ? new WholeServiceCentreP2pToteCompletedListener(
+                                definition.lineId(), releaseLedger.orElseThrow(), p2pCompletedListener)
+                        : p2pCompletedListener;
                 DspHeadlessP2pLineConfig lineConfig = new DspHeadlessP2pLineConfig(
                         definition,
                         queue,
@@ -274,7 +280,7 @@ public final class DspFullDayAnalysisRuntimeFactory {
                                 correlationAssignments::snapshot),
                         bagPlan,
                         outboundAllocator,
-                        p2pCompletedListener,
+                        lineCompletionListener,
                         durations,
                         packDispositionPolicy,
                         missingPackIdsProvider);
