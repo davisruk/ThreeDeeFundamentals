@@ -40,6 +40,7 @@ import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseRegistry;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pPackPathActivitySnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseLedger;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 
 class WholeServiceCentreP2pLineAllocationPolicyTest {
     private final WholeServiceCentreP2pLineAllocationPolicy policy = new WholeServiceCentreP2pLineAllocationPolicy();
@@ -104,6 +105,51 @@ class WholeServiceCentreP2pLineAllocationPolicyTest {
     }
 
     @Test
+    void shouldFilterCappedLinesBeforeApplyingTheExistingRanking() {
+        var leases = new P2pLineLeaseCatalogSnapshot(IntStream.range(0, 5).mapToObj(i ->
+                new P2pLineLeaseSnapshot(LINES.get(i), Optional.of("A"), P2pLineActivitySnapshot.idle(), List.of())).toList());
+        var base = releases(5, 1, Map.of(LINES.get(0).lineId(), 0, LINES.get(1).lineId(), 3,
+                LINES.get(2).lineId(), 1, LINES.get(3).lineId(), 2, LINES.get(4).lineId(), 4));
+        var allocation = plan(new WholeServiceCentreP2pAllocationPlanner(), leases,
+                withOutstanding(base, Map.of(LINES.get(0).lineId(), 2, LINES.get(2).lineId(), 1), 2));
+
+        assertEquals(LINES.get(2).lineId(), assigned(request("candidate", leases, allocation, true, admissions(leases, true))));
+    }
+
+    @Test
+    void shouldReportWatermarkWhenEveryOtherwiseEligibleLineIsCapped() {
+        var leases = idleCatalog();
+        var base = releases(1, 1, Map.of());
+        var counts = new LinkedHashMap<P2pLineId, Integer>();
+        LINES.forEach(line -> counts.put(line.lineId(), 1));
+        var allocation = plan(new WholeServiceCentreP2pAllocationPlanner(), leases,
+                withOutstanding(base, counts, 1));
+
+        var decision = policy.allocate(request("candidate", leases, allocation, true, admissions(leases, true)));
+
+        assertEquals(P2pLineAllocationBlockReason.OUTSTANDING_TOTE_WATERMARK,
+                decision.blockReason().orElseThrow());
+    }
+
+    @Test
+    void shouldKeepPinnedBagOnItsCappedLineRatherThanRetargetingIt() {
+        var leases = idleCatalog();
+        var base = releases(1, 1, Map.of());
+        var allocation = plan(new WholeServiceCentreP2pAllocationPlanner(), leases,
+                withOutstanding(base, Map.of(LINES.get(1).lineId(), 1), 1));
+        var pinned = new P2pLineAllocationRequest(new PhysicalToteId("candidate"), "A", List.of("pharmacy"), true,
+                leases, admissions(leases, true), Optional.of(allocation),
+                Set.of(new P2pBagCorrelationRequirement("bag", 2)),
+                new P2pBagCorrelationAssignmentSnapshot(List.of(
+                        new P2pBagCorrelationAssignment("bag", LINES.get(1).lineId()))));
+
+        var decision = policy.allocate(pinned);
+
+        assertEquals(P2pLineAllocationBlockReason.OUTSTANDING_TOTE_WATERMARK,
+                decision.blockReason().orElseThrow());
+    }
+
+    @Test
     void shouldRejectForeignNonquiescentAndInadmissibleLinesButNotGateEarlierRoutes() {
         var lines = new ArrayList<>(idleCatalog().lines());
         lines.set(0, new P2pLineLeaseSnapshot(LINES.get(0), Optional.of("B"), P2pLineActivitySnapshot.idle(), List.of()));
@@ -141,6 +187,18 @@ class WholeServiceCentreP2pLineAllocationPolicyTest {
 
     private P2pLineId assigned(P2pLineAllocationRequest request) {
         return policy.allocate(request).assignment().orElseThrow().lineId();
+    }
+
+    private static WholeServiceCentreReleaseSnapshot withOutstanding(
+            WholeServiceCentreReleaseSnapshot releases,
+            Map<P2pLineId, Integer> outstanding,
+            int watermark) {
+        var counts = new LinkedHashMap<P2pLineId, Integer>();
+        LINES.forEach(line -> counts.put(line.lineId(), outstanding.getOrDefault(line.lineId(), 0)));
+        return new WholeServiceCentreReleaseSnapshot(releases.version(), releases.orderedServiceCentreIds(),
+                releases.releaseServiceCentreId(), releases.unreleasedOsrToteCounts(),
+                releases.unreleasedEmptySheetCounts(), releases.committedP2pToteCounts(),
+                1, watermark, counts);
     }
 
     static P2pLineAllocationRequest request(String physical, P2pLineLeaseCatalogSnapshot leases,

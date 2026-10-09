@@ -32,6 +32,7 @@ public final class WholeServiceCentreP2pLineAllocationPolicy implements P2pLineA
         int selectedTier = Integer.MAX_VALUE;
         int selectedCount = Integer.MAX_VALUE;
         boolean selectedAffinity = false;
+        boolean watermarkBlocked = false;
         for (var line : request.lineCatalog().lines()) {
             var lineId = line.definition().lineId();
             if (!request.bagCorrelationsCompatibleWith(lineId)
@@ -41,6 +42,11 @@ public final class WholeServiceCentreP2pLineAllocationPolicy implements P2pLineA
             }
             if (line.leased() ? !line.serviceCentreId().filter(request.serviceCentreId()::equals).isPresent()
                     : !line.activity().quiescent() || !policy.availableUnleasedLineIds().contains(lineId)) {
+                continue;
+            }
+            if (policy.releases().outstandingToteCount(lineId)
+                    >= policy.releases().p2pOutstandingToteWatermark()) {
+                watermarkBlocked = true;
                 continue;
             }
             int tier = line.leased() ? 1 : 0;
@@ -55,7 +61,9 @@ public final class WholeServiceCentreP2pLineAllocationPolicy implements P2pLineA
             }
         }
         if (selected == null) {
-            return P2pLineAllocationDecision.blocked(P2pLineAllocationBlockReason.NO_COMPATIBLE_P2P_LINE);
+            return P2pLineAllocationDecision.blocked(watermarkBlocked
+                    ? P2pLineAllocationBlockReason.OUTSTANDING_TOTE_WATERMARK
+                    : P2pLineAllocationBlockReason.NO_COMPATIBLE_P2P_LINE);
         }
         return P2pLineAllocationDecision.assigned(new P2pPhysicalToteAssignment(
                 request.physicalToteId(), request.serviceCentreId(), selected.definition().lineId(),

@@ -64,6 +64,13 @@ public final class WholeServiceCentreReleaseCommandHandler implements SchedulerC
                 return SchedulerCommandApplicationResult.deferredResult(
                         "Proposed P2P line is no longer feeding-current or available unleased");
             }
+            int outstanding = policy.releases().outstandingToteCount(assignment.lineId());
+            int watermark = policy.releases().p2pOutstandingToteWatermark();
+            if (outstanding >= watermark) {
+                return SchedulerCommandApplicationResult.deferredResult(
+                        "OUTSTANDING_TOTE_WATERMARK: line " + assignment.lineId()
+                                + " has " + outstanding + " outstanding totes (limit " + watermark + ")");
+            }
         }
         var result = delegate.apply(command);
         if (result == null) {

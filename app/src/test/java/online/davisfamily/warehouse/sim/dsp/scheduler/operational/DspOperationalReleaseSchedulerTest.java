@@ -327,6 +327,46 @@ class DspOperationalReleaseSchedulerTest {
     }
 
     @Test
+    void shouldPropagateOutstandingWatermarkAsP2pAllocationBlockReason() {
+        var candidate = candidate(
+                "capped-tote",
+                logicalState("capped-order", 1, OrderType.FULL_PACK, "sc-1", 999,
+                        DspOrderLineType.FULL_PACK, p2pRoute()),
+                1, OsrProcessingReleaseAvailability.AVAILABLE, Optional.empty());
+        var firstLine = leasedLine("line-1", "sc-1", Optional.empty());
+        var secondLine = leasedLine("line-2", "sc-1", Optional.empty());
+        var leases = new P2pLineLeaseCatalogSnapshot(List.of(firstLine, secondLine));
+        var lineIds = List.of(firstLine.definition().lineId(), secondLine.definition().lineId());
+        var committed = Map.of("sc-1", Map.of(lineIds.get(0), 1, lineIds.get(1), 1));
+        var releases = new WholeServiceCentreReleaseSnapshot(1, List.of("sc-1"), Optional.of("sc-1"),
+                Map.of("sc-1", 1), Map.of("sc-1", 0), committed,
+                1, 1, Map.of(lineIds.get(0), 1, lineIds.get(1), 1));
+        var allocation = new P2pElasticAllocationSnapshot(
+                DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name(),
+                P2pElasticAllocationCalibrationStatus.UNCALIBRATED,
+                LocalDateTime.of(2026, 8, 24, 6, 0), lineIds, 1, List.of(), List.of(),
+                Optional.of(new WholeServiceCentrePolicySnapshot(releases, Optional.of("sc-1"), List.of())));
+        var wholeScheduler = new DspOperationalReleaseScheduler(new OperationalDependencyReadinessPolicy(),
+                new OperationalRouteEntryAdmissionPolicy(), new PharmacyGroupedSourceSequenceRankingPolicy(),
+                new WholeServiceCentreP2pLineAllocationPolicy(), P2pBagCorrelationRequirementCatalog.empty(),
+                P2pBagCorrelationAssignmentSnapshot::empty, new WholeServiceCentreReleaseEligibilityPolicy());
+        var before = elasticSnapshot(List.of(candidate),
+                Map.of(StationType.P2P, openAdmission(StationType.P2P, "target-line-1")), Set.of(), leases,
+                Map.of(firstLine.definition().destination(), true, secondLine.definition().destination(), true),
+                allocation);
+
+        var evaluated = wholeScheduler.evaluate(before);
+
+        assertTrue(evaluated.releaseDecision().isEmpty());
+        var block = evaluated.blockedCandidates().getFirst().blocks().getFirst();
+        assertEquals(OperationalReleaseBlockType.P2P_LINE_ALLOCATION, block.type());
+        assertEquals("OUTSTANDING_TOTE_WATERMARK", block.reason());
+        assertSame(releases, before.elasticP2pAllocation().orElseThrow()
+                .wholeServiceCentrePolicy().orElseThrow().releases());
+        assertEquals(List.of(candidate), before.candidates());
+    }
+
+    @Test
     void shouldApplyElasticBudgetOnlyWhenElasticPolicyIsExplicitlyInjected() {
         DspOperationalReleaseCandidate candidate = candidate(
                 "tote-1",

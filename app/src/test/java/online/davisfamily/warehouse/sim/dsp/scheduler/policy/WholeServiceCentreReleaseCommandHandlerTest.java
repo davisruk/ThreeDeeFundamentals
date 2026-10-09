@@ -106,6 +106,53 @@ class WholeServiceCentreReleaseCommandHandlerTest {
         assertSame(before, fixture.releases.snapshot());
     }
 
+    @Test
+    void shouldDeferAStaleP2pProposalAtTheLiveWatermarkAndAllowItAfterTipperCompletion() {
+        var fixture = new Fixture(1);
+        var captured = fixture.allocation();
+        var staleProposal = fixture.av02CommandFor(captured);
+        assertEquals(fixture.lineIds.getFirst(), staleProposal.proposedP2pAssignment().orElseThrow().lineId());
+        assertEquals(0, captured.wholeServiceCentrePolicy().orElseThrow().releases()
+                .outstandingToteCount(fixture.lineIds.getFirst()));
+
+        assertTrue(fixture.handler.apply(fixture.osrCommand).applied());
+        var beforeDeferredAttempt = fixture.state();
+        int targetCallsBeforeDeferredAttempt = fixture.targetCalls;
+
+        var deferred = fixture.handler.apply(staleProposal);
+
+        assertTrue(deferred.deferred());
+        assertTrue(deferred.reason().startsWith("OUTSTANDING_TOTE_WATERMARK:"));
+        assertTrue(deferred.reason().contains("1 outstanding totes (limit 1)"));
+        assertEquals(targetCallsBeforeDeferredAttempt, fixture.targetCalls);
+        assertEquals(beforeDeferredAttempt, fixture.state());
+
+        fixture.releases.recordTippingCompleted(fixture.osrCommand.physicalToteId(), fixture.lineIds.getFirst());
+        assertTrue(fixture.handler.apply(staleProposal).applied());
+        assertEquals(targetCallsBeforeDeferredAttempt + 1, fixture.targetCalls);
+        assertEquals(1, fixture.releases.snapshot().outstandingToteCount(fixture.lineIds.getFirst()));
+        assertEquals(0, fixture.releases.snapshot().outstandingToteCount(fixture.lineIds.get(1)));
+    }
+
+    @Test
+    void shouldNotApplyTheP2pWatermarkToCurrentCentreNonP2pReleases() {
+        var fixture = new Fixture(1);
+        int[] delegateCalls = {0};
+        var nonP2pHandler = new WholeServiceCentreReleaseCommandHandler(command -> {
+            delegateCalls[0]++;
+            return SchedulerCommandApplicationResult.appliedResult();
+        }, fixture.releases, fixture::allocation);
+        var nonP2pCommand = new ReleasePhysicalToteFromOsrCommand(
+                fixture.osrCommand.physicalToteId(), fixture.osrCommand.orderSheetKey(), "104", "adapting",
+                Optional.empty());
+
+        assertTrue(nonP2pHandler.apply(nonP2pCommand).applied());
+
+        assertEquals(1, delegateCalls[0]);
+        assertEquals(0, fixture.releases.snapshot().outstandingToteCount(fixture.lineIds.getFirst()));
+        assertEquals(0, fixture.releases.snapshot().committedToteCount("104", fixture.lineIds.getFirst()));
+    }
+
     /** Unit boundary fixture: real inventory, lifecycle, lease and correlation committers. */
     private static final class Fixture {
         final List<P2pLineDefinition> lines = java.util.stream.IntStream.rangeClosed(1, 5)
@@ -130,6 +177,10 @@ class WholeServiceCentreReleaseCommandHandlerTest {
         int targetCalls;
 
         Fixture() {
+            this(Integer.MAX_VALUE);
+        }
+
+        Fixture(int watermark) {
             var current = order("current", "104", OrderType.FULL_PACK);
             var empty = order("empty", "104", OrderType.EMPTY);
             var future = order("future", "108", OrderType.FULL_PACK);
@@ -149,7 +200,7 @@ class WholeServiceCentreReleaseCommandHandlerTest {
             var data = new LoadedDspData(List.of(), List.of(current, empty, future), List.of(),
                     Set.of(), Set.of(), List.of(currentManifest, futureManifest), DspDatasetLoadReport.empty());
             var timetable = new DspServiceCentreTimetable(List.of(schedule("104", 999), schedule("108", 998)));
-            releases = new WholeServiceCentreReleaseLedger(data, timetable, lines);
+            releases = new WholeServiceCentreReleaseLedger(data, timetable, lines, watermark);
             var requirements = new P2pBagCorrelationRequirementCatalog(
                     Map.of(currentManifest.physicalToteId(), List.of(new P2pBagCorrelationRequirement("current", 1)),
                             futureManifest.physicalToteId(), List.of(new P2pBagCorrelationRequirement("future", 1))),
@@ -190,6 +241,18 @@ class WholeServiceCentreReleaseCommandHandlerTest {
             return new P2pElasticAllocationSnapshot(DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER.name(),
                     P2pElasticAllocationCalibrationStatus.UNCALIBRATED, clock().businessDateTime(), lineIds, 1,
                     List.of(), List.of(), Optional.of(new WholeServiceCentrePolicySnapshot(releases.snapshot(), cursor, available)));
+        }
+
+        ReleasePhysicalToteFromAv02Command av02CommandFor(P2pElasticAllocationSnapshot allocation) {
+            var lineCatalog = leases.snapshot(activities);
+            var targetAdmissions = lines.stream().collect(java.util.stream.Collectors.toMap(
+                    P2pLineDefinition::destination, ignored -> true));
+            var decision = new WholeServiceCentreP2pLineAllocationPolicy().allocate(new P2pLineAllocationRequest(
+                    av02Command.physicalToteId(), "104", List.of("pharmacy"), true, lineCatalog,
+                    targetAdmissions, Optional.of(allocation)));
+            var assignment = decision.assignment().orElseThrow();
+            return new ReleasePhysicalToteFromAv02Command(av02Command.physicalToteId(),
+                    av02Command.orderSheetKey(), "104", assignment.destination().targetId(), Optional.of(assignment));
         }
 
         List<Object> state() {

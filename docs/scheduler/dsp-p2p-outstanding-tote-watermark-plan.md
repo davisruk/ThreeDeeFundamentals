@@ -1,6 +1,6 @@
 # P2P Outstanding Inbound Tote Watermark Plan
 
-Status: implementation in progress; Step 1 is implemented and focused-verified,
+Status: implementation in progress; Steps 1-2 are implemented and focused-verified,
 later steps remain planned. Created 2026-10-09 against clean commit
 `cdce510` (`Wire live release guards and prove the production-shaped journey`).
 The planning-session initial `git status --short` was empty. Remain on the
@@ -720,5 +720,31 @@ $env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
 Result: `BUILD SUCCESSFUL`; both named test classes passed. Reviewed the complete
 Step 1 diff and ran `git diff --check`. Step 1 does not wire the configured finite
 limit into the full-day runtime or attach actual tipper callbacks; those remain
-unproven until their separately authorized later steps. Step 2 awaits separate
-user authorization.
+unproven until their separately authorized later steps.
+
+Step 2 completed 2026-10-09. Modified
+`M/p2p/lease/P2pLineAllocationBlockReason.java`,
+`M/p2p/allocation/WholeServiceCentreP2pLineAllocationPolicy.java`,
+`M/scheduler/policy/WholeServiceCentreReleaseCommandHandler.java`,
+`T/p2p/allocation/WholeServiceCentreP2pLineAllocationPolicyTest.java`,
+`T/scheduler/policy/WholeServiceCentreReleaseCommandHandlerTest.java`, and
+`T/scheduler/operational/DspOperationalReleaseSchedulerTest.java`. The allocator
+now filters capped otherwise-eligible lines before applying its existing ranking;
+the release guard checks the fresh shared ledger snapshot and defers capped stale
+proposals without retargeting. Tests cover capped ranking/pinning, stale proposal
+deferral and post-completion retry, non-P2P pass-through, and operational reason
+propagation.
+
+Implementation verification run exactly as specified:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.WholeServiceCentreP2pLineAllocationPolicyTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseCommandHandlerTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.operational.DspOperationalReleaseSchedulerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.DeadlineAwareElasticStickyP2pLineAllocationPolicyTest
+```
+
+Result: `BUILD SUCCESSFUL`; all four named test classes passed. Reviewed the
+complete Step 2 diff against Section 3 and ran `git diff --check`. Production
+configuration/activation and real tipper callback wiring remain unproven until
+Steps 3-4; the production-shaped cap/reopen journey and full-day performance
+validation remain unproven until Step 6 and user verification. Step 3 awaits
+separate user authorization.
