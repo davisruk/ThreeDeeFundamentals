@@ -11,7 +11,19 @@ Documentation closure is also a clean context boundary. When architecture review
 
 The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work. Clickable bin visuals remain deferred.
 
-### Current planning handoff (2026-10-08)
+### Current planning handoff (2026-10-09)
+
+The follow-on feature is planned in
+`docs/scheduler/dsp-p2p-outstanding-tote-watermark-plan.md`: a configurable,
+whole-centre-policy-only per-line inbound watermark, default 8, counting from
+committed P2P assignment to actual tipper completion, not downstream bag completion.
+Only plan creation is authorized; implementation steps require separate requests.
+The clean inspected baseline `cdce510` contains the corrected whole-centre Step 6
+source/wiring. The earlier planned/unimplemented and failed/uncommitted handoffs
+below are historical, not instructions to recreate that work or allocate future
+centres' EMPTY carriers. This does not certify prior review/closure or test results.
+
+### Earlier planning handoff (2026-10-08; historical)
 
 The next feature is defined by
 `docs/scheduler/dsp-whole-service-centre-drained-handover-plan.md`. It is planned,
@@ -50,6 +62,8 @@ Always read these documents before starting:
    `docs/scheduler/dsp-adapting-sheet-owned-bin-groups-plan.md`
 10. The active selectable whole-service-centre/drained-handover plan,
     `docs/scheduler/dsp-whole-service-centre-drained-handover-plan.md`
+11. The follow-on P2P outstanding-tote watermark plan,
+    `docs/scheduler/dsp-p2p-outstanding-tote-watermark-plan.md`
 
 The active plan should name any prerequisite requirements, completed plans, source files, or tests that must also be read for its current step. Read those named prerequisites before implementation. Do not load every historical plan by default.
 

@@ -25,7 +25,7 @@ import online.davisfamily.warehouse.sim.dsp.schedule.DspServiceCentreTimetable;
 import online.davisfamily.warehouse.sim.dsp.schedule.ServiceCentreSchedule;
 
 /**
- * Simulation-thread-owned accounting for the entire executable day's inbound departures.
+ * Simulation-thread-owned accounting for inbound departures and outstanding P2P totes.
  * Workers receive {@link WholeServiceCentreReleaseSnapshot}, never this mutable owner.
  */
 public final class WholeServiceCentreReleaseLedger {
@@ -33,26 +33,42 @@ public final class WholeServiceCentreReleaseLedger {
     private final Map<OrderSheetKey, Obligation> emptyObligations = new LinkedHashMap<>();
     private final Set<PhysicalToteId> committedAv02ToteIds = new HashSet<>();
     private final Map<P2pLineId, P2pLineDefinition> linesById = new LinkedHashMap<>();
+    private final Map<P2pLineId, Integer> outstandingP2pToteCounts = new LinkedHashMap<>();
+    private final Map<PhysicalToteId, TippingObligation> committedP2pToteObligations = new LinkedHashMap<>();
+    private final int p2pOutstandingToteWatermark;
     private final List<CentreCounts> orderedCentres;
     private final List<String> orderedServiceCentreIds;
     private int releaseCentreIndex;
     private long version;
+    private long outstandingVersion;
     private WholeServiceCentreReleaseSnapshot cachedSnapshot;
 
     public WholeServiceCentreReleaseLedger(
             LoadedDspData executableData,
             DspServiceCentreTimetable timetable,
             List<P2pLineDefinition> lineDefinitions) {
+        this(executableData, timetable, lineDefinitions, Integer.MAX_VALUE);
+    }
+
+    public WholeServiceCentreReleaseLedger(
+            LoadedDspData executableData,
+            DspServiceCentreTimetable timetable,
+            List<P2pLineDefinition> lineDefinitions,
+            int p2pOutstandingToteWatermark) {
         if (executableData == null || timetable == null
-                || lineDefinitions == null || lineDefinitions.isEmpty()) {
-            throw new IllegalArgumentException("executable data, timetable and configured lines are required");
+                || lineDefinitions == null || lineDefinitions.isEmpty()
+                || p2pOutstandingToteWatermark < 1) {
+            throw new IllegalArgumentException(
+                    "executable data, timetable, configured lines and a positive watermark are required");
         }
+        this.p2pOutstandingToteWatermark = p2pOutstandingToteWatermark;
         Set<OperationalRouteDestination> destinations = new HashSet<>();
         for (P2pLineDefinition line : lineDefinitions) {
             if (line == null || linesById.putIfAbsent(line.lineId(), line) != null
                     || !destinations.add(line.destination())) {
                 throw new IllegalArgumentException("configured line IDs and destinations must be distinct");
             }
+            outstandingP2pToteCounts.put(line.lineId(), 0);
         }
         Map<String, ServiceCentreSchedule> schedules = new LinkedHashMap<>();
         for (ServiceCentreSchedule schedule : timetable.serviceCentres()) {
@@ -117,7 +133,8 @@ public final class WholeServiceCentreReleaseLedger {
             cachedSnapshot = new WholeServiceCentreReleaseSnapshot(version, orderedServiceCentreIds,
                     releaseCentreIndex < orderedCentres.size()
                             ? Optional.of(orderedServiceCentreIds.get(releaseCentreIndex)) : Optional.empty(),
-                    osrCounts, emptyCounts, committedCounts);
+                    osrCounts, emptyCounts, committedCounts, outstandingVersion,
+                    p2pOutstandingToteWatermark, outstandingP2pToteCounts);
         }
         return cachedSnapshot;
     }
@@ -138,6 +155,11 @@ public final class WholeServiceCentreReleaseLedger {
         } catch (IllegalArgumentException exception) {
             throw new IllegalStateException("Invalid applied release: " + exception.getMessage(), exception);
         }
+        P2pPhysicalToteAssignment assignment = command.proposedP2pAssignment().orElse(null);
+        if (assignment != null
+                && outstandingP2pToteCounts.get(assignment.lineId()) >= p2pOutstandingToteWatermark) {
+            throw new IllegalStateException("Applied P2P release exceeds the outstanding tote watermark");
+        }
         obligation.released = true;
         CentreCounts centre = obligation.centre;
         if (command.source() == OperationalPhysicalToteSource.OSR) {
@@ -146,13 +168,46 @@ public final class WholeServiceCentreReleaseLedger {
             committedAv02ToteIds.add(command.physicalToteId());
             centre.emptyCount--;
         }
-        command.proposedP2pAssignment().ifPresent(assignment ->
-                centre.committedCounts.compute(assignment.lineId(), (line, count) -> count + 1));
+        if (assignment != null) {
+            centre.committedCounts.compute(assignment.lineId(), (line, count) -> count + 1);
+            outstandingP2pToteCounts.compute(assignment.lineId(), (line, count) -> count + 1);
+            committedP2pToteObligations.put(assignment.physicalToteId(), new TippingObligation(assignment));
+            outstandingVersion++;
+        }
         while (releaseCentreIndex < orderedCentres.size()
                 && orderedCentres.get(releaseCentreIndex).allReleased()) {
             releaseCentreIndex++;
         }
         version++;
+        cachedSnapshot = null;
+    }
+
+    /** Read-only validation for an actual terminal tipper callback. */
+    public void validateTippingCompletion(PhysicalToteId physicalToteId, P2pLineId lineId) {
+        if (physicalToteId == null || lineId == null) {
+            throw new IllegalArgumentException("tipping completion identities must not be null");
+        }
+        if (!linesById.containsKey(lineId)) {
+            throw new IllegalArgumentException("Unknown P2P line ID: " + lineId);
+        }
+        TippingObligation obligation = committedP2pToteObligations.get(physicalToteId);
+        if (obligation == null || obligation.completed || !obligation.assignment.lineId().equals(lineId)
+                || outstandingP2pToteCounts.get(lineId) <= 0 || outstandingVersion == Long.MAX_VALUE) {
+            throw new IllegalArgumentException("Tote does not identify an outstanding assignment for this P2P line");
+        }
+    }
+
+    /** Record a successful actual tipper completion exactly once. */
+    public void recordTippingCompleted(PhysicalToteId physicalToteId, P2pLineId lineId) {
+        try {
+            validateTippingCompletion(physicalToteId, lineId);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Invalid tipping completion: " + exception.getMessage(), exception);
+        }
+        TippingObligation obligation = committedP2pToteObligations.get(physicalToteId);
+        obligation.completed = true;
+        outstandingP2pToteCounts.compute(lineId, (line, count) -> count - 1);
+        outstandingVersion++;
         cachedSnapshot = null;
     }
 
@@ -194,8 +249,19 @@ public final class WholeServiceCentreReleaseLedger {
         if (line == null || !line.destination().equals(assignment.destination())
                 || !assignment.physicalToteId().equals(command.physicalToteId())
                 || !assignment.serviceCentreId().equals(command.serviceCentreId())
+                || committedP2pToteObligations.containsKey(assignment.physicalToteId())
+                || outstandingVersion == Long.MAX_VALUE
                 || obligation.centre.committedCounts.get(assignment.lineId()) == Integer.MAX_VALUE) {
             throw new IllegalArgumentException("P2P assignment must match the exact command and configured line");
+        }
+    }
+
+    private static final class TippingObligation {
+        private final P2pPhysicalToteAssignment assignment;
+        private boolean completed;
+
+        private TippingObligation(P2pPhysicalToteAssignment assignment) {
+            this.assignment = assignment;
         }
     }
 

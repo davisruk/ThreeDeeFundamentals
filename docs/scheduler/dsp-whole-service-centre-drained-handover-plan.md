@@ -1,5 +1,23 @@
 # Whole-Service-Centre Release and Drained-Line Handover Plan
 
+## Follow-on handoff (2026-10-09)
+
+The clean inspected source baseline `cdce510` contains the corrected Step 6
+runtime wiring, release guards, current-centre AV02 allocation gate and scenarios.
+The 2026-10-08 incomplete/uncommitted handoff below is preserved as history, not
+current worktree state or permission to restore future-centre EMPTY allocation.
+This planning-session inspection does not establish verification results or close
+this plan's separate architecture review/documentation steps.
+
+The user authorized a separate follow-on plan, not code changes:
+`docs/scheduler/dsp-p2p-outstanding-tote-watermark-plan.md`. Its default-8 configurable
+per-line limit counts committed P2P inbound assignments until actual tipper
+completion, excluding downstream unfinished work. It preserves this plan's release
+barrier, current-centre EMPTY allocation and fully drained-line handover. Read it
+after this plan; await explicit authorization for its selected implementation step.
+
+## Earlier status and session handoff (historical)
+
 Status: implementation in progress; Step 6 is incomplete and not ready for user
 verification. Created 2026-10-08 against clean commit
 `d8524b2` on `feature/dsp-full-day-analysis-metrics-inspection`. Remain on the

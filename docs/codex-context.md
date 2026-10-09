@@ -1,6 +1,23 @@
 # Codex Context
 
-## Current Feature Handoff (2026-10-08)
+## Current Feature Handoff (2026-10-09)
+
+The next separately authorized implementation is defined by
+`docs/scheduler/dsp-p2p-outstanding-tote-watermark-plan.md`. Plan creation only is
+authorized. Follow `docs/codex-instructions.md` completely and its reading order,
+then the complete plan and selected step prerequisites. Default is 8 outstanding
+inbound totes per line, configurable, for the whole-centre policy only. Count
+committed P2P assignments until actual tipper completion; exclude subsequent
+unfinished PRL/PCR/bag work. Preserve FIFO, bag pins and fully drained handover.
+
+The inspected clean baseline `cdce510` contains corrected whole-centre Step 6
+source/wiring and current-centre AV02 allocation gating. Earlier planned or
+failed/uncommitted status below and in the whole-centre plan is historical; do not
+recreate that work. No tests ran in this planning session, and prior review/closure
+is not certified. Watermark performance/calibration and full-day completion are
+unproven. PRL-saturation remedies are deferred, not part of this feature.
+
+## Earlier Feature Handoff (2026-10-08; historical)
 
 The next user-selected work is planned in
 `docs/scheduler/dsp-whole-service-centre-drained-handover-plan.md`; no implementation

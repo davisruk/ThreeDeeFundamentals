@@ -48,6 +48,138 @@ class WholeServiceCentreReleaseLedgerTest {
             schedule("Y", 997), schedule("A", 998)));
 
     @Test
+    void shouldCountCommittedP2pAssignmentsUntilOneExactTippingCompletion() {
+        var first = order("first", 1, "Z", OrderType.FULL_PACK);
+        var second = order("second", 1, "Z", OrderType.FULL_PACK);
+        var third = order("third", 1, "Z", OrderType.FULL_PACK);
+        var firstManifest = manifest("physical-first", first);
+        var secondManifest = manifest("physical-second", second);
+        var thirdManifest = manifest("physical-third", third);
+        var line = LINES.get(0);
+        var ledger = ledger(List.of(first, second, third),
+                List.of(firstManifest, secondManifest, thirdManifest), 2);
+
+        var initial = ledger.snapshot();
+        assertEquals(0, initial.outstandingVersion());
+        assertEquals(2, initial.p2pOutstandingToteWatermark());
+        assertEquals(List.of("line-1", "line-2", "line-3", "line-4", "line-5"),
+                initial.outstandingP2pToteCounts().keySet().stream().map(P2pLineId::value).toList());
+        for (P2pLineDefinition configuredLine : LINES) {
+            assertEquals(0, initial.outstandingToteCount(configuredLine.lineId()));
+        }
+        assertSame(initial, ledger.snapshot());
+
+        var firstCommand = osr(firstManifest, line);
+        ledger.validateUnreleased(firstCommand);
+        assertSame(initial, ledger.snapshot());
+        recordSuccess(ledger, firstCommand);
+        recordSuccess(ledger, osr(secondManifest, line));
+        var atWatermark = ledger.snapshot();
+        assertEquals(2, atWatermark.version());
+        assertEquals(2, atWatermark.outstandingVersion());
+        assertEquals(2, atWatermark.outstandingToteCount(line.lineId()));
+        assertEquals(2, atWatermark.committedToteCount("Z", line.lineId()));
+
+        var thirdCommand = osr(thirdManifest, line);
+        ledger.validateUnreleased(thirdCommand); // A reached watermark is a deferral condition, not invalid input.
+        assertSame(atWatermark, ledger.snapshot());
+        assertThrows(IllegalStateException.class, () -> ledger.recordApplied(thirdCommand));
+        assertSame(atWatermark, ledger.snapshot());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.validateTippingCompletion(new PhysicalToteId("not-committed"), line.lineId()));
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.validateTippingCompletion(firstManifest.physicalToteId(), LINES.get(1).lineId()));
+        assertThrows(IllegalStateException.class,
+                () -> ledger.recordTippingCompleted(firstManifest.physicalToteId(), LINES.get(1).lineId()));
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.validateTippingCompletion(firstManifest.physicalToteId(), new P2pLineId("unknown")));
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.validateTippingCompletion(firstManifest.physicalToteId(), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.validateTippingCompletion(null, line.lineId()));
+        assertThrows(IllegalStateException.class,
+                () -> ledger.recordTippingCompleted(new PhysicalToteId("not-committed"), line.lineId()));
+        assertSame(atWatermark, ledger.snapshot());
+
+        ledger.validateTippingCompletion(firstManifest.physicalToteId(), line.lineId());
+        ledger.recordTippingCompleted(firstManifest.physicalToteId(), line.lineId());
+        var afterTip = ledger.snapshot();
+        assertNotSame(atWatermark, afterTip);
+        assertEquals(2, afterTip.version());
+        assertEquals(3, afterTip.outstandingVersion());
+        assertEquals(1, afterTip.outstandingToteCount(line.lineId()));
+        assertEquals(atWatermark.unreleasedOsrToteCounts(), afterTip.unreleasedOsrToteCounts());
+        assertEquals(atWatermark.unreleasedEmptySheetCounts(), afterTip.unreleasedEmptySheetCounts());
+        assertEquals(atWatermark.releaseServiceCentreId(), afterTip.releaseServiceCentreId());
+        assertEquals(atWatermark.committedP2pToteCounts(), afterTip.committedP2pToteCounts());
+        assertEquals(2, atWatermark.outstandingToteCount(line.lineId()));
+        assertSame(afterTip, ledger.snapshot());
+        assertThrows(IllegalArgumentException.class,
+                () -> ledger.validateTippingCompletion(firstManifest.physicalToteId(), line.lineId()));
+        assertThrows(IllegalStateException.class,
+                () -> ledger.recordTippingCompleted(firstManifest.physicalToteId(), line.lineId()));
+        assertSame(afterTip, ledger.snapshot());
+
+        recordSuccess(ledger, thirdCommand);
+        assertEquals(2, ledger.snapshot().outstandingToteCount(line.lineId()));
+        assertEquals(3, ledger.snapshot().version());
+        assertEquals(4, ledger.snapshot().outstandingVersion());
+        ledger.recordTippingCompleted(secondManifest.physicalToteId(), line.lineId());
+        ledger.recordTippingCompleted(thirdManifest.physicalToteId(), line.lineId());
+        assertEquals(0, ledger.snapshot().outstandingToteCount(line.lineId()));
+        assertEquals(3, ledger.snapshot().version());
+        assertEquals(6, ledger.snapshot().outstandingVersion());
+    }
+
+    @Test
+    void shouldCountAppliedAv02AssignmentsButNotStoreOrPredepartureValidation() {
+        var full = order("full", 1, "Z", OrderType.FULL_PACK);
+        var adapted = order("adapted", 1, "Z", OrderType.ADAPTED);
+        var empty = order("empty", 1, "Z", OrderType.EMPTY);
+        var fullManifest = manifest("physical-full", full);
+        var adaptedManifest = manifest("physical-adapted", adapted);
+        var ledger = ledger(List.of(full, adapted, empty), List.of(fullManifest, adaptedManifest), 2);
+        var line = LINES.get(1);
+
+        recordSuccess(ledger, new ReleasePhysicalToteFromOsrCommand(adaptedManifest.physicalToteId(),
+                adaptedManifest.orderSheetKey(), "Z", "adapting-1"));
+        assertEquals(1, ledger.snapshot().version());
+        assertEquals(0, ledger.snapshot().outstandingVersion());
+        assertEquals(0, ledger.snapshot().outstandingToteCount(line.lineId()));
+
+        var osrCommand = osr(fullManifest, line);
+        var beforeAssignment = ledger.snapshot();
+        ledger.validateUnreleased(osrCommand);
+        assertSame(beforeAssignment, ledger.snapshot());
+        recordSuccess(ledger, osrCommand);
+        assertEquals(1, ledger.snapshot().outstandingToteCount(line.lineId()));
+        assertEquals(1, ledger.snapshot().outstandingVersion());
+
+        var av02Command = av02(empty, "av02-generated-1", line);
+        var beforeDeparture = ledger.snapshot();
+        ledger.validateUnreleased(av02Command); // Logical allocation/proposal does not commit a departure.
+        assertSame(beforeDeparture, ledger.snapshot());
+        assertEquals(1, beforeDeparture.unreleasedEmptySheetCounts().get("Z"));
+        recordSuccess(ledger, av02Command);
+        assertEquals(2, ledger.snapshot().outstandingToteCount(line.lineId()));
+        assertEquals(2, ledger.snapshot().outstandingVersion());
+        assertEquals(3, ledger.snapshot().version());
+
+        var fresh = ledger(List.of(full, adapted, empty), List.of(fullManifest, adaptedManifest), 2);
+        assertEquals(0, fresh.snapshot().outstandingVersion());
+        assertEquals(0, fresh.snapshot().outstandingToteCount(line.lineId()));
+        assertEquals(2, ledger.snapshot().outstandingToteCount(line.lineId()));
+
+        ledger.recordTippingCompleted(new PhysicalToteId("av02-generated-1"), line.lineId());
+        ledger.recordTippingCompleted(fullManifest.physicalToteId(), line.lineId());
+        assertEquals(0, ledger.snapshot().outstandingToteCount(line.lineId()));
+        assertEquals(4, ledger.snapshot().outstandingVersion());
+        assertEquals(3, ledger.snapshot().version());
+        assertEquals(0, fresh.snapshot().outstandingToteCount(line.lineId()));
+    }
+
+    @Test
     void shouldCountTheWholeDayAndAdvanceOnlyAfterEverySourceObligationCommits() {
         var full = order("full", 1, "Z", OrderType.FULL_PACK);
         var adapted = order("adapted", 1, "Z", OrderType.ADAPTED);
@@ -65,6 +197,10 @@ class WholeServiceCentreReleaseLedgerTest {
                 List.of(bManifest, second, preparation, yManifest, first));
         var initial = ledger.snapshot();
         assertEquals(List.of("Z", "A", "B", "Y"), initial.orderedServiceCentreIds());
+        assertEquals(Integer.MAX_VALUE, initial.p2pOutstandingToteWatermark());
+        assertEquals(0, initial.outstandingVersion());
+        assertEquals(List.of("line-1", "line-2", "line-3", "line-4", "line-5"),
+                initial.outstandingP2pToteCounts().keySet().stream().map(P2pLineId::value).toList());
         assertEquals(Map.of("Z", 3, "A", 0, "B", 1, "Y", 1), initial.unreleasedOsrToteCounts());
         assertEquals(Map.of("Z", 1, "A", 1, "B", 0, "Y", 0), initial.unreleasedEmptySheetCounts());
         assertState(initial, 0, "Z", 3, 1);
@@ -255,6 +391,10 @@ class WholeServiceCentreReleaseLedgerTest {
                 List.of(LINES.get(0), new P2pLineDefinition(LINES.get(1).lineId(), LINES.get(0).destination())))) {
             assertThrows(IllegalArgumentException.class, () -> new WholeServiceCentreReleaseLedger(data, TIMETABLE, invalid));
         }
+        assertThrows(IllegalArgumentException.class,
+                () -> new WholeServiceCentreReleaseLedger(data, TIMETABLE, LINES, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new WholeServiceCentreReleaseLedger(data, TIMETABLE, LINES, -1));
         var empty = order("empty", 1, "Z", OrderType.EMPTY);
         var unknown = order("unknown", 1, "unknown", OrderType.FULL_PACK);
         var wrongPriority = new NotionalToteOrder(full.orderId(), full.notionalToteId(), "Z", 1,
@@ -316,7 +456,8 @@ class WholeServiceCentreReleaseLedgerTest {
         assertThrows(IllegalArgumentException.class, () -> snapshot.committedToteCount("Z", null));
         assertThrows(IllegalArgumentException.class, () -> snapshot.committedToteCount("Z", new P2pLineId("unknown")));
         assertEquals(List.of("version", "orderedServiceCentreIds", "releaseServiceCentreId",
-                "unreleasedOsrToteCounts", "unreleasedEmptySheetCounts", "committedP2pToteCounts"),
+                "unreleasedOsrToteCounts", "unreleasedEmptySheetCounts", "committedP2pToteCounts",
+                "outstandingVersion", "p2pOutstandingToteWatermark", "outstandingP2pToteCounts"),
                 Arrays.stream(WholeServiceCentreReleaseSnapshot.class.getRecordComponents())
                         .map(java.lang.reflect.RecordComponent::getName).toList());
     }
@@ -396,6 +537,11 @@ class WholeServiceCentreReleaseLedgerTest {
     private static WholeServiceCentreReleaseLedger ledger(List<NotionalToteOrder> orders,
             List<InboundToteManifest> manifests) {
         return new WholeServiceCentreReleaseLedger(data(orders, manifests), TIMETABLE, LINES);
+    }
+
+    private static WholeServiceCentreReleaseLedger ledger(List<NotionalToteOrder> orders,
+            List<InboundToteManifest> manifests, int watermark) {
+        return new WholeServiceCentreReleaseLedger(data(orders, manifests), TIMETABLE, LINES, watermark);
     }
 
     private static LoadedDspData data(List<NotionalToteOrder> orders, List<InboundToteManifest> manifests) {
