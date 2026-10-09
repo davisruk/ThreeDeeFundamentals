@@ -5,7 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -18,6 +21,9 @@ import online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisR
 import online.davisfamily.warehouse.sim.dsp.io.DspDatasetLoadReport;
 import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.io.UnresolvedProductLine;
+import online.davisfamily.warehouse.sim.dsp.outbound.P2pLineId;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentrePolicySnapshot;
+import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 
 class DspFullDayProgressFormatterTest {
 
@@ -35,16 +41,62 @@ class DspFullDayProgressFormatterTest {
             String wholeLine = before.get(indexOfPrefix(before, "WholeServiceCentre:"));
             assertTrue(wholeLine.contains("releaseCentre=104 eligibleCentre=104 unreleasedOsr=1 unreleasedEmpty=0"));
             assertTrue(wholeLine.contains("availableUnleasedLines=[dsp-p2p-line-1, dsp-p2p-line-2, dsp-p2p-line-3, dsp-p2p-line-4, dsp-p2p-line-5]"));
-            assertTrue(wholeLine.contains("deadlinesAndWorkloadCosts=diagnosticOnly"));
+            assertTrue(wholeLine.endsWith("p2pOutstandingToteWatermark=8 outstandingP2pTotes="
+                    + "{dsp-p2p-line-1=0, dsp-p2p-line-2=0, dsp-p2p-line-3=0, "
+                    + "dsp-p2p-line-4=0, dsp-p2p-line-5=0} deadlinesAndWorkloadCosts=diagnosticOnly"));
             var inspection = new DspFullDayInspectionSnapshot(captured, input, List.of(), List.of());
             var inspectionFormatter = new DspFullDayInspectionFormatter();
             assertTrue(inspectionFormatter.describe(inspection).contains(wholeLine));
             runtime.update(1d);
+            var updated = runtime.snapshot();
+            var updatedReleases = updated.elastic().allocation().wholeServiceCentrePolicy()
+                    .orElseThrow().releases();
+            assertEquals(1, updatedReleases.outstandingVersion());
+            assertEquals("108", updatedReleases.releaseServiceCentreId().orElseThrow());
+            assertEquals("104", updated.elastic().leases().lines().getFirst()
+                    .serviceCentreId().orElseThrow());
+            var updatedProgress = formatter.describe(DspFullDayProgressSnapshot.from(updated, input, profile));
+            String updatedWholeLine = updatedProgress.get(indexOfPrefix(updatedProgress, "WholeServiceCentre:"));
+            assertTrue(updatedWholeLine.endsWith("p2pOutstandingToteWatermark=8 outstandingP2pTotes="
+                    + "{dsp-p2p-line-1=1, dsp-p2p-line-2=0, dsp-p2p-line-3=0, "
+                    + "dsp-p2p-line-4=0, dsp-p2p-line-5=0} deadlinesAndWorkloadCosts=diagnosticOnly"));
+            assertTrue(inspectionFormatter.describe(new DspFullDayInspectionSnapshot(
+                    updated, input, List.of(), List.of())).contains(updatedWholeLine));
             assertEquals(before, formatter.describe(progress));
             assertTrue(inspectionFormatter.describe(inspection).contains(wholeLine));
             assertFalse(wholeLine.contains("order-104"));
             assertFalse(wholeLine.contains("tote-104"));
         }
+    }
+
+    @Test
+    void shouldRetainConfiguredCountOrderAndIncludeOldOwnersOutsideAvailableLines() {
+        var line5 = new P2pLineId("dsp-p2p-line-5");
+        var line2 = new P2pLineId("dsp-p2p-line-2");
+        var line4 = new P2pLineId("dsp-p2p-line-4");
+        var line1 = new P2pLineId("dsp-p2p-line-1");
+        var line3 = new P2pLineId("dsp-p2p-line-3");
+        Map<P2pLineId, Integer> counts = new LinkedHashMap<>();
+        counts.put(line5, 3);
+        counts.put(line2, 0);
+        counts.put(line4, 8);
+        counts.put(line1, 1);
+        counts.put(line3, 0);
+        Map<P2pLineId, Integer> zeros = new LinkedHashMap<>();
+        counts.keySet().forEach(line -> zeros.put(line, 0));
+        var releases = new WholeServiceCentreReleaseSnapshot(12, List.of("104", "108"),
+                Optional.of("108"), Map.of("104", 0, "108", 1), Map.of("104", 0, "108", 0),
+                Map.of("104", counts, "108", zeros), 12, 9, counts);
+        var policy = new WholeServiceCentrePolicySnapshot(releases, Optional.of("108"),
+                List.of(line2, line3));
+        String captured = DspFullDayProgressFormatter.wholeServiceCentreLine(policy);
+        assertEquals("WholeServiceCentre: releaseCentre=108 eligibleCentre=108 unreleasedOsr=1 "
+                + "unreleasedEmpty=0 availableUnleasedLines=[dsp-p2p-line-2, dsp-p2p-line-3] "
+                + "p2pOutstandingToteWatermark=9 outstandingP2pTotes={dsp-p2p-line-5=3, "
+                + "dsp-p2p-line-2=0, dsp-p2p-line-4=8, dsp-p2p-line-1=1, dsp-p2p-line-3=0} "
+                + "deadlinesAndWorkloadCosts=diagnosticOnly", captured);
+        counts.replaceAll((line, count) -> 0);
+        assertEquals(captured, DspFullDayProgressFormatter.wholeServiceCentreLine(policy));
     }
 
     @Test
@@ -114,6 +166,9 @@ class DspFullDayProgressFormatterTest {
                     first.get(remaining));
 
             String text = String.join("\n", first);
+            assertFalse(text.contains("WholeServiceCentre:"));
+            assertFalse(text.contains("p2pOutstandingToteWatermark="));
+            assertFalse(text.contains("outstandingP2pTotes="));
             assertFalse(text.contains("order-104"));
             assertFalse(text.contains("tote-104"));
             assertFalse(text.contains("unfinishedIdentities"));

@@ -786,6 +786,10 @@ public final class DspFullDayReportJsonWriter {
                 ObjectNode lines = committed.putObject(owner);
                 releases.committedP2pToteCounts().get(owner).forEach((line, count) -> lines.put(line.value(), count));
             });
+            counts.put("outstandingVersion", releases.outstandingVersion());
+            counts.put("p2pOutstandingToteWatermark", releases.p2pOutstandingToteWatermark());
+            ObjectNode outstanding = counts.putObject("outstandingP2pToteCounts");
+            releases.outstandingP2pToteCounts().forEach((line, count) -> outstanding.put(line.value(), count));
             node.put("deadlinesAndWorkloadCostsDiagnosticOnly", true);
         }, () -> node.set("wholeServiceCentrePolicy", NullNode.instance));
         ArrayNode issues = node.putArray("issues");

@@ -1,6 +1,6 @@
 # P2P Outstanding Inbound Tote Watermark Plan
 
-Status: implementation in progress; Steps 1-4 are implemented and focused-verified.
+Status: implementation in progress; Steps 1-5 are implemented and focused-verified.
 Later steps remain planned. Created 2026-10-09 against clean commit
 `cdce510` (`Wire live release guards and prove the production-shaped journey`).
 The planning-session initial `git status --short` was empty. Remain on the
@@ -827,3 +827,38 @@ production/test/document diff against Section 3; `git diff --check` passed.
 Step 4 requires no additional user verification and is now complete. Step 5 and
 later steps require separate authorization. Production-shaped Step 6 journeys,
 full regression, real-data completion and performance benefit remain unproven.
+
+Step 5 completed 2026-10-09. Initial `git status --short` was empty. Modified
+`M/analysis/report/DspFullDayProgressFormatter.java`,
+`M/analysis/report/DspFullDayReportJsonWriter.java`,
+`T/analysis/report/DspFullDayProgressFormatterTest.java`,
+`T/analysis/report/DspFullDayReportJsonWriterTest.java`, and
+`T/analysis/DspFullDayInspectionFormatterTest.java`, plus this execution
+record/status. Progress and inspection now share the watermark and every
+configured line's outstanding count in the existing whole-centre line. The JSON
+release node now includes outstanding version, watermark and string-keyed counts.
+Both projections read only captured immutable snapshots. Runtime accounting,
+metrics, sampling, inspection delegation and deadline-aware output shape remain
+unchanged; deferred NS and shared outbound-summary assertions were preserved.
+
+Tests cover ordered zero/nonzero counts, custom configured order and watermark,
+old-centre owners outside the available-line list, captured values surviving real
+runtime mutation, progress/inspection/facade parity, exact JSON versions/counts
+including final zeros after actual completion, and absent whole-centre diagnostics
+under the deadline-aware policy.
+
+Implementation verification run exactly as specified:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayProgressFormatterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.report.DspFullDayReportJsonWriterTest --tests online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayInspectionFormatterTest
+```
+
+The sandbox invocation could not access the user Gradle cache lock; the same
+command was rerun with approved cache access. Result: `BUILD SUCCESSFUL`; all
+15 tests passed with no failures, errors or skips. Reviewed the complete Step 5
+diff against the shared contracts; `git diff --check` passed. No additional user
+verification is required for Step 5. Step 6 and later steps await separate user
+authorization. Production-shaped Step 6 journeys, full regression, real-data
+completion and performance/calibration benefit remain unproven. No agents,
+commits, external configuration/output changes or later-step implementation.

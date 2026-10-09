@@ -175,6 +175,10 @@ public final class DspFullDayProgressFormatter {
                 + " unreleasedEmpty=" + current.map(releases.unreleasedEmptySheetCounts()::get).orElse(0)
                 + " availableUnleasedLines=" + policy.availableUnleasedLineIds().stream()
                         .map(line -> line.value()).toList()
+                + " p2pOutstandingToteWatermark=" + releases.p2pOutstandingToteWatermark()
+                + " outstandingP2pTotes=" + releases.outstandingP2pToteCounts().entrySet().stream()
+                        .map(entry -> entry.getKey().value() + "=" + entry.getValue())
+                        .collect(Collectors.joining(", ", "{", "}"))
                 + " deadlinesAndWorkloadCosts=diagnosticOnly";
     }
 

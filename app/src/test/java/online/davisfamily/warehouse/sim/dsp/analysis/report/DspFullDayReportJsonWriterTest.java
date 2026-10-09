@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.analysis.report;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -54,8 +56,40 @@ class DspFullDayReportJsonWriterTest {
             assertEquals(0, releases.at("/unreleasedEmptySheetCounts/104").intValue());
             assertEquals(1, releases.at("/committedP2pToteCounts/104/dsp-p2p-line-1").intValue());
             assertEquals(5, releases.at("/committedP2pToteCounts/104").size());
+            assertEquals(1, releases.get("outstandingVersion").longValue());
+            assertEquals(8, releases.get("p2pOutstandingToteWatermark").intValue());
+            assertOutstandingCounts(releases.get("outstandingP2pToteCounts"), 1);
             runtime.update(1d);
             assertArrayEquals(captured, writer.serialize(report));
+        }
+    }
+
+    @Test
+    void shouldSerializeEveryZeroCountAfterActualWholeCentreCompletion(@TempDir Path directory)
+            throws Exception {
+        var profile = online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayWholeServiceCentreScenarioTest.withPolicy(
+                DspFullDayReportTestSupport.profile(),
+                online.davisfamily.warehouse.sim.dsp.scheduler.policy.DspSchedulerPolicy.WHOLE_SERVICE_CENTRE_DRAINED_HANDOVER);
+        var report = DspFullDayReportTestSupport.earlyCompletionReport(directory, profile);
+        assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, report.state());
+        JsonNode root = new ObjectMapper().readTree(new DspFullDayReportJsonWriter().serialize(report));
+        var releases = root.at("/current/elastic/wholeServiceCentrePolicy/releases");
+        assertEquals(2, releases.get("version").longValue());
+        assertEquals(4, releases.get("outstandingVersion").longValue());
+        assertEquals(8, releases.get("p2pOutstandingToteWatermark").intValue());
+        assertOutstandingCounts(releases.get("outstandingP2pToteCounts"), 0);
+    }
+
+    private static void assertOutstandingCounts(JsonNode counts, int firstLineCount) {
+        assertTrue(counts.isObject());
+        List<String> keys = new ArrayList<>();
+        counts.fieldNames().forEachRemaining(keys::add);
+        assertEquals(List.of("dsp-p2p-line-1", "dsp-p2p-line-2", "dsp-p2p-line-3",
+                "dsp-p2p-line-4", "dsp-p2p-line-5"), keys);
+        for (int index = 1; index <= 5; index++) {
+            var count = counts.get("dsp-p2p-line-" + index);
+            assertTrue(count.isIntegralNumber());
+            assertEquals(index == 1 ? firstLineCount : 0, count.intValue());
         }
     }
 
@@ -125,6 +159,10 @@ class DspFullDayReportJsonWriterTest {
         assertEquals(0, root.get("nsCandidateInputLineCountByServiceCentreId").size());
         assertEquals("dsp-p2p-line-1", root.at("/p2pLines/0/lineId").textValue());
         assertTrue(root.at("/current/elastic/wholeServiceCentrePolicy").isNull());
+        assertFalse(root.at("/current/elastic").has("deadlinesAndWorkloadCostsDiagnosticOnly"));
+        assertTrue(root.at("/current/elastic/wholeServiceCentrePolicy/releases/outstandingVersion").isMissingNode());
+        assertTrue(root.at("/current/elastic/wholeServiceCentrePolicy/releases/p2pOutstandingToteWatermark").isMissingNode());
+        assertTrue(root.at("/current/elastic/wholeServiceCentrePolicy/releases/outstandingP2pToteCounts").isMissingNode());
         assertEquals(
                 new String(bytes, StandardCharsets.UTF_8),
                 writer.serializeToString(report));
