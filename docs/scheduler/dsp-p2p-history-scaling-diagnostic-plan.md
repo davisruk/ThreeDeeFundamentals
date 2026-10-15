@@ -445,3 +445,54 @@ volume, runtime contribution and the original slowdown's cause remain unproven.
 Step 2 requires a separate request; no runner, matrix, JFR or later-step work was
 performed. Final status contains this modified plan and the two new untracked
 fixture/test files only. No agents, staging or commits.
+
+### Step 2 implemented and focused-verified 2026-10-15; user matrix pending
+
+Initial `git status --short` was empty at `fc4b1f9` (`Synthetic fixtures and
+deterministic correctness proof`). Created
+`T/p2p/lease/P2pHistoryScalingProbe.java` and
+`T/p2p/lease/P2pHistoryScalingProbeTest.java`; added only the opt-in
+`dspP2pHistoryScaling` JavaExec task semantically to `app/build.gradle`, plus this
+execution record. The build file's existing mixed CRLF/LF endings were normalized
+to LF to avoid added carriage-return whitespace errors; its existing settings,
+plugins, dependencies and tasks are otherwise unchanged. No production or Step 1
+fixture/test changes.
+
+The runner implements the four fixed kernels, matrix/smoke settings, deterministic
+round rotation/reversal, discarded warm-up, volatile result consumption and
+checked primitive checksums. Fixture/index/factory setup and validation precede
+warm-up. Counter reads surround but are outside elapsed intervals; unavailable
+allocation/GC values remain NA. The cooperative 120-second budget is checked
+between setup units and kernel passes/constructions, with completed samples and
+partial status preserved on expiry. Reports are UTF-8, no-overwrite, written only
+after measurement, and omit incomplete-case summaries. The task uses test classes,
+the Java 21 launcher, root working directory and the specified heap arguments;
+it is not attached to normal build/check/test execution.
+
+Nine new tests cover strict parsing/direct config rejection, untouched existing
+output directories, one real smoke run (24 samples/eight summaries), exact report
+fields/counts/checksums, warm-up exclusion and known summary statistics, missing
+allocation/decreasing/unsupported counters, incomplete-case omission, fixed matrix
+settings/order without matrix execution, budget logic without waiting, and real
+kernel hit/miss/rejection results with unchanged fixture state.
+
+Implementation verification was run exactly as specified:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pHistoryScalingFixturesTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pHistoryScalingProbeTest
+```
+
+The sandbox invocation could not access the user Gradle cache lock. The identical
+command was rerun with approved cache access: `BUILD SUCCESSFUL`. JUnit XML
+confirmed 17 tests (eight fixture and nine probe), zero failures/errors/skips.
+No compile/test correction cycle was needed. Reviewed the complete new-file,
+Gradle (including line-ending-only changes) and execution-record diffs against
+Sections 2.3-2.4 and Step 2; tracked and both new-file whitespace checks passed.
+
+Step 2 awaits the three fresh-JVM user matrix runs in its User verification
+section. Standalone task launch, matrix completion within budget, timing/allocation
+trends and full-day attribution remain unproven. No new task invocation, matrix,
+full-day, JFR, full-suite, install or Step 3 analysis was performed. Final status
+contains the modified build file and this plan, and the two new untracked probe
+files only. No agents, staging or commits.

@@ -51,3 +51,16 @@ tasks.register('dspFullDayAnalysis', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'online.davisfamily.warehouse.sim.dsp.analysis.DspFullDayAnalysisMain'
 }
+
+tasks.register('dspP2pHistoryScaling', JavaExec) {
+    group = 'verification'
+    description = 'Run the opt-in synthetic P2P retained-history scaling diagnostic.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pHistoryScalingProbe'
+    workingDir = rootProject.projectDir
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    jvmArgs '-Xms256m', '-Xmx512m'
+}
