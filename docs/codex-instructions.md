@@ -11,7 +11,21 @@ Documentation closure is also a clean context boundary. When architecture review
 
 The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work. Clickable bin visuals remain deferred.
 
-### Current planning handoff (2026-10-09)
+### Current diagnostic planning handoff (2026-10-15)
+
+The separately authorized diagnostic is planned in
+`docs/scheduler/dsp-p2p-history-scaling-diagnostic-plan.md`. It defines a bounded,
+test-source synthetic retained-history experiment for P2P request creation and
+lease-catalog construction, not a production optimization or full-day replay.
+Plan creation only is authorized; each implementation/analysis step requires a
+separate request. The model runs only focused correctness verification; matrix
+timings are user-run. No agents, production fixes or JFR runs are authorized.
+The watermark plan records Steps 1-6 implemented and focused-verified; its broader
+Step 6 user verification and Steps 7-8 remain open. This diagnostic does not close
+those gates. The 2026-10-09 planning-only paragraph below is historical relative
+to the implemented source, not an instruction to recreate the watermark feature.
+
+### Earlier planning handoff (2026-10-09; historical)
 
 The follow-on feature is planned in
 `docs/scheduler/dsp-p2p-outstanding-tote-watermark-plan.md`: a configurable,
