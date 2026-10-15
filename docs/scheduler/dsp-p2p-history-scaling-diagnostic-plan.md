@@ -407,3 +407,41 @@ Planning review: read the complete new plan and entry-point diff; checked named
 existing paths, matrix/row arithmetic, setup/timing separation, failure handling,
 verification ownership and unchanged production boundaries. Tracked and new-file
 whitespace checks passed. This records document review, not probe execution.
+
+### Step 1 completed 2026-10-15
+
+Initial `git status --short` was empty at `3607bbf` (`History scaling plan`).
+Created only `T/p2p/lease/P2pHistoryScalingFixtures.java` and
+`T/p2p/lease/P2pHistoryScalingFixturesTest.java`, plus this execution record.
+No production, existing-test, build, handoff, external-file or probe changes.
+
+The immutable fixture uses the specified five ordered lines, H historical
+assignments plus 40 current assignments, alternating-source absent candidates,
+the real request factory and a line-ordered test-only immutable ID index.
+Eight new correctness tests cover all 12 history/pending pairs, exact IDs and
+distribution/activity, real request semantics and shared batch identities,
+exact-object indexed/linear lookup parity for every assigned ID and misses for
+every pending ID, assigned-ID rejection for both sources, collection immutability
+and defensive copies, fixture independence, invalid sizes and real catalog
+cross-line duplicate rejection. No timing assertions or simulated lifecycle
+completion were introduced.
+
+Implementation verification was run exactly as specified:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pHistoryScalingFixturesTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineAllocationRequestFactoryTest --tests online.davisfamily.warehouse.sim.dsp.p2p.lease.P2pLineLeaseRegistryTest
+```
+
+The sandbox invocation could not access the user Gradle cache lock. The same
+command was rerun with approved cache access: `BUILD SUCCESSFUL`. JUnit XML
+confirmed 19 tests (8 new fixture, 5 existing request-factory, 6 existing registry)
+with zero failures, errors or skips. No compile/test correction cycle was needed.
+Reviewed both complete new-file diffs and this record against Step 1 and Section
+2.2. `git diff --check` and both new-file no-index whitespace checks passed.
+
+No additional user verification is required for Step 1. Timing, allocation
+volume, runtime contribution and the original slowdown's cause remain unproven.
+Step 2 requires a separate request; no runner, matrix, JFR or later-step work was
+performed. Final status contains this modified plan and the two new untracked
+fixture/test files only. No agents, staging or commits.
