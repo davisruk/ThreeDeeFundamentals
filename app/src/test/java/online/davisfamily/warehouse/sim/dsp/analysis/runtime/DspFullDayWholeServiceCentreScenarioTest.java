@@ -211,6 +211,7 @@ public class DspFullDayWholeServiceCentreScenarioTest {
                 List.of(full("future-full", 1, "new-pharmacy")));
         var input = input(profile, List.of(sourceA, sourceB, first, lastEmpty, futureEmpty, futureFull), nsReport());
         try (var runtime = new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            DspFullDayP2pOutstandingToteWatermarkScenarioTest.assertOutstandingMatchesLifecycle(runtime);
             Set<String> activeStores = new LinkedHashSet<>();
             Set<String> completedStores = new LinkedHashSet<>();
             boolean futureSequenceBlocked = false;
@@ -222,12 +223,41 @@ public class DspFullDayWholeServiceCentreScenarioTest {
             boolean upstreamHeld = false;
             boolean emptyHeldCursor = false;
             boolean firstCollect = false;
+            Set<PhysicalToteId> countedEmptyIds = new LinkedHashSet<>();
+            Set<PhysicalToteId> completedEmptyIds = new LinkedHashSet<>();
             for (int step = 0; step < 2_000 && runtime.state() == DspFullDayRuntimeState.RUNNING; step++) {
                 boolean currentWasReleased = runtime.snapshot().elastic().allocation()
                         .wholeServiceCentrePolicy().orElseThrow().releases().allReleased("104");
                 runtime.update(1d);
                 var snapshot = runtime.snapshot();
                 var releases = snapshot.elastic().allocation().wholeServiceCentrePolicy().orElseThrow().releases();
+                assertEquals(8, releases.p2pOutstandingToteWatermark());
+                DspFullDayP2pOutstandingToteWatermarkScenarioTest.assertOutstandingMatchesLifecycle(runtime);
+                var assignments = snapshot.elastic().leases().lines().stream()
+                        .flatMap(line -> line.physicalAssignments().stream()).toList();
+                assertTrue(assignments.stream().noneMatch(assignment -> assignment.physicalToteId().equals(physicalId(sourceA))
+                        || assignment.physicalToteId().equals(physicalId(sourceB))), "STORE-only releases must never count as P2P assignments");
+                var lifecycle = runtime.lifecycleSnapshotSupplier().get();
+                for (var empty : List.of(lastEmpty, futureEmpty)) {
+                    snapshot.av02().findTote(empty.orderSheetKey()).ifPresent(tote -> {
+                        var assignment = assignments.stream().filter(value -> value.physicalToteId().equals(tote.physicalToteId())).findFirst();
+                        if (assignment.isPresent()) {
+                            assertFalse(input.data().inboundToteManifests().stream()
+                                    .anyMatch(manifest -> manifest.physicalToteId().equals(tote.physicalToteId())));
+                            if (lifecycle.totes().get(tote.physicalToteId()).state()
+                                    == online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleState.CONSUMED_AT_P2P) {
+                                completedEmptyIds.add(tote.physicalToteId());
+                            } else {
+                                countedEmptyIds.add(tote.physicalToteId());
+                                assertTrue(releases.outstandingToteCount(assignment.orElseThrow().lineId()) > 0);
+                            }
+                        } else {
+                            assertTrue(snapshot.av02().waitingTotes().stream()
+                                    .anyMatch(waiting -> waiting.physicalToteId().equals(tote.physicalToteId())),
+                                    "Allocated but uncommitted EMPTY remains waiting and excluded from the count");
+                        }
+                    });
+                }
                 var claims = snapshot.stationProcessing().activeClaims();
                 for (var source : List.of(sourceA, sourceB)) {
                     String id = physicalId(source).value();
@@ -312,6 +342,10 @@ public class DspFullDayWholeServiceCentreScenarioTest {
             assertTrue(firstCollect);
             var releases = runtime.snapshot().elastic().allocation().wholeServiceCentrePolicy().orElseThrow().releases();
             assertEquals(6, releases.version());
+            assertEquals(8, releases.outstandingVersion());
+            assertTrue(releases.outstandingP2pToteCounts().values().stream().allMatch(count -> count == 0));
+            assertEquals(2, countedEmptyIds.size(), "Both generated AV02 IDs must be counted before actual completion");
+            assertEquals(countedEmptyIds, completedEmptyIds);
             assertEquals(4, releases.committedP2pToteCounts().values().stream().flatMap(counts -> counts.values().stream()).mapToInt(Integer::intValue).sum(),
                     "Two non-P2P STORE releases count globally, not as P2P commitments");
             var pendingEmptyBag = input.bagPlan().plannedBags().stream()
@@ -425,7 +459,8 @@ public class DspFullDayWholeServiceCentreScenarioTest {
                 base.inboundToteArrivalPolicy(), base.av02AllocationConfig(), base.p2pElasticAllocationConfig(), base.outboundToteConfig(),
                 base.maximumPacksPerBag(), base.fixedStep(), base.maximumStepsPerAdvance(), base.metricSampleInterval(),
                 base.routeSpeedUnitsPerSecond(), base.queueCapacities(), base.thirdPartyAreaConfig(), base.adaptingStorageConfig(),
-                base.adaptingBenchDefinitions(), base.p2pPlaceholderDurations(), base.p2pLineDefinitions(), base.prlCountPerLine(), base.timetable(), policy);
+                base.adaptingBenchDefinitions(), base.p2pPlaceholderDurations(), base.p2pLineDefinitions(), base.prlCountPerLine(), base.timetable(), policy,
+                base.p2pOutstandingToteWatermark());
     }
 
     private static DspUncalibratedFullDayProfile journeyProfile(List<String> preload, Duration arrivalInterval) {

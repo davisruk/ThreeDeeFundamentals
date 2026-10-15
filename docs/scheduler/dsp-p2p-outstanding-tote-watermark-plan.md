@@ -1,7 +1,8 @@
 # P2P Outstanding Inbound Tote Watermark Plan
 
 Status: implementation in progress; Steps 1-5 are implemented and focused-verified.
-Later steps remain planned. Created 2026-10-09 against clean commit
+Step 6 is implemented and focused-verified, awaiting its user-run verification.
+Steps 7-8 remain planned. Created 2026-10-09 against clean commit
 `cdce510` (`Wire live release guards and prove the production-shaped journey`).
 The planning-session initial `git status --short` was empty. Remain on the
 user-selected branch; do not create, switch, merge or commit branches.
@@ -862,3 +863,54 @@ verification is required for Step 5. Step 6 and later steps await separate user
 authorization. Production-shaped Step 6 journeys, full regression, real-data
 completion and performance/calibration benefit remain unproven. No agents,
 commits, external configuration/output changes or later-step implementation.
+
+Step 6 implemented and focused-verified 2026-10-09; user verification pending.
+Initial `git status --short` was empty. Created
+`T/analysis/runtime/DspFullDayP2pOutstandingToteWatermarkScenarioTest.java` and
+modified `T/analysis/runtime/DspFullDayWholeServiceCentreScenarioTest.java`, plus
+this execution record/status. No production files changed. The new four tests
+exercise the specified cap-1 slow-bagging journey, cap-2 staggered handover,
+deadline-aware parity at configured 1/8, and fresh reconstruction after closing a
+partially advanced runtime. Each whole-centre update independently reconciles
+counts with captured assignment history and exact lifecycle records. All new
+journeys are bounded to 2,000 updates per runtime and use only real composition
+and `runtime.update(1d)`, with no manual completion/lease/queue mutation.
+
+Scenario A witnesses all five initial slots, no sixth commit before completion,
+reopening while bags remain pending, all inbound counts zero before the final
+bags finish, exact 12-bag/manifest output, and final versions 12/24. Scenario B
+witnesses line 5 alone at 108 while lines 1-4 still own 104, count 2 and a typed
+watermark wait before the first 108 tip completes, later use of other drained
+lines, preserved bag pins/output purity, exact output and final versions 17/34.
+The existing mixed STORE/COLLECT/EMPTY journey now checks the default-8 bound and
+oracle after each update, STORE-only exclusion, both generated AV02 IDs counted
+until actual completion, final zeros and outstanding version 8. Its existing
+release versions 4/6, first-COLLECT, overpick/PDC, deferred NS and output proofs
+remain unchanged. `withPolicy` now preserves the configured scalar.
+
+Implementation verification used only the specified command:
+
+```powershell
+$env:JAVA_HOME = 'C:\Java\jdk\21.0.7'
+.\gradlew test --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayP2pOutstandingToteWatermarkScenarioTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayWholeServiceCentreScenarioTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayAnalysisRuntimeFactoryTest --tests online.davisfamily.warehouse.sim.dsp.analysis.runtime.DspFullDayPdcPackDispositionTest --tests online.davisfamily.warehouse.sim.dsp.av02.DspAv02AllocationRuntimeControllerTest --tests online.davisfamily.warehouse.sim.dsp.av02.Av02AllocationControllerTest --tests online.davisfamily.warehouse.sim.dsp.p2p.allocation.WholeServiceCentreP2pLineAllocationPolicyTest --tests online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseCommandHandlerTest
+```
+
+The sandbox invocation could not access the user Gradle cache lock; the same
+command was rerun with approved cache access. Initial test result: 66 tests,
+1 failure in the new Scenario B assertion requiring every old output closure to
+be observed in an earlier update. Inspection confirmed that capacity closure in
+`OutboundToteAllocationController` runs before lease retention and operational
+release within the same update. One mechanical correction permits that existing
+same-update capacity/full-tote case while preserving the earlier-update check
+for explicit final closure and all consumed/allocated/pinned-owner assertions.
+Final result: `BUILD SUCCESSFUL`; all 66 tests in the eight named classes passed,
+with no failures, errors or skips. Reviewed the complete Step 6 diff, including
+the new untracked file, against the shared contracts. `git diff --check` and the
+new-file no-index whitespace check passed.
+
+Step 6 is not fully complete until the user-run full-suite, install and real-data
+commands in its User verification section pass and their results are supplied.
+Full-day completion, 104/108/116 throughput/distribution improvement and
+calibration remain unproven; sampled diagnostics alone do not prove between-sample
+safety. Steps 7-8 require separate authorization. No agents, commits, external
+configuration/output writes or later-step work were performed.
