@@ -11,7 +11,59 @@ Documentation closure is also a clean context boundary. When architecture review
 
 The current direction is to continue the domain-first DSP/OSR operational implementation while preserving the local machine-state architecture established in the tote-to-bag/P2P work. Clickable bin visuals remain deferred.
 
-### Current diagnostic planning handoff (2026-10-15)
+### Current operational-window correction handoff (2026-10-16)
+
+The user-authorized assessment and correction plan is
+`docs/scheduler/dsp-operational-window-streamlining-plan.md`. It is planned,
+not implemented; each numbered step requires a separate request. Read it after
+the mandatory documents below. It covers current/incoming DSP state, terminal
+retirement and aggregate accounting under both existing scheduler policies,
+not an indexing patch over retained history.
+
+The user explicitly rejects an audit/history requirement: once a physical
+lifecycle ends, count it and remove it from operational state and checks.
+This agreed direction supersedes older requirements for append-only assignment
+history, completed-ID guards and retained output mappings for hypothetical 32R.
+Those older documents describe the baseline until the correction is implemented;
+do not silently restore their retention behaviour. Preserve live ownership,
+FIFO, downstream work, unfinished exceptions and physical capacity checks.
+Any future audit facility is separate and out of scope, including audit threads.
+
+The corrected history probe results were interpreted from run-1,
+run-2-corrected and run-3-corrected at user-supplied revision `7d28bd0`.
+The new plan records their bounded conclusion and the wider source assessment;
+they do not prove the full-day pause's cause. No implementation, rerun or earlier
+watermark review/closure is authorized or certified by this planning handoff.
+No agents or production changes were used in the assessment.
+
+The 2026-10-16 hardening revision splits broad chapters into separately
+authorized execution leaves (2A, 2B, and so on); Section 4.0 is the execution
+order/verification authority. Step 1 remains the first implementation request.
+It specifies shared-ledger constructor migration, retirement ordering, schema 2
+and both empty/non-empty fixed-window proof. Do not execute a whole split chapter
+from a request for its number: execute its first remaining leaf and stop.
+
+For this correction the user explicitly overrides the default master branch
+base: a separately authorized correction branch starts from the current
+`feature/dsp-full-day-analysis-metrics-inspection` HEAD, not master. Do not merge
+the scheduler to master to obtain prerequisites. A successful user-run full-day
+simulation and explicit approval remain required before any master merge;
+structural verification/documentation closure does not satisfy that gate.
+Plan hardening does not authorize branch creation, production changes or tests.
+
+The later FIFO-feed correction supersedes this draft's preserved supply order:
+ascending filename defines physical warehouse-to-OSR arrivals, consumed by one
+pending FIFO across preload and ongoing admission. No ADAPTED-first or
+centre-priority physical reordering; OSR release scheduling remains independent.
+The user has confirmed retaining low-water requests in feed order and the
+configured overnight startup centres (currently 104/108), preloaded only from
+the FIFO prefix subject to capacity. Section 3.9 specifies the shared deque,
+bootstrap handoff and gated arrival state machine. Steps 5A-5D now separate
+filename/metadata order, preload, gated admission and inventory-history removal;
+the earlier planning block is resolved. Do not execute the withdrawn per-batch
+cursor step or infer a requirement to fill overnight OSR to a calibrated target.
+
+### Earlier diagnostic planning handoff (2026-10-15; historical)
 
 The separately authorized diagnostic is planned in
 `docs/scheduler/dsp-p2p-history-scaling-diagnostic-plan.md`. It defines a bounded,

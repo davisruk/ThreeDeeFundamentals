@@ -1,6 +1,49 @@
 # Codex Context
 
-## Current Feature Handoff (2026-10-09)
+## Current Feature Handoff (2026-10-16)
+
+The current assessment and separately executable correction is
+`docs/scheduler/dsp-operational-window-streamlining-plan.md`, planned but not
+implemented at baseline `7d28bd0`. It replaces historical retention with current
+and incoming operational work plus aggregate results. The user has explicitly
+removed the audit requirement: completed physical work must not participate in
+operational checks or remain as an archive/tombstone/index under another name.
+Older history/provenance-for-future-32R retention clauses below are superseded
+in that respect; immutable input provenance and genuinely live downstream work
+are distinct and remain needed. Future audit handling/threads are out of scope.
+
+The plan includes the assessed lifecycle, supply, station, world-object,
+machine, bag-pin, output and reporting dependencies, exact staged changes,
+focused tests, integrated boundedness proof and separate review/closure.
+Each step requires a new user request. No implementation has occurred, no
+full-day performance improvement is claimed, and previous watermark review
+and user-verification gates remain open. Follow codex-instructions' reading
+order and then this complete plan before implementing a selected step.
+
+The hardened plan's Section 4.0 defines individually authorized leaves for
+broad chapters; Step 1 is still first. Exact shared-ledger/API migration,
+terminal/correlation cleanup, supply startup membership, schema-2 deltas and
+non-empty-window scaling proof are specified there and in the shared contracts.
+No implementation is authorized by that revision.
+
+Correction branch base is the current unmerged scheduler branch
+`feature/dsp-full-day-analysis-metrics-inspection`, **not master**. Branch
+creation needs a separate request. The user does not authorize a scheduler
+merge to master before a successful full-day run; correction tests or closure
+must not be presented as satisfying that still-outstanding gate.
+
+The FIFO-feed clarification overrides the draft's preserved supply ordering:
+ascending filename is the physical arrival feed, with one pending FIFO shared
+by preload and ongoing admission. Type/centre priority cannot reorder arrival;
+release decisions remain independent. The user has confirmed low-water requests
+for successive centres in feed order and the configured overnight startup
+centres, subject to capacity and no prefix-skipping. Section 3.9 resolves the
+previous two choices and specifies ownership/state transitions; Steps 5A-5D
+divide input order, preload, gated admission and history removal. Near-full
+overnight occupancy is contextual, not a new calibrated target. Do not run the
+withdrawn per-batch cursor step. Implementation still needs separate requests.
+
+## Earlier Feature Handoff (2026-10-09; historical)
 
 The next separately authorized implementation is defined by
 `docs/scheduler/dsp-p2p-outstanding-tote-watermark-plan.md`. Plan creation only is
