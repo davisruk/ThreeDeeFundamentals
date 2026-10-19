@@ -2227,3 +2227,39 @@ current-state reporting and staged 5A-5D scope/commands/tests. This resolves the
 previous two OPEN decisions; it does not implement those steps. Initial status
 was the same three planning documents, all preserved. No source/config/test
 edits, tests, agents, branch operations, staging or commits in this revision.
+
+2026-10-19 Step 1 implemented and focused-verified. The user separately authorized
+creation/switching of `feature/dsp-operational-window-streamlining` from scheduler
+HEAD `3cb8acb`; the sole intervening commit since `7d28bd0` contains the three
+planning documents only. Initial `git status --short` was empty. Added only
+DspOperationalWorkLedger, DspOperationalWorkSnapshot and their new ledger test,
+plus this execution entry; no existing runtime owner or composition was changed.
+All edits used apply_patch. No agents, staging, commits or later leaves.
+
+Section 3.1's current/incoming maps, indexed source/target counts, exact AV02
+lookups, prevalidation boundaries, effective missing-pack replacement and scalar
+centre/line totals are implemented. Large immutable subviews are invalidated
+independently; bag accounting shares them unchanged. No ended-ID/history map,
+remaining-bag snapshot array, worker mutation or runtime wiring was introduced.
+
+Implementation verification (JDK 21.0.7, repository root):
+`./gradlew test --tests online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalWorkLedgerTest`
+passed: 9 tests, zero failures/errors/skips. The sandbox initially denied the
+Gradle wrapper cache lock; the same command succeeded with approved cache access.
+No compile/test corrective rerun was needed. Tests cover mixed/split input,
+STORE/P2P terminal validation, pending versus live EMPTY identity, current ID
+collision and reuse after retirement, bag/source lifetime separation, partial
+and fully missing accounting, rejected-transition no-mutation, frozen snapshots,
+subview identity reuse, zero rows and 1,000 small retirement cycles with a live
+sentinel. Package-private entry counts verify removal from every per-entity map;
+the final sentinel also completes and leaves those maps empty. Checked arithmetic
+was reviewed; numeric-limit overflow branches were not forced by synthetic state.
+
+Complete new-file diffs and this record were reviewed against Sections 3.1,
+3.5, 3.7, 4.0 and Step 1: no required Step 1 contract violation or unresolved
+architectural choice found. Tracked and explicit new-file whitespace checks
+found no whitespace errors (Git may warn about LF-to-CRLF conversion). Final
+change surface is this modified plan plus the three untracked new Java files.
+Runtime integration, full-day throughput and whole-feature boundedness remain
+UNPROVEN and outside this unwired slice. The successful-full-day/master-merge
+gate remains OPEN. Next authorized-on-request leaf is 2A; stop after Step 1.
