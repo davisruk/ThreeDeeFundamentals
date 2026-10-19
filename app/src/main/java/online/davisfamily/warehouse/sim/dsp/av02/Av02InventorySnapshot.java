@@ -14,6 +14,7 @@ public final class Av02InventorySnapshot {
     private final int capacity;
     private final List<Av02AllocatedTote> waitingTotes;
     private final List<Av02AllocatedTote> departedTotes;
+    private final long departedToteCount;
     private final Map<PhysicalToteId, Av02AllocatedTote> waitingTotesByPhysicalToteId;
     private final Map<OrderSheetKey, Av02AllocatedTote> waitingTotesByOrderSheetKey;
     private final Map<PhysicalToteId, Av02AllocatedTote> totesByPhysicalToteId;
@@ -23,12 +24,24 @@ public final class Av02InventorySnapshot {
             int capacity,
             List<Av02AllocatedTote> waitingTotes,
             List<Av02AllocatedTote> departedTotes) {
+        this(capacity, waitingTotes, departedTotes, copyAndRejectNull(departedTotes, "departedTotes").size());
+    }
+
+    public Av02InventorySnapshot(
+            int capacity,
+            List<Av02AllocatedTote> waitingTotes,
+            List<Av02AllocatedTote> departedTotes,
+            long departedToteCount) {
         if (capacity < 1) {
             throw new IllegalArgumentException("capacity must be >= 1");
         }
         this.capacity = capacity;
         this.waitingTotes = copyAndRejectNull(waitingTotes, "waitingTotes");
         this.departedTotes = copyAndRejectNull(departedTotes, "departedTotes");
+        if (departedToteCount < this.departedTotes.size()) {
+            throw new IllegalArgumentException("departedToteCount must cover retained departures");
+        }
+        this.departedToteCount = departedToteCount;
         if (this.waitingTotes.size() > capacity) {
             throw new IllegalArgumentException("waitingTotes must not exceed capacity");
         }
@@ -62,6 +75,10 @@ public final class Av02InventorySnapshot {
 
     public List<Av02AllocatedTote> departedTotes() {
         return departedTotes;
+    }
+
+    public long departedToteCount() {
+        return departedToteCount;
     }
 
     public int occupancy() {
@@ -109,13 +126,14 @@ public final class Av02InventorySnapshot {
             return false;
         }
         return capacity == that.capacity
+                && departedToteCount == that.departedToteCount
                 && waitingTotes.equals(that.waitingTotes)
                 && departedTotes.equals(that.departedTotes);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(capacity, waitingTotes, departedTotes);
+        return Objects.hash(capacity, waitingTotes, departedTotes, departedToteCount);
     }
 
     @Override

@@ -15,6 +15,8 @@ public final class OsrPhysicalInventory {
     private final Map<PhysicalToteId, InboundToteManifest> storedTotes = new LinkedHashMap<>();
     private final Set<PhysicalToteId> seenPhysicalToteIds = new LinkedHashSet<>();
     private final List<InboundToteManifest> departedTotes = new ArrayList<>();
+    private long departedToteCount;
+    private final Map<String, Long> departedToteCountsByServiceCentre = new LinkedHashMap<>();
     private OsrInventorySnapshot currentSnapshot;
 
     public OsrPhysicalInventory(OsrInventoryConfig config) {
@@ -22,7 +24,8 @@ public final class OsrPhysicalInventory {
             throw new IllegalArgumentException("config must not be null");
         }
         this.config = config;
-        this.currentSnapshot = new OsrInventorySnapshot(config.capacity(), List.of(), List.of());
+        this.currentSnapshot = new OsrInventorySnapshot(
+                config.capacity(), List.of(), List.of(), 0, Map.of());
     }
 
     public void store(InboundToteManifest manifest) {
@@ -66,7 +69,8 @@ public final class OsrPhysicalInventory {
         List<InboundToteManifest> nextStoredTotes = new ArrayList<>(storedTotes.values());
         nextStoredTotes.addAll(manifests);
         OsrInventorySnapshot nextSnapshot = new OsrInventorySnapshot(
-                config.capacity(), nextStoredTotes, departedTotes);
+                config.capacity(), nextStoredTotes, departedTotes,
+                departedToteCount, departedToteCountsByServiceCentre);
 
         for (InboundToteManifest manifest : manifests) {
             storedTotes.put(manifest.physicalToteId(), manifest);
@@ -85,15 +89,22 @@ public final class OsrPhysicalInventory {
                     "Physical tote is not currently stored in OSR: " + physicalToteId.value());
         }
 
+        long nextDepartedCount = Math.incrementExact(departedToteCount);
+        long nextCentreCount = Math.incrementExact(
+                departedToteCountsByServiceCentre.getOrDefault(manifest.serviceCentreId(), 0L));
+        Map<String, Long> nextCentreCounts = new LinkedHashMap<>(departedToteCountsByServiceCentre);
+        nextCentreCounts.put(manifest.serviceCentreId(), nextCentreCount);
         List<InboundToteManifest> nextStoredTotes = new ArrayList<>(storedTotes.values());
         nextStoredTotes.remove(manifest);
         List<InboundToteManifest> nextDepartedTotes = new ArrayList<>(departedTotes);
         nextDepartedTotes.add(manifest);
         OsrInventorySnapshot nextSnapshot = new OsrInventorySnapshot(
-                config.capacity(), nextStoredTotes, nextDepartedTotes);
+                config.capacity(), nextStoredTotes, nextDepartedTotes, nextDepartedCount, nextCentreCounts);
 
         storedTotes.remove(physicalToteId);
         departedTotes.add(manifest);
+        departedToteCount = nextDepartedCount;
+        departedToteCountsByServiceCentre.put(manifest.serviceCentreId(), nextCentreCount);
         currentSnapshot = nextSnapshot;
         return manifest;
     }

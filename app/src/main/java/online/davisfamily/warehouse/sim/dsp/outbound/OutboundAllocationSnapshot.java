@@ -17,11 +17,39 @@ public final class OutboundAllocationSnapshot {
     private final List<AllocatedOutboundBag> allocatedBags;
     private final Map<PhysicalToteId, OutboundToteSnapshot> totesById;
     private final Map<BagKey, AllocatedOutboundBag> allocatedBagsByKey;
+    private final long allocatedBagCount;
+    private final Map<P2pLineId, Long> allocatedBagCountsByLine;
+    private final Map<P2pLineId, Long> closedToteCountsByLine;
+    private final Map<String, Long> closedToteCountsByServiceCentre;
+    private final Map<String, Long> markedClosedToteCountsByServiceCentre;
+    private final Map<OutboundToteClosureReason, Long> closureCountsByReason;
 
     public OutboundAllocationSnapshot(
             Map<P2pLineId, OutboundToteSnapshot> openTotesByLine,
             List<OutboundToteSnapshot> closedTotes,
             List<AllocatedOutboundBag> allocatedBags) {
+        this(openTotesByLine, closedTotes, allocatedBags, fixtureCounts(openTotesByLine, closedTotes, allocatedBags));
+    }
+
+    private OutboundAllocationSnapshot(
+            Map<P2pLineId, OutboundToteSnapshot> openTotesByLine,
+            List<OutboundToteSnapshot> closedTotes,
+            List<AllocatedOutboundBag> allocatedBags,
+            FixtureCounts counts) {
+        this(openTotesByLine, closedTotes, allocatedBags, allocatedBags.size(), counts.allocatedByLine,
+                counts.closedByLine, counts.closedByCentre, counts.markedByCentre, counts.closedByReason);
+    }
+
+    public OutboundAllocationSnapshot(
+            Map<P2pLineId, OutboundToteSnapshot> openTotesByLine,
+            List<OutboundToteSnapshot> closedTotes,
+            List<AllocatedOutboundBag> allocatedBags,
+            long allocatedBagCount,
+            Map<P2pLineId, Long> allocatedBagCountsByLine,
+            Map<P2pLineId, Long> closedToteCountsByLine,
+            Map<String, Long> closedToteCountsByServiceCentre,
+            Map<String, Long> markedClosedToteCountsByServiceCentre,
+            Map<OutboundToteClosureReason, Long> closureCountsByReason) {
         if (openTotesByLine == null) {
             throw new IllegalArgumentException("openTotesByLine must not be null");
         }
@@ -73,6 +101,27 @@ public final class OutboundAllocationSnapshot {
         }
         this.totesById = Collections.unmodifiableMap(totesById);
         this.allocatedBagsByKey = Collections.unmodifiableMap(historyByBagKey);
+        if (allocatedBagCount < this.allocatedBags.size()) {
+            throw new IllegalArgumentException("allocatedBagCount must cover retained allocations");
+        }
+        this.allocatedBagCount = allocatedBagCount;
+        this.allocatedBagCountsByLine = immutableCounts(allocatedBagCountsByLine);
+        this.closedToteCountsByLine = immutableCounts(closedToteCountsByLine);
+        this.closedToteCountsByServiceCentre = immutableCounts(closedToteCountsByServiceCentre);
+        this.markedClosedToteCountsByServiceCentre = immutableCounts(markedClosedToteCountsByServiceCentre);
+        this.closureCountsByReason = immutableCounts(closureCountsByReason);
+        long closedCount = sum(this.closedToteCountsByLine);
+        if (sum(this.allocatedBagCountsByLine) != allocatedBagCount
+                || closedCount < this.closedTotes.size()
+                || sum(this.closureCountsByReason) != closedCount
+                || sum(this.closedToteCountsByServiceCentre) > closedCount) {
+            throw new IllegalArgumentException("Outbound counters must have consistent totals");
+        }
+        for (Map.Entry<String, Long> entry : this.markedClosedToteCountsByServiceCentre.entrySet()) {
+            if (entry.getValue() > this.closedToteCountsByServiceCentre.getOrDefault(entry.getKey(), 0L)) {
+                throw new IllegalArgumentException("Marked closed count must not exceed centre closed count");
+            }
+        }
     }
 
     public Map<P2pLineId, OutboundToteSnapshot> openTotesByLine() {
@@ -85,6 +134,30 @@ public final class OutboundAllocationSnapshot {
 
     public List<AllocatedOutboundBag> allocatedBags() {
         return allocatedBags;
+    }
+
+    public long allocatedBagCount() {
+        return allocatedBagCount;
+    }
+
+    public Map<P2pLineId, Long> allocatedBagCountsByLine() {
+        return allocatedBagCountsByLine;
+    }
+
+    public Map<P2pLineId, Long> closedToteCountsByLine() {
+        return closedToteCountsByLine;
+    }
+
+    public Map<String, Long> closedToteCountsByServiceCentre() {
+        return closedToteCountsByServiceCentre;
+    }
+
+    public Map<String, Long> markedClosedToteCountsByServiceCentre() {
+        return markedClosedToteCountsByServiceCentre;
+    }
+
+    public Map<OutboundToteClosureReason, Long> closureCountsByReason() {
+        return closureCountsByReason;
     }
 
     public Optional<OutboundToteSnapshot> openToteFor(P2pLineId lineId) {
@@ -130,12 +203,20 @@ public final class OutboundAllocationSnapshot {
         }
         return openTotesByLine.equals(that.openTotesByLine)
                 && closedTotes.equals(that.closedTotes)
-                && allocatedBags.equals(that.allocatedBags);
+                && allocatedBags.equals(that.allocatedBags)
+                && allocatedBagCount == that.allocatedBagCount
+                && allocatedBagCountsByLine.equals(that.allocatedBagCountsByLine)
+                && closedToteCountsByLine.equals(that.closedToteCountsByLine)
+                && closedToteCountsByServiceCentre.equals(that.closedToteCountsByServiceCentre)
+                && markedClosedToteCountsByServiceCentre.equals(that.markedClosedToteCountsByServiceCentre)
+                && closureCountsByReason.equals(that.closureCountsByReason);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(openTotesByLine, closedTotes, allocatedBags);
+        return Objects.hash(openTotesByLine, closedTotes, allocatedBags, allocatedBagCount,
+                allocatedBagCountsByLine, closedToteCountsByLine, closedToteCountsByServiceCentre,
+                markedClosedToteCountsByServiceCentre, closureCountsByReason);
     }
 
     @Override
@@ -152,6 +233,72 @@ public final class OutboundAllocationSnapshot {
             throw new IllegalArgumentException("Duplicate outbound physical tote ID: " + tote.physicalToteId());
         }
     }
+
+    private static <K> Map<K, Long> immutableCounts(Map<K, Long> values) {
+        if (values == null) {
+            throw new IllegalArgumentException("Counter maps must not be null");
+        }
+        Map<K, Long> copy = new LinkedHashMap<>();
+        for (Map.Entry<K, Long> entry : values.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null || entry.getValue() < 0) {
+                throw new IllegalArgumentException("Counter maps require non-null keys and nonnegative counts");
+            }
+            copy.put(entry.getKey(), entry.getValue());
+        }
+        return Collections.unmodifiableMap(copy);
+    }
+
+    private static long sum(Map<?, Long> counts) {
+        long total = 0;
+        for (long count : counts.values()) {
+            total = Math.addExact(total, count);
+        }
+        return total;
+    }
+
+    // Compatibility fixtures derive initial scalar facts once; production supplies its own counters.
+    private static FixtureCounts fixtureCounts(
+            Map<P2pLineId, OutboundToteSnapshot> openTotes,
+            List<OutboundToteSnapshot> closedTotes,
+            List<AllocatedOutboundBag> allocatedBags) {
+        if (openTotes == null || closedTotes == null || allocatedBags == null) {
+            throw new IllegalArgumentException("Outbound snapshot inputs must not be null");
+        }
+        Map<P2pLineId, Long> allocatedByLine = new LinkedHashMap<>();
+        Map<P2pLineId, Long> closedByLine = new LinkedHashMap<>();
+        Map<String, Long> closedByCentre = new LinkedHashMap<>();
+        Map<String, Long> markedByCentre = new LinkedHashMap<>();
+        Map<OutboundToteClosureReason, Long> closedByReason = new LinkedHashMap<>();
+        for (OutboundToteSnapshot tote : openTotes.values()) {
+            if (tote == null) {
+                throw new IllegalArgumentException("openTotesByLine must not contain null");
+            }
+            if (tote.bagCount() > 0) {
+                allocatedByLine.merge(tote.p2pLineId(), (long) tote.bagCount(), Math::addExact);
+            }
+        }
+        for (OutboundToteSnapshot tote : closedTotes) {
+            if (tote == null || tote.open()) {
+                throw new IllegalArgumentException("closedTotes must contain only closed totes");
+            }
+            if (tote.bagCount() > 0) {
+                allocatedByLine.merge(tote.p2pLineId(), (long) tote.bagCount(), Math::addExact);
+            }
+            closedByLine.merge(tote.p2pLineId(), 1L, Math::addExact);
+            closedByReason.merge(tote.closureReason().orElseThrow(), 1L, Math::addExact);
+            tote.serviceCentreId().ifPresent(centre -> {
+                closedByCentre.merge(centre, 1L, Math::addExact);
+                if (tote.requiresExceptionProcessing()) {
+                    markedByCentre.merge(centre, 1L, Math::addExact);
+                }
+            });
+        }
+        return new FixtureCounts(allocatedByLine, closedByLine, closedByCentre, markedByCentre, closedByReason);
+    }
+
+    private record FixtureCounts(Map<P2pLineId, Long> allocatedByLine, Map<P2pLineId, Long> closedByLine,
+            Map<String, Long> closedByCentre, Map<String, Long> markedByCentre,
+            Map<OutboundToteClosureReason, Long> closedByReason) { }
 
     private static Map<BagKey, AllocatedOutboundBag> uniqueBags(
             List<AllocatedOutboundBag> bags,

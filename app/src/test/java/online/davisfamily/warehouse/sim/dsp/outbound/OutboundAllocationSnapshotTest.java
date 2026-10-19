@@ -2,6 +2,7 @@ package online.davisfamily.warehouse.sim.dsp.outbound;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,6 +44,68 @@ class OutboundAllocationSnapshotTest {
         assertTrue(openTote.assigned());
         assertEquals(openTote, snapshot.openToteFor(openLine).orElseThrow());
         assertEquals(closedTote, snapshot.findTote(new PhysicalToteId("outbound-2")).orElseThrow());
+        assertEquals(2L, snapshot.allocatedBagCount());
+        assertEquals(Map.of(openLine, 1L, closedLine, 1L), snapshot.allocatedBagCountsByLine());
+        assertEquals(Map.of(closedLine, 1L), snapshot.closedToteCountsByLine());
+        assertEquals(Map.of("SC-1", 1L), snapshot.closedToteCountsByServiceCentre());
+        assertTrue(snapshot.markedClosedToteCountsByServiceCentre().isEmpty());
+        assertEquals(Map.of(OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE, 1L), snapshot.closureCountsByReason());
+    }
+
+    @Test
+    void shouldFreezeIndependentLongCountersWithoutRequiringHistoricalPayloads() {
+        P2pLineId line = new P2pLineId("p2p-1");
+        Map<P2pLineId, Long> allocated = new LinkedHashMap<>(Map.of(line, 3_000_000_000L));
+        Map<P2pLineId, Long> closed = new LinkedHashMap<>(Map.of(line, 2_000_000_000L));
+        Map<String, Long> centres = new LinkedHashMap<>(Map.of("SC-1", 2_000_000_000L));
+        Map<String, Long> marked = new LinkedHashMap<>(Map.of("SC-1", 1_000_000_000L));
+        Map<OutboundToteClosureReason, Long> reasons = new LinkedHashMap<>(
+                Map.of(OutboundToteClosureReason.HARD_CUTOFF, 2_000_000_000L));
+        OutboundAllocationSnapshot snapshot = new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                3_000_000_000L, allocated, closed, centres, marked, reasons);
+        allocated.clear();
+        closed.clear();
+        centres.clear();
+        marked.clear();
+        reasons.clear();
+        assertEquals(3_000_000_000L, snapshot.allocatedBagCount());
+        assertEquals(Map.of(line, 3_000_000_000L), snapshot.allocatedBagCountsByLine());
+        assertEquals(Map.of(line, 2_000_000_000L), snapshot.closedToteCountsByLine());
+        assertEquals(Map.of("SC-1", 2_000_000_000L), snapshot.closedToteCountsByServiceCentre());
+        assertEquals(Map.of("SC-1", 1_000_000_000L), snapshot.markedClosedToteCountsByServiceCentre());
+        assertEquals(Map.of(OutboundToteClosureReason.HARD_CUTOFF, 2_000_000_000L), snapshot.closureCountsByReason());
+        assertTrue(snapshot.allocatedBags().isEmpty());
+        assertTrue(snapshot.closedTotes().isEmpty());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.allocatedBagCountsByLine().clear());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.closedToteCountsByLine().clear());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.closedToteCountsByServiceCentre().clear());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.markedClosedToteCountsByServiceCentre().clear());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.closureCountsByReason().clear());
+        OutboundAllocationSnapshot equivalent = new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                3_000_000_000L, snapshot.allocatedBagCountsByLine(), snapshot.closedToteCountsByLine(),
+                snapshot.closedToteCountsByServiceCentre(), snapshot.markedClosedToteCountsByServiceCentre(),
+                snapshot.closureCountsByReason());
+        assertEquals(snapshot, equivalent);
+        assertEquals(snapshot.hashCode(), equivalent.hashCode());
+        assertNotEquals(snapshot, new OutboundAllocationSnapshot(Map.of(), List.of(), List.of()));
+    }
+
+    @Test
+    void shouldRejectInvalidOrInconsistentCounterValues() {
+        P2pLineId line = new P2pLineId("p2p-1");
+        assertThrows(IllegalArgumentException.class, () -> new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                -1, Map.of(), Map.of(), Map.of(), Map.of(), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                1, Map.of(line, -1L), Map.of(), Map.of(), Map.of(), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                1, Map.of(), Map.of(), Map.of(), Map.of(), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                0, Map.of(), Map.of(line, 1L), Map.of("SC-1", 1L), Map.of(), Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                0, Map.of(), Map.of(line, 1L), Map.of("SC-1", 1L), Map.of("SC-1", 2L),
+                Map.of(OutboundToteClosureReason.HARD_CUTOFF, 1L)));
+        assertThrows(IllegalArgumentException.class, () -> new OutboundAllocationSnapshot(Map.of(), List.of(), List.of(),
+                0, null, Map.of(), Map.of(), Map.of(), Map.of()));
     }
 
     @Test

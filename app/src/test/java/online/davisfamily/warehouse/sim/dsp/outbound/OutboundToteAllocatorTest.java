@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,73 @@ import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 
 class OutboundToteAllocatorTest {
     private static final P2pLineId LINE = new P2pLineId("p2p-1");
+
+    @Test
+    void shouldCountAcceptedBagsAndAllClosurePathsExactlyOnceAcrossLinesAndCentres() {
+        P2pLineId otherLine = new P2pLineId("p2p-2");
+        OrderSheetKey first = sheet("order-1", 1);
+        OrderSheetKey second = sheet("order-2", 1);
+        OrderSheetKey third = sheet("order-3", 1);
+        OrderSheetKey fourth = sheet("order-4", 1);
+        OrderSheetKey fifth = sheet("order-5", 1);
+        OrderSheetKey sixth = sheet("order-6", 1);
+        OrderSheetKey seventh = sheet("order-7", 1);
+        Fixture fixture = fixture(2, first, second, third, fourth, fifth, sixth, seventh);
+        OutboundToteAllocator allocator = fixture.allocator();
+        assertEquals(0L, allocator.snapshot().allocatedBagCount());
+        assertTrue(allocator.snapshot().closedToteCountsByLine().isEmpty());
+        PlannedBag partial = bagWithPackIds("rx-1", 1, "SC-1", "pharmacy-1", "patient-1",
+                List.of("actual", "missing"), first);
+        allocator.allocate(LINE, partial, seconds(1), Set.of("missing"));
+        OutboundAllocationSnapshot markedOpen = allocator.snapshot();
+        assertEquals(1L, markedOpen.allocatedBagCount());
+        assertTrue(markedOpen.markedClosedToteCountsByServiceCentre().isEmpty());
+        allocator.allocate(LINE, bag("rx-2", second), seconds(2));
+        assertEquals(Map.of(LINE, 1L), allocator.snapshot().closedToteCountsByLine());
+        assertEquals(Map.of("SC-1", 1L), allocator.snapshot().markedClosedToteCountsByServiceCentre());
+        allocator.allocate(otherLine, bag("rx-3", 1, "SC-2", "pharmacy-2", "patient-3", third), seconds(3));
+        allocator.closeForHardCutoff(otherLine, seconds(4));
+        allocator.allocate(LINE, bag("rx-4", fourth), seconds(3));
+        allocator.allocate(LINE, bag("rx-5", 1, "SC-1", "pharmacy-2", "patient-5", fifth), seconds(4));
+        allocator.allocate(LINE, bag("rx-6", 1, "SC-2", "pharmacy-2", "patient-6", sixth), seconds(5));
+        allocator.closeForApplicableWorkCompletion(LINE, seconds(6));
+        OutboundAllocationSnapshot closed = allocator.snapshot();
+        assertEquals(6L, closed.allocatedBagCount());
+        assertEquals(Map.of(LINE, 5L, otherLine, 1L), closed.allocatedBagCountsByLine());
+        assertEquals(Map.of(LINE, 4L, otherLine, 1L), closed.closedToteCountsByLine());
+        assertEquals(Map.of("SC-1", 3L, "SC-2", 2L), closed.closedToteCountsByServiceCentre());
+        assertEquals(Map.of("SC-1", 1L), closed.markedClosedToteCountsByServiceCentre());
+        assertEquals(Map.of(OutboundToteClosureReason.CAPACITY_REACHED, 1L,
+                OutboundToteClosureReason.HARD_CUTOFF, 1L, OutboundToteClosureReason.PHARMACY_CHANGED, 1L,
+                OutboundToteClosureReason.SERVICE_CENTRE_CHANGED, 1L,
+                OutboundToteClosureReason.APPLICABLE_WORK_COMPLETE, 1L), closed.closureCountsByReason());
+        assertEquals(5, closed.closedTotes().size());
+        assertEquals(6, closed.allocatedBags().size());
+        assertTrue(allocator.closeForApplicableWorkCompletion(LINE, seconds(7)).isEmpty());
+        assertTrue(allocator.closeForServiceCentreChange(otherLine, seconds(7)).isEmpty());
+        assertTrue(allocator.closeForHardCutoff(LINE, seconds(7)).isEmpty());
+        assertSame(closed, allocator.snapshot());
+        assertThrows(IllegalStateException.class, () -> allocator.allocate(LINE, partial, seconds(7)));
+        assertSame(closed, allocator.snapshot());
+
+        PlannedBag laterPartial = bagWithPackIds("rx-7", 1, "SC-1", "pharmacy-1", "patient-7",
+                List.of("later-actual", "later-missing"), seventh);
+        allocator.allocate(LINE, laterPartial, seconds(7), Set.of("later-missing"));
+        assertEquals(Map.of("SC-1", 1L), allocator.snapshot().markedClosedToteCountsByServiceCentre());
+        allocator.closeForServiceCentreChange(LINE, seconds(8));
+        OutboundAllocationSnapshot finalSnapshot = allocator.snapshot();
+        assertEquals(7L, finalSnapshot.allocatedBagCount());
+        assertEquals(Map.of(LINE, 6L, otherLine, 1L), finalSnapshot.allocatedBagCountsByLine());
+        assertEquals(Map.of(LINE, 5L, otherLine, 1L), finalSnapshot.closedToteCountsByLine());
+        assertEquals(Map.of("SC-1", 4L, "SC-2", 2L), finalSnapshot.closedToteCountsByServiceCentre());
+        assertEquals(Map.of("SC-1", 2L), finalSnapshot.markedClosedToteCountsByServiceCentre());
+        assertEquals(2L, finalSnapshot.closureCountsByReason().get(OutboundToteClosureReason.SERVICE_CENTRE_CHANGED));
+        assertEquals(1L, markedOpen.allocatedBagCount());
+        assertTrue(markedOpen.closedToteCountsByLine().isEmpty());
+        assertEquals(6L, closed.allocatedBagCount());
+        assertEquals(finalSnapshot, new OutboundAllocationSnapshot(finalSnapshot.openTotesByLine(),
+                finalSnapshot.closedTotes(), finalSnapshot.allocatedBags()));
+    }
 
     @Test
     void shouldPublishExactImmutableActualAndMissingPackPartition() {
@@ -508,6 +576,10 @@ class OutboundToteAllocatorTest {
         assertEquals(1, afterPartialAllocation.allocatedBags().size());
         assertEquals(1, afterPartialAllocation.openToteFor(LINE).orElseThrow().bagCount());
         assertTrue(afterPartialAllocation.closedTotes().isEmpty());
+        assertEquals(1L, afterPartialAllocation.allocatedBagCount());
+        assertEquals(Map.of(LINE, 1L), afterPartialAllocation.allocatedBagCountsByLine());
+        assertTrue(afterPartialAllocation.closedToteCountsByLine().isEmpty());
+        assertTrue(afterPartialAllocation.closureCountsByReason().isEmpty());
     }
 
     @Test
@@ -544,6 +616,11 @@ class OutboundToteAllocatorTest {
         assertEquals(1, afterPartialClosure.closedTotes().size());
         assertTrue(afterPartialClosure.openTotesByLine().isEmpty());
         assertEquals(1, afterPartialClosure.allocatedBags().size());
+        assertEquals(1L, afterPartialClosure.allocatedBagCount());
+        assertEquals(Map.of(LINE, 1L), afterPartialClosure.closedToteCountsByLine());
+        assertEquals(Map.of("SC-1", 1L), afterPartialClosure.closedToteCountsByServiceCentre());
+        assertEquals(Map.of(OutboundToteClosureReason.SERVICE_CENTRE_CHANGED, 1L),
+                afterPartialClosure.closureCountsByReason());
     }
 
     @Test
@@ -566,6 +643,9 @@ class OutboundToteAllocatorTest {
         OutboundToteSnapshot open = afterPartialCreation.openToteFor(LINE).orElseThrow();
         assertFalse(open.assigned());
         assertTrue(afterPartialCreation.allocatedBags().isEmpty());
+        assertEquals(0L, afterPartialCreation.allocatedBagCount());
+        assertTrue(afterPartialCreation.allocatedBagCountsByLine().isEmpty());
+        assertTrue(afterPartialCreation.closedToteCountsByLine().isEmpty());
     }
 
     private static void assertInvalidPartition(
@@ -591,6 +671,9 @@ class OutboundToteAllocatorTest {
         assertSame(lifecycleBefore, ledger.snapshot());
         assertEquals(1, idCalls[0]);
         assertTrue(outboundBefore.closedTotes().isEmpty());
+        assertEquals(1L, allocator.snapshot().allocatedBagCount());
+        assertEquals(Map.of(LINE, 1L), allocator.snapshot().allocatedBagCountsByLine());
+        assertTrue(allocator.snapshot().closureCountsByReason().isEmpty());
     }
 
     private static Fixture fixture(int capacity, OrderSheetKey... knownSheets) {

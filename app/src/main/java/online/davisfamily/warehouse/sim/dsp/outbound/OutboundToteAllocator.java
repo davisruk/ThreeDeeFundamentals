@@ -30,6 +30,12 @@ public final class OutboundToteAllocator {
     private final List<AllocatedOutboundBag> allocatedBags = new ArrayList<>();
     private final Set<BagKey> allocatedBagKeys = new LinkedHashSet<>();
     private final Map<P2pLineId, Duration> lastMutationTimeByLine = new LinkedHashMap<>();
+    private long allocatedBagCount;
+    private final Map<P2pLineId, Long> allocatedBagCountsByLine = new LinkedHashMap<>();
+    private final Map<P2pLineId, Long> closedToteCountsByLine = new LinkedHashMap<>();
+    private final Map<String, Long> closedToteCountsByServiceCentre = new LinkedHashMap<>();
+    private final Map<String, Long> markedClosedToteCountsByServiceCentre = new LinkedHashMap<>();
+    private final Map<OutboundToteClosureReason, Long> closureCountsByReason = new LinkedHashMap<>();
     private OutboundAllocationSnapshot cachedSnapshot;
 
     public OutboundToteAllocator(
@@ -69,9 +75,17 @@ public final class OutboundToteAllocator {
             throw new IllegalStateException("Planned bag is already allocated: " + bag.bagKey());
         }
         PackPartition packPartition = preparePackPartition(bag, missingPhysicalPackIds);
+        Math.incrementExact(allocatedBagCount);
+        Math.incrementExact(allocatedBagCountsByLine.getOrDefault(lineId, 0L));
 
         MutableOutboundTote currentTote = openTotesByLine.get(lineId);
         OutboundToteClosureReason mismatchReason = mismatchReason(currentTote, bag);
+        if (config.maximumBagCount() == 1 || (currentTote != null && mismatchReason == null
+                && currentTote.allocatedBags.size() == config.maximumBagCount() - 1)) {
+            validateClosureCounts(lineId, bag.serviceCentreId(), !packPartition.missingPhysicalPackIds().isEmpty()
+                    || (currentTote != null && mismatchReason == null && currentTote.requiresExceptionProcessing),
+                    OutboundToteClosureReason.CAPACITY_REACHED);
+        }
         if (mismatchReason != null) {
             closeCurrentTote(lineId, mismatchReason, allocationTime);
             currentTote = null;
@@ -124,7 +138,9 @@ public final class OutboundToteAllocator {
                 openSnapshots.put(lineId, tote.snapshot(Optional.empty()));
             }
         }
-        cachedSnapshot = new OutboundAllocationSnapshot(openSnapshots, closedTotes, allocatedBags);
+        cachedSnapshot = new OutboundAllocationSnapshot(openSnapshots, closedTotes, allocatedBags,
+                allocatedBagCount, allocatedBagCountsByLine, closedToteCountsByLine,
+                closedToteCountsByServiceCentre, markedClosedToteCountsByServiceCentre, closureCountsByReason);
         return cachedSnapshot;
     }
 
@@ -155,6 +171,8 @@ public final class OutboundToteAllocator {
         cachedSnapshot = null;
         allocatedBags.add(allocatedBag);
         allocatedBagKeys.add(bag.bagKey());
+        allocatedBagCount++;
+        increment(allocatedBagCountsByLine, currentTote.p2pLineId);
         lastMutationTimeByLine.put(currentTote.p2pLineId, allocationTime);
 
         if (currentTote.full()) {
@@ -197,6 +215,7 @@ public final class OutboundToteAllocator {
                         "Open outbound tote has an assignment outside OUTBOUND_BAG: " + assignment.orderSheetKey());
             }
         }
+        validateClosureCounts(lineId, tote.serviceCentreId, tote.requiresExceptionProcessing, reason);
         for (PhysicalToteAssignment assignment : assignments) {
             lifecycleLedger.terminateActiveAssignment(
                     assignment.orderSheetKey(),
@@ -212,10 +231,29 @@ public final class OutboundToteAllocator {
 
         OutboundToteSnapshot closedSnapshot = tote.snapshot(Optional.of(reason));
         closedTotes.add(closedSnapshot);
+        increment(closedToteCountsByLine, lineId);
+        increment(closedToteCountsByServiceCentre, tote.serviceCentreId);
+        if (tote.requiresExceptionProcessing) {
+            increment(markedClosedToteCountsByServiceCentre, tote.serviceCentreId);
+        }
+        increment(closureCountsByReason, reason);
         cachedSnapshot = null;
         openTotesByLine.remove(lineId);
         lastMutationTimeByLine.put(lineId, time);
         return closedSnapshot;
+    }
+
+    private void validateClosureCounts(P2pLineId line, String centre, boolean marked, OutboundToteClosureReason reason) {
+        Math.incrementExact(closedToteCountsByLine.getOrDefault(line, 0L));
+        Math.incrementExact(closedToteCountsByServiceCentre.getOrDefault(centre, 0L));
+        Math.incrementExact(closureCountsByReason.getOrDefault(reason, 0L));
+        if (marked) {
+            Math.incrementExact(markedClosedToteCountsByServiceCentre.getOrDefault(centre, 0L));
+        }
+    }
+
+    private static <K> void increment(Map<K, Long> counts, K key) {
+        counts.put(key, Math.incrementExact(counts.getOrDefault(key, 0L)));
     }
 
     private static PackPartition preparePackPartition(

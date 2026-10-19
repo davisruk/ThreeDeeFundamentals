@@ -21,6 +21,8 @@ public final class OsrInventorySnapshot {
     private final int capacity;
     private final List<InboundToteManifest> storedTotes;
     private final List<InboundToteManifest> departedTotes;
+    private final long departedToteCount;
+    private final Map<String, Long> departedToteCountsByServiceCentre;
     private final Map<PhysicalToteId, InboundToteManifest> storedTotesById;
     private final Set<PhysicalToteId> departedToteIds;
     private final Map<OrderSheetKey, List<InboundToteManifest>> storedTotesByOrderSheet;
@@ -32,12 +34,40 @@ public final class OsrInventorySnapshot {
             int capacity,
             List<InboundToteManifest> storedTotes,
             List<InboundToteManifest> departedTotes) {
+        this(capacity, storedTotes, departedTotes,
+                copyAndRejectNull(departedTotes, "departedTotes").size(), departureCounts(departedTotes));
+    }
+
+    public OsrInventorySnapshot(
+            int capacity,
+            List<InboundToteManifest> storedTotes,
+            List<InboundToteManifest> departedTotes,
+            long departedToteCount,
+            Map<String, Long> departedToteCountsByServiceCentre) {
         if (capacity < 1) {
             throw new IllegalArgumentException("capacity must be >= 1");
         }
         this.capacity = capacity;
         this.storedTotes = copyAndRejectNull(storedTotes, "storedTotes");
         this.departedTotes = copyAndRejectNull(departedTotes, "departedTotes");
+        if (departedToteCount < this.departedTotes.size() || departedToteCountsByServiceCentre == null) {
+            throw new IllegalArgumentException("Departure counters must cover retained departures");
+        }
+        Map<String, Long> departureCounts = new LinkedHashMap<>();
+        long total = 0;
+        for (Map.Entry<String, Long> entry : departedToteCountsByServiceCentre.entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank()
+                    || entry.getValue() == null || entry.getValue() < 0) {
+                throw new IllegalArgumentException("Centre departure counters must be nonnegative and keyed");
+            }
+            total = Math.addExact(total, entry.getValue());
+            departureCounts.put(entry.getKey(), entry.getValue());
+        }
+        if (total != departedToteCount) {
+            throw new IllegalArgumentException("Centre departure counters must sum to departedToteCount");
+        }
+        this.departedToteCount = departedToteCount;
+        this.departedToteCountsByServiceCentre = Collections.unmodifiableMap(departureCounts);
         if (this.storedTotes.size() > capacity) {
             throw new IllegalArgumentException("storedTotes must not exceed capacity");
         }
@@ -85,6 +115,14 @@ public final class OsrInventorySnapshot {
 
     public List<InboundToteManifest> departedTotes() {
         return departedTotes;
+    }
+
+    public long departedToteCount() {
+        return departedToteCount;
+    }
+
+    public Map<String, Long> departedToteCountsByServiceCentre() {
+        return departedToteCountsByServiceCentre;
     }
 
     public int occupancy() {
@@ -143,13 +181,16 @@ public final class OsrInventorySnapshot {
             return false;
         }
         return capacity == that.capacity
+                && departedToteCount == that.departedToteCount
+                && departedToteCountsByServiceCentre.equals(that.departedToteCountsByServiceCentre)
                 && storedTotes.equals(that.storedTotes)
                 && departedTotes.equals(that.departedTotes);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(capacity, storedTotes, departedTotes);
+        return Objects.hash(capacity, storedTotes, departedTotes,
+                departedToteCount, departedToteCountsByServiceCentre);
     }
 
     @Override
@@ -164,6 +205,14 @@ public final class OsrInventorySnapshot {
         Map<K, List<InboundToteManifest>> immutable = new LinkedHashMap<>();
         indexed.forEach((key, values) -> immutable.put(key, List.copyOf(values)));
         return Collections.unmodifiableMap(immutable);
+    }
+
+    private static Map<String, Long> departureCounts(List<InboundToteManifest> departedTotes) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (InboundToteManifest tote : departedTotes) {
+            counts.merge(tote.serviceCentreId(), 1L, Math::addExact);
+        }
+        return counts;
     }
 
     private static List<InboundToteManifest> copyAndRejectNull(

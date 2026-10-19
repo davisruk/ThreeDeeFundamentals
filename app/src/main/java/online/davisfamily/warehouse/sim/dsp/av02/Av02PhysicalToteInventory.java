@@ -17,6 +17,7 @@ public final class Av02PhysicalToteInventory {
     private final Set<PhysicalToteId> seenPhysicalToteIds = new LinkedHashSet<>();
     private final Set<OrderSheetKey> seenOrderSheetKeys = new LinkedHashSet<>();
     private final List<Av02AllocatedTote> departedTotes = new ArrayList<>();
+    private long departedToteCount;
     private Av02InventorySnapshot currentSnapshot;
 
     public Av02PhysicalToteInventory(Av02AllocationConfig config) {
@@ -64,9 +65,11 @@ public final class Av02PhysicalToteInventory {
                     "Physical tote is not at the head of AV02 inventory: " + physicalToteId.value());
         }
 
+        long nextDepartedCount = Math.incrementExact(departedToteCount);
         waitingTotes.remove(physicalToteId);
         currentSnapshot = null;
         departedTotes.add(requested);
+        departedToteCount = nextDepartedCount;
         return requested;
     }
 
@@ -109,7 +112,8 @@ public final class Av02PhysicalToteInventory {
             currentSnapshot = new Av02InventorySnapshot(
                     config.capacity(),
                     List.copyOf(waitingTotes.values()),
-                    departedTotes);
+                    departedTotes,
+                    departedToteCount);
         }
         return currentSnapshot;
     }

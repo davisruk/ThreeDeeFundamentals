@@ -2263,3 +2263,47 @@ change surface is this modified plan plus the three untracked new Java files.
 Runtime integration, full-day throughput and whole-feature boundedness remain
 UNPROVEN and outside this unwired slice. The successful-full-day/master-merge
 gate remains OPEN. Next authorized-on-request leaf is 2A; stop after Step 1.
+
+2026-10-19 Step 2A implemented and focused-verified on
+`feature/dsp-operational-window-streamlining`, starting at user-committed Step 1
+`ffb4b02` with empty `git status --short`. The request for Step 2 executes only
+2A under Section 4.0. Changed the six inventory/allocator/snapshot owners, their
+four specified test classes and this execution record only. All edits used
+apply_patch; no agents, commits, branch operations or later-leaf changes.
+
+OSR/AV02 now maintain long departure totals at successful departure; OSR also
+publishes immutable `departedToteCountsByServiceCentre()`. Outbound allocation
+maintains total/per-line accepted-bag counts, closed counts by line/centre,
+marked closed counts by centre and counts by closure reason. Closure accounting
+is shared by explicit, mismatch and capacity-triggered closure. Prospective
+counter arithmetic is validated before mutation, including capacity closure
+inside allocation. A fatal later closure failure preserves the already accepted
+bag count without inventing a successful closure; an old-tote closure remains
+counted if subsequent new-tote creation fails.
+
+Production owners pass maintained counters to new snapshot overloads; existing
+fixture constructors derive their initial counters once from supplied payloads.
+Maps are defensively frozen, value equality includes counters, and unchanged
+owners retain snapshot identity. New production counter work is bounded by
+centre/line/reason counts; it does not add a historical scan. All existing
+history, seen-ID guards, lifecycle transitions and operational/report readers
+remain intact for their later migration steps. No shared-work-ledger wiring yet.
+
+Ran only Section 4.0's exact 2A Gradle command with JDK 21.0.7 and approved
+Gradle-cache access: OsrPhysicalInventoryTest (9), Av02PhysicalToteInventoryTest
+(9), OutboundToteAllocatorTest (19), OutboundAllocationSnapshotTest (7).
+BUILD SUCCESSFUL; 44 tests, zero failures/errors/skips; no corrective rerun.
+Coverage includes multiple lines/centres and every closure reason, marked open
+versus closed totes, rejected/repeated operations, existing post-mutation fatal
+failures, point-in-time immutability/cache reuse, fixture compatibility and
+explicit long counters with no historical payload. No physical assertions or
+existing tests were removed.
+
+Reviewed the complete step diff against Sections 3.3-3.5, 3.8, 4.0 and Step 2:
+no required 2A contract violation or unresolved architectural choice found.
+git diff --check found no whitespace errors, only LF-to-CRLF warnings. Final
+surface is eleven modified files (six production, four tests and this plan).
+Numeric-limit overflow paths were source-reviewed, not exercised at Long.MAX_VALUE.
+Runtime reader migration, historical-retention removal, full-day performance and
+whole-feature boundedness remain UNPROVEN/outside 2A. The full-day/master-merge
+gate remains OPEN. Next leaf is 2B and requires a new request; stop after 2A.

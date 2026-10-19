@@ -3,6 +3,7 @@ package online.davisfamily.warehouse.sim.dsp.av02;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,6 +21,53 @@ import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysic
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
 
 class Av02PhysicalToteInventoryTest {
+
+    @Test
+    void shouldCountOnlySuccessfulHeadDeparturesAndKeepHistoryDuringMigration() {
+        Av02PhysicalToteInventory inventory = inventory(2);
+        Av02AllocatedTote first = tote("av02-1", "empty-1", 0);
+        Av02AllocatedTote second = tote("av02-2", "empty-2", 1);
+        Av02InventorySnapshot initial = inventory.snapshot();
+        assertEquals(0L, initial.departedToteCount());
+        inventory.store(first);
+        inventory.store(second);
+        Av02InventorySnapshot stored = inventory.snapshot();
+        assertEquals(0L, stored.departedToteCount());
+        assertThrows(IllegalStateException.class, () -> inventory.recordDeparture(second.physicalToteId()));
+        assertThrows(IllegalStateException.class, () -> inventory.store(tote("av02-3", "empty-3", 2)));
+        assertSame(stored, inventory.snapshot());
+        assertSame(first, inventory.recordDeparture(first.physicalToteId()));
+        Av02InventorySnapshot departed = inventory.snapshot();
+        assertEquals(1L, departed.departedToteCount());
+        assertEquals(List.of(first), departed.departedTotes());
+        assertEquals(0L, stored.departedToteCount());
+        assertThrows(IllegalStateException.class, () -> inventory.recordDeparture(first.physicalToteId()));
+        assertThrows(IllegalStateException.class, () -> inventory.recordDeparture(new PhysicalToteId("unknown")));
+        assertSame(departed, inventory.snapshot());
+        inventory.recordDeparture(second.physicalToteId());
+        assertEquals(2L, inventory.snapshot().departedToteCount());
+        assertEquals(List.of(first, second), inventory.snapshot().departedTotes());
+        assertEquals(1L, departed.departedToteCount());
+        assertSame(inventory.snapshot(), inventory.snapshot());
+    }
+
+    @Test
+    void shouldDeriveFixtureCountsOnceAndAcceptIndependentLongCountersInSnapshots() {
+        Av02AllocatedTote first = tote("av02-1", "empty-1", 0);
+        Av02InventorySnapshot fixture = new Av02InventorySnapshot(1, List.of(), List.of(first));
+        assertEquals(1L, fixture.departedToteCount());
+        Av02InventorySnapshot scalar = new Av02InventorySnapshot(1, List.of(), List.of(), 3_000_000_000L);
+        assertEquals(3_000_000_000L, scalar.departedToteCount());
+        assertTrue(scalar.departedTotes().isEmpty());
+        Av02InventorySnapshot equivalent = new Av02InventorySnapshot(1, List.of(), List.of(), 3_000_000_000L);
+        assertEquals(scalar, equivalent);
+        assertEquals(scalar.hashCode(), equivalent.hashCode());
+        assertNotEquals(scalar, new Av02InventorySnapshot(1, List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Av02InventorySnapshot(1, List.of(), List.of(), -1));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Av02InventorySnapshot(1, List.of(), List.of(first), 0));
+    }
 
     @Test
     void shouldStoreAllocatedTotesInFifoOrderAndExposeLookups() {
