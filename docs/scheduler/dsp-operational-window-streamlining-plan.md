@@ -2307,3 +2307,55 @@ Numeric-limit overflow paths were source-reviewed, not exercised at Long.MAX_VAL
 Runtime reader migration, historical-retention removal, full-day performance and
 whole-feature boundedness remain UNPROVEN/outside 2A. The full-day/master-merge
 gate remains OPEN. Next leaf is 2B and requires a new request; stop after 2A.
+
+2026-10-19 Step 2B implemented and focused-verified, starting at user-committed
+2A `6cef09f` on `feature/dsp-operational-window-streamlining`; initial
+git status --short was empty. The repeated Step 2 request was interrupted before
+work; the subsequent explicit 2B request authorizes this leaf only. Six production
+files (one new), four test files (one new) and this execution record changed.
+All edits used apply_patch. No agents, commits, branch changes or later leaves.
+
+Full-day construction creates exactly one DspOperationalWorkLedger immediately
+after scheduler state/manifest catalog, passes it to AV02/STORE/per-line P2P
+producers and appends it to the runtime facade's required package constructor.
+The facade exposes operationalWorkLedger(). Low-level AV02/Adapting constructors
+retain accounting-absent delegation through private Optional paths; explicit
+ledger overloads reject null. The AV02 runtime bridge adds only its specified
+most-complete ledger overload; full signature migration remains 3B.
+
+AV02 validates pending work before ID generation and the generated current
+identity before lifecycle mutation; it accounts the exact accepted tote after
+inventory and load-plan acceptance. STORE validates work before applying the
+bench completion and accounts only after lifecycle and station completion.
+COLLECT/CONTINUE does not consume inbound work. The new three-argument
+OperationalWindowP2pToteCompletedListener wraps the existing lifecycle/station/
+optional whole-centre watermark chain, validates before the delegate and records
+only after it returns. No accounting was duplicated in inner listeners, and
+P2P assignments remain retained until their later owning leaf.
+
+Ran only Section 4.0's exact 2B Gradle command with JDK 21.0.7 and approved cache
+access. Initial run: 56 tests, one new test failed because it required identity
+reuse from legacy AdaptedLineStore.snapshot(), which returns equal value
+snapshots without that identity contract. One mechanical correction changed
+that assertion to value equality; work-ledger/lifecycle identity assertions and
+physical/storage no-mutation assertions remain. Strengthened the existing real
+STORE composition test to assert all future planned bags remain present.
+The same command then passed: DspFullDayAnalysisRuntimeFactoryTest (23),
+Av02AllocationControllerTest (12), AdaptingStationProcessingControllerTest (17),
+OperationalWindowP2pToteCompletedListenerTest (4): 56 tests, zero failures/errors/
+skips. No further correction cycle or broader verification was run.
+
+Complete tracked/new-file diffs reviewed against Sections 3.1-3.3, 3.6-3.7,
+4.0 and Step 2. Tests prove actual full-day AV02 identity sharing through final
+P2P consumption, STORE preservation of prepared packs/future collectors/bags,
+both policies' per-line callback wiring, lifecycle -> station -> watermark ->
+work accounting, exactly-once counts, queued/incorrect-instance/delegate-failure
+no-accounting, pre-ID rejection, generated current-ID collision and fatal
+post-lifecycle load-plan rejection without falsely accounting allocation.
+No required 2B contract violation or unresolved architectural choice found.
+Tracked/new-file whitespace checks found no errors (LF-to-CRLF warnings only).
+Final surface: nine modified files including this plan, plus the new listener
+and its test. COLLECT missing/bag accounting (2C), operational reader migration,
+historical retirement, integrated whole-feature boundedness and full-day
+performance remain UNPROVEN/outside this leaf. Master-merge/full-day gate stays
+OPEN. Next leaf is 2C and requires a new request; stop after 2B.

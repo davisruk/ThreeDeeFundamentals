@@ -13,6 +13,7 @@ import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleSnaps
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.scheduler.policy.WholeServiceCentreReleaseSnapshot;
 import online.davisfamily.warehouse.sim.dsp.supply.DspSupplySnapshot;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalWorkLedger;
 
 /**
  * Full-day bridge around the existing AV02 command controller.
@@ -83,6 +84,38 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
             MutableToteLoadPlanRegistry loadPlanRegistry,
             Av02AllocationSnapshotFactory snapshotFactory,
             Optional<Supplier<WholeServiceCentreReleaseSnapshot>> wholeServiceCentreReleaseSupplier) {
+        this(schedulerSnapshotSupplier, supplySnapshotSupplier, lifecycleSnapshotSupplier,
+                inventory, lifecycleLedger, idAllocator, loadPlanRegistry, snapshotFactory,
+                wholeServiceCentreReleaseSupplier, Optional.empty());
+    }
+
+    public DspAv02AllocationRuntimeController(
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Av02PhysicalToteInventory inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            PhysicalToteIdAllocator idAllocator,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            Av02AllocationSnapshotFactory snapshotFactory,
+            Optional<Supplier<WholeServiceCentreReleaseSnapshot>> wholeServiceCentreReleaseSupplier,
+            DspOperationalWorkLedger operationalWork) {
+        this(schedulerSnapshotSupplier, supplySnapshotSupplier, lifecycleSnapshotSupplier,
+                inventory, lifecycleLedger, idAllocator, loadPlanRegistry, snapshotFactory,
+                wholeServiceCentreReleaseSupplier, Optional.of(requireOperationalWork(operationalWork)));
+    }
+
+    private DspAv02AllocationRuntimeController(
+            Supplier<WarehouseSchedulerSnapshot> schedulerSnapshotSupplier,
+            Supplier<DspSupplySnapshot> supplySnapshotSupplier,
+            Supplier<PhysicalToteLifecycleSnapshot> lifecycleSnapshotSupplier,
+            Av02PhysicalToteInventory inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            PhysicalToteIdAllocator idAllocator,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            Av02AllocationSnapshotFactory snapshotFactory,
+            Optional<Supplier<WholeServiceCentreReleaseSnapshot>> wholeServiceCentreReleaseSupplier,
+            Optional<DspOperationalWorkLedger> operationalWork) {
         requireNonNull(schedulerSnapshotSupplier, "schedulerSnapshotSupplier");
         requireNonNull(supplySnapshotSupplier, "supplySnapshotSupplier");
         requireNonNull(lifecycleSnapshotSupplier, "lifecycleSnapshotSupplier");
@@ -102,22 +135,23 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
         this.snapshotFactory = snapshotFactory;
         this.wholeServiceCentreReleaseSupplier = wholeServiceCentreReleaseSupplier;
 
-        this.allocationController = new Av02AllocationController(
+        Supplier<Optional<AllocateEmptyToteAtAv02Command>> commandSupplier =
                 () -> activeAllocationSnapshot == null
                         ? Optional.empty()
-                        : activeAllocationSnapshot.command(),
-                () -> {
-                    if (activeSequence < 0L) {
-                        throw new IllegalStateException(
-                                "AV02 allocation revalidation requested outside an update");
-                    }
-                    activeRevalidationSnapshot = buildSnapshot(activeSequence);
-                    return activeRevalidationSnapshot;
-                },
-                inventory,
-                lifecycleLedger,
-                idAllocator,
-                loadPlanRegistry);
+                        : activeAllocationSnapshot.command();
+        Supplier<Av02AllocationSnapshot> freshSnapshotSupplier = () -> {
+            if (activeSequence < 0L) {
+                throw new IllegalStateException(
+                        "AV02 allocation revalidation requested outside an update");
+            }
+            activeRevalidationSnapshot = buildSnapshot(activeSequence);
+            return activeRevalidationSnapshot;
+        };
+        this.allocationController = operationalWork.isPresent()
+                ? new Av02AllocationController(commandSupplier, freshSnapshotSupplier, inventory,
+                        lifecycleLedger, idAllocator, loadPlanRegistry, operationalWork.orElseThrow())
+                : new Av02AllocationController(commandSupplier, freshSnapshotSupplier, inventory,
+                        lifecycleLedger, idAllocator, loadPlanRegistry);
 
         AllocationInputs initialInputs = captureInputs();
         Av02AllocationSnapshot initial = buildSnapshot(0L, initialInputs);
@@ -269,5 +303,10 @@ public final class DspAv02AllocationRuntimeController implements SimulationContr
         if (value == null) {
             throw new IllegalArgumentException(fieldName + " must not be null");
         }
+    }
+
+    private static DspOperationalWorkLedger requireOperationalWork(DspOperationalWorkLedger work) {
+        requireNonNull(work, "operationalWork");
+        return work;
     }
 }

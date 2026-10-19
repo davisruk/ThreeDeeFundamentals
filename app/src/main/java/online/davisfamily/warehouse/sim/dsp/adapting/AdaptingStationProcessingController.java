@@ -17,6 +17,7 @@ import online.davisfamily.warehouse.sim.dsp.model.OrderType;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.model.StationType;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalRouteDestination;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalWorkLedger;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingClaim;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCompletionController;
 import online.davisfamily.warehouse.sim.dsp.station.processing.StationProcessingCoordinator;
@@ -42,6 +43,7 @@ public final class AdaptingStationProcessingController
     private final AdaptingAreaController areaController;
     private final InboundToteLifecycleController inboundLifecycleController;
     private final StationProcessingCoordinator coordinator;
+    private final Optional<DspOperationalWorkLedger> operationalWork;
 
     public AdaptingStationProcessingController(
             String processingControllerId,
@@ -51,6 +53,32 @@ public final class AdaptingStationProcessingController
             AdaptingAreaController areaController,
             InboundToteLifecycleController inboundLifecycleController,
             StationProcessingCoordinator coordinator) {
+        this(processingControllerId, destinations, loadPlanRegistry, area, areaController,
+                inboundLifecycleController, coordinator, Optional.empty());
+    }
+
+    public AdaptingStationProcessingController(
+            String processingControllerId,
+            Set<OperationalRouteDestination> destinations,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            AdaptingArea area,
+            AdaptingAreaController areaController,
+            InboundToteLifecycleController inboundLifecycleController,
+            StationProcessingCoordinator coordinator,
+            DspOperationalWorkLedger operationalWork) {
+        this(processingControllerId, destinations, loadPlanRegistry, area, areaController,
+                inboundLifecycleController, coordinator, Optional.of(requireOperationalWork(operationalWork)));
+    }
+
+    private AdaptingStationProcessingController(
+            String processingControllerId,
+            Set<OperationalRouteDestination> destinations,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            AdaptingArea area,
+            AdaptingAreaController areaController,
+            InboundToteLifecycleController inboundLifecycleController,
+            StationProcessingCoordinator coordinator,
+            Optional<DspOperationalWorkLedger> operationalWork) {
         if (processingControllerId == null || processingControllerId.isBlank()) {
             throw new IllegalArgumentException("processingControllerId must not be blank");
         }
@@ -108,6 +136,7 @@ public final class AdaptingStationProcessingController
         this.areaController = areaController;
         this.inboundLifecycleController = inboundLifecycleController;
         this.coordinator = coordinator;
+        this.operationalWork = operationalWork;
     }
 
     @Override
@@ -212,6 +241,8 @@ public final class AdaptingStationProcessingController
                 currentLoadPlan,
                 completedAt);
         inboundLifecycleController.validateConsumeAtAdapting(physicalToteId, completedAt);
+        operationalWork.ifPresent(work -> work.validateInboundConsumed(
+                physicalToteId, StationType.ADAPTING, Optional.empty()));
 
         AdaptingBenchCompletion applied = areaController.applyBenchCompletion(benchId, positionOrdinal)
                 .orElseThrow(() -> new IllegalStateException(
@@ -229,6 +260,15 @@ public final class AdaptingStationProcessingController
                 StationProcessingDispositionType.CONSUME,
                 retainedPlan,
                 completedAt);
+        operationalWork.ifPresent(work -> work.recordInboundConsumed(
+                physicalToteId, StationType.ADAPTING, Optional.empty()));
+    }
+
+    private static DspOperationalWorkLedger requireOperationalWork(DspOperationalWorkLedger work) {
+        if (work == null) {
+            throw new IllegalArgumentException("operationalWork must not be null");
+        }
+        return work;
     }
 
     private void completeCollect(

@@ -96,9 +96,9 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             var originalCompletionListener = first.lineRuntimes().getFirst().config()
                     .toteCompletedListener();
             assertTrue(originalCompletionListener instanceof
-                    online.davisfamily.warehouse.sim.dsp.p2p.arrival.StationProcessingP2pToteCompletedListener);
-            assertTrue(first.lineRuntimes().stream().allMatch(line ->
-                    line.config().toteCompletedListener() == originalCompletionListener));
+                    online.davisfamily.warehouse.sim.dsp.p2p.allocation.OperationalWindowP2pToteCompletedListener);
+            assertEquals(5, first.lineRuntimes().stream()
+                    .map(line -> line.config().toteCompletedListener()).distinct().count());
             assertEquals(first.snapshot().elastic(), second.snapshot().elastic());
             assertTrue(first.snapshot().elastic().allocation().wholeServiceCentrePolicy().isEmpty());
             for (int step = 0; step < 300 && first.state() == DspFullDayRuntimeState.RUNNING; step++) {
@@ -109,6 +109,10 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             assertEquals(DspFullDayRuntimeState.ALL_SUPPORTED_WORK_COMPLETE, first.state());
             assertEquals(first.state(), second.state());
             assertEquals(first.outboundToteAllocator().snapshot(), second.outboundToteAllocator().snapshot());
+            assertTrue(first.operationalWorkLedger().snapshot().remainingInboundTotes().isEmpty());
+            assertEquals(1L, first.operationalWorkLedger().snapshot().totalsByServiceCentre().get("104").consumedAtP2p());
+            assertEquals(first.operationalWorkLedger().snapshot().totalsByServiceCentre(),
+                    second.operationalWorkLedger().snapshot().totalsByServiceCentre());
         }
     }
 
@@ -130,7 +134,7 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                     .map(line -> line.config().toteCompletedListener()).distinct().count());
             assertTrue(configuredLines.stream().allMatch(line ->
                     line.config().toteCompletedListener() instanceof
-                            online.davisfamily.warehouse.sim.dsp.p2p.allocation.WholeServiceCentreP2pToteCompletedListener));
+                            online.davisfamily.warehouse.sim.dsp.p2p.allocation.OperationalWindowP2pToteCompletedListener));
 
             var initialReleases = runtime.snapshot().elastic().allocation()
                     .wholeServiceCentrePolicy().orElseThrow().releases();
@@ -686,6 +690,12 @@ class DspFullDayAnalysisRuntimeFactoryTest {
             }
             assertTrue(runtime.schedulerRuntimeState().snapshot().preparedLineKeys().containsAll(expectedKeys),
                     () -> "Prepared lines not published: " + runtime.snapshot());
+            assertEquals(1L, runtime.operationalWorkLedger().snapshot().totalsByServiceCentre().get("104").consumedAtAdapting());
+            assertEquals(0, runtime.operationalWorkLedger().remainingInboundConsumersForSource(source));
+            assertEquals(2, runtime.operationalWorkLedger().remainingConsumersForOrder("associated-target"));
+            for (PlannedBag bag : input.bagPlan().plannedBags()) {
+                assertSame(bag, runtime.operationalWorkLedger().remainingBag(bag.bagKey()).orElseThrow());
+            }
             List<AdaptingBinSnapshot> stored = runtime.adaptingBinSnapshots();
             assertSame(stored, runtime.adaptingBinSnapshots());
             assertEquals(List.of("associated-target", "associated-target", "associated-target"),
@@ -1065,6 +1075,7 @@ class DspFullDayAnalysisRuntimeFactoryTest {
 
         try (DspFullDayAnalysisRuntime runtime =
                 new DspFullDayAnalysisRuntimeFactory().create(input, profile)) {
+            assertTrue(runtime.operationalWorkLedger().isUnallocatedEmpty(emptySheet));
             for (int step = 0; step < 500
                     && !runtime.schedulerRuntimeState().snapshot().preparedLineKeys()
                             .contains(new PreparedLineKey("associated-target", "B")); step++) {
@@ -1093,7 +1104,17 @@ class DspFullDayAnalysisRuntimeFactoryTest {
                             + ", station=" + runtime.stationProcessingRuntime().coordinatorSnapshot());
             PhysicalToteId allocatedId = runtime.av02Inventory().snapshot()
                     .findTote(emptySheet).orElseThrow().physicalToteId();
+            assertFalse(runtime.operationalWorkLedger().isUnallocatedEmpty(emptySheet));
+            assertSame(runtime.av02Inventory().snapshot().findTote(allocatedId).orElseThrow(),
+                    runtime.operationalWorkLedger().findLiveAv02(allocatedId).orElseThrow());
             assertCorrelations(input.bagPlan(), runtime, allocatedId.value(), source, List.of("B"));
+            for (int step = 0; step < 1_000
+                    && runtime.operationalWorkLedger().findLiveAv02(allocatedId).isPresent(); step++) {
+                runtime.update(1d);
+            }
+            assertTrue(runtime.operationalWorkLedger().findLiveAv02(allocatedId).isEmpty());
+            assertEquals(1L, runtime.operationalWorkLedger().snapshot().totalsByServiceCentre().get("104").consumedAtP2p());
+            assertEquals(0, runtime.operationalWorkLedger().remainingConsumersForOrder("associated-target"));
         }
     }
 

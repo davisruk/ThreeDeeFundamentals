@@ -3,6 +3,8 @@ package online.davisfamily.warehouse.sim.dsp.av02;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.time.Duration;
 import java.util.LinkedHashSet;
@@ -17,6 +19,9 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.adapting.MapBackedToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.adapting.MutableToteLoadPlanRegistry;
+import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteManifestCatalog;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalWorkLedger;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteAssignmentStage;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteIdAllocator;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.PhysicalToteLifecycleLedger;
@@ -43,6 +48,91 @@ import online.davisfamily.warehouse.sim.dsp.supply.ServiceCentreSupplySnapshot;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 class Av02AllocationControllerTest {
+
+    @Test
+    void shouldAccountExactAcceptedIdentityAndKeepOtherPendingEmptyWork() {
+        CountingIdAllocator ids = new CountingIdAllocator();
+        Fixture f = new Fixture(2, ids, List.of(fullPackOrder("empty-1", 0), fullPackOrder("empty-2", 1)), true);
+        DspOperationalWorkLedger work = f.work.orElseThrow();
+        var initial = work.snapshot();
+        f.submitCurrentCommand();
+        f.sequence.incrementAndGet();
+        f.controller.update(new SimulationContext(), 0d);
+        assertSame(initial, work.snapshot());
+        assertEquals(0, ids.calls);
+        f.submitCurrentCommand();
+        f.controller.update(new SimulationContext(), 0d);
+        Av02AllocatedTote first = f.inventory.head().orElseThrow();
+        assertSame(first, work.findLiveAv02(first.physicalToteId()).orElseThrow());
+        assertSame(first, work.findLiveAv02(first.orderSheetKey()).orElseThrow());
+        assertFalse(work.isUnallocatedEmpty(first.orderSheetKey()));
+        assertTrue(work.isUnallocatedEmpty(f.states.get(1).order().orderSheetKey()));
+        assertEquals(1, ids.calls);
+        assertEquals(0L, work.snapshot().totalsByServiceCentre().get("104").consumedAtP2p());
+        var beforeDeparture = work.snapshot();
+        f.inventory.recordDeparture(first.physicalToteId());
+        assertSame(beforeDeparture, work.snapshot());
+        f.sequence.incrementAndGet();
+        f.submitCurrentCommand();
+        f.controller.update(new SimulationContext(), 0d);
+        assertEquals(2, ids.calls);
+        assertEquals(2, work.snapshot().liveAv02Totes().size());
+        assertTrue(work.snapshot().unallocatedEmptyOrders().isEmpty());
+    }
+
+    @Test
+    void shouldRejectMissingPendingWorkBeforeRequestingAnIdAndKeepTheNextEmptyPending() {
+        CountingIdAllocator ids = new CountingIdAllocator();
+        Fixture f = new Fixture(2, ids, List.of(fullPackOrder("empty-1", 0), fullPackOrder("empty-2", 1)), true);
+        DspOperationalWorkLedger work = f.work.orElseThrow();
+        f.submitCurrentCommand();
+        work.recordAv02Allocated(allocated(f.states.getFirst().order(), "already-live", 0));
+        var before = work.snapshot();
+        assertThrows(IllegalArgumentException.class, () -> f.controller.update(new SimulationContext(), 0d));
+        assertEquals(0, ids.calls);
+        assertSame(before, work.snapshot());
+        assertTrue(work.isUnallocatedEmpty(f.states.get(1).order().orderSheetKey()));
+        assertTrue(f.inventory.snapshot().waitingTotes().isEmpty());
+        assertTrue(f.ledger.snapshot().totes().isEmpty());
+    }
+
+    @Test
+    void shouldRejectGeneratedCurrentWorkCollisionBeforeLifecycleMutation() {
+        CountingIdAllocator ids = new CountingIdAllocator();
+        Fixture f = new Fixture(2, ids, List.of(fullPackOrder("empty-1", 0), fullPackOrder("empty-2", 1)), true);
+        DspOperationalWorkLedger work = f.work.orElseThrow();
+        work.recordAv02Allocated(allocated(f.states.get(1).order(), "counted-1", 1));
+        var before = work.snapshot();
+        f.submitCurrentCommand();
+        assertThrows(IllegalArgumentException.class, () -> f.controller.update(new SimulationContext(), 0d));
+        assertEquals(1, ids.calls);
+        assertSame(before, work.snapshot());
+        assertTrue(work.isUnallocatedEmpty(f.states.getFirst().order().orderSheetKey()));
+        assertTrue(f.inventory.snapshot().waitingTotes().isEmpty());
+        assertTrue(f.ledger.snapshot().totes().isEmpty());
+    }
+
+    @Test
+    void shouldNotAccountWhenLoadPlanAcceptanceFailsAfterPhysicalAllocation() {
+        CountingIdAllocator ids = new CountingIdAllocator();
+        Fixture f = new Fixture(2, ids, List.of(fullPackOrder("empty-1", 0), fullPackOrder("empty-2", 1)), true);
+        DspOperationalWorkLedger work = f.work.orElseThrow();
+        MutableToteLoadPlanRegistry rejectingPlans = new MutableToteLoadPlanRegistry() {
+            @Override public ToteLoadPlan getLoadPlanFor(PhysicalToteId id) { return null; }
+            @Override public void putLoadPlan(ToteLoadPlan plan) { throw new IllegalStateException("reject plan"); }
+        };
+        Av02AllocationController controller = new Av02AllocationController(() -> f.command.getAndSet(Optional.empty()),
+                f::freshSnapshot, f.inventory, f.ledger, ids, rejectingPlans, work);
+        var before = work.snapshot();
+        f.submitCurrentCommand();
+        assertThrows(IllegalStateException.class, () -> controller.update(new SimulationContext(), 0d));
+        assertEquals(1, ids.calls);
+        assertEquals(1, f.inventory.occupancy()); // Post-mutation failures are fatal, not rolled back/retried.
+        assertEquals(1, f.ledger.snapshot().totes().size());
+        assertSame(before, work.snapshot());
+        assertEquals(2, work.snapshot().unallocatedEmptyOrders().size());
+        assertTrue(work.snapshot().liveAv02Totes().isEmpty());
+    }
 
     @Test
     void shouldAllocateOneToteAndEmptyLoadPlanOnOneSimulationUpdate() {
@@ -347,11 +437,17 @@ class Av02AllocationControllerTest {
         private final Av02AllocationSnapshotFactory snapshotFactory =
                 new Av02AllocationSnapshotFactory();
         private final Av02AllocationController controller;
+        private final Optional<DspOperationalWorkLedger> work;
 
         private Fixture(
                 int capacity,
                 PhysicalToteIdAllocator idAllocator,
                 List<NotionalToteOrder> orders) {
+            this(capacity, idAllocator, orders, false);
+        }
+
+        private Fixture(int capacity, PhysicalToteIdAllocator idAllocator,
+                List<NotionalToteOrder> orders, boolean accounting) {
             this.states = orders.stream()
                     .map(order -> new DspSchedulerOrderState(
                             order,
@@ -365,7 +461,11 @@ class Av02AllocationControllerTest {
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             this.supply = new AtomicReference<>(Av02AllocationControllerTest.supply(states, authorizedKeys));
             this.inventory = new Av02PhysicalToteInventory(new Av02AllocationConfig(capacity));
-            this.controller = new Av02AllocationController(
+            this.work = accounting ? Optional.of(new DspOperationalWorkLedger(states,
+                    new InboundToteManifestCatalog(List.of()), List.of(), List.of())) : Optional.empty();
+            this.controller = work.isPresent() ? new Av02AllocationController(
+                    () -> command.getAndSet(Optional.empty()), this::freshSnapshot, inventory,
+                    ledger, idAllocator, loadPlans, work.orElseThrow()) : new Av02AllocationController(
                     () -> command.getAndSet(Optional.empty()),
                     this::freshSnapshot,
                     inventory,

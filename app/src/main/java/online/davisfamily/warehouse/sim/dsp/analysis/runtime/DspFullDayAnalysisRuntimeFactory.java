@@ -130,6 +130,9 @@ public final class DspFullDayAnalysisRuntimeFactory {
 
             InboundToteManifestCatalog manifestCatalog = new InboundToteManifestCatalog(
                     data.inboundToteManifests());
+            DspOperationalWorkLedger operationalWork = new DspOperationalWorkLedger(
+                    schedulerState.snapshot().orderStates(), manifestCatalog, bagPlan.plannedBags(),
+                    profile.p2pLineDefinitions());
             PhysicalToteLifecycleLedger lifecycleLedger = new PhysicalToteLifecycleLedger();
             InboundToteLifecycleController inboundLifecycle = new InboundToteLifecycleController(
                     lifecycleLedger, manifestCatalog);
@@ -263,6 +266,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                         ? new WholeServiceCentreP2pToteCompletedListener(
                                 definition.lineId(), releaseLedger.orElseThrow(), p2pCompletedListener)
                         : p2pCompletedListener;
+                lineCompletionListener = new OperationalWindowP2pToteCompletedListener(
+                        definition.lineId(), operationalWork, lineCompletionListener);
                 DspHeadlessP2pLineConfig lineConfig = new DspHeadlessP2pLineConfig(
                         definition,
                         queue,
@@ -323,7 +328,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             av02IdAllocator,
                             loadPlans,
                             new Av02AllocationSnapshotFactory(),
-                            releaseLedger.<Supplier<WholeServiceCentreReleaseSnapshot>>map(ledger -> ledger::snapshot));
+                            releaseLedger.<Supplier<WholeServiceCentreReleaseSnapshot>>map(ledger -> ledger::snapshot),
+                            operationalWork);
             simulationWorld.addController(av02AllocationController);
 
             OsrOutboundRouteLaunchQueue launchQueue = new OsrOutboundRouteLaunchQueue(
@@ -441,7 +447,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                             adaptingArea,
                             adaptingAreaController,
                             inboundLifecycle,
-                            stationCoordinator),
+                            stationCoordinator,
+                            operationalWork),
                     new ThirdPartyStationProcessingController(
                             "dsp-third-party",
                             Set.of(THIRD_PARTY_DESTINATION),
@@ -570,7 +577,8 @@ public final class DspFullDayAnalysisRuntimeFactory {
                     completionEvaluator,
                     completionSource,
                     metricsCollector,
-                    runtimeState);
+                    runtimeState,
+                    operationalWork);
         } catch (RuntimeException exception) {
             closeReverse(closeables, exception);
             throw exception;

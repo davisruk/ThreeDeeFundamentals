@@ -28,6 +28,7 @@ import online.davisfamily.warehouse.sim.dsp.outbound.OutboundToteAllocator;
 import online.davisfamily.warehouse.sim.dsp.p2p.allocation.DspP2pElasticAllocationRuntime;
 import online.davisfamily.warehouse.sim.dsp.runtime.DspSchedulerRuntimeState;
 import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalReleaseRuntime;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalWorkLedger;
 import online.davisfamily.warehouse.sim.dsp.scheduler.WarehouseSchedulerSnapshot;
 import online.davisfamily.warehouse.sim.dsp.station.continuation.DspStationRouteContinuationRuntime;
 import online.davisfamily.warehouse.sim.dsp.station.processing.DspStationProcessingRuntime;
@@ -64,6 +65,7 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
     private final Supplier<List<DspServiceCentreCompletionSnapshot>> completionSnapshotSupplier;
     private final DspFullDayMetricsCollector metricsCollector;
     private final java.util.concurrent.atomic.AtomicReference<DspFullDayRuntimeState> state;
+    private final DspOperationalWorkLedger operationalWorkLedger;
     private boolean closed;
 
     DspFullDayAnalysisRuntime(
@@ -93,7 +95,8 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
             DspFullDayCompletionEvaluator completionEvaluator,
             Supplier<List<DspServiceCentreCompletionSnapshot>> completionSnapshotSupplier,
             DspFullDayMetricsCollector metricsCollector,
-            java.util.concurrent.atomic.AtomicReference<DspFullDayRuntimeState> state) {
+            java.util.concurrent.atomic.AtomicReference<DspFullDayRuntimeState> state,
+            DspOperationalWorkLedger operationalWorkLedger) {
         this.simulationWorld = Objects.requireNonNull(simulationWorld);
         this.clockController = Objects.requireNonNull(clockController);
         this.schedulerRuntimeState = Objects.requireNonNull(schedulerRuntimeState);
@@ -121,10 +124,15 @@ public final class DspFullDayAnalysisRuntime implements AutoCloseable {
         this.completionSnapshotSupplier = Objects.requireNonNull(completionSnapshotSupplier);
         this.metricsCollector = Objects.requireNonNull(metricsCollector);
         this.state = Objects.requireNonNull(state);
+        this.operationalWorkLedger = Objects.requireNonNull(operationalWorkLedger);
     }
 
     public SimulationWorld simulationWorld() {
         return simulationWorld;
+    }
+
+    public DspOperationalWorkLedger operationalWorkLedger() {
+        return operationalWorkLedger;
     }
 
     public DspOperationalClockController clockController() {

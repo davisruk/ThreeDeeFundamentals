@@ -18,6 +18,13 @@ import org.junit.jupiter.api.Test;
 
 import online.davisfamily.threedee.sim.framework.SimulationContext;
 import online.davisfamily.warehouse.sim.dsp.bagging.DspPackPlanFactory;
+import online.davisfamily.warehouse.sim.dsp.bagging.BagKey;
+import online.davisfamily.warehouse.sim.dsp.bagging.PlannedBag;
+import online.davisfamily.warehouse.sim.dsp.routing.RouteRequirements;
+import online.davisfamily.warehouse.sim.dsp.model.StartLocation;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspSchedulerOrderState;
+import online.davisfamily.warehouse.sim.dsp.scheduler.DspOrderStatus;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalWorkLedger;
 import online.davisfamily.warehouse.sim.dsp.bagging.PackProvenanceRegistry;
 import online.davisfamily.warehouse.sim.dsp.io.LoadedDspData;
 import online.davisfamily.warehouse.sim.dsp.lifecycle.InboundToteLifecycleController;
@@ -54,6 +61,78 @@ import online.davisfamily.warehouse.sim.totebag.plan.PackPlan;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 class AdaptingStationProcessingControllerTest {
+
+    @Test
+    void shouldAccountStoreAfterPhysicalCompletionWithoutRemovingPreparedPacksOrFutureBagWork() {
+        NotionalToteOrder order = order("accounted-store", OrderType.ADAPTED);
+        Fixture f = storeFixture(order, 0d);
+        var manifest = f.lifecycle().manifestFor(f.routedTote().physicalToteId());
+        PlannedBag bag = new PlannedBag(new BagKey("downstream", 1), "SC-1", "pharmacy-1", "patient",
+                "downstream", List.of("future-pack"), List.of(order.orderSheetKey()));
+        DspOperationalWorkLedger work = new DspOperationalWorkLedger(List.of(new DspSchedulerOrderState(order,
+                new RouteRequirements(false, true, false, false, false, StartLocation.OSR), DspOrderStatus.WAITING)),
+                new InboundToteManifestCatalog(List.of(manifest)), List.of(bag), List.of());
+        AdaptingStationProcessingController controller = new AdaptingStationProcessingController("accounted",
+                Set.of(f.destination()), f.registry(), f.area(), f.areaController(), f.lifecycle(), f.coordinator(), work);
+        f.lifecycle().activate(manifest.physicalToteId(), Duration.ZERO);
+        f.target().accept(f.routedTote(), Duration.ZERO);
+        controller.update(context(1d), 0d);
+        assertEquals(StationProcessingDispositionType.CONSUME, f.coordinator().peekDisposition().orElseThrow().type());
+        assertEquals(PhysicalToteLifecycleState.CONSUMED_AT_ADAPTING,
+                f.lifecycle().snapshot().totes().get(manifest.physicalToteId()).state());
+        assertTrue(work.snapshot().remainingInboundTotes().isEmpty());
+        assertEquals(1L, work.snapshot().totalsByServiceCentre().get("SC-1").consumedAtAdapting());
+        assertTrue(f.store().contains(PreparedLineKey.forPreparedLine(order.items().getFirst())));
+        assertSame(bag, work.remainingBag(bag.bagKey()).orElseThrow());
+        assertEquals(1, work.remainingBagsForSource(order.orderSheetKey()));
+        var complete = work.snapshot();
+        controller.update(context(2d), 0d);
+        assertSame(complete, work.snapshot());
+    }
+
+    @Test
+    void shouldRejectAbsentStoreAccountingBeforeConsumingTheBenchCompletion() {
+        NotionalToteOrder order = order("rejected-store", OrderType.ADAPTED);
+        Fixture f = storeFixture(order, 0d);
+        DspOperationalWorkLedger work = new DspOperationalWorkLedger(List.of(),
+                new InboundToteManifestCatalog(List.of()), List.of(), List.of());
+        AdaptingStationProcessingController controller = new AdaptingStationProcessingController("accounted",
+                Set.of(f.destination()), f.registry(), f.area(), f.areaController(), f.lifecycle(), f.coordinator(), work);
+        f.lifecycle().activate(f.routedTote().physicalToteId(), Duration.ZERO);
+        f.target().accept(f.routedTote(), Duration.ZERO);
+        var workBefore = work.snapshot();
+        var lifecycleBefore = f.lifecycle().snapshot();
+        var stationBefore = f.coordinator().snapshot();
+        var storageBefore = f.store().snapshot();
+        assertThrows(IllegalArgumentException.class, () -> controller.update(context(1d), 0d));
+        assertSame(workBefore, work.snapshot());
+        assertSame(lifecycleBefore, f.lifecycle().snapshot());
+        assertEquals(stationBefore, f.coordinator().snapshot());
+        assertEquals(storageBefore, f.store().snapshot());
+        assertTrue(f.area().bench(new AdaptingBenchId("bench-1")).peekCompletion().isPresent());
+        assertSame(f.routedTote().loadPlan(), f.registry().getLoadPlanFor(f.routedTote().physicalToteId()));
+    }
+
+    @Test
+    void shouldNotConsumeWorkAtAnIntermediateCollectContinuation() {
+        NotionalToteOrder order = order("collect-not-terminal", OrderType.ASSOCIATED);
+        Fixture f = collectFixture(order, OperationalPhysicalToteSource.OSR, true, 0d);
+        var manifest = new InboundToteManifest(f.routedTote().physicalToteId(), order.orderSheetKey(),
+                order.orderType(), order.serviceCentreId(), order.items(), 0);
+        DspOperationalWorkLedger work = new DspOperationalWorkLedger(List.of(new DspSchedulerOrderState(order,
+                new RouteRequirements(false, true, false, true, false, StartLocation.OSR), DspOrderStatus.WAITING)),
+                new InboundToteManifestCatalog(List.of(manifest)), List.of(), List.of());
+        AdaptingStationProcessingController controller = new AdaptingStationProcessingController("accounted",
+                Set.of(f.destination()), f.registry(), f.area(), f.areaController(), f.lifecycle(), f.coordinator(), work);
+        var before = work.snapshot();
+        f.target().accept(f.routedTote(), Duration.ZERO);
+        controller.update(context(1d), 0d);
+        assertEquals(StationProcessingDispositionType.CONTINUE, f.coordinator().peekDisposition().orElseThrow().type());
+        assertSame(before, work.snapshot());
+        assertEquals(1, work.remainingInboundConsumersForSource(order.orderSheetKey()));
+        assertEquals(1, work.remainingConsumersForOrder(order.orderId()));
+        assertEquals(2, f.registry().getLoadPlanFor(manifest.physicalToteId()).getPackPlans().size());
+    }
 
     @Test
     void shouldPublishStrictCollectObserverOnlyAfterExactStationContinuation() {
@@ -709,7 +788,7 @@ class AdaptingStationProcessingControllerTest {
                 lifecycle,
                 coordinator);
         return new Fixture(order, routedTote, registry, store, area, target, controller,
-                coordinator, lifecycle, runtimeState, routedTote.destination());
+                coordinator, lifecycle, runtimeState, routedTote.destination(), areaController);
     }
 
     private static MultiBenchFixture multiBenchFixture(
@@ -870,7 +949,8 @@ class AdaptingStationProcessingControllerTest {
             StationProcessingCoordinator coordinator,
             InboundToteLifecycleController lifecycle,
             DspSchedulerRuntimeState runtimeState,
-            OperationalRouteDestination destination) {
+            OperationalRouteDestination destination,
+            AdaptingAreaController areaController) {
     }
 
     private record MultiBenchFixture(

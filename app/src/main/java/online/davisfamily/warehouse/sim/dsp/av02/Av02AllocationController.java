@@ -17,6 +17,7 @@ import online.davisfamily.warehouse.sim.dsp.model.NotionalToteOrder;
 import online.davisfamily.warehouse.sim.dsp.model.PhysicalToteId;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteIdentity;
 import online.davisfamily.warehouse.sim.dsp.osr.release.launch.OperationalPhysicalToteSource;
+import online.davisfamily.warehouse.sim.dsp.runtime.operational.DspOperationalWorkLedger;
 import online.davisfamily.warehouse.sim.totebag.plan.ToteLoadPlan;
 
 public final class Av02AllocationController implements SimulationController {
@@ -29,6 +30,7 @@ public final class Av02AllocationController implements SimulationController {
     private final PhysicalToteIdAllocator idAllocator;
     private final Av02ToteLifecycleController lifecycleController;
     private final MutableToteLoadPlanRegistry loadPlanRegistry;
+    private final Optional<DspOperationalWorkLedger> operationalWork;
     private Optional<Av02AllocatedTote> lastAllocatedTote = Optional.empty();
 
     public Av02AllocationController(
@@ -38,6 +40,30 @@ public final class Av02AllocationController implements SimulationController {
             PhysicalToteLifecycleLedger lifecycleLedger,
             PhysicalToteIdAllocator idAllocator,
             MutableToteLoadPlanRegistry loadPlanRegistry) {
+        this(commandSupplier, freshSnapshotSupplier, inventory, lifecycleLedger, idAllocator,
+                loadPlanRegistry, Optional.empty());
+    }
+
+    public Av02AllocationController(
+            Supplier<Optional<AllocateEmptyToteAtAv02Command>> commandSupplier,
+            Supplier<Av02AllocationSnapshot> freshSnapshotSupplier,
+            Av02PhysicalToteInventory inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            PhysicalToteIdAllocator idAllocator,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            DspOperationalWorkLedger operationalWork) {
+        this(commandSupplier, freshSnapshotSupplier, inventory, lifecycleLedger, idAllocator,
+                loadPlanRegistry, Optional.of(requireOperationalWork(operationalWork)));
+    }
+
+    private Av02AllocationController(
+            Supplier<Optional<AllocateEmptyToteAtAv02Command>> commandSupplier,
+            Supplier<Av02AllocationSnapshot> freshSnapshotSupplier,
+            Av02PhysicalToteInventory inventory,
+            PhysicalToteLifecycleLedger lifecycleLedger,
+            PhysicalToteIdAllocator idAllocator,
+            MutableToteLoadPlanRegistry loadPlanRegistry,
+            Optional<DspOperationalWorkLedger> operationalWork) {
         if (commandSupplier == null || freshSnapshotSupplier == null || inventory == null
                 || lifecycleLedger == null || idAllocator == null || loadPlanRegistry == null) {
             throw new IllegalArgumentException("AV02 allocation controller inputs must not be null");
@@ -49,6 +75,7 @@ public final class Av02AllocationController implements SimulationController {
         this.idAllocator = idAllocator;
         this.lifecycleController = new Av02ToteLifecycleController(lifecycleLedger, idAllocator);
         this.loadPlanRegistry = loadPlanRegistry;
+        this.operationalWork = operationalWork;
     }
 
     @Override
@@ -103,6 +130,7 @@ public final class Av02AllocationController implements SimulationController {
             return;
         }
 
+        operationalWork.ifPresent(work -> work.validateCanAllocateEmpty(order.orderSheetKey()));
         PhysicalToteId allocatedId = idAllocator.nextPhysicalToteId();
         if (allocatedId == null) {
             throw new IllegalStateException("idAllocator returned null");
@@ -118,27 +146,33 @@ public final class Av02AllocationController implements SimulationController {
         }
 
         Duration allocationTime = simulationTime(simulationTimeSeconds);
+        OperationalPhysicalToteIdentity identity = new OperationalPhysicalToteIdentity(
+                OperationalPhysicalToteSource.AV02, allocatedId, order.orderSheetKey(), order.orderType(),
+                order.serviceCentreId(), PhysicalToteRole.PRE_P2P, order.sequenceNumber());
+        operationalWork.ifPresent(work -> work.validateAv02Allocated(new Av02AllocatedTote(
+                identity, PhysicalToteRecord.preP2p(allocatedId), pharmacyId)));
         PhysicalToteRecord physicalTote = lifecycleController.allocateFor(
                 order, allocationTime, allocatedId);
         Av02AllocatedTote allocatedTote = new Av02AllocatedTote(
-                new OperationalPhysicalToteIdentity(
-                        OperationalPhysicalToteSource.AV02,
-                        allocatedId,
-                        order.orderSheetKey(),
-                        order.orderType(),
-                        order.serviceCentreId(),
-                        PhysicalToteRole.PRE_P2P,
-                        order.sequenceNumber()),
+                identity,
                 physicalTote,
                 pharmacyId);
         try {
             inventory.store(allocatedTote);
             loadPlanRegistry.putLoadPlan(new ToteLoadPlan(allocatedId, List.of()));
+            operationalWork.ifPresent(work -> work.recordAv02Allocated(allocatedTote));
         } catch (RuntimeException failure) {
             throw new IllegalStateException(
                     "AV02 allocation invariant failed after lifecycle mutation", failure);
         }
         lastAllocatedTote = Optional.of(allocatedTote);
+    }
+
+    private static DspOperationalWorkLedger requireOperationalWork(DspOperationalWorkLedger work) {
+        if (work == null) {
+            throw new IllegalArgumentException("operationalWork must not be null");
+        }
+        return work;
     }
 
     private static Duration simulationTime(double seconds) {
